@@ -1,34 +1,70 @@
-package protoflex
+package Protoflex
 
 import chisel3._
 import chisel3.util.BitPat
 import chisel3.util.ListLookup
 
-import INSTR_TYPES._
-import OP_ALU._
-import SHIFT_OP._
-import CONSTANTS._
-import INSTRUCTIONS._
+import constants.SIGNALS._
+import common.INSTRUCTIONS._
 
 class DInst extends Bundle
 {
-  val rd  = REG_X
-  val rs1 = REG_X
-  val rs2 = REG_X
+  // Data
+  val rd  = REG_T
+  val rs1 = REG_T
+  val rs2 = REG_T
+  val imm = IMM_T
+  val shift = SHIFT_T
 
-  val imm = IMM_X
-  val imm_valid = Bool(false)
+  // Control
+  val imm_valid = Bool()
+  val aluOp = OP_ALU_T
+  val shift_v = Bool()
+  val valid = Bool()
 
-  val aluOp = OP_ALU_X
+  def decode(inst : UInt) = {
+    val cdecoder = ListLookup(inst, Decode.decode_control_default, Decode.table_control)
+    val csignals = Seq(imm_valid, aluOp, shift_v, valid)
+    csignals zip cdecoder map { case (s, d) => s:= d }
 
-  val shift = SHIFT_X
-  val shift_v = Bool(false)
+    val ddecoder = ListLookup(inst, Decode.decode_data_default, Decode.table_data)
 
-  val valid = Bool(false)
-
-  def decode(inst: UInt) = {
-    val dinst_sigs = 
+    this
   }
+}
+
+object Decode
+{
+  def decode_control_default: List[UInt] =
+    //
+    //         ALU   INSTRUCTION
+    //          OP     VALID
+    //          |        |
+    //  IMM     |   SHIFT|
+    // VALID    |   VALID|
+    //   |      |     |  |
+    //   |      |     |  |
+    List(N, OP_ALU_X, N, N)
+
+  def table_control: Array[(BitPat, List[UInt])]  =
+    Array(
+      /* Logical (shifted register) 64-bit */
+      AND  -> List(N, OP_AND, Y, Y),
+      BIC  -> List(N, OP_BIC, Y, Y),
+      ORR  -> List(N, OP_ORR, Y, Y),
+      ORN  -> List(N, OP_ORN, Y, Y),
+      EOR  -> List(N, OP_EOR, Y, Y),
+      EON  -> List(N, OP_EON, Y, Y)
+    )
+
+  def decode_data_default: List[UInt] =
+    //
+    //    RD                  IMM
+    //    |      RS1            |    SHIFT
+    //    |       |     RS2     |      OP
+    //    |       |      |      |      |
+    //    |       |      |      |      |
+    List(REG_X, REG_X, REG_X, IMM_X, SHIFT_X)
 }
 
 class DecodeUnitIo extends Bundle
@@ -40,41 +76,6 @@ class DecodeUnitIo extends Bundle
 class DecodeUnit extends Module
 {
   val io = new DecodeUnitIo
+  io.dinst := Wire(new DInst).decode(io.inst)
 }
-
-abstract trait DecodeConstants
-{
-// scalastyle:off
-  def decode_default: List[BitPat] =
-    //
-    //
-    //   RD                  IMM
-    //   |     RS1            |    ALUOP
-    //   |      |     RS2     |      |           SHIFT VALID
-    //   |      |      |      |      |  SHIFT OP     |
-    //   |      |      |      |      |      |        |  INSTRUCTION
-    //   |      |      |      |      |      |        |  VALID
-    //   |      |      |      |      |      |        |  |
-    //   |      |      |      |      |      |        |  |
-    List(REG_X, REG_X, REG_X, IMM_X, ALU_X, SHIFT_X, N, N)
-  val table: Array[(BitPat, List[BitPat])]
-// scalastyle:on
-}
-
-object Decode extends DecodeConstants
-{
-  val table = Array(
-    /* Logical (shifted register) 64-bit */
-    AND  -> List(REG_X, REG_X, REG_X, IMM_X, OP_ALU_X, SHIFT_X, N, N),
-    BIC  -> List(REG_X, REG_X, REG_X, IMM_X, OP_ALU_X, SHIFT_X, N, N),
-    ORR  -> List(REG_X, REG_X, REG_X, IMM_X, OP_ALU_X, SHIFT_X, N, N),
-    ORN  -> List(REG_X, REG_X, REG_X, IMM_X, OP_ALU_X, SHIFT_X, N, N),
-    EOR  -> List(REG_X, REG_X, REG_X, IMM_X, OP_ALU_X, SHIFT_X, N, N),
-    EON  -> List(REG_X, REG_X, REG_X, IMM_X, OP_ALU_X, SHIFT_X, N, N),
-    ANDS -> List(REG_X, REG_X, REG_X, IMM_X, OP_ALU_X, SHIFT_X, N, N),
-    BICS -> List(REG_X, REG_X, REG_X, IMM_X, OP_ALU_X, SHIFT_X, N, N),
-    INST_X -> decode_default
-  )
-}
-
 
