@@ -3,9 +3,12 @@ package Protoflex
 import chisel3._
 import chisel3.util.BitPat
 import chisel3.util.ListLookup
+import chisel3.util.MuxLookup
+import chisel3.util.Cat
 
-import constants.SIGNALS._
+import common.SIGNALS._
 import common.INSTRUCTIONS._
+import common.INSTRUCTIONS_TYPES._
 
 class DInst extends Bundle
 {
@@ -23,11 +26,20 @@ class DInst extends Bundle
   val valid = Bool()
 
   def decode(inst : UInt) = {
-    val cdecoder = ListLookup(inst, Decode.decode_control_default, Decode.table_control)
+    val decoder = ListLookup(inst, Decode.decode_control_default, Decode.table_control)
+
+    // Data
+    val dtype = decoder.head
+    rd    := MuxLookup(dtype,   REG_X, Array( LogSR -> inst(4,0) ))
+    rs1   := MuxLookup(dtype,   REG_X, Array( LogSR -> inst(4,0) ))
+    rs2   := MuxLookup(dtype,   REG_X, Array( LogSR -> inst(4,0) ))
+    imm   := MuxLookup(dtype,   IMM_X, Array( LogSR -> Cat(0.U(20.W), inst(15,10))))
+    shift := MuxLookup(dtype, SHIFT_X, Array( LogSR -> inst(23,22) ))
+
+    // Control
+    val cdecoder = decoder.tail
     val csignals = Seq(imm_valid, aluOp, shift_v, valid)
     csignals zip cdecoder map { case (s, d) => s:= d }
-
-    val ddecoder = ListLookup(inst, Decode.decode_data_default, Decode.table_data)
 
     this
   }
@@ -37,34 +49,25 @@ object Decode
 {
   def decode_control_default: List[UInt] =
     //
-    //         ALU   INSTRUCTION
-    //          OP     VALID
-    //          |        |
-    //  IMM     |   SHIFT|
-    // VALID    |   VALID|
-    //   |      |     |  |
-    //   |      |     |  |
-    List(N, OP_ALU_X, N, N)
+    //              ALU   INSTRUCTION
+    // INSTR         OP     VALID
+    // TYPE          |        |
+    //   |   IMM     |   SHIFT|
+    //   |  VALID    |   VALID|
+    //   |    |      |     |  |
+    //   |    |      |     |  |
+    List(I_X, N, OP_ALU_X, N, N)
 
   def table_control: Array[(BitPat, List[UInt])]  =
     Array(
       /* Logical (shifted register) 64-bit */
-      AND  -> List(N, OP_AND, Y, Y),
-      BIC  -> List(N, OP_BIC, Y, Y),
-      ORR  -> List(N, OP_ORR, Y, Y),
-      ORN  -> List(N, OP_ORN, Y, Y),
-      EOR  -> List(N, OP_EOR, Y, Y),
-      EON  -> List(N, OP_EON, Y, Y)
+      AND  -> List(I_LogSR, N, OP_AND, Y, Y),
+      BIC  -> List(I_LogSR, N, OP_BIC, Y, Y),
+      ORR  -> List(I_LogSR, N, OP_ORR, Y, Y),
+      ORN  -> List(I_LogSR, N, OP_ORN, Y, Y),
+      EOR  -> List(I_LogSR, N, OP_EOR, Y, Y),
+      EON  -> List(I_LogSR, N, OP_EON, Y, Y)
     )
-
-  def decode_data_default: List[UInt] =
-    //
-    //    RD                  IMM
-    //    |      RS1            |    SHIFT
-    //    |       |     RS2     |      OP
-    //    |       |      |      |      |
-    //    |       |      |      |      |
-    List(REG_X, REG_X, REG_X, IMM_X, SHIFT_X)
 }
 
 class DecodeUnitIo extends Bundle
