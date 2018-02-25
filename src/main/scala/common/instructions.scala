@@ -38,12 +38,3 @@ object INSTRUCTIONS
   // sf |  opc  |  0  1  0  1  0 | shift |  N |      Rm        |       imm6        |       Rn       |       Rd      |                  |
   val I_LogSR = 1.U(W_TYPE)
 }
-
-/*
- *
- */
-object INSTRUCTIONS_TYPES
-{
-  private val W_TYPE = 2
-  val LogSR = 0.U(W_TYPE)
-}

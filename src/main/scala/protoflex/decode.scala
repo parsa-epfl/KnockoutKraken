@@ -1,14 +1,7 @@
-package Protoflex
+package protoflex
 
 import chisel3._
-import chisel3.util.BitPat
-import chisel3.util.ListLookup
-import chisel3.util.MuxLookup
-import chisel3.util.Cat
-
-import common.SIGNALS._
-import common.INSTRUCTIONS._
-import common.INSTRUCTIONS_TYPES._
+import chisel3.util.{BitPat, ListLookup, MuxLookup}
 
 class DInst extends Bundle
 {
@@ -30,11 +23,11 @@ class DInst extends Bundle
 
     // Data
     val dtype = decoder.head
-    rd    := MuxLookup(dtype,   REG_X, Array( LogSR -> inst(4,0) ))
-    rs1   := MuxLookup(dtype,   REG_X, Array( LogSR -> inst(4,0) ))
-    rs2   := MuxLookup(dtype,   REG_X, Array( LogSR -> inst(4,0) ))
-    imm   := MuxLookup(dtype,   IMM_X, Array( LogSR -> Cat(0.U(20.W), inst(15,10))))
-    shift := MuxLookup(dtype, SHIFT_X, Array( LogSR -> inst(23,22) ))
+    rd    := MuxLookup(dtype,   REG_X, Array( I_LogSR -> inst(4,0) ))
+    rs1   := MuxLookup(dtype,   REG_X, Array( I_LogSR -> inst(4,0) ))
+    rs2   := MuxLookup(dtype,   REG_X, Array( I_LogSR -> inst(4,0) ))
+    imm   := MuxLookup(dtype,   IMM_X, Array( I_LogSR -> Cat(0.U(20.W), inst(15,10))))
+    shift := MuxLookup(dtype, SHIFT_X, Array( I_LogSR -> inst(23,22) ))
 
     // Control
     val cdecoder = decoder.tail
@@ -81,4 +74,3 @@ class DecodeUnit extends Module
   val io = new DecodeUnitIo
   io.dinst := Wire(new DInst).decode(io.inst)
 }
-
