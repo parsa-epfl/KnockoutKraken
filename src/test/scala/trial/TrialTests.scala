@@ -4,11 +4,11 @@ import chisel3.iotesters
 import chisel3.iotesters.{ChiselFlatSpec, Driver, PeekPokeTester}
 
 class TrialUnitTester(c: Trial) extends PeekPokeTester(c) {
-  poke(c.io.in, 2)
+  poke(c.io.in, 0xFF)
   step(1)
   val sObj = c.io.out
-  expect(sObj.a, 2)
-  expect(sObj.b, 1)
+  expect(sObj.a, 0x0F)
+  expect(sObj.b, 0x00)
 }
 
 class TrialTester extends ChiselFlatSpec {
