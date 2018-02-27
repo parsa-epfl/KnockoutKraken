@@ -339,4 +339,4 @@ project/plugins/project/
 hs_err_pid*
 
 # ensime
-*ensime*
+.ensime*
