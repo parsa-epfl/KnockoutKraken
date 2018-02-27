@@ -47,5 +47,15 @@ libraryDependencies ++= (Seq("chisel3","chisel-iotesters").map {
   dep: String => "edu.berkeley.cs" %% dep % sys.props.getOrElse(dep + "Version", defaultVersions(dep)) })
 
 scalacOptions ++= scalacOptionsVersion(scalaVersion.value)
+scalacOptions ++= Seq("-feature", "-deprecation")
+scalacOptions ++= Seq("-language:reflectiveCalls")
 
 javacOptions ++= javacOptionsVersion(scalaVersion.value)
+
+// Recommendations from http://www.scalatest.org/user_guide/using_scalatest_with_sbt
+logBuffered in Test := false
+
+// Disable parallel execution when running tests.
+//  Running tests in parallel on Jenkins currently fails.
+parallelExecution in Test := false
+
