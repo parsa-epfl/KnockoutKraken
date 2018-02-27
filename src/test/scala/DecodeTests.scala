@@ -35,7 +35,7 @@ class DecodeTester extends ChiselFlatSpec
   behavior of "Decoder"
 
   backends foreach {backend =>
-    it should s"test the basic Decode circuit" in {
+    it should s"decode an instruction" in {
       Driver(() => new DecodeUnit, backend)((c) => new DecodeTests(c)) should be (true)
     }
   }

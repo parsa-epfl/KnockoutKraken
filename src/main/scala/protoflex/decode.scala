@@ -22,18 +22,16 @@ class DInst extends Bundle
   val valid = Bool()
 
   def decode(inst : UInt) = {
-    val local_default = Decode.decode_control_default
-    val local_table = Decode.table_control
-    //val decoder = ListLookup(inst, Decode.decode_control_default, Decode.table_control)
-    val decoder = ListLookup(inst, local_default, local_table)
-    printf(p"$decoder")
+    val table   = Decode.table_control
+    val default = Decode.decode_control_default
+    val decoder = ListLookup(inst, default, table)
 
     // Data
     val dtype = decoder.head
-    rd    := MuxLookup(dtype,   REG_X, Array( I_LogSR -> inst(4,0) ))
-    rs1   := MuxLookup(dtype,   REG_X, Array( I_LogSR -> inst(9,5) ))
+    rd    := MuxLookup(dtype,   REG_X, Array( I_LogSR -> inst(4,0)   ))
+    rs1   := MuxLookup(dtype,   REG_X, Array( I_LogSR -> inst(9,5)   ))
     rs2   := MuxLookup(dtype,   REG_X, Array( I_LogSR -> inst(20,16) ))
-    imm   := MuxLookup(dtype,   IMM_X, Array( I_LogSR -> Cat(0.U(20.W), inst(15,10))))
+    imm   := MuxLookup(dtype,   IMM_X, Array( I_LogSR -> inst(15,10) ))
     shift := MuxLookup(dtype, SHIFT_X, Array( I_LogSR -> inst(23,22) ))
 
     // Control
@@ -50,12 +48,12 @@ object Decode
   def decode_control_default: List[UInt] =
     //
     //              ALU   INSTRUCTION
-    // INSTR         OP     VALID
-    // TYPE          |        |
-    //   |   IMM     |   SHIFT|
-    //   |  VALID    |   VALID|
-    //   |   ALU     |     |  |
-    //   |    |      |     |  |
+    //  INSTR        OP     VALID
+    //  TYPE         |        |
+    //    |  IMM     |   SHIFT|
+    //    | VALID    |   VALID|
+    //    |  ALU     |     |  |
+    //    |   |      |     |  |
     List(I_X, N, OP_ALU_X, N, N)
 
   def table_control: Array[(BitPat, List[UInt])]  =
@@ -79,31 +77,6 @@ class DecodeUnitIO extends Bundle
 class DecodeUnit extends Module
 {
   val io = IO(new DecodeUnitIO)
-
   val dinst = Wire(new DInst).decode(io.inst)
-  printf(p"new Wire")
-
-  /*
-  // Decode
-  val local_default = Decode.decode_control_default
-  val local_table = Decode.table_control
-  //val decoder = ListLookup(inst, Decode.decode_control_default, Decode.table_control)
-  val decoder = ListLookup(io.inst, local_default, local_table)
-  printf(p"$decoder")
-
-  // Data
-  val dtype = decoder.head
-  dinst.rd   := MuxLookup(dtype,   REG_X, Array( I_LogSR -> io.inst(4,0) ))
-  dinst.rs1   := MuxLookup(dtype,   REG_X, Array( I_LogSR -> io.inst(4,0) ))
-  dinst.rs2   := MuxLookup(dtype,   REG_X, Array( I_LogSR -> io.inst(4,0) ))
-  dinst.imm   := MuxLookup(dtype,   IMM_X, Array( I_LogSR -> Cat(0.U(20.W), io.inst(15,10))))
-  dinst.shift := MuxLookup(dtype, SHIFT_X, Array( I_LogSR -> io.inst(23,22) ))
-
-  // Control
-  val cdecoder = decoder.tail
-  val csignals = Seq(dinst.imm_valid, dinst.aluOp, dinst.shift_v, dinst.valid)
-  csignals zip cdecoder map { case (s, d) => s:= d }
-  */
-
   io.dinst := dinst
 }
