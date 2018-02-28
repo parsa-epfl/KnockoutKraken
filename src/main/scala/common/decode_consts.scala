@@ -3,7 +3,10 @@ package common
 import chisel3._
 import chisel3.util.BitPat
 
-object SIGNALS
+import INSTRUCTIONS._
+import DECODE_CONTROL_SIGNALS._
+
+object DECODE_CONTROL_SIGNALS
 {
   // Default Values
   private def W_REG = 5.W
@@ -39,4 +42,30 @@ object SIGNALS
   val ASR  = 2.U(W_SHIFT)
   val ROR  = 3.U(W_SHIFT)
   val SHIFT_X = 0.U(W_SHIFT)
+}
+
+object DECODE_MATCHING_TABLES
+{
+
+  def decode_default: List[UInt] =
+    //
+    //              ALU   INSTRUCTION
+    //  INSTR        OP     VALID
+    //  TYPE         |        |
+    //    |  IMM     |   SHIFT|
+    //    | VALID    |   VALID|
+    //    |  ALU     |     |  |
+    //    |   |      |     |  |
+    List(I_X, N, OP_ALU_X, N, N)
+
+  def decode_table: Array[(BitPat, List[UInt])]  =
+    Array(
+      /* Logical (shifted register) 64-bit */
+      AND  -> List(I_LogSR, N, OP_AND, Y, Y),
+      BIC  -> List(I_LogSR, N, OP_BIC, Y, Y),
+      ORR  -> List(I_LogSR, N, OP_ORR, Y, Y),
+      ORN  -> List(I_LogSR, N, OP_ORN, Y, Y),
+      EOR  -> List(I_LogSR, N, OP_EOR, Y, Y),
+      EON  -> List(I_LogSR, N, OP_EON, Y, Y)
+    )
 }

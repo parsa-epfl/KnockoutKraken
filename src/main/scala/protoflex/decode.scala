@@ -3,7 +3,8 @@ package protoflex
 import chisel3._
 import chisel3.util.{BitPat, ListLookup, MuxLookup, Cat}
 
-import common.SIGNALS._
+import common.DECODE_CONTROL_SIGNALS._
+import common.DECODE_MATCHING_TABLES._
 import common.INSTRUCTIONS._
 
 class DInst extends Bundle
@@ -22,9 +23,7 @@ class DInst extends Bundle
   val valid = Bool()
 
   def decode(inst : UInt) = {
-    val table   = Decode.table_control
-    val default = Decode.decode_control_default
-    val decoder = ListLookup(inst, default, table)
+    val decoder = ListLookup(inst, decode_default, decode_table)
 
     // Data
     val dtype = decoder.head
@@ -42,32 +41,6 @@ class DInst extends Bundle
     this
   }
 }
-
-object Decode
-{
-  def decode_control_default: List[UInt] =
-    //
-    //              ALU   INSTRUCTION
-    //  INSTR        OP     VALID
-    //  TYPE         |        |
-    //    |  IMM     |   SHIFT|
-    //    | VALID    |   VALID|
-    //    |  ALU     |     |  |
-    //    |   |      |     |  |
-    List(I_X, N, OP_ALU_X, N, N)
-
-  def table_control: Array[(BitPat, List[UInt])]  =
-    Array(
-      /* Logical (shifted register) 64-bit */
-      AND  -> List(I_LogSR, N, OP_AND, Y, Y),
-      BIC  -> List(I_LogSR, N, OP_BIC, Y, Y),
-      ORR  -> List(I_LogSR, N, OP_ORR, Y, Y),
-      ORN  -> List(I_LogSR, N, OP_ORN, Y, Y),
-      EOR  -> List(I_LogSR, N, OP_EOR, Y, Y),
-      EON  -> List(I_LogSR, N, OP_EON, Y, Y)
-    )
-}
-
 class DecodeUnitIO extends Bundle
 {
   val inst = Input(UInt(32.W))
