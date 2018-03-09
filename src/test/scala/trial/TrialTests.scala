@@ -3,12 +3,37 @@ package trial
 import chisel3.iotesters
 import chisel3.iotesters.{ChiselFlatSpec, Driver, PeekPokeTester}
 
-class TrialUnitTester(c: Trial) extends PeekPokeTester(c) {
-  poke(c.io.in, 0xFF)
+class TrialUnitTesterRotate(c: TrialRotate) extends PeekPokeTester(c) {
+  poke(c.io.in, 0x1)
+  poke(c.io.rot, 0)
   step(1)
-  val sObj = c.io.out
-  expect(sObj.a, 0x0F)
-  expect(sObj.b, 0x00)
+  expect(c.io.out, 0x1)
+
+  poke(c.io.in, 0x1)
+  poke(c.io.rot, 1)
+  step(1)
+  expect(c.io.out, 0x8)
+
+  poke(c.io.in, 0x01)
+  poke(c.io.rot, 2)
+  step(1)
+  expect(c.io.out, 0x4)
+
+  poke(c.io.in, 0x01)
+  poke(c.io.rot, 3)
+  step(1)
+  expect(c.io.out, 0x2)
+}
+
+class TrialUnitTesterVecs(c: TrialVecs) extends PeekPokeTester(c) {
+  for(i <- 0 to 10 ) {
+    expect(c.io.out, i * (i%4))
+    expect(c.io.out0, i * 0)
+    expect(c.io.out1, i * 1)
+    expect(c.io.out2, i * 2)
+    expect(c.io.out3, i * 3)
+    step(1)
+  }
 }
 
 class TrialTester extends ChiselFlatSpec {
@@ -20,8 +45,15 @@ class TrialTester extends ChiselFlatSpec {
   }
   for ( backendName <- backendNames ) {
     "Trial" should s"test some stuff (with $backendName)" in {
-      Driver(() => new Trial, backendName) {
-        c => new TrialUnitTester(c)
+      Driver(() => new TrialRotate, backendName) {
+        c => new TrialUnitTesterRotate(c)
+      } should be (true)
+    }
+  }
+  for ( backendName <- backendNames ) {
+    "TrialVecs" should s"test some stuff (with $backendName)" in {
+      Driver(() => new TrialVecs, backendName) {
+        c => new TrialUnitTesterVecs(c)
       } should be (true)
     }
   }
