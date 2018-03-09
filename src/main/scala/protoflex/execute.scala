@@ -5,13 +5,14 @@ import chisel3._
 import chisel3.util.MuxLookup
 
 import common.DECODE_CONTROL_SIGNALS._
+import common.PROCESSOR_TYPES._
 
 class BasicALU extends Module {
   val io = IO(new Bundle {
-    val a = Input(UInt(64.W))
-    val b = Input(UInt(64.W))
+    val a = Input(DATA_T)
+    val b = Input(DATA_T)
     val opcode = Input(OP_ALU_T)
-    val res = Output(UInt(64.W))
+    val res = Output(DATA_T)
   })
 
   io.res :=
@@ -30,39 +31,32 @@ class BasicALU extends Module {
 
 class ShiftALU extends Module {
   val io = IO(new Bundle {
-    val word = Input(UInt(64.W))
+    val word = Input(DATA_T)
     val amount = Input(UInt(6.W))
     val opcode = Input(SHIFT_T)
-    val res = Output(UInt(64.W))
+    val res = Output(DATA_T)
   })
 
-  // TODO Could be optimized by taking the opcode(0) bit
-  // to ensure a 2 way mux
-  // need to check the Verilog compiled code
-  // or surface area between N-way MuxLookup and Mux2
-  val left_amount =
-    MuxLookup(io.opcode, 0.U,
-              Array(
-                LSL -> io.amount,
-                ROR -> (64.U - io.amount) // Warps around lsb's
-              ))
-
-  val left  = io.word << left_amount // Zero extend
-  val right = io.word >> io.amount   // Zero extend
-
-  val ASR_right = io.word.asSInt() >> io.amount // Sign extended with SInt
+  /** Taken from Rocket chip arbiter
+    */
+  def rotateRight[T <: Data](norm: Vec[T], rot: UInt): Vec[T] = {
+    val n = norm.size
+    VecInit.tabulate(n) { i =>
+      Mux(rot < UInt(n - i), norm(rot - UInt(n - i)), norm(UInt(i) + rot))
+    }
+  }
 
   io.res :=
     MuxLookup(io.opcode, 0.U,
               Array(
-                LSL -> left,
-                LSR -> right,
-                ASR -> ASR_right,
-                ROR -> (left | right)
+                LSL -> (io.word << io.amount),
+                LSR -> (io.word >> io.amount),
+                ASR -> (io.word.asSInt() >> io.amount),
+                ROR -> rotateRight(VecInit(io.word.toBools), io.amount).asUInt
               ))
 }
 
-class ExecutionUnitIO extends Bundle
+class ExecuteUnitIO extends Bundle
 {
   val dinst = Input(new DInst)
   val rVal1 = Input(UInt(64.W))
@@ -72,9 +66,9 @@ class ExecutionUnitIO extends Bundle
   val rd  = Output(UInt(5.W))
 }
 
-class ExecutionUnit extends Module
+class ExecuteUnit extends Module
 {
-  val io = IO(new ExecutionUnitIO)
+  val io = IO(new ExecuteUnitIO)
 
 
   // Take immediate as second argument if valid
@@ -82,7 +76,7 @@ class ExecutionUnit extends Module
   when (io.dinst.imm_valid) {
     interVal2 := io.dinst.imm
   }
-  val aluVal2 = UInt(64.W)
+  val aluVal2 = DATA_T
 
   // Shift if valid
   val shiftALU = Module(new ShiftALU())

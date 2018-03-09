@@ -9,11 +9,8 @@ import DECODE_CONTROL_SIGNALS._
 object DECODE_CONTROL_SIGNALS
 {
   // Default Values
-  private def W_REG = 5.W
   private def W_MAX_IMM = 26.W
-  def REG_T = UInt(W_REG)
   def IMM_T = UInt(W_MAX_IMM)
-  val REG_X = 0.U(W_REG)
   val IMM_X = 0.U(W_MAX_IMM)
 
   // Controls Signals
