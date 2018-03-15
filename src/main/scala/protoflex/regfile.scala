@@ -21,7 +21,7 @@ class RegisterFile extends Module
 {
   val io = IO(new RFileIO())
 
-  val regfile = Mem(DATA_T, 32)
+  val regfile = Mem(REG_T, 32)
 
   when (io.wen && (io.waddr =/= 0.U))
   {
