@@ -46,23 +46,27 @@ object DECODE_MATCHING_TABLES
 
   def decode_default: List[UInt] =
     //
-    //              ALU   INSTRUCTION
-    //  INSTR        OP     VALID
-    //  TYPE         |        |
-    //    |  IMM     |   SHIFT|
-    //    | VALID    |   VALID|
-    //    |  ALU     |     |  |
-    //    |   |      |     |  |
-    List(I_X, N, OP_ALU_X, N, N)
+    //          ALU    RD         INSTRUCTION
+    //  INSTR    OP    EN           VALID
+    //  TYPE     |     | RS1          |
+    //    |      |     |  EN          |
+    //    |      |     |  | RS2  SHIFT|
+    //    |      |     |  |  EN    EN |
+    //    |      |     |  |  | IMM |  |
+    //    |      |     |  |  |  EN |  |
+    //    |      |     |  |  |  |  |  |
+    //    |      |     |  |  |  |  |  |
+    //    |      |     |  |  |  |  |  |
+    List(I_X,OP_ALU_X, N, N, N, N, N, N)
 
   def decode_table: Array[(BitPat, List[UInt])]  =
     Array(
       /* Logical (shifted register) 64-bit */
-      AND  -> List(I_LogSR, N, OP_AND, Y, Y),
-      BIC  -> List(I_LogSR, N, OP_BIC, Y, Y),
-      ORR  -> List(I_LogSR, N, OP_ORR, Y, Y),
-      ORN  -> List(I_LogSR, N, OP_ORN, Y, Y),
-      EOR  -> List(I_LogSR, N, OP_EOR, Y, Y),
-      EON  -> List(I_LogSR, N, OP_EON, Y, Y)
+      AND  -> List(I_LogSR, OP_AND, Y, Y, Y, N, Y, Y),
+      BIC  -> List(I_LogSR, OP_BIC, Y, Y, Y, N, Y, Y),
+      ORR  -> List(I_LogSR, OP_ORR, Y, Y, Y, N, Y, Y),
+      ORN  -> List(I_LogSR, OP_ORN, Y, Y, Y, N, Y, Y),
+      EOR  -> List(I_LogSR, OP_EOR, Y, Y, Y, N, Y, Y),
+      EON  -> List(I_LogSR, OP_EON, Y, Y, Y, N, Y, Y)
     )
 }

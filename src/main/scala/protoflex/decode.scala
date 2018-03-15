@@ -1,7 +1,7 @@
 package protoflex
 
 import chisel3._
-import chisel3.util.{BitPat, ListLookup, MuxLookup, Cat}
+import chisel3.util.{BitPat, ListLookup, MuxLookup, EnqIO, DeqIO}
 
 import common.PROCESSOR_TYPES._
 import common.DECODE_CONTROL_SIGNALS._
@@ -18,10 +18,17 @@ class DInst extends Bundle
   val shift = SHIFT_T
 
   // Control
-  val imm_valid = Bool()
   val aluOp = OP_ALU_T
-  val shift_v = Bool()
-  val valid = Bool()
+
+  // Enables
+  val rd_en    = Bool()
+  val rs1_en   = Bool()
+  val rs2_en   = Bool()
+  val imm_en   = Bool()
+  val shift_en = Bool()
+
+  // Instruction is Valid
+  val inst_en = Bool()
 
   val tag = TAG_T
 
@@ -38,23 +45,39 @@ class DInst extends Bundle
 
     // Control
     val cdecoder = decoder.tail
-    val csignals = Seq(imm_valid, aluOp, shift_v, valid)
+    val csignals = Seq(aluOp, rd_en, rs1_en, rs2_en, imm_en, shift_en, inst_en)
     csignals zip cdecoder map { case (s, d) => s:= d }
+
     this.tag := tag
 
     this
   }
 }
+
 class DecodeUnitIO extends Bundle
 {
-  val inst = Input(INST_T)
-  val tag  = Input(TAG_T)
-  val dinst = Output(new DInst)
+  // Fetch - Decode
+  val in_inst = DeqIO(INST_T)
+  val in_tag  = Input(TAG_T)
+
+  // Decode - Issue
+  val out_dinst = EnqIO(new DInst)
+  val out_tag = Output(TAG_T)
+
 }
 
+/** Decode unit
+  * Fowards the decoded instruction to the issue stage
+  */
 class DecodeUnit extends Module
 {
   val io = IO(new DecodeUnitIO)
-  val dinst = Wire(new DInst).decode(io.inst, io.tag)
-  io.dinst := dinst
+  val dinst = Wire(new DInst).decode(io.in_inst.bits, io.in_tag)
+
+  io.out_dinst.bits  := dinst
+  io.out_dinst.valid := io.in_inst.valid
+  io.in_inst.ready   := io.out_dinst.ready
+
+  io.out_tag := io.in_tag
+
 }
