@@ -28,6 +28,6 @@ class RegisterFile extends Module
     regfile(io.waddr) := io.wdata
   }
 
-  io.rs1_data := Mux((io.rs1_addr != 0.U), regfile(io.rs1_addr), 0.U)
-  io.rs2_data := Mux((io.rs2_addr != 0.U), regfile(io.rs2_addr), 0.U)
+  io.rs1_data := regfile(io.rs1_addr)
+  io.rs2_data := regfile(io.rs2_addr)
 }
