@@ -7,6 +7,13 @@ import chisel3.util.MuxLookup
 import common.DECODE_CONTROL_SIGNALS._
 import common.PROCESSOR_TYPES._
 
+class EInst extends Bundle {
+  val rd_v = Bool()
+  val rd = REG_T
+  val res = DATA_T
+  val tag = TAG_T
+}
+
 class BasicALU extends Module {
   val io = IO(new Bundle {
     val a = Input(DATA_T)
@@ -59,11 +66,10 @@ class ShiftALU extends Module {
 class ExecuteUnitIO extends Bundle
 {
   val dinst = Input(new DInst)
-  val rVal1 = Input(UInt(64.W))
-  val rVal2 = Input(UInt(64.W))
+  val rVal1 = Input(DATA_T)
+  val rVal2 = Input(DATA_T)
 
-  val res = Output(UInt(64.W))
-  val rd  = Output(UInt(5.W))
+  val einst = Output(new EInst)
 }
 
 class ExecuteUnit extends Module
@@ -71,30 +77,36 @@ class ExecuteUnit extends Module
   val io = IO(new ExecuteUnitIO)
 
 
-  // Take immediate as second argument if valid
+  // Take immediate
   val interVal2 = io.rVal2
-  when (io.dinst.imm_valid) {
+  when (io.dinst.imm_en) {
     interVal2 := io.dinst.imm
   }
-  val aluVal2 = DATA_T
 
-  // Shift if valid
+  // Shift
   val shiftALU = Module(new ShiftALU())
   shiftALU.io.word := interVal2
   shiftALU.io.amount := io.dinst.imm
   shiftALU.io.opcode := io.dinst.shift
 
+  // Choose shifted
+  val aluVal2 = DATA_T
   aluVal2 := interVal2
-  when (io.dinst.shift_v) {
+  when (io.dinst.shift_en) {
     aluVal2 := shiftALU.io.res
   }
 
-  // Execute in ALU now that we have second input ready
+  // Execute in ALU now that we have both inputs ready
   val basicALU = Module(new BasicALU())
   basicALU.io.a := io.rVal1
   basicALU.io.b := aluVal2
   basicALU.io.opcode := io.dinst.aluOp
 
-  io.res := basicALU.io.res
-  io.rd  := io.dinst.rd
+  val einst = Wire(new EInst)
+  einst.res := basicALU.io.res
+  einst.rd  := io.dinst.rd
+  einst.tag := io.dinst.tag
+  einst.rd_v := true.B
+
+  io.einst := einst
 }
