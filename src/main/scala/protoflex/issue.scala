@@ -11,22 +11,22 @@ import chisel3.util.PriorityEncoder
 import common.PROCESSOR_TYPES._
 
 class IssueUnitIO extends Bundle {
-  // Fetch - (Decode) - Issue
+  // Decode - Issue
   val enq = EnqIO(new DInst)
   val tag = Input(TAG_T)
 
   // Issue - Exec
   val deq = DeqIO(new DInst)
 
+
   //`Exec - Issue
   val exe_rd = Input(REG_T)
   val exe_tag = Input(TAG_T)
-//  val exe_res = Input(DATA_T)
+  val exe_rd_v = Input(Bool())
   // Mem - Issue
   val mem_rd = Input(REG_T)
   val mem_tag = Input(TAG_T)
-//  val mem_res = Input(DATA_T)
-
+  val mem_rd_v =Input(Bool())
 }
 
 /** IssueUnit
@@ -47,13 +47,13 @@ class IssueUnit extends Module
     * reg_pipe   Contains the next decoded instruction to issue per thread.
     *            The Round Robine Arbiter selects which thread issues during the cycle.
     * reg_pipe_v The valid bit indicates whenever the register contains a valid decoded instruction.
-    * reg_pipe_r This signal indicates whenever the register is ready to recieve the next instruction.
+    * sig_pipe_r This signal indicates whenever the register is ready to recieve the next instruction.
     */
   val reg_pipe   = RegInit(VecInit(Seq.fill(NUM_THREADS)(new DInst)))
   val reg_pipe_v = RegInit(VecInit(0.U(NUM_THREADS.W).toBools))
   val sig_pipe_r = WireInit(VecInit(UInt(NUM_THREADS.W).toBools))
 
-  /** Issue stage buffer components
+  /** Issue stage buffer
     * FIFO_i To buffer instructions we have a FIFO queue with flow and pipe modes enabled per thread.
     *        Flow, this implies that if the register is ready to recieve a decoded instruction, it will
     *            bypass the FIFO connecting directly into the register, thus saving a cycle.
@@ -65,27 +65,34 @@ class IssueUnit extends Module
   // Instanciates queue modules, expresses their IO through the vector
   val fifo_vec = VecInit(Seq.fill(NUM_THREADS)(Module(FIFO_i).io))
 
-  /** Arbiter
+  /** Issue stage arbiter
     * arbiter        Round Robin Arbiter
     * reg_issue_idx  Contains the index of the last issued thread
-    * sig_next_idx   This signal indicates the next instruction to issue
     * sig_pipe_i     This signal indicates which threads are ready to be issued
+    * sig_next_idx   This signal indicates the next instruction to issue
     */
   val arbiter       = new RRArbiter(NUM_THREADS)
   val reg_issue_idx = Reg(0.U(TAG_T))
-  val sig_next_idx  = Wire(TAG_T)
   val sig_pipe_i    = Wire(UInt(NUM_THREADS.W))
+  val sig_next_idx  = Wire(TAG_T)
+
+  /** Managing backpressure
+    */
+  val exe_stall = WireInit(Bool())
+  val mem_stall = WireInit(Bool())
 
   // Enqueuing interface Decode -> FIFO
-  // By default not valid, if the tag matches, overwrites to the valid input
+  // Enqueues the Decoded instrcution with matching tag
+  fifo_vec map { f =>
+    f.enq.valid := false.B
+    f.enq.bits := io.enq.bits
+  }
   io.enq.ready := fifo_vec(io.tag).enq.ready
-  fifo_vec map ( f => f.enq.valid := false.B )
   fifo_vec(io.tag).enq.valid := io.enq.valid
-  fifo_vec map ( f => f.enq.bits := io.enq.bits )
 
-  // Dequeing buffered interface : FIFO -> Reg
+  // Dequeing buffers interface : FIFO -> Reg
   // Registers who are invalid are ready to recieve new value
-  sig_pipe_r zip reg_pipe_v map { case (rdy, valid) => rdy := ~valid }
+  sig_pipe_r zip reg_pipe_v map { case (reg_r, reg_v) => reg_r := ~reg_v}
   fifo_vec zip (reg_pipe, reg_pipe_v, sig_pipe_r).zipped.toSeq map {
     case (fifo, (reg, reg_v, sig_r)) =>
       fifo.deq.ready := sig_r
@@ -93,24 +100,34 @@ class IssueUnit extends Module
       reg_v := Mux(sig_r, fifo.deq.valid, reg_v)
   }
 
-  // Choose next thread to Issue (Reg, hazards -> idx)
-  // Thread is ready to issue if it has a valid decoded instruction in register and has no hazard detected.
-  sig_pipe_i.toBools zip reg_pipe_v map { case (rdy,valid) => rdy := valid }
-  sig_pipe_i(io.exe_tag) := (reg_pipe_v(io.exe_tag) & (reg_pipe(io.exe_tag).rd != io.exe_rd)).asUInt
-  sig_pipe_i(io.mem_tag) := (reg_pipe_v(io.mem_tag) & (reg_pipe(io.mem_tag).rd != io.mem_rd)).asUInt
-  // Arbiter interface
-  arbiter.io.ready := sig_pipe_i.data
+  // Choose next thread to Issue (Reg status + hazards -> idx)
+  // Thread is ready to be issued if it has a valid decoded instruction in register and has no hazard detected.
+  sig_pipe_i.toBools zip reg_pipe_v map { case (sig_rdy,reg_v) => sig_rdy := reg_v}
+  exe_stall := (io.exe_rd_v && ((reg_pipe(io.exe_tag).rs1 === io.exe_rd) || (reg_pipe(io.exe_tag).rs2 === io.exe_rd)))
+  mem_stall := (io.mem_rd_v && ((reg_pipe(io.mem_tag).rs1 === io.mem_rd) || (reg_pipe(io.mem_tag).rs2 === io.mem_rd)))
+  when(io.exe_tag === io.mem_tag) {
+    sig_pipe_i(io.exe_tag) := reg_pipe_v(io.exe_tag) && !(exe_stall || mem_stall)
+  }.otherwise {
+    sig_pipe_i(io.exe_tag) := reg_pipe_v(io.exe_tag) && !exe_stall
+    sig_pipe_i(io.mem_tag) := reg_pipe_v(io.mem_tag) && !mem_stall
+  }
+
+  // Get idx to issue
+  arbiter.io.ready := sig_pipe_i
   arbiter.io.last  := reg_issue_idx
   sig_next_idx     := arbiter.io.next
-  // Update for next round
-  reg_issue_idx := sig_next_idx
 
-  // Issues the thread : Reg -> Exec
-  io.deq.bits  := reg_pipe(sig_next_idx.data)
-  io.deq.valid := reg_pipe_v(sig_next_idx.data)
-  // Set thread ready to recieve next value if next stage is ready
-  sig_pipe_i(sig_next_idx.data) := io.deq.ready
-
+  io.deq.bits  := reg_pipe(sig_next_idx)
+  io.deq.valid := false.B
+  // If at least one of the threads is ready to be issued
+  when(sig_pipe_i.orR() && io.deq.ready) {
+    // Set issued thread register ready to recieve next instruction
+    sig_pipe_r(sig_next_idx) := true.B
+    // Update for next round
+    reg_issue_idx := sig_next_idx
+    // Issues the thread : Reg -> Exec
+    io.deq.valid := true.B
+  }
 }
 
 class RRArbiter(arbN: Int)
