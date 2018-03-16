@@ -23,6 +23,7 @@ object PROCESSOR_TYPES
   def INST_T = UInt(W_INST)
 
   // Regs
+  def REG_N = 32
   def W_REG = 5.W
   def REG_T = UInt(W_REG)
   val REG_X = 0.U(W_REG)
