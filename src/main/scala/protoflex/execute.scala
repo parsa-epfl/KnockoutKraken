@@ -49,7 +49,7 @@ class ShiftALU extends Module {
   def rotateRight[T <: Data](norm: Vec[T], rot: UInt): Vec[T] = {
     val n = norm.size
     VecInit.tabulate(n) { i =>
-      Mux(rot < UInt(n - i), norm(rot - UInt(n - i)), norm(UInt(i) + rot))
+      Mux(rot < (n - i).U, norm(rot - (n - i).U), norm(i.U + rot))
     }
   }
 
@@ -58,7 +58,7 @@ class ShiftALU extends Module {
               Array(
                 LSL -> (io.word << io.amount),
                 LSR -> (io.word >> io.amount),
-                ASR -> (io.word.asSInt() >> io.amount),
+                ASR -> (io.word.asSInt() >> io.amount).asUInt(),
                 ROR -> rotateRight(VecInit(io.word.toBools), io.amount).asUInt
               ))
 }
@@ -78,10 +78,7 @@ class ExecuteUnit extends Module
 
 
   // Take immediate
-  val interVal2 = io.rVal2
-  when (io.dinst.imm_en) {
-    interVal2 := io.dinst.imm
-  }
+  val interVal2 = Mux(io.dinst.rs2_en, io.rVal2, io.dinst.imm)
 
   // Shift
   val shiftALU = Module(new ShiftALU())
@@ -90,11 +87,7 @@ class ExecuteUnit extends Module
   shiftALU.io.opcode := io.dinst.shift
 
   // Choose shifted
-  val aluVal2 = DATA_T
-  aluVal2 := interVal2
-  when (io.dinst.shift_en) {
-    aluVal2 := shiftALU.io.res
-  }
+  val aluVal2 = Mux(io.dinst.shift_en, shiftALU.io.res, interVal2)
 
   // Execute in ALU now that we have both inputs ready
   val basicALU = Module(new BasicALU())
@@ -102,11 +95,13 @@ class ExecuteUnit extends Module
   basicALU.io.b := aluVal2
   basicALU.io.opcode := io.dinst.aluOp
 
+  // Build executed instrcution
   val einst = Wire(new EInst)
   einst.res := basicALU.io.res
   einst.rd  := io.dinst.rd
   einst.tag := io.dinst.tag
   einst.rd_v := true.B
 
+  // Output
   io.einst := einst
 }
