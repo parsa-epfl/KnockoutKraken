@@ -2,8 +2,10 @@ package trial
 
 import chisel3.iotesters
 import chisel3.iotesters.{ChiselFlatSpec, Driver, PeekPokeTester}
+import utils.AssemblyParser
 
-class TrialUnitTesterRotate(c: TrialRotate) extends PeekPokeTester(c) {
+class TrialUnitTesterRotate(c: TrialRotate) extends PeekPokeTester(c)
+{
   poke(c.io.in, 0x1)
   poke(c.io.rot, 0)
   step(1)
@@ -25,7 +27,8 @@ class TrialUnitTesterRotate(c: TrialRotate) extends PeekPokeTester(c) {
   expect(c.io.out, 0x2)
 }
 
-class TrialUnitTesterVecs(c: TrialVecs) extends PeekPokeTester(c) {
+class TrialUnitTesterVecs(c: TrialVecs) extends PeekPokeTester(c)
+{
   for(i <- 0 to 10 ) {
     expect(c.io.out, i * (i%4))
     expect(c.io.out0, i * 0)
@@ -36,6 +39,22 @@ class TrialUnitTesterVecs(c: TrialVecs) extends PeekPokeTester(c) {
   }
 }
 
+class TrialUnitPriority(c: TrialPriority) extends PeekPokeTester(c)
+{
+
+  for(i <- 0 to 3 ) {
+    poke(c.io.in, i)
+    step(1)
+    expect(c.io.out, 0)
+    expect(c.io.out0, if(i==0) 0 else (0 + 1))
+    expect(c.io.out1, if(i==1) 0 else (1 + 1))
+    expect(c.io.out2, if(i==2) 0 else (2 + 1))
+    expect(c.io.out3, if(i==3) 0 else (3 + 1))
+  }
+}
+
+
+
 class TrialTester extends ChiselFlatSpec {
   private val backendNames = if(firrtl.FileUtils.isCommandAvailable("verilator")) {
     Array("firrtl", "verilator")
@@ -44,16 +63,23 @@ class TrialTester extends ChiselFlatSpec {
     Array("firrtl")
   }
   for ( backendName <- backendNames ) {
-    "Trial" should s"test some stuff (with $backendName)" in {
+    "TrialRotate" should s"test right rotate function from alu and priority enconder (with $backendName)" in {
       Driver(() => new TrialRotate, backendName) {
         c => new TrialUnitTesterRotate(c)
       } should be (true)
     }
   }
   for ( backendName <- backendNames ) {
-    "TrialVecs" should s"test some stuff (with $backendName)" in {
+    "TrialVecs" should s"test how to create registered vectors and index (with $backendName)" in {
       Driver(() => new TrialVecs, backendName) {
         c => new TrialUnitTesterVecs(c)
+      } should be (true)
+    }
+  }
+  for ( backendName <- backendNames ) {
+    "TrialPriority" should s"test how chisel assignement works with linear overwriting assignements (with $backendName)" in {
+      Driver(() => new TrialPriority, backendName) {
+        c => new TrialUnitPriority(c)
       } should be (true)
     }
   }

@@ -45,3 +45,29 @@ class TrialRotate extends Module {
   val vec = VecInit(io.in.toBools)
   io.out := rotateRight(vec, io.rot).asUInt
 }
+
+class TrialPriority extends Module {
+
+  val io = IO(new Bundle {
+                val in  = Input(UInt(2.W))
+                val out = Output(UInt(8.W))
+
+                val out0 = Output(UInt(8.W))
+                val out1 = Output(UInt(8.W))
+                val out2 = Output(UInt(8.W))
+                val out3 = Output(UInt(8.W))
+              })
+
+  val vec = RegInit(VecInit(Seq.fill(4)(0.U(8.W))))
+
+  vec.zipWithIndex map { case (r,i) => r := (i + 1).U}
+  vec(io.in) := 0.U
+
+  io.out := vec(io.in)
+
+  io.out0 := vec(0.U)
+  io.out1 := vec(1.U)
+  io.out2 := vec(2.U)
+  io.out3 := vec(3.U)
+}
+
