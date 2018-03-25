@@ -70,3 +70,32 @@ object DECODE_MATCHING_TABLES
       EON  -> List(I_LogSR, OP_EON, Y, Y, Y, N, Y, Y)
     )
 }
+
+// Non hardware types for Testing and debbuging
+object DECODE_INTEGER_LITERALS
+{
+  // Default Values
+  val IMM_X = 0
+
+  // Controls Signals
+  val Y = 1
+  val N = 0
+
+  // ALU Operation Signals
+  val OP_AND  = 0
+  val OP_BIC  = 1
+  val OP_ORR  = 2
+  val OP_ORN  = 3
+  val OP_EOR  = 4
+  val OP_EON  = 5
+  val OP_ADD  = 6
+  val OP_SUB  = 7
+  val OP_ALU_X = 0
+
+  // Shiift Operation Signals
+  val LSL     = 0
+  val LSR     = 1
+  val ASR     = 2
+  val ROR     = 3
+  val SHIFT_X = 0
+}
