@@ -33,25 +33,23 @@ class ExecuteALULog_SR(c: ExecuteUnit) extends PeekPokeTester(c)
 
   instrs foreach { inst =>
     println("Line : " + inst.line)
-    val dinst_vals = inst.dinstvals
-    val dinst_sigs = dinst_vals.slice(2, dinst_vals.size)
-    dinst_in zip dinst_sigs map { case (io, value) => poke(io, value)}
+    dinst_in zip inst.io map { case (io, value) => poke(io, value)}
     poke(c.io.rVal1, rVal1)
     poke(c.io.rVal2, rVal2)
 
-    if(inst.getSig("inst_en") != 0)
+    if(inst.inst_en != 0)
     {
       //val val2 = if(inst.getSig("imm_en") == 0) rVal2 else inst.getSig("imm").toInt
-      val val2 = if(inst.getSig("shift_en") != 0) {
-        (inst.getSig("shift").toInt, inst.getSig("imm").toInt) match {
-          case (LSL, imm)  => rVal2 << imm
+      val val2 = if(inst.shift_en != N ) {
+        (inst.shift.toInt, inst.imm.toInt) match {
+          case (LSL, imm)  => rVal2 <<  imm
           case (LSR, imm)  => rVal2 >>> imm
-          case (ASR, imm)  => rVal2 >> imm
+          case (ASR, imm)  => rVal2 >>  imm
           case (ROR, imm)  => rVal2 >>> imm | rVal2 << ~imm
         }
       } else { rVal2 }
 
-      val res = inst.getSig("aluOp").toInt match {
+      val res = inst.aluOp.toInt match {
        case OP_AND => (rVal1  &  val2)
        case OP_BIC => (rVal1  & ~val2)
        case OP_ORR => (rVal1  |  val2)

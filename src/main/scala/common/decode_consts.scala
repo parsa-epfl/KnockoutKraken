@@ -98,4 +98,16 @@ object DECODE_INTEGER_LITERALS
   val ASR     = 2
   val ROR     = 3
   val SHIFT_X = 0
+
+  // Types
+  private def W_TYPE = 2
+  val I_X     = 0
+  val I_LogSR = 1
+
+  def decode_table(inst_type : Int ): List[BigInt] =
+    inst_type match {
+    case I_LogSR => List(Y, Y, Y, N, Y, Y)
+    case I_X     => List(N, N, N, N, N, N)
+  }
+
 }
