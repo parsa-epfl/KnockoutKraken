@@ -11,7 +11,7 @@ import utils.AssemblyInstruction
 
 class DecodeTests(c: DecodeUnit) extends PeekPokeTester(c)
 {
-  val instrs = AssemblyParser.parse("decode.x")
+  val instrs = AssemblyParser.parse("alu.x")
 
   val dinst_out = Seq(
     c.io.out_dinst.bits.aluOp,
@@ -29,7 +29,7 @@ class DecodeTests(c: DecodeUnit) extends PeekPokeTester(c)
   )
 
   instrs map {
-    case inst =>
+    case inst if(inst.inst_en != 0) =>
       println(inst.line)
       poke(c.io.in_inst.bits, inst.bitPat)
       poke(c.io.in_inst.valid, 1)
@@ -41,6 +41,7 @@ class DecodeTests(c: DecodeUnit) extends PeekPokeTester(c)
       dinst_out zip inst.io map { case (out, in) => expect(out, in)}
 
       expect(c.io.out_dinst.bits.tag, 1)
+    case _ =>
   }
 }
 
