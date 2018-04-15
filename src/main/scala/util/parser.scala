@@ -6,23 +6,24 @@ import scala.util.matching.Regex
 import common.DECODE_INTEGER_LITERALS._
 
 class AssemblyInstruction
+  (
+    val line       : String,
+    val inst_type  : BigInt,
+    val aluOp      : BigInt,
+    val rd         : BigInt,
+    val rs1        : BigInt,
+    val rs2        : BigInt,
+    val imm        : BigInt,
+    val shift      : BigInt,
+    val rd_en      : BigInt,
+    val rs1_en     : BigInt,
+    val rs2_en     : BigInt,
+    val imm_en     : BigInt,
+    val shift_en   : BigInt,
+    val inst_en    : BigInt,
+    val bitPat     : BigInt
+  )
 {
-  var line   = "": String
-
-  var inst_type = I_X: BigInt
-  var aluOp     = OP_ALU_X: BigInt
-  var rd        = 0: BigInt
-  var rs1       = 0: BigInt
-  var rs2       = 0: BigInt
-  var imm       = 0: BigInt
-  var shift     = 0: BigInt
-  var rd_en     = N: BigInt
-  var rs1_en    = N: BigInt
-  var rs2_en    = N: BigInt
-  var imm_en    = N: BigInt
-  var shift_en  = N: BigInt
-  var inst_en   = N: BigInt
-
   val io = Seq(
     aluOp,
     rd,
@@ -45,60 +46,109 @@ class AssemblyInstruction
   */
 object AssemblyInstruction
 {
-  def apply( op     : String,
-             rd     : Option[Int],
-             rs1    : Option[Int],
-             rs2    : Option[Int],
-             imm    : Option[Int],
-             shift  : Option[String],
-             bitPat : String,
-             line   : String ) : AssemblyInstruction = {
+  // Instruction types
+  def LogSR = Map(
+    "AND" -> OP_AND,
+    "BIC" -> OP_BIC,
+    "ORR" -> OP_ORR,
+    "ORN" -> OP_ORN,
+    "EOR" -> OP_EOR,
+    "EON" -> OP_EON
+  )
 
-    var inst = new AssemblyInstruction
-    val inst_ctrl: List[(BigInt)=>Unit] =
-      List(inst.rd_en_=, inst.rs1_en_=, inst.rs2_en_=, inst.imm_en_=, inst.inst_en_=)
-    val ctrl = decode_table(I_X)
-    (inst_ctrl zip ctrl) map{ case (i_a, v) => i_a(v)}
+  def ShiftTypes = Map(
+    "LSL" -> LSL,
+    "LSR" -> LSR,
+    "ASR" -> ASR,
+    "ROR" -> ROR
+  )
 
-    inst.line = line
+  /**
+    * Creates a simple instruction with registers enabled
+    */
+  def apply(rd:Int, rs1:Int, rs2 : Int) : AssemblyInstruction = {
+    AssemblyInstruction(
+      "and": String,
+      Some(rd): Option[Int],
+      Some(rs1): Option[Int],
+      Some(rs2): Option[Int],
+      None: Option[Int],
+      None: Option[String],
+      "00000000": String,
+      "empty": String)
+  }
 
-    (op, rd, rs1, rs2, imm, shift) match {
-      case (_, Some(s1), Some(s2), Some(d), Some(i), Some(shift)) =>
+  def apply( i_op     : String,
+             i_rd     : Option[Int],
+             i_rs1    : Option[Int],
+             i_rs2    : Option[Int],
+             i_imm    : Option[Int],
+             i_shift  : Option[String],
+             i_bitPat : String,
+             i_line   : String ) : AssemblyInstruction = {
+
+
+    val line = i_line
+    val bitPat = BigInt(i_bitPat, 16)
+
+    var inst_type = I_X
+    var aluOp = OP_ALU_X
+    var rd    = REG_X
+    var rs1   = REG_X
+    var rs2   = REG_X
+    var imm   = IMM_X
+    var shift = SHIFT_X
+
+    var ctrl = decode_table(I_X)
+    (i_rd, i_rs1, i_rs2) match {
+      case (Some(d), Some(s1), Some(s2)) if LogSR.get(i_op.toUpperCase).isDefined =>
+        inst_type = I_LogSR
+
+        // (alu_op)
+        aluOp = LogSR.getOrElse(i_op.toUpperCase, OP_ALU_X)
+
         // (reg_addr | imm_val)
-        inst.rd  = d
-        inst.rs1 = s1
-        inst.rs2 = s2
-        inst.imm = i
+        rd  = d
+        rs1 = s1
+        rs2 = s2
+        imm = i_imm match { case Some(i) => i; case _ => 0 }
 
 
         // (shift_type)
-        shift.toUpperCase match {
-          case "LSL" => inst.shift_en = Y; inst.shift = LSL
-          case "LSR" => inst.shift_en = Y; inst.shift = LSR
-          case "ASR" => inst.shift_en = Y; inst.shift = ASR
-          case "ROR" => inst.shift_en = Y; inst.shift = ROR
-          case  _    => inst.shift_en = Y; inst.shift = SHIFT_X
+        i_shift match {
+          case Some(s) => shift = ShiftTypes.getOrElse(s.toUpperCase, SHIFT_X)
+          case None    => shift = SHIFT_X
         }
 
-        // ( inst_type, alu_op)
-        val i_op = op.toUpperCase match {
-          case "AND" => inst.inst_type = I_LogSR; inst.aluOp = OP_AND
-          case "BIC" => inst.inst_type = I_LogSR; inst.aluOp = OP_BIC
-          case "ORR" => inst.inst_type = I_LogSR; inst.aluOp = OP_ORR
-          case "ORN" => inst.inst_type = I_LogSR; inst.aluOp = OP_ORN
-          case "EOR" => inst.inst_type = I_LogSR; inst.aluOp = OP_EOR
-          case "EON" => inst.inst_type = I_LogSR; inst.aluOp = OP_EON
-          case "ADD" => inst.inst_type = 0;       inst.aluOp = OP_ADD
-          case "SUB" => inst.inst_type = 0;       inst.aluOp = OP_SUB
-          case _     => inst.inst_type = 0;       inst.aluOp = OP_ALU_X
-        }
-
-        val ctrl = decode_table(inst.inst_type.toInt)
-        (inst_ctrl zip ctrl) map{ case (i_a, v) => i_a(v)}
+        ctrl = decode_table(inst_type.toInt)
       case _ =>
 
     }
-    inst
+    val rd_en    = ctrl(0)
+    val rs1_en   = ctrl(1)
+    val rs2_en   = ctrl(2)
+    val imm_en   = ctrl(3)
+    val shift_en = ctrl(4)
+    val inst_en  = ctrl(5)
+
+    new AssemblyInstruction(
+      line,
+      inst_type,
+      aluOp,
+      rd,
+      rs1,
+      rs2,
+      imm,
+      shift,
+      rd_en,
+      rs1_en,
+      rs2_en,
+      imm_en,
+      shift_en,
+      inst_en,
+      bitPat
+    )
+
   }
 }
 
@@ -151,7 +201,7 @@ object AssemblyParser
           val shift  = grouVals("shift")  map ( n => matches.group(n)) find( s => s != null && s != "") match { case Some(s) => Some(s); case _ => None}
           val bitPat = grouVals("bitPat") map ( n => matches.group(n)) find( s => s != null && s != "") match { case Some(s) => s; case _ => ""}
 
-          insts = AssemblyInstruction(op, rd, rs1, rs2, imm, shift, bitPat, line) :: insts
+          insts = insts :+ AssemblyInstruction(op.toUpperCase, rd, rs1, rs2, imm, shift, bitPat, line)
         } catch {
           case e : Exception => throw new Exception("Regex matched wrong, non integer where expected integer (pos:" + file.pos + ") in line :\n\t" + line)
         }
