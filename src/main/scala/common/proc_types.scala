@@ -13,6 +13,8 @@ object PROCESSOR_TYPES
   def NUM_THREADS = 4
   def W_NUM_THREAD = chisel3.util.log2Ceil(NUM_THREADS).W // 4 Threads
   def TAG_T = UInt(W_NUM_THREAD)
+  val TAG_X = 0.U(W_NUM_THREAD)
+  val TAG_VEC_X = 0.U(NUM_THREADS.W)
 
   // Data
   def W_DATA = 64.W

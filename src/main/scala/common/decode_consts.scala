@@ -76,6 +76,7 @@ object DECODE_INTEGER_LITERALS
 {
   // Default Values
   val IMM_X = 0
+  val REG_X = 0
 
   // Controls Signals
   val Y = 1
@@ -104,10 +105,24 @@ object DECODE_INTEGER_LITERALS
   val I_X     = 0
   val I_LogSR = 1
 
+
   def decode_table(inst_type : Int ): List[BigInt] =
+
     inst_type match {
-    case I_LogSR => List(Y, Y, Y, N, Y, Y)
-    case I_X     => List(N, N, N, N, N, N)
+      //                   RD         INSTRUCTION
+      //                   EN           VALID
+      //                   | RS1          |
+      //                   |  EN          |
+      //                   |  | RS2  SHIFT|
+      //                   |  |  EN    EN |
+      //                   |  |  | IMM |  |
+      //                   |  |  |  EN |  |
+      //                   |  |  |  |  |  |
+      //                   |  |  |  |  |  |
+      //                   |  |  |  |  |  |
+      case I_X     => List(N, N, N, N, N, N)
+      case I_LogSR => List(Y, Y, Y, N, Y, Y)
+
   }
 
 }
