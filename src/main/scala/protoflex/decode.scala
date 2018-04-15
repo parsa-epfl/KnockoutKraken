@@ -1,7 +1,7 @@
 package protoflex
 
 import chisel3._
-import chisel3.util.{BitPat, ListLookup, MuxLookup, EnqIO, DeqIO}
+import chisel3.util.{BitPat, ListLookup, MuxLookup, EnqIO, DeqIO, Cat}
 
 import common.PROCESSOR_TYPES._
 import common.DECODE_CONTROL_SIGNALS._
@@ -52,6 +52,33 @@ class DInst extends Bundle
 
     this
   }
+
+  def empty() = {
+
+    // Data
+    rd    := REG_X
+    rs1   := REG_X
+    rs2   := REG_X
+    imm   := IMM_X
+    shift := SHIFT_X
+
+    // Control
+    aluOp := OP_ALU_X
+
+    // Enables
+    rd_en    := N
+    rs1_en   := N
+    rs2_en   := N
+    imm_en   := N
+    shift_en := N
+
+    // Instruction is Valid
+    inst_en := N
+
+    tag := TAG_X
+
+    this
+  }
 }
 
 class DecodeUnitIO extends Bundle
@@ -62,8 +89,6 @@ class DecodeUnitIO extends Bundle
 
   // Decode - Issue
   val out_dinst = EnqIO(new DInst)
-  val out_tag = Output(TAG_T)
-
 }
 
 /** Decode unit
@@ -72,12 +97,18 @@ class DecodeUnitIO extends Bundle
 class DecodeUnit extends Module
 {
   val io = IO(new DecodeUnitIO)
-  val dinst = Wire(new DInst).decode(io.in_inst.bits, io.in_tag)
+  val inst = Cat(1.U,io.in_inst.bits(30,0))// Hack to force 64 bits operations
 
-  io.out_dinst.bits  := dinst
+//    Cat(
+//    io.in_inst.bits(31, 24), io.in_inst.bits(23, 16), io.in_inst.bits(15, 8), io.in_inst.bits( 7,  0),
+//    1.U, io.in_inst.bits( 6, 0), io.in_inst.bits(15, 8), io.in_inst.bits(23,16), io.in_inst.bits(31,24)
+//  )
+
+  val dinst = Wire(new DInst).decode(inst, io.in_tag)
+
+  io.out_dinst.bits     := dinst
+  io.out_dinst.bits.tag := io.in_tag
+
   io.out_dinst.valid := io.in_inst.valid
   io.in_inst.ready   := io.out_dinst.ready
-
-  io.out_tag := io.in_tag
-
 }
