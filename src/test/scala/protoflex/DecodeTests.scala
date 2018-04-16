@@ -43,6 +43,7 @@ class DecodeTests(c: DecodeUnit) extends PeekPokeTester(c)
       expect(c.io.out_dinst.bits.tag, 1)
     case _ =>
   }
+
 }
 
 class DecodeTester extends ChiselFlatSpec
@@ -52,7 +53,7 @@ class DecodeTester extends ChiselFlatSpec
   private val backendNames = Array("firrtl")
 
   for ( backend <- backendNames ) {
-    it should s"decode an instruction (with $backend)" in {
+    it should s"decode logical shift register instructions (with $backend)" in {
       Driver(() => new DecodeUnit, backend)((c) => new DecodeTests(c)) should be (true)
     }
   }
