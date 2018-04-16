@@ -97,14 +97,8 @@ class DecodeUnitIO extends Bundle
 class DecodeUnit extends Module
 {
   val io = IO(new DecodeUnitIO)
-  val inst = Cat(1.U,io.in_inst.bits(30,0))// Hack to force 64 bits operations
 
-//    Cat(
-//    io.in_inst.bits(31, 24), io.in_inst.bits(23, 16), io.in_inst.bits(15, 8), io.in_inst.bits( 7,  0),
-//    1.U, io.in_inst.bits( 6, 0), io.in_inst.bits(15, 8), io.in_inst.bits(23,16), io.in_inst.bits(31,24)
-//  )
-
-  val dinst = Wire(new DInst).decode(inst, io.in_tag)
+  val dinst = Wire(new DInst).decode(io.in_inst.bits, io.in_tag)
 
   io.out_dinst.bits     := dinst
   io.out_dinst.bits.tag := io.in_tag

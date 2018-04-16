@@ -1,13 +1,13 @@
 # Logical (shifted register) 64-bit
-and	w15, w5, w0
-bic	w12, w3, w0
-orr	w16, w3, w0
-orn	w1, w21, w0
-eor	w5, w11, w0
-eor	w1, w1, w0
-and	w5, w8, w15, LSL #15
-and	w3, w15, w20, LSR #15
-and	w7, w1, w0, ASR #1
+and	x15, x5, x0
+bic	x12, x3, x0
+orr	x16, x3, x0
+orn	x1, x21, x0
+eor	x5, x11, x0
+eon	x1, x1, x0
+and	x5, x8, x15, LSL #15
+and	x3, x15, x20, LSR #15
+and	x7, x1, x0, ASR #1
 
-add	w5, w7, w30
-sub	w2, w10, w0
+add	x5, x7, x30
+sub	x2, x10, x0
