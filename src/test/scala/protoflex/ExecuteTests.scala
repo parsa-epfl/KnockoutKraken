@@ -58,7 +58,7 @@ class ExecuteALULog_SR(c: ExecuteUnit) extends PeekPokeTester(c)
        case OP_EON => (rVal1  ^ ~val2)
      }
 
-     expect(c.io.einst.res, res)
+      expect(c.io.einst.res, res)
     }
     step(1)
   }
@@ -68,8 +68,10 @@ class ExecuteTester extends ChiselFlatSpec
 {
   behavior of "Executer"
 
-  backends foreach {backend =>
-    it should s"decode an instruction" in {
+  private val backendNames = Array("firrtl")
+
+  for ( backend <- backendNames ) {
+    it should s"execute ALU ops and shifts for dual register operations (with $backend)" in {
       Driver(() => new ExecuteUnit, backend)((c) => new ExecuteALULog_SR(c)) should be (true)
     }
   }
