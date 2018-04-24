@@ -55,6 +55,7 @@ class TrialUnitPriority(c: TrialPriority) extends PeekPokeTester(c)
 
 
 
+/*
 class TrialTester extends ChiselFlatSpec {
   private val backendNames = if(firrtl.FileUtils.isCommandAvailable("verilator")) {
     Array("firrtl", "verilator")
@@ -115,4 +116,4 @@ class TrialTester extends ChiselFlatSpec {
 //      c => new TrialUnitTester(c)
 //    } should be (true)
 //  }
-}
+} // */
