@@ -8,7 +8,7 @@ import common.DECODE_INTEGER_LITERALS._
 class AssemblyInstruction
   (
     val line       : String,
-    val inst_type  : BigInt,
+    val itype      : BigInt,
     val aluOp      : BigInt,
     val rd         : BigInt,
     val rs1        : BigInt,
@@ -25,6 +25,7 @@ class AssemblyInstruction
   )
 {
   val io = Seq(
+    itype,
     aluOp,
     rd,
     rs1,
@@ -91,7 +92,7 @@ object AssemblyInstruction
     val line = i_line
     val bitPat = BigInt(i_bitPat, 16)
 
-    var inst_type = I_X
+    var itype = I_X
     var aluOp = OP_ALU_X
     var rd    = REG_X
     var rs1   = REG_X
@@ -102,7 +103,7 @@ object AssemblyInstruction
     var ctrl = decode_table(I_X)
     (i_rd, i_rs1, i_rs2) match {
       case (Some(d), Some(s1), Some(s2)) if LogSR.get(i_op.toUpperCase).isDefined =>
-        inst_type = I_LogSR
+        itype = I_LogSR
 
         // (alu_op)
         aluOp = LogSR.getOrElse(i_op.toUpperCase, OP_ALU_X)
@@ -120,7 +121,7 @@ object AssemblyInstruction
           case None    => shift = SHIFT_X
         }
 
-        ctrl = decode_table(inst_type.toInt)
+        ctrl = decode_table(itype.toInt)
       case _ =>
 
     }
@@ -133,7 +134,7 @@ object AssemblyInstruction
 
     new AssemblyInstruction(
       line,
-      inst_type,
+      itype,
       aluOp,
       rd,
       rs1,
@@ -156,7 +157,7 @@ object AssemblyParser
 {
   /*
    Regex :
-   [a,b,c,d,e0-9]{1,}[?:]\s*([0-9a-z]{8,8})\s*([a-z]*)\s*[wr]([0-9]*)(,\s*\[|,\s*|.*)((sp|pc)|#([0-9]*)|[wr]([0-9]*))(,\s*|.*)(#([0-9]*)|[wr]([0-9]*))(,\s*|.*)(lsl|lsr|asr|.*)(\s*#|)([0-9]*|)
+   [a,b,c,d,e0-9]{1,}[?:]\s*([0-9a-z]{8,8})\s*([a-z]*)\s*[wrx]([0-9]*)(,\s*\[|,\s*|.*)((sp|pc)|#([0-9]*)|[wrx]([0-9]*))(,\s*|.*)(#([0-9]*)|[wrx]([0-9]*))(,\s*|.*)(lsl|lsr|asr|.*)(\s*#|)([0-9]*|)
    Group information :
 
    group:      1    2        3   6    11
@@ -179,7 +180,7 @@ object AssemblyParser
     "rs2"     -> Seq(12),
     "shift"   -> Seq(14)
   )
-  val regex_str = "[a,b,c,d,e0-9]{1,}[?:]\\s*([0-9a-z]{8,8})\\s*([a-z]*)\\s*[wr]([0-9]*)(,\\s*\\[|,\\s*|.*)((sp|pc)|#([0-9]*)|[wr]([0-9]*))(,\\s*|.*)(#([0-9]*)|[wr]([0-9]*))(,\\s*|.*)(lsl|lsr|asr|.*)(\\s*#|)([0-9]*|)"
+  val regex_str = "[a,b,c,d,e0-9]{1,}[?:]\\s*([0-9a-z]{8,8})\\s*([a-z]*)\\s*[wrx]([0-9]*)(,\\s*\\[|,\\s*|.*)((sp|pc)|#([0-9]*)|[wrx]([0-9]*))(,\\s*|.*)(#([0-9]*)|[wrx]([0-9]*))(,\\s*|.*)(lsl|lsr|asr|.*)(\\s*#|)([0-9]*|)"
   val regex     = new Regex(regex_str)
 
   def parse(filename: String): Seq[AssemblyInstruction] = {
