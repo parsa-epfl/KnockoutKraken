@@ -1,7 +1,7 @@
 package common
 
 import chisel3._
-import chisel3.util.BitPat
+import chisel3.util.{BitPat,log2Ceil}
 
 /*
  * Bit Patterns for Instructions
@@ -10,25 +10,29 @@ import chisel3.util.BitPat
 object PROCESSOR_TYPES
 {
   // Number of threads
-  def NUM_THREADS = 4
-  def W_NUM_THREAD = chisel3.util.log2Ceil(NUM_THREADS).W // 4 Threads
-  def TAG_T = UInt(W_NUM_THREAD)
-  val TAG_X = 0.U(W_NUM_THREAD)
+  val NUM_THREADS = 4
+  val NUM_THREAD_W = log2Ceil(NUM_THREADS).W // 4 Threads
+  def TAG_T = UInt(NUM_THREAD_W)
+  val TAG_X = 0.U(NUM_THREAD_W)
   val TAG_VEC_X = 0.U(NUM_THREADS.W)
 
   // Data
-  def W_DATA = 64.W
-  def DATA_T = UInt(W_DATA)
-  val DATA_X = 0.U(W_DATA)
+  val DATA_W = 64.W
+  def DATA_T = UInt(DATA_W)
+  val DATA_X = 0.U(DATA_W)
 
-  def W_INST = 32.W
-  def INST_T = UInt(W_INST)
+  val INST_W = 32.W
+  def INST_T = UInt(INST_W)
 
   // Regs
-  def REG_N = 32
-  def W_REG = 5.W
-  def REG_T = UInt(W_REG)
-  val REG_X = 0.U(W_REG)
+  val REG_N = 32
+  val REG_W = log2Ceil(REG_N).W
+  def REG_T = UInt(REG_W)
+  val REG_X = 0.U(REG_W)
 
+  // Special Regs
+  val NZCV_W = 4.W
+  def NZCV_T = UInt(NZCV_W)
+  val NZCV_X = 0.U(NZCV_W)
 }
 
