@@ -16,9 +16,11 @@ class DInst extends Bundle
   val rs2   = REG_T
   val imm   = IMM_T
   val shift = SHIFT_T
+  val cond  = COND_T
 
   // Control
-  val aluOp = OP_ALU_T
+  val itype = I_T
+  val op = OP_T
 
   // Enables
   val rd_en    = Bool()
@@ -26,6 +28,7 @@ class DInst extends Bundle
   val rs2_en   = Bool()
   val imm_en   = Bool()
   val shift_en = Bool()
+  val cond_en  = Bool()
 
   // Instruction is Valid
   val inst_en = Bool()
@@ -36,19 +39,23 @@ class DInst extends Bundle
     val decoder = ListLookup(inst, decode_default, decode_table)
 
     // Data
-    val dtype = decoder.head
-    rd    := MuxLookup(dtype,   REG_X, Array( I_LogSR -> inst( 4, 0) ))
-    rs1   := MuxLookup(dtype,   REG_X, Array( I_LogSR -> inst( 9, 5) ))
-    rs2   := MuxLookup(dtype,   REG_X, Array( I_LogSR -> inst(20,16) ))
-    imm   := MuxLookup(dtype,   IMM_X, Array( I_LogSR -> inst(15,10) ))
-    shift := MuxLookup(dtype, SHIFT_X, Array( I_LogSR -> inst(23,22) ))
+    val itype = decoder.head
+    rd    := MuxLookup(itype,   REG_X, Array( I_LogSR -> inst( 4, 0) ))
+    rs1   := MuxLookup(itype,   REG_X, Array( I_LogSR -> inst( 9, 5) ))
+    rs2   := MuxLookup(itype,   REG_X, Array( I_LogSR -> inst(20,16) ))
+    imm   := MuxLookup(itype,   IMM_X, Array( I_LogSR -> inst(15,10),
+                                              I_BImm  -> inst(25, 0),
+                                              I_BCImm -> inst(23, 5)))
+    shift := MuxLookup(itype, SHIFT_X, Array( I_LogSR -> inst(23,22) ))
+    cond  := MuxLookup(itype,  COND_X, Array( I_BCImm -> inst( 3, 0) ))
 
     // Control
     val cdecoder = decoder.tail
-    val csignals = Seq(aluOp, rd_en, rs1_en, rs2_en, imm_en, shift_en, inst_en)
+    val csignals = Seq(op, rd_en, rs1_en, rs2_en, imm_en, shift_en, cond_en, inst_en)
     csignals zip cdecoder map { case (s, d) => s:= d }
 
     this.tag := tag
+    this.itype := itype
 
     this
   }
@@ -61,9 +68,11 @@ class DInst extends Bundle
     rs2   := REG_X
     imm   := IMM_X
     shift := SHIFT_X
+    cond  := COND_X
 
     // Control
-    aluOp := OP_ALU_X
+    op := OP_T
+    itype := I_X
 
     // Enables
     rd_en    := N
@@ -71,6 +80,7 @@ class DInst extends Bundle
     rs2_en   := N
     imm_en   := N
     shift_en := N
+    cond_en  := N
 
     // Instruction is Valid
     inst_en := N
