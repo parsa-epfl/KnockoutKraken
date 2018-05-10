@@ -6,37 +6,43 @@ import chisel3.iotesters.{ChiselFlatSpec, Driver, PeekPokeTester}
 
 import utils.AssemblyParser
 import utils.AssemblyInstruction
-import common.DECODE_INTEGER_LITERALS._
+import common.DEC_LITS._
 
 class IssueTestsReadyValid(c: IssueUnit) extends PeekPokeTester(c)
 {
   val dinst_in = Seq(
-    c.io.enq.bits.aluOp,
+    c.io.enq.bits.itype,
+    c.io.enq.bits.op,
     c.io.enq.bits.rd,
     c.io.enq.bits.rs1,
     c.io.enq.bits.rs2,
     c.io.enq.bits.imm,
     c.io.enq.bits.shift,
+    c.io.enq.bits.cond,
     c.io.enq.bits.rd_en,
     c.io.enq.bits.rs1_en,
     c.io.enq.bits.rs2_en,
     c.io.enq.bits.imm_en,
     c.io.enq.bits.shift_en,
+    c.io.enq.bits.cond_en,
     c.io.enq.bits.inst_en
   )
 
   val dinst_out = Seq(
-    c.io.deq.bits.aluOp,
+    c.io.enq.bits.itype,
+    c.io.deq.bits.op,
     c.io.deq.bits.rd,
     c.io.deq.bits.rs1,
     c.io.deq.bits.rs2,
     c.io.deq.bits.imm,
     c.io.deq.bits.shift,
+    c.io.deq.bits.cond,
     c.io.deq.bits.rd_en,
     c.io.deq.bits.rs1_en,
     c.io.deq.bits.rs2_en,
     c.io.deq.bits.imm_en,
     c.io.deq.bits.shift_en,
+    c.io.deq.bits.cond_en,
     c.io.deq.bits.inst_en
   )
 
@@ -111,33 +117,41 @@ class IssueTestsReadyValid(c: IssueUnit) extends PeekPokeTester(c)
 class IssueTestsPriority(c: IssueUnit) extends PeekPokeTester(c)
 {
   val dinst_in = Seq(
-    c.io.enq.bits.aluOp,
+    c.io.enq.bits.itype,
+    c.io.enq.bits.op,
     c.io.enq.bits.rd,
     c.io.enq.bits.rs1,
     c.io.enq.bits.rs2,
     c.io.enq.bits.imm,
     c.io.enq.bits.shift,
+    c.io.enq.bits.cond,
     c.io.enq.bits.rd_en,
     c.io.enq.bits.rs1_en,
     c.io.enq.bits.rs2_en,
     c.io.enq.bits.imm_en,
     c.io.enq.bits.shift_en,
+    c.io.enq.bits.cond_en,
     c.io.enq.bits.inst_en
   )
+
   val dinst_out = Seq(
-    c.io.deq.bits.aluOp,
+    c.io.enq.bits.itype,
+    c.io.deq.bits.op,
     c.io.deq.bits.rd,
     c.io.deq.bits.rs1,
     c.io.deq.bits.rs2,
     c.io.deq.bits.imm,
     c.io.deq.bits.shift,
+    c.io.deq.bits.cond,
     c.io.deq.bits.rd_en,
     c.io.deq.bits.rs1_en,
     c.io.deq.bits.rs2_en,
     c.io.deq.bits.imm_en,
     c.io.deq.bits.shift_en,
+    c.io.deq.bits.cond_en,
     c.io.deq.bits.inst_en
   )
+
   val exe_in = Seq(
     c.io.exe_rd,
     c.io.exe_tag,
@@ -200,15 +214,13 @@ class IssueTester extends ChiselFlatSpec
 {
   behavior of "Issuer"
 
-  private val backendNames = Array("firrtl")
- 
-  for ( backend <- backendNames ) {
+  backends foreach { backend =>
     "IssueTestsReadyValid" should s"test IssueUnit Ready Valid signals for queues (with $backend)" in {
       Driver(() => new IssueUnit, backend)((c) => new IssueTestsReadyValid(c)) should be (true)
     }
   }
 
-  for ( backend <- backendNames ) {
+  backends foreach { backend =>
     "IssueTestsPriority" should s"test IssueUnit arbiter (with $backend)" in {
       Driver(() => new IssueUnit, backend)((c) => new IssueTestsPriority(c)) should be (true)
     }
