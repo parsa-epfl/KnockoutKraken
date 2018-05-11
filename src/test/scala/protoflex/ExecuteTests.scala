@@ -4,8 +4,7 @@ import chisel3._
 import chisel3.iotesters
 import chisel3.iotesters.{ChiselFlatSpec, Driver, PeekPokeTester}
 
-import utils.AssemblyParser
-import utils.AssemblyInstruction
+import utils.{AssemblyParser, AssemblyInstruction, DInstExtractor}
 import common.DEC_LITS._
 
 class ExecuteALULog_SR(c: ExecuteUnit) extends PeekPokeTester(c)
@@ -14,23 +13,7 @@ class ExecuteALULog_SR(c: ExecuteUnit) extends PeekPokeTester(c)
   val rVal1 = 1337
   val rVal2 = 79271
 
-  val dinst_in = Seq(
-    c.io.dinst.itype,
-    c.io.dinst.op,
-    c.io.dinst.rd,
-    c.io.dinst.rs1,
-    c.io.dinst.rs2,
-    c.io.dinst.imm,
-    c.io.dinst.shift,
-    c.io.dinst.cond,
-    c.io.dinst.rd_en,
-    c.io.dinst.rs1_en,
-    c.io.dinst.rs2_en,
-    c.io.dinst.imm_en,
-    c.io.dinst.shift_en,
-    c.io.dinst.cond_en,
-    c.io.dinst.inst_en
-  )
+  val dinst_in = DInstExtractor(c)
 
   instrs map {
     case inst if inst.inst_en.toInt == N =>

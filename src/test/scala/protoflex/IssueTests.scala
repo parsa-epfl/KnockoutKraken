@@ -7,44 +7,11 @@ import chisel3.iotesters.{ChiselFlatSpec, Driver, PeekPokeTester}
 import utils.AssemblyParser
 import utils.AssemblyInstruction
 import common.DEC_LITS._
+import utils.DInstExtractor
 
 class IssueTestsReadyValid(c: IssueUnit) extends PeekPokeTester(c)
 {
-  val dinst_in = Seq(
-    c.io.enq.bits.itype,
-    c.io.enq.bits.op,
-    c.io.enq.bits.rd,
-    c.io.enq.bits.rs1,
-    c.io.enq.bits.rs2,
-    c.io.enq.bits.imm,
-    c.io.enq.bits.shift,
-    c.io.enq.bits.cond,
-    c.io.enq.bits.rd_en,
-    c.io.enq.bits.rs1_en,
-    c.io.enq.bits.rs2_en,
-    c.io.enq.bits.imm_en,
-    c.io.enq.bits.shift_en,
-    c.io.enq.bits.cond_en,
-    c.io.enq.bits.inst_en
-  )
-
-  val dinst_out = Seq(
-    c.io.enq.bits.itype,
-    c.io.deq.bits.op,
-    c.io.deq.bits.rd,
-    c.io.deq.bits.rs1,
-    c.io.deq.bits.rs2,
-    c.io.deq.bits.imm,
-    c.io.deq.bits.shift,
-    c.io.deq.bits.cond,
-    c.io.deq.bits.rd_en,
-    c.io.deq.bits.rs1_en,
-    c.io.deq.bits.rs2_en,
-    c.io.deq.bits.imm_en,
-    c.io.deq.bits.shift_en,
-    c.io.deq.bits.cond_en,
-    c.io.deq.bits.inst_en
-  )
+  val (dinst_in, dinst_out) = DInstExtractor(c)
 
   val exe_in = Seq(
     c.io.exe_rd,
@@ -116,42 +83,7 @@ class IssueTestsReadyValid(c: IssueUnit) extends PeekPokeTester(c)
 
 class IssueTestsPriority(c: IssueUnit) extends PeekPokeTester(c)
 {
-  val dinst_in = Seq(
-    c.io.enq.bits.itype,
-    c.io.enq.bits.op,
-    c.io.enq.bits.rd,
-    c.io.enq.bits.rs1,
-    c.io.enq.bits.rs2,
-    c.io.enq.bits.imm,
-    c.io.enq.bits.shift,
-    c.io.enq.bits.cond,
-    c.io.enq.bits.rd_en,
-    c.io.enq.bits.rs1_en,
-    c.io.enq.bits.rs2_en,
-    c.io.enq.bits.imm_en,
-    c.io.enq.bits.shift_en,
-    c.io.enq.bits.cond_en,
-    c.io.enq.bits.inst_en
-  )
-
-  val dinst_out = Seq(
-    c.io.enq.bits.itype,
-    c.io.deq.bits.op,
-    c.io.deq.bits.rd,
-    c.io.deq.bits.rs1,
-    c.io.deq.bits.rs2,
-    c.io.deq.bits.imm,
-    c.io.deq.bits.shift,
-    c.io.deq.bits.cond,
-    c.io.deq.bits.rd_en,
-    c.io.deq.bits.rs1_en,
-    c.io.deq.bits.rs2_en,
-    c.io.deq.bits.imm_en,
-    c.io.deq.bits.shift_en,
-    c.io.deq.bits.cond_en,
-    c.io.deq.bits.inst_en
-  )
-
+  val (dinst_in, dinst_out) = DInstExtractor(c)
   val exe_in = Seq(
     c.io.exe_rd,
     c.io.exe_tag,
