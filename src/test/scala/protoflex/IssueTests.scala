@@ -34,7 +34,6 @@ class IssueTestsReadyValid(c: IssueUnit) extends PeekPokeTester(c)
   exe_in map { s => poke(s, 0) }
   mem_in map { s => poke(s, 0) }
 
-  println()
   println("Enqueing")
   for (i <- 0 until 3) {
     println("Cycle" + i)
@@ -56,7 +55,6 @@ class IssueTestsReadyValid(c: IssueUnit) extends PeekPokeTester(c)
   }
 
   // Dequeing
-  println()
   println("Dequeing")
   // Confirm queue is full, and others empty
   expect(c.io.enq.ready, 0)
@@ -100,7 +98,6 @@ class IssueTestsPriority(c: IssueUnit) extends PeekPokeTester(c)
   val insts = (0 to n) map { case i => AssemblyInstruction(i: Int, i: Int, i: Int) }
 
   def cycle(cycle : Int, enq_val : Boolean, inst : Int, tag : Int, enq_rdy : Boolean, deq_valid : Boolean, deq_rdy : Boolean, deq_tag : Int, deq_rd : Int) : Unit = {
-    println("Cycle" +  cycle)
     poke(c.io.enq.valid, enq_val)
     poke(c.io.enq.bits.tag, tag)
     poke(c.io.deq.ready, deq_rdy)
@@ -125,21 +122,22 @@ class IssueTestsPriority(c: IssueUnit) extends PeekPokeTester(c)
   step(1)
   expect(c.io.enq.ready, 1)
   expect(c.io.deq.valid, 0)
-  // t:thread, 1,0 queue, R: pipe_reg, ~:last_idx    t  1  0  R ~       +:incoming  -:outgoing ->:deq.ready
-  //                                                  3            2           1           0
-  cycle( 0,  true, 0, 3,  true, false, false, 0, 0) //#|  |  |+0| |#|  |  |  | #|  |  |  | #|  |  |  |~
-  cycle( 1,  true, 1, 2,  true,  true, false, 0, 0) //#|  |  | 0| |#|  |  |+1| #|  |  |  | #|  |  |  |~
-  cycle( 2,  true, 2, 2,  true,  true, false, 0, 0) //#|  |  | 0| |#|  |+2| 1| #|  |  |  | #|  |  |  |~
-  cycle( 3,  true, 3, 2,  true,  true, false, 0, 0) //#|  |  | 0| |#|+3| 2| 1| #|  |  |  | #|  |  |  |~
-  cycle( 4,  true,15, 2, false,  true, false, 0, 0) //#|  |  | 0| |#| 3| 2| 1| #|  |  |  | #|  |  |  |~
-  cycle( 5,  true, 4, 1,  true,  true,  true, 2, 1) //#|  |  | 0| |#| 3| 2|-1|~#|  |  |+4| #|  |  |  | ->
-  cycle( 6,  true, 5, 1,  true,  true,  true, 3, 0) //#|  |  |-0|~|#|  | 3| 2| #|  |+5| 4| #|  |  |  | ->
-  cycle( 7,  true, 6, 1,  true,  true,  true, 1, 4) //#|  |  |  | |#|  | 3| 2| #|+6| 5|-4|~#|  |  |  | ->
-  cycle( 8, false, 0, 0,  true,  true,  true, 2, 2) //#|  |  |  | |#|  | 3|-2|~#|  | 6| 5| #|  |  |  | ->
-  cycle( 9, false, 0, 0,  true,  true,  true, 1, 5) //#|  |  |  | |#|  |  | 3| #|  | 6|-5|~#|  |  |  | ->
-  cycle(10, false, 0, 0,  true,  true,  true, 2, 3) //#|  |  |  | |#|  |  |-3|~#|  |  | 6| #|  |  |  | ->
-  cycle(11, false, 0, 0,  true,  true,  true, 1, 6) //#|  |  |  | |#|  |  |  | #|  |  |-6|~#|  |  |  | ->
-  cycle(12, false, 0, 0,  true, false,  true, 0, 0) //#|  |  |  | |#|  |  |  | #|  |  |  | #|  |  |  | ->
+  println("c: cycle; t:thread; 1,0 queue; R: pipe_reg; ~:last_idx; +:incoming; -:outgoing; ->:deq.ready;")
+  println("c  t  1  0  R   t  1  0  R  t  1  0  R  t  1  0  R   ")
+  println("   3            2           1           0            ");
+  println("0 |#|  |  |+0| |#|  |  |  | #|  |  |  | #|  |  |  |~  ");cycle( 0,  true, 0, 3,  true, false, false, 0, 0)
+  println("1 |#|  |  | 0| |#|  |  |+1| #|  |  |  | #|  |  |  |~  ");cycle( 1,  true, 1, 2,  true,  true, false, 0, 0)
+  println("2 |#|  |  | 0| |#|  |+2| 1| #|  |  |  | #|  |  |  |~  ");cycle( 2,  true, 2, 2,  true,  true, false, 0, 0)
+  println("3 |#|  |  | 0| |#|+3| 2| 1| #|  |  |  | #|  |  |  |~  ");cycle( 3,  true, 3, 2,  true,  true, false, 0, 0)
+  println("4 |#|  |  | 0| |#| 3| 2| 1| #|  |  |  | #|  |  |  |~  ");cycle( 4,  true,15, 2, false,  true, false, 0, 0)
+  println("5 |#|  |  | 0| |#| 3| 2|-1|~#|  |  |+4| #|  |  |  | ->");cycle( 5,  true, 4, 1,  true,  true,  true, 2, 1)
+  println("6 |#|  |  |-0|~|#|  | 3| 2| #|  |+5| 4| #|  |  |  | ->");cycle( 6,  true, 5, 1,  true,  true,  true, 3, 0)
+  println("7 |#|  |  |  | |#|  | 3| 2| #|+6| 5|-4|~#|  |  |  | ->");cycle( 7,  true, 6, 1,  true,  true,  true, 1, 4)
+  println("8 |#|  |  |  | |#|  | 3|-2|~#|  | 6| 5| #|  |  |  | ->");cycle( 8, false, 0, 0,  true,  true,  true, 2, 2)
+  println("9 |#|  |  |  | |#|  |  | 3| #|  | 6|-5|~#|  |  |  | ->");cycle( 9, false, 0, 0,  true,  true,  true, 1, 5)
+  println("10|#|  |  |  | |#|  |  |-3|~#|  |  | 6| #|  |  |  | ->");cycle(10, false, 0, 0,  true,  true,  true, 2, 3)
+  println("11|#|  |  |  | |#|  |  |  | #|  |  |-6|~#|  |  |  | ->");cycle(11, false, 0, 0,  true,  true,  true, 1, 6)
+  println("12|#|  |  |  | |#|  |  |  | #|  |  |  | #|  |  |  | ->");cycle(12, false, 0, 0,  true, false,  true, 0, 0)
 }
 
 class IssueTester extends ChiselFlatSpec
