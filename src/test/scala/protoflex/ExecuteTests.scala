@@ -17,7 +17,8 @@ class ExecuteALULog_SR(c: ExecuteUnit) extends PeekPokeTester(c)
 
   instrs map {
     case inst if inst.inst_en.toInt == N =>
-      println("Line : " + inst.line + " | Not decoded !")
+      println("Line : " + inst.line)
+      println("     - Skipped : Instruction not decoded")
     case inst if inst.op.toInt == OP_EON  || inst.op.toInt == OP_ORN || inst.op.toInt == OP_SUB =>
       println("Line : " + inst.line )
       println("     - Skipped : Negative scala operations don't match hardware results")
