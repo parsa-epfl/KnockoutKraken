@@ -97,7 +97,35 @@ class IssueTestsPriority(c: IssueUnit) extends PeekPokeTester(c)
   val n = 16
   val insts = (0 to n) map { case i => AssemblyInstruction(i: Int, i: Int, i: Int) }
 
-  def cycle(cycle : Int, enq_val : Boolean, inst : Int, tag : Int, enq_rdy : Boolean, deq_valid : Boolean, deq_rdy : Boolean, deq_tag : Int, deq_rd : Int) : Unit = {
+  val descrition = List("~:last_idx; +:incoming; -:outgoing; ->:deq.ready;",
+  "c: cycle; t:thread; 1,0 queue; R: pipe_reg;")
+  val instr_flow = List(
+  "c  t  1  0  R   t  1  0  R  t  1  0  R  t  1  0  R   ",
+  "   3            2           1           0            ",
+  "0 |#|  |  |+0| |#|  |  |  | #|  |  |  | #|  |  |  |~  ",
+  "1 |#|  |  | 0| |#|  |  |+1| #|  |  |  | #|  |  |  |~  ",
+  "2 |#|  |  | 0| |#|  |+2| 1| #|  |  |  | #|  |  |  |~  ",
+  "3 |#|  |  | 0| |#|+3| 2| 1| #|  |  |  | #|  |  |  |~  ",
+  "4 |#|  |  | 0| |#| 3| 2| 1| #|  |  |  | #|  |  |  |~  ",
+  "5 |#|  |  | 0| |#| 3| 2|-1|~#|  |  |+4| #|  |  |  | ->",
+  "6 |#|  |  |-0|~|#|  | 3| 2| #|  |+5| 4| #|  |  |  | ->",
+  "7 |#|  |  |  | |#|  | 3| 2| #|+6| 5|-4|~#|  |  |  | ->",
+  "8 |#|  |  |  | |#|  | 3|-2|~#|  | 6| 5| #|  |  |  | ->",
+  "9 |#|  |  |  | |#|  |  | 3| #|  | 6|-5|~#|  |  |  | ->",
+  "10|#|  |  |  | |#|  |  |-3|~#|  |  | 6| #|  |  |  | ->",
+  "11|#|  |  |  | |#|  |  |  | #|  |  |-6|~#|  |  |  | ->",
+  "12|#|  |  |  | |#|  |  |  | #|  |  |  | #|  |  |  | ->")
+
+  def cycle(cycle : Int,
+            enq_val : Boolean,
+            inst : Int,
+            tag : Int,
+            enq_rdy : Boolean,
+            deq_valid : Boolean,
+            deq_rdy : Boolean,
+            deq_tag : Int,
+            deq_rd : Int) : Unit = {
+    println(instr_flow(cycle))
     poke(c.io.enq.valid, enq_val)
     poke(c.io.enq.bits.tag, tag)
     poke(c.io.deq.ready, deq_rdy)
@@ -118,31 +146,34 @@ class IssueTestsPriority(c: IssueUnit) extends PeekPokeTester(c)
   poke(c.io.enq.bits.tag, 0)
   exe_in map { s => poke(s, 0) }
   mem_in map { s => poke(s, 0) }
-  println()
   step(1)
   expect(c.io.enq.ready, 1)
   expect(c.io.deq.valid, 0)
-  println("c: cycle; t:thread; 1,0 queue; R: pipe_reg; ~:last_idx; +:incoming; -:outgoing; ->:deq.ready;")
-  println("c  t  1  0  R   t  1  0  R  t  1  0  R  t  1  0  R   ")
-  println("   3            2           1           0            ");
-  println("0 |#|  |  |+0| |#|  |  |  | #|  |  |  | #|  |  |  |~  ");cycle( 0,  true, 0, 3,  true, false, false, 0, 0)
-  println("1 |#|  |  | 0| |#|  |  |+1| #|  |  |  | #|  |  |  |~  ");cycle( 1,  true, 1, 2,  true,  true, false, 0, 0)
-  println("2 |#|  |  | 0| |#|  |+2| 1| #|  |  |  | #|  |  |  |~  ");cycle( 2,  true, 2, 2,  true,  true, false, 0, 0)
-  println("3 |#|  |  | 0| |#|+3| 2| 1| #|  |  |  | #|  |  |  |~  ");cycle( 3,  true, 3, 2,  true,  true, false, 0, 0)
-  println("4 |#|  |  | 0| |#| 3| 2| 1| #|  |  |  | #|  |  |  |~  ");cycle( 4,  true,15, 2, false,  true, false, 0, 0)
-  println("5 |#|  |  | 0| |#| 3| 2|-1|~#|  |  |+4| #|  |  |  | ->");cycle( 5,  true, 4, 1,  true,  true,  true, 2, 1)
-  println("6 |#|  |  |-0|~|#|  | 3| 2| #|  |+5| 4| #|  |  |  | ->");cycle( 6,  true, 5, 1,  true,  true,  true, 3, 0)
-  println("7 |#|  |  |  | |#|  | 3| 2| #|+6| 5|-4|~#|  |  |  | ->");cycle( 7,  true, 6, 1,  true,  true,  true, 1, 4)
-  println("8 |#|  |  |  | |#|  | 3|-2|~#|  | 6| 5| #|  |  |  | ->");cycle( 8, false, 0, 0,  true,  true,  true, 2, 2)
-  println("9 |#|  |  |  | |#|  |  | 3| #|  | 6|-5|~#|  |  |  | ->");cycle( 9, false, 0, 0,  true,  true,  true, 1, 5)
-  println("10|#|  |  |  | |#|  |  |-3|~#|  |  | 6| #|  |  |  | ->");cycle(10, false, 0, 0,  true,  true,  true, 2, 3)
-  println("11|#|  |  |  | |#|  |  |  | #|  |  |-6|~#|  |  |  | ->");cycle(11, false, 0, 0,  true,  true,  true, 1, 6)
-  println("12|#|  |  |  | |#|  |  |  | #|  |  |  | #|  |  |  | ->");cycle(12, false, 0, 0,  true, false,  true, 0, 0)
+  descrition map (println(_))
+  cycle( 0,  true, 0, 3,  true, false, false, 0, 0)
+  cycle( 1,  true, 1, 2,  true,  true, false, 0, 0)
+  cycle( 2,  true, 2, 2,  true,  true, false, 0, 0)
+  cycle( 3,  true, 3, 2,  true,  true, false, 0, 0)
+  cycle( 4,  true,15, 2, false,  true, false, 0, 0)
+  cycle( 5,  true, 4, 1,  true,  true,  true, 2, 1)
+  cycle( 6,  true, 5, 1,  true,  true,  true, 3, 0)
+  cycle( 7,  true, 6, 1,  true,  true,  true, 1, 4)
+  cycle( 8, false, 0, 0,  true,  true,  true, 2, 2)
+  cycle( 9, false, 0, 0,  true,  true,  true, 1, 5)
+  cycle(10, false, 0, 0,  true,  true,  true, 2, 3)
+  cycle(11, false, 0, 0,  true,  true,  true, 1, 6)
+  cycle(12, false, 0, 0,  true, false,  true, 0, 0)
+
+
+
+
+
+
 }
 
 class IssueTester extends ChiselFlatSpec
 {
-  behavior of "Issuer"
+  behavior of "IssueUnit"
 
   backends foreach { backend =>
     "IssueTestsReadyValid" should s"test IssueUnit Ready Valid signals for queues (with $backend)" in {
