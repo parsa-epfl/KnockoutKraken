@@ -16,13 +16,13 @@ Disassembly of section .text:
   18:	54000023 	b.cc	1c <offset2>  // b.lo, b.ul, b.last
 
 000000000000001c <offset2>:
-  1c:	540000e4 	b.mi	38 <offset3>  // b.first
-  20:	540000c5 	b.pl	38 <offset3>  // b.nfrst
+  1c:	54ffff44 	b.mi	4 <offset1>  // b.first
+  20:	54ffffe5 	b.pl	1c <offset2>  // b.nfrst
   24:	540000a6 	b.vs	38 <offset3>
-  28:	54000087 	b.vc	38 <offset3>
-  2c:	54000068 	b.hi	38 <offset3>  // b.pmore
+  28:	54fffee7 	b.vc	4 <offset1>
+  2c:	54ffff88 	b.hi	1c <offset2>  // b.pmore
   30:	54000049 	b.ls	38 <offset3>  // b.plast
-  34:	5400002a 	b.ge	38 <offset3>  // b.tcont
+  34:	54fffe8a 	b.ge	4 <offset1>  // b.tcont
 
 0000000000000038 <offset3>:
   38:	54fffe6b 	b.lt	4 <offset1>  // b.tstop

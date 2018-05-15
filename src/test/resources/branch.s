@@ -11,13 +11,13 @@ offset1:
 	b.cc  offset2
 	b.lo  offset2
 offset2:
-	b.mi	offset3
-	b.pl	offset3
+	b.mi	offset1
+	b.pl	offset2
 	b.vs	offset3
-	b.vc	offset3
-	b.hi	offset3
+	b.vc	offset1
+	b.hi	offset2
 	b.ls	offset3
-	b.ge	offset3
+	b.ge	offset1
 offset3:
 	b.lt	offset1
 	b.gt	offset1
