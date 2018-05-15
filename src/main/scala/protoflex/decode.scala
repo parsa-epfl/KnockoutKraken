@@ -71,7 +71,7 @@ class DInst extends Bundle
     cond  := COND_X
 
     // Control
-    op := OP_T
+    op := OP_X
     itype := I_X
 
     // Enables
