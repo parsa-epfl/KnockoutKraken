@@ -23,7 +23,8 @@ class DecodeInstructionTest(c: DecodeUnit) extends PeekPokeTester(c)
         step(1)
 
         if (peek(c.io.out_dinst.bits.inst_en) != 0) {
-          dinst_out zip inst.io map { case (out, in) => expect(out, in)}
+          dinst_out zip inst.io map { case (out, in) =>
+            expect(out, in)}
           expect(c.io.out_dinst.bits.tag, 1)
         } else {
           println("    - Skipped : Instruction not decoded")
@@ -53,4 +54,11 @@ class DecodeTester extends ChiselFlatSpec
       Driver(() => new DecodeUnit, backend)((c) => new DecodeALULog_SR(c)) should be (true)
     }
   }
+
+  backends foreach {backend =>
+    it should s"decode branch instructions (with $backend)" in {
+      Driver(() => new DecodeUnit, backend)((c) => new DecodeBranches(c)) should be (true)
+    }
+  }
+
 }
