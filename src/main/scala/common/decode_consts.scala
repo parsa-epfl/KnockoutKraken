@@ -144,24 +144,24 @@ object DEC_LITS
   // Cond Operations Signals C1-144
   val COND_W = 4
   val COND_X = 0
-  val EQ = 0
-  val NE = 1
-  val CS = 2
-  val HS = 2
-  val CC = 3
-  val LO = 3
-  val MI = 4
-  val PL = 5
-  val VS = 6
-  val VC = 7
-  val HI = 8
-  val LS = 9
-  val GE = 10
-  val LT = 11
-  val GT = 12
-  val LE = 13
-  val AL = 14
-  val NV = 15
+  val EQ = 0  // 000 0
+  val NE = 1  // 000 1
+  val CS = 2  // 001 0
+  val HS = 2  // 001 0
+  val CC = 3  // 001 1
+  val LO = 3  // 001 1
+  val MI = 4  // 010 0
+  val PL = 5  // 010 1
+  val VS = 6  // 011 0
+  val VC = 7  // 011 1
+  val HI = 8  // 100 0
+  val LS = 9  // 100 1
+  val GE = 10 // 101 0
+  val LT = 11 // 101 1
+  val GT = 12 // 110 0
+  val LE = 13 // 110 1
+  val AL = 14 // 111 0
+  val NV = 15 // 111 1
 
   // Types
   val TYPE_W = 2
