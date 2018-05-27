@@ -78,8 +78,10 @@ object DECODE_MATCHING_TABLES
     //
     //              RD            INSTRUCTION
     //  IN TR       EN              VALID
-    //  TYPE        | RS1        COND |
-    //    |         |  EN          EN |
+    //  TYPE        | RS1        COND/|
+    //    |         |  EN        NZCV |
+    //    |         |  |           EN |
+    //    |         |  |           |  |
     //    |    INST |  | RS2  SHIFT|  |
     //    |     OP  |  |  EN    EN |  |
     //    |     |   |  |  | IMM |  |  |
@@ -98,6 +100,8 @@ object DECODE_MATCHING_TABLES
       ORN  -> List(I_LogSR, OP_ORN  , Y, Y, Y, N, Y, N, Y),
       EOR  -> List(I_LogSR, OP_EOR  , Y, Y, Y, N, Y, N, Y),
       EON  -> List(I_LogSR, OP_EON  , Y, Y, Y, N, Y, N, Y),
+      ANDS -> List(I_LogSR, OP_AND  , Y, Y, Y, N, Y, Y, Y),
+      BICS -> List(I_LogSR, OP_BIC  , Y, Y, Y, N, Y, Y, Y),
       B    -> List(I_BImm , OP_B    , N, N, N, Y, N, N, Y),
       BL   -> List(I_BImm , OP_B    , N, N, N, Y, N, N, Y),
       BCond-> List(I_BCImm, OP_BCOND, N, N, N, Y, N, Y, Y)
