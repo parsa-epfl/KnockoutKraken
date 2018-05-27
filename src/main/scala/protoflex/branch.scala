@@ -14,7 +14,7 @@ class CondUnit extends Module {
                 val res  = Output(Bool())
               })
   val result = WireInit(false.B)
-       when (io.cond(3,1) === "b000".U) {result := (io.nzcv(2) === 1.U);}
+  /* */when (io.cond(3,1) === "b000".U) {result := (io.nzcv(2) === 1.U);}
   .elsewhen (io.cond(3,1) === "b001".U) {result := (io.nzcv(1) === 1.U);}
   .elsewhen (io.cond(3,1) === "b010".U) {result := (io.nzcv(3) === 1.U);}
   .elsewhen (io.cond(3,1) === "b011".U) {result := (io.nzcv(0) === 1.U);}
@@ -51,7 +51,8 @@ class BranchUnit extends Module
   cond.io.cond := io.dinst.cond
   cond.io.nzcv := io.nzcv
 
-  val signExtended = io.dinst.imm.asSInt()
+  val signExtended = Wire(SInt(DATA_W))
+  signExtended := io.dinst.imm.asSInt
   when(io.dinst.op === OP_BCOND) {
     io.offset := signExtended.asUInt
     io.valid := cond.io.res

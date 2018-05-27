@@ -51,7 +51,6 @@ class PSTATE extends Bundle
     SP := DATA_X
     EL := DATA_X
     nzcv := NZCV_X
-
     this
   }
 }

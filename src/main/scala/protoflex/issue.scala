@@ -13,6 +13,43 @@ import chisel3.util.PriorityMux
 
 import common.PROCESSOR_TYPES._
 
+class RRArbiter(arbN: Int)
+    extends Module {
+
+  val io = IO(new Bundle {
+           // Ready threads
+           val ready = Input(UInt(arbN.W))
+           // Next thread to issue
+           val next  = EnqIO(UInt(log2Ceil(arbN).W))
+         })
+
+  def rotateRight[T <: Data](norm: UInt, rot : UInt) : UInt = {
+    val right = norm >> rot
+    val left  = norm << ~rot + 1.U;
+    val res = left | right
+    res(arbN - 1, 0)
+  }
+
+  /*
+   * valid      At least one thread is ready to be issued
+   * curr       Thread with highest priority during round
+   * ready_ofst Ready vector shifted such as lsb is the
+   *            offset from curr thread to the thread with
+   *            highest priority
+   * ofst       Offset from curr thread to thread to be issued
+   * next       Thread being issued on this cycle if next stage ready
+   */
+  val valid = io.ready.orR
+  val curr = RegInit(0.U(log2Ceil(arbN).W))  // Last thread issued
+  val ready_ofst = rotateRight(io.ready, curr)
+  val ofst = PriorityEncoder(ready_ofst)
+  val next = curr + ofst
+
+  io.next.bits := next
+  io.next.valid := valid
+  when(io.next.ready && valid) { curr := next + 1.U}
+}
+
 class IssueUnitIO extends Bundle {
   // Decode - Issue
   val enq = DeqIO(new DInst)
@@ -130,39 +167,3 @@ class IssueUnit extends Module
   }
 }
 
-class RRArbiter(arbN: Int)
-    extends Module {
-
-  val io = IO(new Bundle {
-           // Ready threads
-           val ready = Input(UInt(arbN.W))
-           // Next thread to issue
-           val next  = EnqIO(UInt(log2Ceil(arbN).W))
-         })
-
-  def rotateRight[T <: Data](norm: UInt, rot : UInt) : UInt = {
-    val right = norm >> rot
-    val left  = norm << ~rot + 1.U;
-    val res = left | right
-    res(arbN - 1, 0)
-  }
-
-  /*
-   * valid      At least one thread is ready to be issued
-   * curr       Thread with highest priority during round
-   * ready_ofst Ready vector shifted such as lsb is the
-   *            offset from curr thread to the thread with
-   *            highest priority
-   * ofst       Offset from curr thread to thread to be issued
-   * next       Thread being issued on this cycle if next stage ready
-   */
-  val valid = io.ready.orR
-  val curr = RegInit(0.U(log2Ceil(arbN).W))  // Last thread issued
-  val ready_ofst = rotateRight(io.ready, curr)
-  val ofst = PriorityEncoder(ready_ofst)
-  val next = curr + ofst
-
-  io.next.bits := next
-  io.next.valid := valid
-  when(io.next.ready && valid) { curr := next + 1.U}
-}
