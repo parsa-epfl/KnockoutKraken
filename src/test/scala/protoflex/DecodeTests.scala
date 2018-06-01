@@ -16,16 +16,13 @@ class DecodeInstructionTest(c: DecodeUnit) extends PeekPokeTester(c)
     insts map {
       case inst =>
         println(inst.line)
-        poke(c.io.in_inst.bits, inst.bitPat)
-        poke(c.io.in_inst.valid, 1)
-        poke(c.io.out_dinst.ready, 1)
-        poke(c.io.in_tag, 1)
+        poke(c.io.inst, inst.bitPat)
+        poke(c.io.tag, 1)
         step(1)
 
-        if (peek(c.io.out_dinst.bits.inst_en) != 0) {
-          dinst_out zip inst.io map { case (out, in) =>
-            expect(out, in)}
-          expect(c.io.out_dinst.bits.tag, 1)
+        if (peek(c.io.dinst.inst_en) != 0) {
+          dinst_out zip inst.io map { case (out, in) => expect(out, in)}
+          expect(c.io.dinst.tag, 1)
         } else {
           println("    - Skipped : Instruction not decoded")
         }

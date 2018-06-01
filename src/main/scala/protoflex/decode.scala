@@ -29,6 +29,7 @@ class DInst extends Bundle
   val imm_en   = Bool()
   val shift_en = Bool()
   val cond_en  = Bool()
+  val nzcv_en  = cond_en
 
   // Instruction is Valid
   val inst_en = Bool()
@@ -94,11 +95,11 @@ class DInst extends Bundle
 class DecodeUnitIO extends Bundle
 {
   // Fetch - Decode
-  val in_inst = DeqIO(INST_T)
-  val in_tag  = Input(TAG_T)
+  val inst = Input(INST_T)
+  val tag  = Input(TAG_T)
 
   // Decode - Issue
-  val out_dinst = EnqIO(new DInst)
+  val dinst = Output(new DInst)
 }
 
 /** Decode unit
@@ -107,12 +108,6 @@ class DecodeUnitIO extends Bundle
 class DecodeUnit extends Module
 {
   val io = IO(new DecodeUnitIO)
-
-  val dinst = Wire(new DInst).decode(io.in_inst.bits, io.in_tag)
-
-  io.out_dinst.bits     := dinst
-  io.out_dinst.bits.tag := io.in_tag
-
-  io.out_dinst.valid := io.in_inst.valid
-  io.in_inst.ready   := io.out_dinst.ready
+  val dinst = Wire(new DInst).decode(io.inst, io.tag)
+  io.dinst := dinst
 }

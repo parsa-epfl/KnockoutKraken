@@ -21,6 +21,7 @@ class BranchTest(c: BranchUnit) extends PeekPokeTester(c)
       l <- 0 to 1
     } yield Seq(i,j,k,l)
 
+
   def cycle(inst: Int, nzcv : Seq[Int]) : Unit =
   {
     dinst_in zip insts(inst).io map { case (io, v) => poke(io, v) }
@@ -74,6 +75,7 @@ class BranchTester extends ChiselFlatSpec
       Driver(() => new BranchUnit, backend)((c) => new BranchTest(c)) should be (true)
     }
   }
+
 }
 
 object BranchRepl extends App {

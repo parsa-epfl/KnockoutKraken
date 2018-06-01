@@ -30,6 +30,6 @@ object DInstExtractor {
   }
 
   def apply(c: IssueUnit) : (Seq[UInt], Seq[UInt]) = (extract(c.io.enq.bits), extract(c.io.deq.bits))
-  def apply(c: DecodeUnit) : Seq[UInt] = extract(c.io.out_dinst.bits)
+  def apply(c: DecodeUnit) : Seq[UInt] = extract(c.io.dinst)
   def apply(c: ExecuteUnit) : Seq[UInt] = extract(c.io.dinst)
 }

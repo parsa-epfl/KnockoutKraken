@@ -58,8 +58,11 @@ object AssemblyInstruction
     "ORR" -> OP_ORR,
     "ORN" -> OP_ORN,
     "EOR" -> OP_EOR,
-    "EON" -> OP_EON
+    "EON" -> OP_EON,
+    "ANDS" -> OP_AND,
+    "BICS" -> OP_BIC
   )
+
 
   def Branch = Map (
     "B" -> OP_BCOND
@@ -93,12 +96,14 @@ object AssemblyInstruction
     "NV" -> NV
   )
 
+  def setCond = Seq("ANDS", "BICS")
+
   /**
     * Creates a simple instruction with registers enabled
     */
   def apply(rd:Int, rs1:Int, rs2 : Int) : AssemblyInstruction = {
     AssemblyInstruction(
-      "and": String,
+      "ands": String,
       Some(rd): Option[Int],
       Some(rs1): Option[Int],
       Some(rs2): Option[Int],
@@ -144,7 +149,6 @@ object AssemblyInstruction
         rs2 = s2
         imm = i_imm match { case Some(imm) => imm; case _ => IMM_X }
 
-
         // (shift_type)
         shift = i_shift match {
           case Some(s) => ShiftTypes.getOrElse(s.toUpperCase, SHIFT_X)
@@ -179,7 +183,7 @@ object AssemblyInstruction
     val rs2_en   = ctrl(2)
     val imm_en   = ctrl(3)
     val shift_en = ctrl(4)
-    val cond_en  = ctrl(5)
+    val cond_en  = if(setCond.contains(i_op.toUpperCase)) BigInt(Y) else ctrl(5)
     val inst_en  = ctrl(6)
 
     new AssemblyInstruction(
