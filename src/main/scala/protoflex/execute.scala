@@ -6,23 +6,12 @@ import chisel3.util.{MuxLookup, log2Ceil}
 
 import common.DECODE_CONTROL_SIGNALS._
 import common.PROCESSOR_TYPES._
+import common.INSTRUCTIONS._
 
 class EInst extends Bundle {
   val res  = DATA_T
   val rd   = REG_T
-  val rd_v = C_T
   val tag  = TAG_T
-}
-
-class PStateFlags extends Module {
-  val io = IO(new Bundle {
-                val res = Input(UInt(DATA_W + 1.W))
-                val nzcv = Output(NZCV_T)
-              })
-  io.nzcv(0) := (io.res.asSInt < 0.S)
-  io.nzcv(1) := (io.res === 0.U)
-  io.nzcv(2) := (io.res(64) === 1.U)
-  io.nzcv(3) := (io.res(64) === 1.U)
 }
 
 class BasicALU extends Module {
@@ -30,10 +19,11 @@ class BasicALU extends Module {
                 val a = Input(DATA_T)
                 val b = Input(DATA_T)
                 val opcode = Input(OP_T)
-                val res = Output(UInt(DATA_W + 1.W))
+                val res = Output(UInt(DATA_W))
+                val nzcv = Output(NZCV_T)
               })
 
-  io.res :=
+  val res =
     MuxLookup(io.opcode, 0.U,
               Array (
                 OP_AND -> (io.a  &  io.b),
@@ -42,9 +32,32 @@ class BasicALU extends Module {
                 OP_ORN -> (io.a  | ~io.b),
                 OP_EOR -> (io.a  ^  io.b),
                 OP_EON -> (io.a  ^ ~io.b),
-                OP_ADD -> (io.a  +& io.b),
-                OP_SUB -> (io.a  -& io.b)
+                OP_ADD -> (io.a  +  io.b),
+                OP_SUB -> (io.a  -  io.b)
               ))
+
+  /*
+   * NZCV flags
+   */
+  val nzcv = VecInit(NZCV_X.toBools)
+  nzcv(0) := res.asSInt < 0.S
+  nzcv(1) := res === 0.U
+  nzcv(2) := (io.a +& io.b)(DATA_W.get) === 1.U // Unsigned carry
+  // Sign carry (overflow)
+  val sign_sum = io.a.asSInt + io.b.asSInt
+  val isPos = io.a.asSInt > 0.S & io.b.asSInt > 0.S
+  val isNeg = io.a.asSInt < 0.S & io.b.asSInt < 0.S
+  when(isPos) {
+    nzcv(3) := !(sign_sum > 0.S)
+  }.elsewhen(isNeg) {
+    nzcv(3) := !(sign_sum < 0.S)
+  }.otherwise {
+    nzcv(3) := false.B
+  }
+
+  io.nzcv := nzcv.asUInt
+
+  io.res := res
 }
 
 class ShiftALU extends Module {
@@ -53,6 +66,7 @@ class ShiftALU extends Module {
                 val amount = Input(UInt(log2Ceil(DATA_W.get).W))
                 val opcode = Input(SHIFT_T)
                 val res = Output(DATA_T)
+                val carry = Output(C_T)
               })
 
   /** Taken from Rocket chip arbiter
@@ -64,7 +78,7 @@ class ShiftALU extends Module {
     }
   }
 
-  io.res :=
+  val res =
     MuxLookup(io.opcode, io.word,
               Array(
                 LSL -> (io.word << io.amount),
@@ -72,6 +86,9 @@ class ShiftALU extends Module {
                 ASR -> (io.word.asSInt() >> io.amount).asUInt(),
                 ROR -> rotateRight(VecInit(io.word.toBools), io.amount).asUInt
               ))
+
+  io.carry := res(DATA_W.get).toBool()
+  io.res := res
 }
 
 class ExecuteUnitIO extends Bundle
@@ -79,7 +96,11 @@ class ExecuteUnitIO extends Bundle
   val dinst = Input(new DInst)
   val rVal1 = Input(DATA_T)
   val rVal2 = Input(DATA_T)
+
   val einst = Output(new EInst)
+  val valid = Output(Bool())
+  val nzcv  = Output(NZCV_T)
+  val nzcv_en = Output(Bool())
 }
 
 class ExecuteUnit extends Module
@@ -108,9 +129,16 @@ class ExecuteUnit extends Module
   val einst = Wire(new EInst)
   einst.res := basicALU.io.res
   einst.rd  := io.dinst.rd
-  einst.rd_v := true.B
   einst.tag := io.dinst.tag
 
   // Output
   io.einst := einst
+  io.valid :=
+    MuxLookup(io.dinst.itype, false.B,
+              Array(
+                I_LogSR -> true.B
+              ))
+
+  io.nzcv := basicALU.io.nzcv
+  io.nzcv_en := io.dinst.nzcv_en
 }
