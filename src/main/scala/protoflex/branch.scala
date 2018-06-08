@@ -2,12 +2,19 @@
 package protoflex
 
 import chisel3._
-import chisel3.util.MuxLookup
+import chisel3.util.{MuxLookup, Valid}
 
 import common.DECODE_CONTROL_SIGNALS._
 import common.PROCESSOR_TYPES._
+import common.INSTRUCTIONS._
 
-class CondUnit extends Module {
+class BInst extends Bundle {
+  val offset = DATA_T
+  val tag = TAG_T
+}
+
+class CondUnit extends Module
+{
   val io = IO( new Bundle {
                 val cond = Input(COND_T)
                 val nzcv = Input(NZCV_T)
@@ -35,8 +42,7 @@ class BranchUnitIO extends Bundle
   val dinst = Input(new DInst)
   val nzcv  = Input(NZCV_T)
 
-  val offset = Output(DATA_T)
-  val valid = Output(Bool())
+  val binst = Output(Valid(new BInst))
 }
 
 class BranchUnit extends Module
@@ -44,23 +50,23 @@ class BranchUnit extends Module
   val io = IO(new BranchUnitIO)
 
   // Default IO
-  io.valid := false.B
+  io.binst.valid :=  false.B
+  io.binst.bits.tag := io.dinst.tag
+
+  // Offset
+  val signExtended = Wire(SInt(DATA_W))
+  signExtended := io.dinst.imm.asSInt
+  io.binst.bits.offset := signExtended.asUInt
 
   // Condition to branch
   val cond = Module(new CondUnit())
   cond.io.cond := io.dinst.cond
   cond.io.nzcv := io.nzcv
-
-  val signExtended = Wire(SInt(DATA_W))
-  signExtended := io.dinst.imm.asSInt
-  when(io.dinst.op === OP_BCOND) {
-    io.offset := signExtended.asUInt
-    io.valid := cond.io.res
-  }.elsewhen(io.dinst.op === OP_B) {
-    io.offset := signExtended.asUInt
-    io.valid := true.B
-  }.otherwise {
-    io.offset := 0.U
-    io.valid := false.B
+  when (io.dinst.itype ===  I_BImm || io.dinst.itype === I_BCImm) {
+    when(io.dinst.op === OP_BCOND) {
+      io.binst.valid := cond.io.res
+    }.elsewhen(io.dinst.op === OP_B) {
+      io.binst.valid := true.B
+    }
   }
 }

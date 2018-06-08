@@ -51,14 +51,16 @@ class BranchTest(c: BranchUnit) extends PeekPokeTester(c)
 
     insts(inst).op.toInt match {
       case OP_BCOND =>
-        expect(c.io.offset, insts(inst).imm)
-        expect(c.io.valid, res)
+        //expect(c.io.binst.bits.offset.bits, insts(inst).imm)
+        println("      -- offset:" + peek(c.io.binst.bits.offset))
+        expect(c.io.binst.valid, res)
       case OP_B =>
-        expect(c.io.offset, insts(inst).imm)
-        expect(c.io.valid, true)
+        //expect(c.io.binst.bits.offset.bits, insts(inst).imm)
+        println("      -- offset:" + peek(c.io.binst.bits.offset))
+        expect(c.io.binst.valid, true)
       case _ =>
-        expect(c.io.offset, 0)
-        expect(c.io.valid, false)
+        expect(c.io.binst.bits.offset, 0)
+        expect(c.io.binst.valid, false)
     }
   }
 
