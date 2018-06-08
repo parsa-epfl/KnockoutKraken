@@ -6,23 +6,12 @@ import chisel3.iotesters.{ChiselFlatSpec, Driver, PeekPokeTester}
 
 import utils.AssemblyParser
 import utils.AssemblyInstruction
-import common.DEC_LITS._
 import utils.DInstExtractor
+import common.DEC_LITS._
 
 class IssueTestsReadyValid(c: IssueUnit) extends PeekPokeTester(c)
 {
   val (dinst_in, dinst_out) = DInstExtractor(c)
-
-  val exe_in = Seq(
-    c.io.exe_rd,
-    c.io.exe_tag,
-    c.io.exe_rd_v
-  )
-  val mem_in = Seq(
-    c.io.mem_rd,
-    c.io.mem_tag,
-    c.io.mem_rd_v
-  )
 
   // creates n instructions with target and source registers index of i
   val n = 3
@@ -31,8 +20,6 @@ class IssueTestsReadyValid(c: IssueUnit) extends PeekPokeTester(c)
   // Fill the queue, check whenever ready signal goes low
   poke(c.io.enq.valid, 0)
   poke(c.io.deq.ready, 0)
-  exe_in map { s => poke(s, 0) }
-  mem_in map { s => poke(s, 0) }
 
   println("Enqueing")
   for (i <- 0 until 3) {
@@ -82,16 +69,6 @@ class IssueTestsReadyValid(c: IssueUnit) extends PeekPokeTester(c)
 class IssueTestsPriority(c: IssueUnit) extends PeekPokeTester(c)
 {
   val (dinst_in, dinst_out) = DInstExtractor(c)
-  val exe_in = Seq(
-    c.io.exe_rd,
-    c.io.exe_tag,
-    c.io.exe_rd_v
-  )
-  val mem_in = Seq(
-    c.io.mem_rd,
-    c.io.mem_tag,
-    c.io.mem_rd_v
-  )
 
   // creates n instructions with target and source registers index of i
   val n = 16
@@ -144,8 +121,7 @@ class IssueTestsPriority(c: IssueUnit) extends PeekPokeTester(c)
   poke(c.io.enq.valid, 0)
   poke(c.io.deq.ready, 0)
   poke(c.io.enq.bits.tag, 0)
-  exe_in map { s => poke(s, 0) }
-  mem_in map { s => poke(s, 0) }
+
   step(1)
   expect(c.io.enq.ready, 1)
   expect(c.io.deq.valid, 0)
@@ -163,12 +139,6 @@ class IssueTestsPriority(c: IssueUnit) extends PeekPokeTester(c)
   cycle(10, false, 0, 0,  true,  true,  true, 2, 3)
   cycle(11, false, 0, 0,  true,  true,  true, 1, 6)
   cycle(12, false, 0, 0,  true, false,  true, 0, 0)
-
-
-
-
-
-
 }
 
 class IssueTester extends ChiselFlatSpec

@@ -2,14 +2,7 @@
 package protoflex
 
 import chisel3._
-import chisel3.util.Queue
-import chisel3.util.log2Ceil
-import chisel3.util.EnqIO
-import chisel3.util.DeqIO
-import chisel3.util.PriorityEncoder
-import chisel3.util.Reverse
-import chisel3.util.PriorityMux
-
+import chisel3.util.{Queue,log2Ceil, EnqIO, DeqIO, PriorityEncoder, Reverse, PriorityMux, Valid}
 
 import common.PROCESSOR_TYPES._
 
@@ -52,19 +45,18 @@ class RRArbiter(arbN: Int)
 
 class IssueUnitIO extends Bundle {
   // Decode - Issue
-  val enq = DeqIO(new DInst)
+  val enq = Flipped(EnqIO(new DInst))
 
   // Issue - Exec
-  val deq = EnqIO(new DInst)
+  val deq = Flipped(DeqIO(new DInst))
 
   //`Exec - Issue
-  val exe_rd = Input(REG_T)
-  val exe_tag = Input(TAG_T)
-  val exe_rd_v = Input(Bool())
+  val exe_reg = Flipped(Valid(new EInst))
+
   // Mem - Issue
-  val mem_rd = Input(REG_T)
-  val mem_tag = Input(TAG_T)
-  val mem_rd_v =Input(Bool())
+//  val mem_rd = Input(REG_T)
+//  val mem_tag = Input(TAG_T)
+//  val mem_rd_v =Input(Bool())
 }
 
 /** IssueUnit
@@ -140,14 +132,22 @@ class IssueUnit extends Module
   // Thread is ready to be issued if it has a valid decoded instruction in register and has no hazard detected.
   sig_pipe_i zip reg_pipe_v map { case (sig_rdy,reg_v) => sig_rdy := reg_v}
 
-  exe_stall := (io.exe_rd_v && ((reg_pipe(io.exe_tag).rs1 === io.exe_rd) || (reg_pipe(io.exe_tag).rs2 === io.exe_rd)))
-  mem_stall := (io.mem_rd_v && ((reg_pipe(io.mem_tag).rs1 === io.mem_rd) || (reg_pipe(io.mem_tag).rs2 === io.mem_rd)))
-  when(io.exe_tag === io.mem_tag) {
-    sig_pipe_i(io.exe_tag) := reg_pipe_v(io.exe_tag) && !(exe_stall || mem_stall)
-  }.otherwise {
-    sig_pipe_i(io.exe_tag) := reg_pipe_v(io.exe_tag) && !exe_stall
-    sig_pipe_i(io.mem_tag) := reg_pipe_v(io.mem_tag) && !mem_stall
-  }
+
+  val rfile_wb_pending = io.exe_reg.valid && io.exe_reg.bits.rd_en
+  exe_stall := rfile_wb_pending &&
+    ((reg_pipe(io.exe_reg.bits.tag).rs1 === io.exe_reg.bits.rd) ||
+       (reg_pipe(io.exe_reg.bits.tag).rs2 === io.exe_reg.bits.rd))
+  sig_pipe_i(io.exe_reg.bits.tag) := reg_pipe_v(io.exe_reg.bits.tag) && !exe_stall
+  /*
+   exe_stall := (io.exe_rd_v && ((reg_pipe(io.exe_tag).rs1 === io.exe_rd) || (reg_pipe(io.exe_tag).rs2 === io.exe_rd)))
+   mem_stall := (io.mem_rd_v && ((reg_pipe(io.mem_tag).rs1 === io.mem_rd) || (reg_pipe(io.mem_tag).rs2 === io.mem_rd)))
+   when(io.exe_tag === io.mem_tag) {
+   sig_pipe_i(io.exe_tag) := reg_pipe_v(io.exe_tag) && !(exe_stall || mem_stall)
+   }.otherwise {
+   sig_pipe_i(io.exe_tag) := reg_pipe_v(io.exe_tag) && !exe_stall
+   sig_pipe_i(io.mem_tag) := reg_pipe_v(io.mem_tag) && !mem_stall
+   }
+   */
 
   // Issue -> Exec
   // Get idx to issue
