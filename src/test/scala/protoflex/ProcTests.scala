@@ -8,59 +8,75 @@ import utils.AssemblyParser
 import utils.AssemblyInstruction
 import utils.DInstExtractor
 import common.DEC_LITS._
+import common.PrintingTools._
+import common.SoftwareStructs
 
 class ProcTestsPipeline(c: Proc) extends PeekPokeTester(c)
 {
   val random = scala.util.Random
   def printState() = {
-    val sFet = peek(c.io.inst_in)
-    val sDec = if(peek(c.io.dec_reg.valid) == 1) peek(c.io.dec_reg) else "Invalid"
-    val sIss = if(peek(c.io.issue_reg.valid) == 1) peek(c.io.issue_reg) else "Invalid"
-    val sExe = if(peek(c.io.exe_reg.valid) == 1) peek(c.io.exe_reg) else "Invalid"
-    val sBr = if(peek(c.io.br_reg.valid) == 1) peek(c.io.br_reg) else "Invalid"
+    val sFet = SoftwareStructs.dinst(peek(c.io.inst_in), false)
+    val sDec = if(peek(c.io.dec_reg.valid) == 1) SoftwareStructs.dinst(peek(c.io.dec_reg)) else "XXX"
+    val sIss = if(peek(c.io.issue_reg.valid) == 1) SoftwareStructs.dinst(peek(c.io.issue_reg)) else "XXX"
+    val sExe = if(peek(c.io.exe_reg.valid) == 1) SoftwareStructs.einst(peek(c.io.exe_reg)) else "XXX"
+    val sBr = if(peek(c.io.br_reg.valid) == 1) SoftwareStructs.binst(peek(c.io.br_reg)) else "XXX"
     val wbEn =  peek(c.io.wen)
     val state = Seq(
-      "____________________________________________________________________________________",
-      "Inst in : " + sFet,
-      " | ",
-      " | ",
-      "------ DECODE STAGE ------",
-      " | ",
-      "Reg_Dec : " + sDec,
-      " | ",
-      " | ",
-      "------ ISSUE STAGE ------",
-      " | ",
-      "Reg_Iss : " + sIss,
-      " | ",
-      "------ EXECUTE STAGE ------",
-      " | ",
-      " |------------|",
-      " |            |",
-      "Reg_Exe : " + sExe,
-      " |            |",
-      " |           Reg_Br : " + sBr,
-      " |            |",
-      " |------------|",
-      " | ",
-      "------ WB STAGE ------",
-      " | ",
+      "+----------------------------------------------------------------------------------+",
+      "|                                   STATE                                          |",
+      "+----------------------------------------------------------------------------------+",
+      "-------------------------------- DECODE STAGE --------------------------------------",
+      "Inst in : \n" + sFet,
+      "-------------------------------- DECODE STAGE --------------------------------------",
+      "Reg_Dec : \n" + sDec,
+      "-------------------------------- ISSUE STAGE ---------------------------------------",
+      "Reg_Iss : \n" + sIss,
+      "------------------------------- EXECUTE STAGE --------------------------------------",
+      "                    |      ",
+      "                    |      ",
+      "             +------------+",
+      "             |            |",
+      "  +---------Reg_Exe :     |",
+      "  |                        \n" + sExe,
+      "             |            |",
+      "             |            |",
+      "             |            |",
+      "  +----------------------Reg_Br :",
+      "  |                        \n" + sBr,
+      "             |            |",
+      "             |            |",
+      "             |            |",
+      "             |------------|",
+      "                    |      ",
+      "                    |      ",
+      "------------------------------- WB STAGE -------------------------------------------",
+      "                                                                               ",
       " PC : " + peek(c.io.curr_PC) + " -> " + peek(c.io.next_PC) + " || WB : " + wbEn,
-      "____________________________________________________________________________________"
-    )
-    state map (println(_))
+      "+----------------------------------------------------------------------------------+",
+      "|                                   DONE                                           |",
+      "+-----------------------------------------------------------------------------------\n",
+    ).mkString("\n")
+    print(state)
   }
   val insts = AssemblyParser.parse("alu.x")
   val br_insts = AssemblyParser.parse("branch.x")
   poke(c.io.br_reg.ready, 1)
   poke(c.io.exe_reg.ready, 1)
+  poke(c.io.valid, 0)
+  step(1)
   for(i <- 0 until 20) {
-    printState()
     val itype = random.nextInt(2)
     val inst = if (itype == 0) insts(random.nextInt(insts.size)) else br_insts(random.nextInt(br_insts.size))
     poke(c.io.inst, inst.bitPat)
     poke(c.io.tag, random.nextInt(4))
     poke(c.io.valid, 1)
+    val cycle = Seq(
+      "+----------------------------------------------------------------------------------+",
+      "|                             Cycle : "+i.toString.padTo(3,' ')
+        + "                                           |",
+      "+-----------------------------------------------------------------------------------\n").mkString("\n")
+    print(cycle)
+    printState()
     step(1)
   }
 
