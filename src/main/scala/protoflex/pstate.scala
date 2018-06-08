@@ -23,17 +23,15 @@ import common.PROCESSOR_TYPES._
  * the register can be accessed.
  */
 
-class PSTATE extends Bundle
+class PStateRegs extends Bundle
 {
-  // REGS
-  // val regFile = Module(new RegisterFile)
   val PC = DATA_T
   val SP = DATA_T // Normaly 4 levels
   val EL = DATA_T // Normaly 4 levels
 
   // PSTATE
   // Condition flags
-  val nzcv = NZCV_T
+  val NZCV = NZCV_T
 
   /* Execution state
    // Registers Select
@@ -44,14 +42,40 @@ class PSTATE extends Bundle
    val SS = Bool()    // Software step
    val IL = Bool()    // Illegal Execution
    val nRW = Bool()   // Current Execution
-  // */
-
-  def apply() = {
+   // */
+  def empty() = {
     PC := DATA_X
     SP := DATA_X
     EL := DATA_X
-    nzcv := NZCV_X
+    NZCV := DATA_X
     this
   }
+}
+
+class RFileIO extends Bundle
+{
+  val rs1_addr = Input(REG_T)
+  val rs1_data = Output(DATA_T)
+  val rs2_addr = Input(REG_T)
+  val rs2_data = Output(DATA_T)
+
+  val waddr    = Input(REG_T)
+  val wdata    = Input(DATA_T)
+  val wen      = Input(Bool())
+}
+
+class RFile extends Module
+{
+  val io = IO(new RFileIO())
+
+  val regfile = Mem(REG_N, DATA_T)
+
+  when (io.wen)
+  {
+    regfile(io.waddr) := io.wdata
+  }
+
+  io.rs1_data := regfile(io.rs1_addr)
+  io.rs2_data := regfile(io.rs2_addr)
 }
 
