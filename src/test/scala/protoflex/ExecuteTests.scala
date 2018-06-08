@@ -29,12 +29,13 @@ class ExecuteALULog_SR(c: ExecuteUnit) extends PeekPokeTester(c)
       poke(c.io.rVal2, rVal2)
 
       //val val2 = if(inst.getSig("imm_en") == 0) rVal2 else inst.getSig("imm").toInt
-      val val2 = if(inst.shift_en != N ) {
+      val val2 = if(inst.shift_en == Y ) {
         (inst.shift.toInt, inst.imm.toInt) match {
           case (LSL, imm)  => rVal2 <<  imm
           case (LSR, imm)  => rVal2 >>> imm
           case (ASR, imm)  => rVal2 >>  imm
           case (ROR, imm)  => rVal2 >>> imm | rVal2 << ~imm
+          case (_,_) => println("    -- Mismatched shift"); 0
         }
       } else { rVal2 }
 
@@ -49,8 +50,8 @@ class ExecuteALULog_SR(c: ExecuteUnit) extends PeekPokeTester(c)
         case OP_SUB => (rVal1  -  val2)
       }
 
-      expect(c.io.einst.res, res)
-      expect(c.io.valid, 1)
+      expect(c.io.einst.bits.res, res)
+      expect(c.io.einst.valid, 1)
       step(1)
   }
 }
@@ -61,52 +62,47 @@ class ExecuteLog_SRCond(c: ExecuteUnit) extends PeekPokeTester(c)
   val dinst_in = DInstExtractor(c)
   val andsInst = AssemblyInstruction(0, 0, 0)
   dinst_in zip andsInst.io map { case (io, value) => poke(io, value) }
-  expect(c.io.nzcv_en, 1)
+  expect(c.io.einst.bits.nzcv_en, 1)
+
+  def nzcv_check(rVal1: BigInt, rVal2: BigInt, nzcv: BigInt) = {
+    poke(c.io.rVal1, rVal1)
+    poke(c.io.rVal2, rVal2)
+    step(1)
+    expect(c.io.einst.bits.nzcv, nzcv)
+    expect(c.io.einst.valid, 1)
+  }
 
   // Checks for n flag ( res < 0 )
-  val n_nzcv = BigInt(Seq(1, 0, 1, 0).reverse.mkString, 2)
-  val n_rVal1 = BigInt("8000000000000000", 16)
-  val n_rVal2 = BigInt("8000000000000000", 16)
-  poke(c.io.rVal1, n_rVal1)
-  poke(c.io.rVal2, n_rVal2)
-  expect(c.io.nzcv, n_nzcv)
-  step(1)
- 
+  var nzcv = BigInt(Seq(1, 0, 1, 0).reverse.mkString, 2)
+  var rVal1 = BigInt("8000000000000000", 16)
+  var rVal2 = BigInt("8000000000000000", 16)
+  nzcv_check(rVal1, rVal2, nzcv)
+
+
   //// Checks for z flag ( res == 0 )
-  val z_nzcv = BigInt(Seq(0, 1, 0, 0).reverse.mkString, 2)
-  val z_rVal1 = BigInt("0000101010101000", 16)
-  val z_rVal2 = BigInt("0001010101010100", 16)
-  poke(c.io.rVal1, z_rVal1)
-  poke(c.io.rVal2, z_rVal2)
-  expect(c.io.nzcv, z_nzcv)
-  step(1)
+  nzcv = BigInt(Seq(0, 1, 0, 0).reverse.mkString, 2)
+  rVal1 = BigInt("0000101010101000", 16)
+  rVal2 = BigInt("0001010101010100", 16)
+  nzcv_check(rVal1, rVal2, nzcv)
 
   // Checks for c flag ( a + b : unsigned overflow )
-  val c_nzcv = BigInt(Seq(0, 0, 1, 0).reverse.mkString, 2)
-  val c_rVal1 = BigInt("FFFFFFFFFFFFFFFF", 16)
-  val c_rVal2 = BigInt("0000000000000001", 16)
-  poke(c.io.rVal1, c_rVal1)
-  poke(c.io.rVal2, c_rVal2)
-  expect(c.io.nzcv, c_nzcv)
-  step(1)
- 
+  nzcv = BigInt(Seq(0, 0, 1, 0).reverse.mkString, 2)
+  rVal1 = BigInt("FFFFFFFFFFFFFFFF", 16)
+  rVal2 = BigInt("0000000000000001", 16)
+  nzcv_check(rVal1, rVal2, nzcv)
+
   // Checks for v flag ( a + b : signed overflow )
   // Positive overflow
-  val v1_nzcv = BigInt(Seq(0, 0, 0, 1).reverse.mkString, 2)
-  val v1_rVal1 = BigInt("7FFFFFFFFFFFFFFF", 16)
-  val v1_rVal2 = BigInt("0000000000000001", 16)
-  poke(c.io.rVal1, v1_rVal1)
-  poke(c.io.rVal2, v1_rVal2)
-  expect(c.io.nzcv, v1_nzcv)
-  step(1)
+  nzcv = BigInt(Seq(0, 0, 0, 1).reverse.mkString, 2)
+  rVal1 = BigInt("7FFFFFFFFFFFFFFF", 16)
+  rVal2 = BigInt("0000000000000001", 16)
+  nzcv_check(rVal1, rVal2, nzcv)
+
   // negative overflow
-  val v2_nzcv = BigInt(Seq(1, 0, 1, 1).reverse.mkString, 2)
-  val v2_rVal1 = BigInt("FFFFFFFFFFFFFFFF", 16)
-  val v2_rVal2 = BigInt("8000000000000000", 16)
-  poke(c.io.rVal1, v2_rVal1)
-  poke(c.io.rVal2, v2_rVal2)
-  expect(c.io.nzcv, v2_nzcv)
-  step(1)
+  nzcv = BigInt(Seq(1, 0, 1, 1).reverse.mkString, 2)
+  rVal1 = BigInt("FFFFFFFFFFFFFFFF", 16)
+  rVal2 = BigInt("8000000000000000", 16)
+  nzcv_check(rVal1, rVal2, nzcv)
 
 }
 
@@ -127,7 +123,6 @@ class ExecuteTester extends ChiselFlatSpec
       Driver(() => new ExecuteUnit, backend)((c) => new ExecuteLog_SRCond(c)) should be (true)
     }
   }
-
 }
 
 object ExecuteRepl extends App {

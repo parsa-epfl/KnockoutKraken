@@ -2,7 +2,7 @@
 package protoflex
 
 import chisel3._
-import chisel3.util.{MuxLookup, log2Ceil}
+import chisel3.util.{Valid, MuxLookup, log2Ceil}
 
 import common.DECODE_CONTROL_SIGNALS._
 import common.PROCESSOR_TYPES._
@@ -11,7 +11,11 @@ import common.INSTRUCTIONS._
 class EInst extends Bundle {
   val res  = DATA_T
   val rd   = REG_T
+  val rd_en = C_T
   val tag  = TAG_T
+
+  val nzcv = NZCV_T
+  val nzcv_en = C_T
 }
 
 class BasicALU extends Module {
@@ -42,7 +46,8 @@ class BasicALU extends Module {
   val nzcv = VecInit(NZCV_X.toBools)
   nzcv(0) := res.asSInt < 0.S
   nzcv(1) := res === 0.U
-  nzcv(2) := (io.a +& io.b)(DATA_W.get) === 1.U // Unsigned carry
+  // Unsigned carry
+  nzcv(2) := (io.a +& io.b)(DATA_W.get) === 1.U
   // Sign carry (overflow)
   val sign_sum = io.a.asSInt + io.b.asSInt
   val isPos = io.a.asSInt > 0.S & io.b.asSInt > 0.S
@@ -97,10 +102,7 @@ class ExecuteUnitIO extends Bundle
   val rVal1 = Input(DATA_T)
   val rVal2 = Input(DATA_T)
 
-  val einst = Output(new EInst)
-  val valid = Output(Bool())
-  val nzcv  = Output(NZCV_T)
-  val nzcv_en = Output(Bool())
+  val einst = Output(Valid(new EInst))
 }
 
 class ExecuteUnit extends Module
@@ -129,16 +131,17 @@ class ExecuteUnit extends Module
   val einst = Wire(new EInst)
   einst.res := basicALU.io.res
   einst.rd  := io.dinst.rd
+  einst.rd_en := io.dinst.rd_en
   einst.tag := io.dinst.tag
+  einst.nzcv := basicALU.io.nzcv
+  einst.nzcv_en := io.dinst.nzcv_en
 
   // Output
-  io.einst := einst
-  io.valid :=
+  io.einst.bits := einst
+  io.einst.valid :=
     MuxLookup(io.dinst.itype, false.B,
               Array(
                 I_LogSR -> true.B
               ))
 
-  io.nzcv := basicALU.io.nzcv
-  io.nzcv_en := io.dinst.nzcv_en
 }
