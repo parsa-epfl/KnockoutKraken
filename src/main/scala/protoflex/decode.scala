@@ -29,7 +29,7 @@ class DInst extends Bundle
   val imm_en   = Bool()
   val shift_en = Bool()
   val cond_en  = Bool()
-  val nzcv_en  = cond_en
+  val nzcv_en  = Bool()
 
   // Instruction is Valid
   val inst_en = Bool()
@@ -41,18 +41,22 @@ class DInst extends Bundle
 
     // Data
     val itype = decoder.head
-    rd    := MuxLookup(itype,   REG_X, Array( I_LogSR -> inst( 4, 0) ))
-    rs1   := MuxLookup(itype,   REG_X, Array( I_LogSR -> inst( 9, 5) ))
+    rd    := MuxLookup(itype,   REG_X, Array( I_LogSR -> inst( 4, 0),
+                                              I_ASImm -> inst( 4, 0)))
+    rs1   := MuxLookup(itype,   REG_X, Array( I_LogSR -> inst( 9, 5),
+                                              I_ASImm -> inst( 9, 5)))
     rs2   := MuxLookup(itype,   REG_X, Array( I_LogSR -> inst(20,16) ))
     imm   := MuxLookup(itype,   IMM_X, Array( I_LogSR -> inst(15,10),
                                               I_BImm  -> inst(25, 0),
-                                              I_BCImm -> inst(23, 5)))
-    shift := MuxLookup(itype, SHIFT_X, Array( I_LogSR -> inst(23,22) ))
+                                              I_BCImm -> inst(23, 5),
+                                              I_ASImm -> inst(21,10)))
+    shift := MuxLookup(itype, SHIFT_X, Array( I_LogSR -> inst(23,22),
+                                              I_ASImm -> inst(23,22)))
     cond  := MuxLookup(itype,  COND_X, Array( I_BCImm -> inst( 3, 0) ))
 
     // Control
     val cdecoder = decoder.tail
-    val csignals = Seq(op, rd_en, rs1_en, rs2_en, imm_en, shift_en, cond_en, inst_en)
+    val csignals = Seq(op, rd_en, rs1_en, rs2_en, imm_en, shift_en, cond_en, nzcv_en, inst_en)
     csignals zip cdecoder map { case (s, d) => s:= d }
 
     this.tag := tag
@@ -82,6 +86,7 @@ class DInst extends Bundle
     imm_en   := N
     shift_en := N
     cond_en  := N
+    nzcv_en  := N
 
     // Instruction is Valid
     inst_en := N

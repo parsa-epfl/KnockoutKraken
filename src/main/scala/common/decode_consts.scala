@@ -51,60 +51,77 @@ object DECODE_CONTROL_SIGNALS
   def COND_T = UInt(COND_W)
   val COND_X = DEC_LITS.COND_X.U(COND_W)
   // Not needed, already in 4 bit form
-  //  val EQ = DEC_LITS.EQ.U(COND_W)
-  //  val NE = DEC_LITS.NE.U(COND_W)
-  //  val CS = DEC_LITS.CS.U(COND_W)
-  //  val HS = DEC_LITS.HS.U(COND_W)
-  //  val CC = DEC_LITS.CC.U(COND_W)
-  //  val LO = DEC_LITS.LO.U(COND_W)
-  //  val MI = DEC_LITS.MI.U(COND_W)
-  //  val PL = DEC_LITS.PL.U(COND_W)
-  //  val VS = DEC_LITS.VS.U(COND_W)
-  //  val VC = DEC_LITS.VC.U(COND_W)
-  //  val HI = DEC_LITS.HI.U(COND_W)
-  //  val LS = DEC_LITS.LS.U(COND_W)
-  //  val GE = DEC_LITS.GE.U(COND_W)
-  //  val LT = DEC_LITS.LT.U(COND_W)
-  //  val GT = DEC_LITS.GT.U(COND_W)
-  //  val LE = DEC_LITS.LE.U(COND_W)
-  //  val AL = DEC_LITS.AL.U(COND_W)
-  //  val NV = DEC_LITS.NV.U(COND_W)
+  // val EQ = DEC_LITS.EQ.U(COND_W)
+  // val NE = DEC_LITS.NE.U(COND_W)
+  // val CS = DEC_LITS.CS.U(COND_W)
+  // val HS = DEC_LITS.HS.U(COND_W)
+  // val CC = DEC_LITS.CC.U(COND_W)
+  // val LO = DEC_LITS.LO.U(COND_W)
+  // val MI = DEC_LITS.MI.U(COND_W)
+  // val PL = DEC_LITS.PL.U(COND_W)
+  // val VS = DEC_LITS.VS.U(COND_W)
+  // val VC = DEC_LITS.VC.U(COND_W)
+  // val HI = DEC_LITS.HI.U(COND_W)
+  // val LS = DEC_LITS.LS.U(COND_W)
+  // val GE = DEC_LITS.GE.U(COND_W)
+  // val LT = DEC_LITS.LT.U(COND_W)
+  // val GT = DEC_LITS.GT.U(COND_W)
+  // val LE = DEC_LITS.LE.U(COND_W)
+  // val AL = DEC_LITS.AL.U(COND_W)
+  // val NV = DEC_LITS.NV.U(COND_W)
+
+  // Types
+  val TYPE_W = 3.W
+  def I_T = UInt(TYPE_W)
+  val I_X = 0.U(TYPE_W)
+  val I_LogSR = DEC_LITS.I_LogSR.U(TYPE_W)
+  val I_BImm  = DEC_LITS.I_BImm.U(TYPE_W)
+  val I_BCImm = DEC_LITS.I_BCImm.U(TYPE_W)
+  val I_ASImm = DEC_LITS.I_ASImm.U(TYPE_W)
 }
 
 object DECODE_MATCHING_TABLES
 {
+  import INSTRUCTIONS._
 
   def decode_default: List[UInt] =
     //
-    //              RD            INSTRUCTION
-    //  IN TR       EN              VALID
-    //  TYPE        | RS1        COND/|
-    //    |         |  EN        NZCV |
-    //    |         |  |           EN |
-    //    |         |  |           |  |
-    //    |    INST |  | RS2  SHIFT|  |
-    //    |     OP  |  |  EN    EN |  |
-    //    |     |   |  |  | IMM |  |  |
-    //    |     |   |  |  |  EN |  |  |
-    //    |     |   |  |  |  |  |  |  |
-    //    |     |   |  |  |  |  |  |  |
-    //    |     |   |  |  |  |  |  |  |
-    List(I_X, OP_X, N, N, N, N, N, N, N)
+    //              RD               INSTRUCTION
+    //  IN TR       EN                 VALID
+    //  TYPE        | RS1                |
+    //    |         |  EN        COND    |
+    //    |         |  |           EN    |
+    //    |         |  |           | NZCV|
+    //    |    INST |  | RS2  SHIFT|  EN |
+    //    |     OP  |  |  EN    EN |  |  |
+    //    |     |   |  |  | IMM |  |  |  |
+    //    |     |   |  |  |  EN |  |  |  |
+    //    |     |   |  |  |  |  |  |  |  |
+    //    |     |   |  |  |  |  |  |  |  |
+    //    |     |   |  |  |  |  |  |  |  |
+    List(I_X, OP_X, N, N, N, N, N, N, N, N)
 
   def decode_table: Array[(BitPat, List[UInt])]  =
     Array(
-      /* Logical (shifted register) 64-bit */
-      AND  -> List(I_LogSR, OP_AND  , Y, Y, Y, N, Y, N, Y),
-      BIC  -> List(I_LogSR, OP_BIC  , Y, Y, Y, N, Y, N, Y),
-      ORR  -> List(I_LogSR, OP_ORR  , Y, Y, Y, N, Y, N, Y),
-      ORN  -> List(I_LogSR, OP_ORN  , Y, Y, Y, N, Y, N, Y),
-      EOR  -> List(I_LogSR, OP_EOR  , Y, Y, Y, N, Y, N, Y),
-      EON  -> List(I_LogSR, OP_EON  , Y, Y, Y, N, Y, N, Y),
-      ANDS -> List(I_LogSR, OP_AND  , Y, Y, Y, N, Y, Y, Y),
-      BICS -> List(I_LogSR, OP_BIC  , Y, Y, Y, N, Y, Y, Y),
-      B    -> List(I_BImm , OP_B    , N, N, N, Y, N, N, Y),
-      BL   -> List(I_BImm , OP_B    , N, N, N, Y, N, N, Y),
-      BCond-> List(I_BCImm, OP_BCOND, N, N, N, Y, N, Y, Y)
+      // Logical (shifted register)
+      AND    -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, N, Y),
+      BIC    -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, N, Y),
+      ORR    -> List(I_LogSR, OP_ORR,   Y, Y, Y, N, Y, N, N, Y),
+      ORN    -> List(I_LogSR, OP_ORN,   Y, Y, Y, N, Y, N, N, Y),
+      EOR    -> List(I_LogSR, OP_EOR,   Y, Y, Y, N, Y, N, N, Y),
+      EON    -> List(I_LogSR, OP_EON,   Y, Y, Y, N, Y, N, N, Y),
+      ANDS   -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, Y, Y),
+      BICS   -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, Y, Y),
+      // Unconditional branch (immediate)
+      B      -> List(I_BImm , OP_B,     N, N, N, Y, N, N, N, Y),
+      BL     -> List(I_BImm , OP_B,     N, N, N, Y, N, N, N, Y),
+      // Compare & branch (immediate)
+      BCond  -> List(I_BCImm, OP_BCOND, N, N, N, Y, N, Y, N, Y),
+      // Add/subtract (immediate)
+      ADD_I  -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, N, N, N, Y),
+      ADDS_I -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, N, N, Y, Y),
+      SUB_I  -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, N, N, N, Y),
+      SUBS_I -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, N, N, Y, Y),
     )
 }
 
@@ -168,29 +185,31 @@ object DEC_LITS
   val NV = 15 // 111 1
 
   // Types
-  val TYPE_W = 2
+  val TYPE_W = 3
   val I_X = 0
   val I_LogSR = 1
   val I_BImm  = 2
   val I_BCImm = 3
+  val I_ASImm = 4
 
-  def decode_table(inst_type : Int ): List[BigInt] =
+  def decode_table(inst_type : Int): List[BigInt] =
     inst_type match {
-      //                   RD            INSTRUCTION
-      //                   EN              VALID
-      //                   | RS1        COND |
-      //                   |  EN          EN |
-      //                   |  | RS2  SHIFT|  |
-      //                   |  |  EN    EN |  |
-      //                   |  |  | IMM |  |  |
-      //                   |  |  |  EN |  |  |
-      //                   |  |  |  |  |  |  |
-      //                   |  |  |  |  |  |  |
-      //                   |  |  |  |  |  |  |
-      case I_X     => List(N, N, N, N, N, N, N)
-      case I_LogSR => List(Y, Y, Y, N, Y, N, Y)
-      case I_BImm  => List(N, N, N, Y, N, N, Y)
-      case I_BCImm => List(N, N, N, Y, N, Y, Y)
+      //                   RD               INSTRUCTION
+      //                   EN                 VALID
+      //                   | RS1                |
+      //                   |  EN        COND    |
+      //                   |  |           EN    |
+      //                   |  | RS2  SHIFT| NZCV|
+      //                   |  |  EN    EN |  EN |
+      //                   |  |  | IMM |  |  |  |
+      //                   |  |  |  EN |  |  |  |
+      //                   |  |  |  |  |  |  |  |
+      //                   |  |  |  |  |  |  |  |
+      //                   |  |  |  |  |  |  |  |
+      case I_X     => List(N, N, N, N, N, N, N, N)
+      case I_LogSR => List(Y, Y, Y, N, Y, N, N, Y)
+      case I_BImm  => List(N, N, N, Y, N, N, N, Y)
+      case I_BCImm => List(N, N, N, Y, N, Y, N, Y)
+      case I_ASImm => List(Y, Y, N, Y, N, N, N, Y)
     }
-
 }
