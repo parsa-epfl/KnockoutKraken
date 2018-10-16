@@ -3,7 +3,6 @@ package common
 import chisel3._
 import chisel3.util.BitPat
 
-import INSTRUCTIONS._
 import DECODE_CONTROL_SIGNALS._
 
 object DECODE_CONTROL_SIGNALS

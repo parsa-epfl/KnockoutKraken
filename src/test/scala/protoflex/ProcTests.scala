@@ -7,9 +7,9 @@ import chisel3.iotesters.{ChiselFlatSpec, Driver, PeekPokeTester}
 import utils.AssemblyParser
 import utils.AssemblyInstruction
 import utils.DInstExtractor
+import utils.PrintingTools._
+import utils.SoftwareStructs
 import common.DEC_LITS._
-import common.PrintingTools._
-import common.SoftwareStructs
 
 class ProcTestsPipeline(c: Proc) extends PeekPokeTester(c)
 {
@@ -19,7 +19,7 @@ class ProcTestsPipeline(c: Proc) extends PeekPokeTester(c)
     val sDec = if(peek(c.io.dec_reg.valid) == 1) SoftwareStructs.dinst(peek(c.io.dec_reg)) else "XXX"
     val sIss = if(peek(c.io.issue_reg.valid) == 1) SoftwareStructs.dinst(peek(c.io.issue_reg)) else "XXX"
     val sExe = if(peek(c.io.exe_reg.valid) == 1) SoftwareStructs.einst(peek(c.io.exe_reg)) else "XXX"
-    val sBr = if(peek(c.io.br_reg.valid) == 1) SoftwareStructs.binst(peek(c.io.br_reg)) else "XXX"
+    val sBr  = if(peek(c.io.br_reg.valid) == 1) SoftwareStructs.binst(peek(c.io.br_reg)) else "XXX"
     val wbEn =  peek(c.io.wen)
     val state = Seq(
       "+----------------------------------------------------------------------------------+",
@@ -51,7 +51,7 @@ class ProcTestsPipeline(c: Proc) extends PeekPokeTester(c)
       "                    |      ",
       "------------------------------- WB STAGE -------------------------------------------",
       "                                                                               ",
-      " PC : " + peek(c.io.curr_PC) + " -> " + peek(c.io.next_PC) + " || WB : " + wbEn,
+      " PC : " + peek(c.io.curr_PC) + " -> " + peek(c.io.next_PC),
       "+----------------------------------------------------------------------------------+",
       "|                                   DONE                                           |",
       "+-----------------------------------------------------------------------------------\n",
@@ -72,8 +72,7 @@ class ProcTestsPipeline(c: Proc) extends PeekPokeTester(c)
     poke(c.io.valid, 1)
     val cycle = Seq(
       "+----------------------------------------------------------------------------------+",
-      "|                             Cycle : "+i.toString.padTo(3,' ')
-        + "                                           |",
+      "|                                Cycle : "+i.toString.padTo(2,' ')+ "                                        |",
       "+-----------------------------------------------------------------------------------\n").mkString("\n")
     print(cycle)
     printState()
@@ -88,7 +87,7 @@ class ProcTester extends ChiselFlatSpec
 
   backends foreach { backend =>
     "ProcTestsReadyValid" should s"test Proc pipeline (with $backend)" in {
-      Driver(() => new Proc, backend)((c) => new ProcTestsPipeline(c)) should be (true)
+      Driver(() => new Proc, "verilator")((c) => new ProcTestsPipeline(c)) should be (true)
     }
   }
 }

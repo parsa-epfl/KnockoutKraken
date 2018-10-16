@@ -21,7 +21,8 @@ class ExecuteALULog_SR(c: ExecuteUnit) extends PeekPokeTester(c)
       println("     - Skipped : Instruction not decoded")
     case inst if inst.op.toInt == OP_EON  || inst.op.toInt == OP_ORN || inst.op.toInt == OP_SUB =>
       println("Line : " + inst.line )
-      println("     - Skipped : Negative scala operations don't match hardware results,\n scala doesn't have unsigned types")
+      println("     - Skipped : Negative scala operations don't match hardware results,"
+              + "\n scala doesn't have unsigned types")
     case inst if inst.inst_en.toInt != N =>
       println("Line : " + inst.line)
       dinst_in zip inst.io map { case (io, value) => poke(io, value)}

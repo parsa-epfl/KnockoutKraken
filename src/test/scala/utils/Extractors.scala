@@ -24,6 +24,7 @@ object DInstExtractor {
       input.imm_en,
       input.shift_en,
       input.cond_en,
+      input.nzcv_en,
       input.inst_en
     )
     out

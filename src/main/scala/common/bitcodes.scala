@@ -327,14 +327,14 @@
 /* Add/subtract (immediate) */
 /* 31 | 30 | 29 | 28 27 26 25 24 | 23 22 | 21 20 19 18 17 16 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant */
 /* sf | op |  S |  1  0  0  0  1 | shift |               imm12                 |      Rn        |        Rd      |                  |         */
-/*  0 |  0 |  0 |  1  0  0  0  1 |   -   |               imm12                 |      Rn        |        Rd      | ADD              | 32-bit  */
-/*  0 |  0 |  1 |  1  0  0  0  1 |   -   |               imm12                 |      Rn        |        Rd      | ADDS             | 32-bit  */
-/*  0 |  1 |  0 |  1  0  0  0  1 |   -   |               imm12                 |      Rn        |        Rd      | SUB              | 32-bit  */
-/*  0 |  1 |  1 |  1  0  0  0  1 |   -   |               imm12                 |      Rn        |        Rd      | SUBS             | 32-bit  */
-/*  1 |  0 |  0 |  1  0  0  0  1 |   -   |               imm12                 |      Rn        |        Rd      | ADD              | 64-bit  */
-/*  1 |  0 |  1 |  1  0  0  0  1 |   -   |               imm12                 |      Rn        |        Rd      | ADDS             | 64-bit  */
-/*  1 |  1 |  0 |  1  0  0  0  1 |   -   |               imm12                 |      Rn        |        Rd      | SUB              | 64-bit  */
-/*  1 |  1 |  1 |  1  0  0  0  1 |   -   |               imm12                 |      Rn        |        Rd      | SUBS             | 64-bit  */
+/*  0 |  0 |  0 |  1  0  0  0  1 | shift |               imm12                 |      Rn        |        Rd      | ADD              | 32-bit  */
+/*  0 |  0 |  1 |  1  0  0  0  1 | shift |               imm12                 |      Rn        |        Rd      | ADDS             | 32-bit  */
+/*  0 |  1 |  0 |  1  0  0  0  1 | shift |               imm12                 |      Rn        |        Rd      | SUB              | 32-bit  */
+/*  0 |  1 |  1 |  1  0  0  0  1 | shift |               imm12                 |      Rn        |        Rd      | SUBS             | 32-bit  */
+/*  1 |  0 |  0 |  1  0  0  0  1 | shift |               imm12                 |      Rn        |        Rd      | ADD              | 64-bit  */
+/*  1 |  0 |  1 |  1  0  0  0  1 | shift |               imm12                 |      Rn        |        Rd      | ADDS             | 64-bit  */
+/*  1 |  1 |  0 |  1  0  0  0  1 | shift |               imm12                 |      Rn        |        Rd      | SUB              | 64-bit  */
+/*  1 |  1 |  1 |  1  0  0  0  1 | shift |               imm12                 |      Rn        |        Rd      | SUBS             | 64-bit  */
 
 /* Logical (immediate) */
 /* 31 | 30 29 | 28 27 26 25 24 23 | 22 | 21 20 19 18 17 16 | 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant */

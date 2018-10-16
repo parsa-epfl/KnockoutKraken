@@ -1,9 +1,9 @@
-package common
+package utils
 
 import scala.collection.mutable.LinkedHashMap
 
 import common.DEC_LITS._
-import common.PrintingTools._
+import utils.PrintingTools._
 
 object PrintingTools {
   def get_itype(itype : BigInt) : String = {
@@ -43,9 +43,9 @@ object PrintingTools {
 
   def get_reg_op(rd : BigInt, rs1 : BigInt, rs2 : BigInt, rd_en : BigInt, rs1_en : BigInt, rs2_en : BigInt) : String = {
     (rd_en.toInt, rs1_en.toInt, rs2_en.toInt) match {
-      case (0,0,0) => "" // "XXX" + " <- " + "XXX" + "," + "XXX"
+      case (0,0,0) => "XXX" + " <- " + "XXX" + "," + "XXX"
       case (1,0,0) => get_reg(rd) + " <- "
-      case (0,1,0) => "   " + " <- " + get_reg(rs1)
+      case (0,1,0) => "XXX" + " <- " + get_reg(rs1)
       case (1,1,0) => get_reg(rd) + " <- " + get_reg(rs1)
       case (1,1,1) => get_reg(rd) + " <- " + get_reg(rs1) + "," + get_reg(rs2)
       case _ => "? <-   ?,   ?"
@@ -62,7 +62,7 @@ object PrintingTools {
   def get_nzcv(nzcv : BigInt, nzcv_en : BigInt) : String = {
     nzcv_en.toInt match {
       case Y => "nzcv" + " <- " + nzcv.toInt
-      case N => "" // "nzcv" + " <-/- " + "XXX"
+      case N => "nzcv" + " <- " + "XXX"
     }
   }
 
@@ -82,8 +82,8 @@ object PrintingTools {
       case ROR => "ROR"
     }
     shift_en.toInt match {
-      case Y => str.padTo(8, ' ') + ": " + imm.toString
-      case N => "" // "shift".padTo(8, ' ') + ": " + "XXX"
+      case Y => "shift".padTo(8, ' ') + ": " + str + "#" + imm.toString
+      case N => "shift".padTo(8, ' ') + ": " + "XXX"
     }
   }
 
@@ -111,17 +111,17 @@ object PrintingTools {
 
     cond_en.toInt match {
       case Y => "cond".padTo(8, ' ') + ": " + str
-      case N => "" // "cond".padTo(8, ' ') + ": " + "XXX"
+      case N => "cond".padTo(8, ' ') + ": " + "XXX"
     }
   }
   def get_nzcv_is_update(nzcv_en : BigInt) : String = {
     nzcv_en.toInt match {
-      case Y => "nzcv ? <- " + get_v(Y)
-      case N => "" // "nzcv ? <- " XXX
+      case Y => "nzcv".padTo(8, ' ') + ": " + "Y"
+      case N => "nzcv".padTo(8, ' ') + ": " + "N"
     }
   }
 }
- 
+
 
 object SoftwareStructs {
   case class DInst (
@@ -154,7 +154,7 @@ object SoftwareStructs {
           get_shift(shift, shift_en, imm_en),
           get_cond(cond: BigInt, cond_en : BigInt),
           get_nzcv_is_update(nzcv_en),
-        ).map(s => " |-- " + s).mkString("\n")
+          ).map(s => " |-- " + s).mkString("\n")
       ).mkString("\n")
       str
     }
@@ -198,41 +198,41 @@ object SoftwareStructs {
   }
 
   def dinst(map : LinkedHashMap[String, BigInt], decoupled : Boolean = true) : DInst = {
-      val rd       = if(!decoupled) map("rd")       else map("bits.rd")
-      val rs1      = if(!decoupled) map("rs1")      else map("bits.rs1")
-      val rs2      = if(!decoupled) map("rs2")      else map("bits.rs2")
-      val imm      = if(!decoupled) map("imm")      else map("bits.imm")
-      val shift    = if(!decoupled) map("shift")    else map("bits.shift")
-      val cond     = if(!decoupled) map("cond")     else map("bits.cond")
-      val itype    = if(!decoupled) map("itype")    else map("bits.itype")
-      val op       = if(!decoupled) map("op")       else map("bits.op")
-      val rd_en    = if(!decoupled) map("rd_en")    else map("bits.rd_en")
-      val rs1_en   = if(!decoupled) map("rs1_en")   else map("bits.rs1_en")
-      val rs2_en   = if(!decoupled) map("rs2_en")   else map("bits.rs2_en")
-      val imm_en   = if(!decoupled) map("imm_en")   else map("bits.imm_en")
-      val shift_en = if(!decoupled) map("shift_en") else map("bits.shift_en")
-      val cond_en  = if(!decoupled) map("cond_en")  else map("bits.cond_en")
-      val nzcv_en  = if(!decoupled) cond_en         else cond_en
-      val inst_en  = if(!decoupled) map("inst_en")  else map("bits.inst_en")
-      val tag      = if(!decoupled) map("tag")      else map("bits.tag")
-      new DInst(
-        tag : BigInt,
-        itype: BigInt,
-        op: BigInt,
-        rd: BigInt,
-        rs1: BigInt,
-        rs2: BigInt,
-        imm: BigInt,
-        shift: BigInt,
-        cond: BigInt,
-        rd_en: BigInt,
-        rs1_en: BigInt,
-        rs2_en: BigInt,
-        imm_en: BigInt,
-        shift_en: BigInt,
-        cond_en: BigInt,
-        nzcv_en: BigInt,
-        inst_en: BigInt)
+    val rd       = if(!decoupled) map("rd")       else map("bits.rd")
+    val rs1      = if(!decoupled) map("rs1")      else map("bits.rs1")
+    val rs2      = if(!decoupled) map("rs2")      else map("bits.rs2")
+    val imm      = if(!decoupled) map("imm")      else map("bits.imm")
+    val shift    = if(!decoupled) map("shift")    else map("bits.shift")
+    val cond     = if(!decoupled) map("cond")     else map("bits.cond")
+    val itype    = if(!decoupled) map("itype")    else map("bits.itype")
+    val op       = if(!decoupled) map("op")       else map("bits.op")
+    val rd_en    = if(!decoupled) map("rd_en")    else map("bits.rd_en")
+    val rs1_en   = if(!decoupled) map("rs1_en")   else map("bits.rs1_en")
+    val rs2_en   = if(!decoupled) map("rs2_en")   else map("bits.rs2_en")
+    val imm_en   = if(!decoupled) map("imm_en")   else map("bits.imm_en")
+    val shift_en = if(!decoupled) map("shift_en") else map("bits.shift_en")
+    val cond_en  = if(!decoupled) map("cond_en")  else map("bits.cond_en")
+    val nzcv_en  = if(!decoupled) map("nzcv_en")  else map("bits.nzcv_en")
+    val inst_en  = if(!decoupled) map("inst_en")  else map("bits.inst_en")
+    val tag      = if(!decoupled) map("tag")      else map("bits.tag")
+    new DInst(
+      tag : BigInt,
+      itype: BigInt,
+      op: BigInt,
+      rd: BigInt,
+      rs1: BigInt,
+      rs2: BigInt,
+      imm: BigInt,
+      shift: BigInt,
+      cond: BigInt,
+      rd_en: BigInt,
+      rs1_en: BigInt,
+      rs2_en: BigInt,
+      imm_en: BigInt,
+      shift_en: BigInt,
+      cond_en: BigInt,
+      nzcv_en: BigInt,
+      inst_en: BigInt)
   }
 
   def einst(map : LinkedHashMap[String, BigInt], decoupled : Boolean = true) : EInst = {
@@ -258,6 +258,6 @@ object SoftwareStructs {
     new BInst (
       tag     : BigInt,
       offset  : BigInt,
-    )
+      )
   }
 }

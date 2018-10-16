@@ -42,6 +42,12 @@ class DecodeBranches(c: DecodeUnit) extends PeekPokeTester(c)
   val execute = new DecodeInstructionTest(c).decode(c, insts)
 }
 
+class DecodeALUAddSub_I(c: DecodeUnit) extends PeekPokeTester(c)
+{
+  val insts = AssemblyParser.parse("add_sub_i.x")
+  val execute = new DecodeInstructionTest(c).decode(c, insts)
+}
+
 class DecodeTester extends ChiselFlatSpec
 {
   behavior of "Decoder"

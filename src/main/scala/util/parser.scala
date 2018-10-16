@@ -22,6 +22,7 @@ case class AssemblyInstruction
     val imm_en   : BigInt,
     val shift_en : BigInt,
     val cond_en  : BigInt,
+    val nzcv_en  : BigInt,
     val inst_en  : BigInt,
     val bitPat   : BigInt
   )
@@ -41,6 +42,7 @@ case class AssemblyInstruction
     imm_en,
     shift_en,
     cond_en,
+    nzcv_en,
     inst_en
   )
 }
@@ -183,8 +185,9 @@ object AssemblyInstruction
     val rs2_en   = ctrl(2)
     val imm_en   = ctrl(3)
     val shift_en = ctrl(4)
-    val cond_en  = if(setCond.contains(i_op.toUpperCase)) BigInt(Y) else ctrl(5)
-    val inst_en  = ctrl(6)
+    val cond_en  = ctrl(5)
+    val nzcv_en  = if(setCond.contains(i_op.toUpperCase)) BigInt(Y) else ctrl(6)
+    val inst_en  = ctrl(7)
 
     new AssemblyInstruction(
       line,
@@ -202,6 +205,7 @@ object AssemblyInstruction
       imm_en,
       shift_en,
       cond_en,
+      nzcv_en,
       inst_en,
       bitPat
     )
@@ -211,20 +215,20 @@ object AssemblyInstruction
 object AssemblyParser
 {
   /*
+   Regex 3 (immediate ops) :
+   Group information :
+   group:      1    2        3   8   12  14   16
+    b:  52800000    mov     w0, #40
+   */
+
+  /*
    Regex 1 (multireg ops) :
    [a,b,c,d,e0-9]{1,}[?:]\s*([0-9a-z]{8,8})\s*([a-z]*)\s*[wrx]([0-9]*)(,\s*\[|,\s*|.*)((sp|pc)|#([0-9]*)|[wrx]([0-9]*))(,\s*|.*)(#([0-9]*)|[wrx]([0-9]*))(,\s*|.*)(lsl|lsr|asr|.*)(\s*#|)([0-9]*|)
    Group information :
-   group:      1    2        3   6    11
-   0:   b90013e0    str     w0, [sp, #16]
-
-   group:      1    2        3   7
-   b:   52800000    mov     w1, #40
-
    group:      1    2        3   8   12  14   16
    20:  0a803c20    and     w0, w1, w0,  asr #15
    */
 
-  
   val grouVals_1 = Map(
     "bitPat"  -> Seq(1),
     "op"      -> Seq(2),
