@@ -48,6 +48,12 @@ class DecodeALUAddSub_I(c: DecodeUnit) extends PeekPokeTester(c)
   val execute = new DecodeInstructionTest(c).decode(c, insts)
 }
 
+class DecodeLDR_I(c: DecodeUnit) extends PeekPokeTester(c)
+{
+  val insts = AssemblyParser.parse("ldr.x")
+  val execute = new DecodeInstructionTest(c).decode(c, insts)
+}
+
 class DecodeTester extends ChiselFlatSpec
 {
   behavior of "Decoder"
@@ -64,4 +70,9 @@ class DecodeTester extends ChiselFlatSpec
     }
   }
 
+  backends foreach {backend =>
+    it should s"decode load/store instruction (with $backend)" in {
+      Driver(() => new DecodeUnit, backend)((c) => new DecodeLDR_I(c)) should be (true)
+    }
+  }
 }

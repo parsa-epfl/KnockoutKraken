@@ -2,8 +2,7 @@ package common
 
 import chisel3._
 import chisel3.util.BitPat
-
-import DECODE_CONTROL_SIGNALS._
+import DECODE_CONTROL_SIGNALS.{N, Y, _}
 
 object DECODE_CONTROL_SIGNALS
 {
@@ -69,6 +68,9 @@ object DECODE_CONTROL_SIGNALS
   // val AL = DEC_LITS.AL.U(COND_W)
   // val NV = DEC_LITS.NV.U(COND_W)
 
+  // load/store signal
+  val OP_LDR = DEC_LITS.OP_LDR.U(OP_W)
+
   // Types
   val TYPE_W = 3.W
   def I_T = UInt(TYPE_W)
@@ -77,6 +79,7 @@ object DECODE_CONTROL_SIGNALS
   val I_BImm  = DEC_LITS.I_BImm.U(TYPE_W)
   val I_BCImm = DEC_LITS.I_BCImm.U(TYPE_W)
   val I_ASImm = DEC_LITS.I_ASImm.U(TYPE_W)
+  val I_LSImm = DEC_LITS.I_LSImm.U(TYPE_W)
 }
 
 object DECODE_MATCHING_TABLES
@@ -121,6 +124,8 @@ object DECODE_MATCHING_TABLES
       ADDS_I -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, N, N, Y, Y),
       SUB_I  -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, N, N, N, Y),
       SUBS_I -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, N, N, Y, Y),
+      // load/store (immediate)
+      LDR_I  -> List(I_LSImm, OP_LDR,   Y, N, N, Y, N, N, N, Y),
     )
 }
 
@@ -183,6 +188,10 @@ object DEC_LITS
   val AL = 14 // 111 0
   val NV = 15 // 111 1
 
+  // load/store operation signals
+  val OP_LDR = 0
+
+
   // Types
   val TYPE_W = 3
   val I_X = 0
@@ -190,6 +199,7 @@ object DEC_LITS
   val I_BImm  = 2
   val I_BCImm = 3
   val I_ASImm = 4
+  val I_LSImm = 5
 
   def decode_table(inst_type : Int): List[BigInt] =
     inst_type match {
@@ -210,5 +220,6 @@ object DEC_LITS
       case I_BImm  => List(N, N, N, Y, N, N, N, Y)
       case I_BCImm => List(N, N, N, Y, N, Y, N, Y)
       case I_ASImm => List(Y, Y, N, Y, N, N, N, Y)
+      case I_LSImm => List(Y, N, N, Y, N, N, N, Y)
     }
 }

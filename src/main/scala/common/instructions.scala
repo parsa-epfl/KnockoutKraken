@@ -64,4 +64,14 @@ object INSTRUCTIONS
   def ADDS_I = BitPat("b10110001????????????????????????")
   def SUB_I  = BitPat("b11010001????????????????????????")
   def SUBS_I = BitPat("b11110001????????????????????????")
+
+  //  Load register (literal) */
+  //    V = 1 bit is for SIMD, we ignore */
+  //  31 30 | 29 28 27 | 26 | 25 24 | 23 22 21 20 19 18 17 16 15 14 13 12 11 10 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
+  //  opc  |  0  1  1 |  V |  0  0 |                           imm19                          |       Rt       |                  |
+  //  0  0 |  0  1  1 |  0 |  0  0 |                           imm19                          |       Rt       | LDR              | 32-bit
+  //  0  1 |  0  1  1 |  0 |  0  0 |                           imm19                          |       Rt       | LDR              | 64-bit
+  //  1  0 |  0  1  1 |  0 |  0  0 |                           imm19                          |       Rt       | LDRSW            |
+  //  1  1 |  0  1  1 |  0 |  0  0 |                           imm19                          |       Rt       | PRFM             |
+  def LDR_I  = BitPat("b01011000????????????????????????")
 }

@@ -42,14 +42,16 @@ class DInst extends Bundle
     // Data
     val itype = decoder.head
     rd    := MuxLookup(itype,   REG_X, Array( I_LogSR -> inst( 4, 0),
-                                              I_ASImm -> inst( 4, 0)))
+                                              I_ASImm -> inst( 4, 0),
+                                              I_LSImm -> inst(4,0)))
     rs1   := MuxLookup(itype,   REG_X, Array( I_LogSR -> inst( 9, 5),
                                               I_ASImm -> inst( 9, 5)))
     rs2   := MuxLookup(itype,   REG_X, Array( I_LogSR -> inst(20,16) ))
     imm   := MuxLookup(itype,   IMM_X, Array( I_LogSR -> inst(15,10),
                                               I_BImm  -> inst(25, 0),
                                               I_BCImm -> inst(23, 5),
-                                              I_ASImm -> inst(21,10)))
+                                              I_ASImm -> inst(21,10),
+                                              I_LSImm -> inst(23,5)))
     shift := MuxLookup(itype, SHIFT_X, Array( I_LogSR -> inst(23,22),
                                               I_ASImm -> inst(23,22)))
     cond  := MuxLookup(itype,  COND_X, Array( I_BCImm -> inst( 3, 0) ))
