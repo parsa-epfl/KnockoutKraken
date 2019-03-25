@@ -34,5 +34,17 @@ object PROCESSOR_TYPES
   val NZCV_W = 4.W
   def NZCV_T = UInt(NZCV_W)
   val NZCV_X = 0.U(NZCV_W)
+
+  // Virtual memory
+  val VADDR = 48
+  val PADDR = 32
+
+  // TLB
+  val PG_OFFSET = 12 // 4K page
+  val TLB_ENTRIES = 256
+  val TLB_SZ = log2Ceil(TLB_ENTRIES)
+  val TLB_TAG =  VADDR - PG_OFFSET - TLB_SZ
+  val PPN = PADDR - PG_OFFSET
+
 }
 

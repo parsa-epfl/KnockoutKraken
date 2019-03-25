@@ -65,16 +65,26 @@ object AssemblyInstruction
     "BICS" -> OP_BIC
   )
 
+  def AddSubImm = Map (
+    "ADD" -> OP_ADD,
+    "ADDS" -> OP_ADD,
+    "SUB" -> OP_SUB,
+    "SUBS" -> OP_SUB
+  )
 
   def Branch = Map (
     "B" -> OP_BCOND
   )
 
+  def LoadStore = Map(
+    "LDR" -> OP_LDR
+  )
+
   def ShiftTypes = Map(
-    "LSL" -> LSL,
-    "LSR" -> LSR,
-    "ASR" -> ASR,
-    "ROR" -> ROR
+  "LSL" -> LSL,
+  "LSR" -> LSR,
+  "ASR" -> ASR,
+  "ROR" -> ROR
   )
 
   def CondTypes = Map (
@@ -175,6 +185,27 @@ object AssemblyInstruction
         rd  = i_rd match { case Some(d) => d; case _ => REG_X }
         imm = i
       }
+      // add/subdract ( immediate )
+      case (Some(d), Some(s1), _,Some(i), _, _) if AddSubImm.get(i_op.toUpperCase).isDefined => {
+        itype = I_ASImm
+        op = AddSubImm.getOrElse(i_op.toUpperCase, OP_ALU_X)
+        rd  = d
+        rs1 = s1
+        imm = i
+        // (shift_type)
+        shift = i_shift match {
+          case Some(s) => ShiftTypes.getOrElse(s.toUpperCase, SHIFT_X)
+          case None    => SHIFT_X
+        }
+      }
+
+      // load store ( immediate )
+      case (Some(d), _, _,Some(i), _, _) if LoadStore.get(i_op.toUpperCase).isDefined => {
+        itype = I_LSImm
+        op = OP_LDR
+        rd  = d
+        imm = i
+      }
 
       case _ =>
     }
@@ -241,7 +272,7 @@ object AssemblyParser
     "shift"   -> Seq(14)
   )
 
-  val regex_str_1 = "[a,b,c,d,e0-9]{1,}[?:]\\s*([0-9a-z]{8,8})\\s*([a-z]*)\\s*[wrx]([0-9]*)(,\\s*\\[|,\\s*|.*)((sp|pc)|#([0-9]*)|[wrx]([0-9]*))(,\\s*|.*)(#([0-9]*)|[wrx]([0-9]*))(,\\s*|.*)(lsl|lsr|asr|.*)(\\s*#|)([0-9]*|)"
+  val regex_str_1 = "[a,b,c,d,e0-9]{1,}[?:]\\s*([0-9a-z]{8,8})\\s*([a-z]*)\\s*[wrx]([0-9]*)(,\\s*\\[|,\\s*|.*)((sp|pc)|#([0-9]*)|[wrx]([0-9]*)|.*)(,\\s*|.*)(#([0-9]*)|[wrx]([0-9]*))(,\\s*|.*)(lsl|lsr|asr|.*)(\\s*#|)([0-9]*|)"
   val regex_1     = new Regex(regex_str_1)
   /*
 

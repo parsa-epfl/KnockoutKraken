@@ -12,6 +12,7 @@ object PrintingTools {
       case I_BImm  => "I_BImm "
       case I_BCImm => "I_BCImm"
       case I_LogSR => "I_LogSR"
+      case I_LSImm => "I_LSImm"
     }
     "itype".padTo(8, ' ') + ": " + str
   }
@@ -31,6 +32,10 @@ object PrintingTools {
         case OP_EON => "EON"
         case OP_ADD => "ADD"
         case OP_SUB => "SUB"
+      }
+
+      case I_LSImm => op.toInt match {
+        case OP_LDR => "LDR"
       }
     }
     "op".padTo(8, ' ') + ": " + str
@@ -156,7 +161,7 @@ object SoftwareStructs {
           get_nzcv_is_update(nzcv_en),
           ).map(s => " |-- " + s).mkString("\n")
       ).mkString("\n")
-      str
+      str+"\n"
     }
   }
 

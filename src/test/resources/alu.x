@@ -18,3 +18,5 @@ Disassembly of section .text:
   28:	8a800427 	and	x7, x1, x0, asr #1
   2c:	8b1e00e5 	add	x5, x7, x30
   30:	cb000142 	sub	x2, x10, x0
+  34:   91002822    add x2, x1, #10
+  38:   91402822    add x2, x1, #10, LSL #12
