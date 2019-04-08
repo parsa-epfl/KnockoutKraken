@@ -63,6 +63,8 @@ class ProcTestsPipeline(c: Proc) extends PeekPokeTester(c)
   poke(c.io.br_reg.ready, 1)
   poke(c.io.exe_reg.ready, 1)
   poke(c.io.valid, 0)
+  poke(c.io.mem_res.valid, 0)
+  poke(c.io.mem_res.bits.data, 0)
   step(1)
   for(i <- 0 until 20) {
     val itype = random.nextInt(2)
@@ -87,7 +89,7 @@ class ProcTester extends ChiselFlatSpec
 
   backends foreach { backend =>
     "ProcTestsReadyValid" should s"test Proc pipeline (with $backend)" in {
-      Driver(() => new Proc, "verilator")((c) => new ProcTestsPipeline(c)) should be (true)
+      Driver(() => new Proc, backend)((c) => new ProcTestsPipeline(c)) should be (true)
     }
   }
 }

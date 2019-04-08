@@ -71,7 +71,7 @@ object DECODE_CONTROL_SIGNALS
   // load/store signal
   val OP_LDR = DEC_LITS.OP_LDR.U(OP_W)
 
-  // Types
+  // Instruction Types for chisel
   val TYPE_W = 3.W
   def I_T = UInt(TYPE_W)
   val I_X = 0.U(TYPE_W)
@@ -192,14 +192,14 @@ object DEC_LITS
   val OP_LDR = 0
 
 
-  // Types
+  // Instruction Types for scala
   val TYPE_W = 3
   val I_X = 0
   val I_LogSR = 1
-  val I_BImm  = 2
-  val I_BCImm = 3
-  val I_ASImm = 4
-  val I_LSImm = 5
+  val I_BImm  = 2 //branch
+  val I_BCImm = 3 // conditional branch
+  val I_ASImm = 4 // ADD/Subdract with Immediate
+  val I_LSImm = 5 // Load/Store Immediate
 
   def decode_table(inst_type : Int): List[BigInt] =
     inst_type match {

@@ -12,7 +12,7 @@ import utils.SoftwareStructs
 class LSUTests(c: LoadStoreUnit) extends PeekPokeTester(c)
 {
   val imm = 28
-  val insts = AssemblyParser.parse("ldr.x") // TODO
+  val insts = AssemblyParser.parse("ldr.x") // TODO add more instruncti on forms
   val dinst_in = DInstExtractor.extract(c.io.dinst)
 
   val rVal1 = 0

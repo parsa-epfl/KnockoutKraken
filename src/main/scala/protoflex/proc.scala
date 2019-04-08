@@ -12,22 +12,31 @@ import common.PROCESSOR_TYPES._
 class Proc extends Module
 {
   val io = IO(new Bundle {
-                // Fetche simulator
-                val inst = Input(INST_T)
-                val tag  = Input(TAG_T)
-                val valid = Input(Bool())
-                val ready = Output(Bool())
+    // Fetche simulator
+    val tag  = Input(TAG_T)
+    val inst = Input(INST_T)
+    val valid = Input(Bool())
+    val ready = Output(Bool())
 
-                // State
-                val inst_in = Output(new DInst)
-                val dec_reg = Flipped(DeqIO(new DInst))
-                val issue_reg = Flipped(DeqIO(new DInst))
-                val exe_reg = Flipped(DeqIO(new EInst))
-                val br_reg = Flipped(DeqIO(new BInst))
-                val curr_PC = Output(DATA_T)
-                val next_PC = Output(DATA_T)
-                val wen = Output(Bool())
-              })
+    // State
+    val inst_in = Output(new DInst)
+    val dec_reg = Flipped(DeqIO(new DInst))
+    val issue_reg = Flipped(DeqIO(new DInst))
+    val exe_reg = Flipped(DeqIO(new EInst))
+    val br_reg = Flipped(DeqIO(new BInst))
+    val lsu_reg = Flipped(DeqIO(new MInst))
+    val curr_PC = Output(DATA_T)
+    val next_PC = Output(DATA_T)
+    val wen = Output(Bool())
+
+    // memory interface
+    val mem_req = Output(Valid(new MemRes))
+    val mem_res = Input(Valid(new MemRes))
+  })
+
+  // PCs
+  val curr_PC = Wire(REG_T)
+  val next_PC = Wire(REG_T)
 
   // Pipeline
   // Decode
@@ -42,8 +51,13 @@ class Proc extends Module
   val executer = Module(new ExecuteUnit())
   val exe_reg = Module(new Queue(new EInst, 1, pipe = true, flow = false))
 
+  // Branch
   val brancher = Module(new BranchUnit())
   val br_reg = Module(new Queue(new BInst, 1, pipe = true, flow = false))
+
+  // Load Store
+  val lsu = Module(new LoadStoreUnit())
+  val lsu_reg = Module(new Queue(new MInst, 1, pipe = true, flow = false))
 
   // PState
   // Writeback
@@ -56,12 +70,13 @@ class Proc extends Module
   io.issue_reg <> issuer.io.deq
   io.exe_reg   <> exe_reg.io.deq
   io.br_reg    <> br_reg.io.deq
+  io.lsu_reg   <> lsu_reg.io.deq
 
   // Fetch -> Decode
   decoder.io.inst := io.inst
   decoder.io.tag := io.tag
 
-  // Save into register
+  // Register instruction (DInst)
   io.ready := dec_reg.io.enq.ready
   dec_reg.io.enq.valid := io.valid && decoder.io.dinst.itype =/= 0.U
   dec_reg.io.enq.bits  := decoder.io.dinst
@@ -77,31 +92,56 @@ class Proc extends Module
   issuer.io.exe_reg.bits := exe_reg.io.deq.bits
   issuer.io.exe_reg.valid :=  exe_reg.io.deq.valid
 
-  // Execute
+  /** Execute */
+  // connect rfile read(address) interface
   vec_rfile map { case rfile =>
     rfile.rs1_addr := issued_dinst.rs1
     rfile.rs2_addr := issued_dinst.rs2
   }
-  executer.io.rVal1 := vec_rfile(issued_tag).rs1_data
-  executer.io.rVal2 := vec_rfile(issued_tag).rs2_data
+  // Read register data from rfile
+  val rVal1 = vec_rfile(issued_tag).rs1_data
+  val rVal2 = vec_rfile(issued_tag).rs2_data
+
+  // connect executeUnit interface
+  executer.io.rVal1 := rVal1
+  executer.io.rVal2 := rVal2
   executer.io.dinst := issued_dinst
-  // Execute register
+
+  // Register ExecuteUnit output
   exe_reg.io.enq.valid := executer.io.einst.valid && issuer.io.deq.valid
   exe_reg.io.enq.bits  := executer.io.einst.bits
 
-  // Branch
+  // connect BranchUnit interface
   brancher.io.nzcv := vec_pregs(issued_dinst.tag).NZCV
   brancher.io.dinst := issued_dinst
-  // Branch register
+
+  // Register BranchUnit output
   br_reg.io.enq.valid := issuer.io.deq.valid && brancher.io.binst.valid
   br_reg.io.enq.bits.offset := brancher.io.binst.bits.offset
   br_reg.io.enq.bits.tag := brancher.io.binst.bits.tag
 
+  // connect LSUnit interface
+  lsu.io.dinst := issued_dinst
+  lsu.io.rVal1 := rVal1
+  lsu.io.rVal2 := rVal2
+  lsu.io.pc    := curr_PC
+  io.mem_req := lsu.io.memReq
+  lsu.io.memRes := io.mem_res
+
+  // testing only
+  lsu.io.write_tlb_vaddr := DontCare
+  lsu.io.write_tlb_entry := DontCare
+
+  // Register LSUnit output MInst
+  lsu_reg.io.enq.valid  := lsu.io.minst.valid && issuer.io.deq.valid // TODO: check condition
+  lsu_reg.io.enq.bits := lsu.io.minst.bits
+
   // Writeback : Execute -> PState
-  // Always dequeue executions stage
+  // NOTE: Always dequeue executions stage
   exe_reg.io.deq.ready := true.B
   br_reg.io.deq.ready := true.B
-  // RFile
+
+  // connect RFile's write interface
   vec_rfile map { case rfile =>
     rfile.waddr := exe_reg.io.deq.bits.rd
     rfile.wdata := exe_reg.io.deq.bits.res
@@ -117,17 +157,22 @@ class Proc extends Module
   }
 
   val last_thread = Reg(TAG_T)
-  io.curr_PC := vec_pregs(last_thread).PC
-  io.next_PC := vec_pregs(last_thread).PC
+  // do not update PC when an instruction(branch/execute) instruction didn't executed
+  curr_PC := vec_pregs(last_thread).PC
+  next_PC := vec_pregs(last_thread).PC
+  // output PCs
+  io.curr_PC := curr_PC
+  io.next_PC := next_PC
+  // update PC
   when(br_reg.io.deq.valid) {
     vec_pregs(br_reg.io.deq.bits.tag).PC := (vec_pregs(br_reg.io.deq.bits.tag).PC.zext + br_reg.io.deq.bits.offset.asSInt).asUInt()
-    io.curr_PC := vec_pregs(br_reg.io.deq.bits.tag).PC
-    io.next_PC := (vec_pregs(br_reg.io.deq.bits.tag).PC.zext + br_reg.io.deq.bits.offset.asSInt).asUInt()
+    curr_PC := vec_pregs(br_reg.io.deq.bits.tag).PC
+    next_PC := (vec_pregs(br_reg.io.deq.bits.tag).PC.zext + br_reg.io.deq.bits.offset.asSInt).asUInt()
     last_thread := br_reg.io.deq.bits.tag
   }.elsewhen(exe_reg.io.deq.valid) {
     vec_pregs(exe_reg.io.deq.bits.tag).PC := vec_pregs(exe_reg.io.deq.bits.tag).PC + 1.U
-    io.curr_PC := vec_pregs(exe_reg.io.deq.bits.tag).PC
-    io.next_PC := vec_pregs(exe_reg.io.deq.bits.tag).PC + 1.U
+    curr_PC := vec_pregs(exe_reg.io.deq.bits.tag).PC
+    next_PC := vec_pregs(exe_reg.io.deq.bits.tag).PC + 1.U
     last_thread := exe_reg.io.deq.bits.tag
   }
 }

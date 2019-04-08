@@ -20,3 +20,4 @@ Disassembly of section .text:
   30:	cb000142 	sub	x2, x10, x0
   34:   91002822    add x2, x1, #10
   38:   91402822    add x2, x1, #10, LSL #12
+  3c:	5801F400 	ldr x0, #16000

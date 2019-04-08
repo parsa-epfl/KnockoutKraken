@@ -13,6 +13,7 @@ object PrintingTools {
       case I_BCImm => "I_BCImm"
       case I_LogSR => "I_LogSR"
       case I_LSImm => "I_LSImm"
+      case I_ASImm => "I_ASImm"
     }
     "itype".padTo(8, ' ') + ": " + str
   }
@@ -36,6 +37,11 @@ object PrintingTools {
 
       case I_LSImm => op.toInt match {
         case OP_LDR => "LDR"
+      }
+
+      case I_ASImm => op.toInt match {
+        case OP_ADD => "ADD"
+        case OP_SUB => "SUB"
       }
     }
     "op".padTo(8, ' ') + ": " + str
