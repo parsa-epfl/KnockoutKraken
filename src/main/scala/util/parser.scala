@@ -138,7 +138,8 @@ object AssemblyInstruction
 
 
     val line = i_line
-    val bitPat = BigInt(i_bitPat, 16)
+    val i_bitPad_l = i_bitPat.grouped(2).toList.reverse.mkString // little endien
+    val bitPat = BigInt(i_bitPad_l, 16)
 
     var itype = I_X
     var op    = OP_ALU_X
@@ -272,7 +273,7 @@ object AssemblyParser
     "shift"   -> Seq(14)
   )
 
-  val regex_str_1 = "[a,b,c,d,e0-9]{1,}[?:]\\s*([0-9a-z]{8,8})\\s*([a-z]*)\\s*[wrx]([0-9]*)(,\\s*\\[|,\\s*|.*)((sp|pc)|#([0-9]*)|[wrx]([0-9]*)|.*)(,\\s*|.*)(#([0-9]*)|[wrx]([0-9]*))(,\\s*|.*)(lsl|lsr|asr|.*)(\\s*#|)([0-9]*|)"
+  val regex_str_1 = "[0-9a-fA-F]{1,}[?:]\\s*([0-9A-Fa-f]{8,8})\\s*([a-zA-Z]*)\\s*[wrxWRX]([0-9]*)(,\\s*\\[|,\\s*|.*)((sp|pc)|#([a-fA-F0-9]*)|[wrxWRX]([0-9]*)|.*)(,\\s*|.*)(#([a-fA-F0-9]*)|[wrxWRX]([0-9]*))(,\\s*|.*)(?i)(lsl|lsr|asr|.*)(\\s*#|)([a-fA-F0-9]*)"
   val regex_1     = new Regex(regex_str_1)
   /*
 
@@ -288,7 +289,7 @@ object AssemblyParser
    */
 
   val regex_str_2 =
-    "[a,b,c,d,e0-9]{1,}[?:]\\s*([0-9a-z]{8,8})\\s*([a-z]*)\\s*([.]|\\s*)(le|eq|ne|cs|cc|mi|pl|vs|vc|hi|ls|ge|lt|gt|al|nv|)\\s*([a-z0-9]*).*<.*>.*"
+    "[a-fA-F0-9]{1,}[?:]\\s*([0-9a-zA-F]{8,8})\\s*([a-zA-Z]*)\\s*([.]|\\s*)(le|eq|ne|cs|cc|mi|pl|vs|vc|hi|ls|ge|lt|gt|al|nv|)\\s*([a-z0-9]*).*<.*>.*"
 
   val regex_2     = new Regex(regex_str_2)
   val grouVals_2 = Map(
