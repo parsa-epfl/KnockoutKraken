@@ -2,8 +2,8 @@
 package protoflex
 
 import chisel3._
-import chisel3.util.{Queue, Valid, DeqIO}
-
+import chisel3.core.withReset
+import chisel3.util.{DeqIO, Queue, Valid}
 import common.PROCESSOR_TYPES._
 
 /** Processor
@@ -32,16 +32,42 @@ class Proc extends Module
     // memory interface
     val mem_req = Output(Valid(new MemRes))
     val mem_res = Input(Valid(new MemRes))
-  })
 
+    // initialization qemu->armflex
+    val tp_mode = Input(Bool())
+    val tp_reg_waddr = Input(REG_T)
+    val tp_reg_wdata = Input(DATA_T)
+    val tp_reg_wen = Input(DATA_T)
+    val tp_tag = Input(TAG_T)
+    val tp_rs1 = Output(DATA_T)
+    val tp_rs2 = Output(DATA_T)
+    // pstate
+    val tp_pstate_wen = Input(Bool())
+    val tp_PC = Input(DATA_T)
+    val tp_SP = Input(DATA_T)
+    val tp_EL = Input(DATA_T)
+    val tp_NZCV = Input(NZCV_T)
+    val tp_PC_o = Output(DATA_T)
+    val tp_SP_o = Output(DATA_T)
+    val tp_EL_o = Output(DATA_T)
+    val tp_NZCV_o = Output(NZCV_T)
+
+    // transplant.scala armflex->qemu
+    val tp_reg_rs1_addr = Input(REG_T)
+    val tp_reg_rs2_addr = Input(REG_T)
+
+    val flush = Input(Bool())
+  })
   // PCs
   val curr_PC = Wire(REG_T)
   val next_PC = Wire(REG_T)
 
   // Pipeline
+  val flush = io.flush || reset.toBool()
+
   // Decode
   val decoder = Module(new DecodeUnit())
-  val dec_reg = Module(new Queue(new DInst, 1, pipe = true, flow = false))
+  val dec_reg = withReset(flush){Module(new Queue(new DInst, 1, pipe = true, flow = false))}
 
   // Issue
   val issuer = Module(new IssueUnit())
@@ -49,15 +75,15 @@ class Proc extends Module
 
   // Execute
   val executer = Module(new ExecuteUnit())
-  val exe_reg = Module(new Queue(new EInst, 1, pipe = true, flow = false))
+  val exe_reg = withReset(flush){Module(new Queue(new EInst, 1, pipe = true, flow = false))}
 
   // Branch
   val brancher = Module(new BranchUnit())
-  val br_reg = Module(new Queue(new BInst, 1, pipe = true, flow = false))
+  val br_reg = withReset(flush){Module(new Queue(new BInst, 1, pipe = true, flow = false))}
 
   // Load Store
   val lsu = Module(new LoadStoreUnit())
-  val lsu_reg = Module(new Queue(new MInst, 1, pipe = true, flow = false))
+  val lsu_reg = withReset(flush){Module(new Queue(new MInst, 1, pipe = true, flow = false))}
 
   // PState
   // Writeback
@@ -83,24 +109,32 @@ class Proc extends Module
 
   // Decode -> Issue
   issuer.io.enq <> dec_reg.io.deq
+  issuer.io.flush := flush
 
   // Execute : Issue -> Execute
   val issued_dinst = issuer.io.deq.bits
   val issued_tag = issued_dinst.tag
+  val tag_select = Mux(io.tp_mode, io.tp_tag, issued_tag)
   issuer.io.deq.ready := exe_reg.io.enq.ready || br_reg.io.enq.ready
   // Check for front pressure
   issuer.io.exe_reg.bits := exe_reg.io.deq.bits
   issuer.io.exe_reg.valid :=  exe_reg.io.deq.valid
 
   /** Execute */
+  val rs1_addr = Mux(io.tp_mode, io.tp_reg_rs1_addr, issued_dinst.rs1)
+  val rs2_addr = Mux(io.tp_mode, io.tp_reg_rs2_addr, issued_dinst.rs2)
   // connect rfile read(address) interface
   vec_rfile map { case rfile =>
-    rfile.rs1_addr := issued_dinst.rs1
-    rfile.rs2_addr := issued_dinst.rs2
+    rfile.rs1_addr := rs1_addr
+    rfile.rs2_addr := rs2_addr
   }
   // Read register data from rfile
-  val rVal1 = vec_rfile(issued_tag).rs1_data
-  val rVal2 = vec_rfile(issued_tag).rs2_data
+  val rVal1 = vec_rfile(tag_select).rs1_data
+  val rVal2 = vec_rfile(tag_select).rs2_data
+
+  // reading register: transplant.scala
+  io.tp_rs1 := rVal1
+  io.tp_rs2 := rVal2
 
   // connect executeUnit interface
   executer.io.rVal1 := rVal1
@@ -142,12 +176,15 @@ class Proc extends Module
   br_reg.io.deq.ready := true.B
 
   // connect RFile's write interface
+  val waddr = Mux(io.tp_mode, io.tp_reg_waddr, exe_reg.io.deq.bits.rd)
+  val wdata = Mux(io.tp_mode, io.tp_reg_wdata, exe_reg.io.deq.bits.res)
   vec_rfile map { case rfile =>
-    rfile.waddr := exe_reg.io.deq.bits.rd
-    rfile.wdata := exe_reg.io.deq.bits.res
+    rfile.waddr := waddr
+    rfile.wdata := wdata
     rfile.wen := false.B
   }
-  vec_rfile(issued_tag).wen := exe_reg.io.deq.bits.rd_en && exe_reg.io.deq.valid
+  val wen = Mux(io.tp_mode, io.tp_reg_wen, exe_reg.io.deq.bits.rd_en && exe_reg.io.deq.valid)
+  vec_rfile(tag_select).wen := wen
   io.wen := exe_reg.io.deq.bits.rd_en && exe_reg.io.deq.valid
 
 
@@ -163,6 +200,18 @@ class Proc extends Module
   // output PCs
   io.curr_PC := curr_PC
   io.next_PC := next_PC
+
+  // pstate in tp mode
+  io.tp_PC_o := vec_pregs(io.tp_tag).PC
+  io.tp_SP_o := vec_pregs(io.tp_tag).SP
+  io.tp_EL_o := vec_pregs(io.tp_tag).EL
+  io.tp_NZCV_o := vec_pregs(io.tp_tag).NZCV
+  when(io.tp_mode && io.tp_pstate_wen){
+    vec_pregs(io.tp_tag).PC := io.tp_PC
+    vec_pregs(io.tp_tag).SP := io.tp_SP
+    vec_pregs(io.tp_tag).EL := io.tp_EL
+    vec_pregs(io.tp_tag).NZCV := io.tp_NZCV
+  }
   // update PC
   when(br_reg.io.deq.valid) {
     vec_pregs(br_reg.io.deq.bits.tag).PC := (vec_pregs(br_reg.io.deq.bits.tag).PC.zext + br_reg.io.deq.bits.offset.asSInt).asUInt()

@@ -4,7 +4,6 @@ import chisel3._
 import chisel3.iotesters
 import chisel3.iotesters.{ChiselFlatSpec, Driver, PeekPokeTester}
 
-import common.INSTRUCTIONS._
 import utils.AssemblyParser
 import utils.AssemblyInstruction
 import utils.DInstExtractor
@@ -39,12 +38,6 @@ class DecodeALULog_SR(c: DecodeUnit) extends PeekPokeTester(c)
 class DecodeBranches(c: DecodeUnit) extends PeekPokeTester(c)
 {
   val insts = AssemblyParser.parse("branch.x")
-  val execute = new DecodeInstructionTest(c).decode(c, insts)
-}
-
-class DecodeALUAddSub_I(c: DecodeUnit) extends PeekPokeTester(c)
-{
-  val insts = AssemblyParser.parse("add_sub_i.x")
   val execute = new DecodeInstructionTest(c).decode(c, insts)
 }
 

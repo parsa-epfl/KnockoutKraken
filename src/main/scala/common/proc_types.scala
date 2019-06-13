@@ -17,7 +17,8 @@ object PROCESSOR_TYPES
   val TAG_VEC_X = 0.U(NUM_THREADS.W)
 
   // Data
-  val DATA_W = 64.W
+  val DATA_SZ = 64
+  val DATA_W = DATA_SZ.W
   def DATA_T = UInt(DATA_W)
   val DATA_X = 0.U(DATA_W)
 
@@ -31,7 +32,8 @@ object PROCESSOR_TYPES
   val REG_X = 0.U(REG_W)
 
   // Special Regs
-  val NZCV_W = 4.W
+  val NZCV_SZ = 4
+  val NZCV_W = NZCV_SZ.W
   def NZCV_T = UInt(NZCV_W)
   val NZCV_X = 0.U(NZCV_W)
 

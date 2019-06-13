@@ -6,7 +6,6 @@ import chisel3.util.{MuxLookup, Valid}
 
 import common.DECODE_CONTROL_SIGNALS._
 import common.PROCESSOR_TYPES._
-import common.INSTRUCTIONS._
 
 class BInst extends Bundle {
   val offset = DATA_T

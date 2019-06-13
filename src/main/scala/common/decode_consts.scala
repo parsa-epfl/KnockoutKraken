@@ -36,13 +36,16 @@ object DECODE_CONTROL_SIGNALS
   val OP_BCOND = DEC_LITS.OP_BCOND.U(OP_W)
 
   // Shiift Operation Signals
-  val SHIFT_W = DEC_LITS.SHIFT_W.W
-  def SHIFT_T = UInt(SHIFT_W)
-  val SHIFT_X = DEC_LITS.SHIFT_X.U(SHIFT_W)
-  val LSL  = DEC_LITS.LSL.U(SHIFT_W)
-  val LSR  = DEC_LITS.LSR.U(SHIFT_W)
-  val ASR  = DEC_LITS.ASR.U(SHIFT_W)
-  val ROR  = DEC_LITS.ROR.U(SHIFT_W)
+  val SHIFT_VAL_W = DEC_LITS.SHIFT_VAL_W.W
+  def SHIFT_VAL_T = UInt(SHIFT_VAL_W)
+  val SHIFT_VAL_X = DEC_LITS.SHIFT_VAL_X.U(SHIFT_VAL_W)
+  val SHIFT_TYPE_W = DEC_LITS.SHIFT_TYPE_W.W
+  def SHIFT_TYPE_T = UInt(SHIFT_TYPE_W)
+  val SHIFT_TYPE_X = DEC_LITS.SHIFT_TYPE_X.U(SHIFT_TYPE_W)
+  val LSL  = DEC_LITS.LSL.U(SHIFT_TYPE_W)
+  val LSR  = DEC_LITS.LSR.U(SHIFT_TYPE_W)
+  val ASR  = DEC_LITS.ASR.U(SHIFT_TYPE_W)
+  val ROR  = DEC_LITS.ROR.U(SHIFT_TYPE_W)
 
   // Cond Operations Signals
   val COND_W = DEC_LITS.COND_W.W
@@ -120,10 +123,10 @@ object DECODE_MATCHING_TABLES
       // Compare & branch (immediate)
       BCond  -> List(I_BCImm, OP_BCOND, N, N, N, Y, N, Y, N, Y),
       // Add/subtract (immediate)
-      ADD_I  -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, N, N, N, Y),
-      ADDS_I -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, N, N, Y, Y),
-      SUB_I  -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, N, N, N, Y),
-      SUBS_I -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, N, N, Y, Y),
+      ADD_I  -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, N, Y),
+      ADDS_I -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, Y, Y),
+      SUB_I  -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, Y, N, N, Y),
+      SUBS_I -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, Y, N, Y, Y),
       // load/store (immediate)
       LDR_I  -> List(I_LSImm, OP_LDR,   Y, N, N, Y, N, N, N, Y),
     )
@@ -159,8 +162,10 @@ object DEC_LITS
   val OP_BCOND = 1
 
   // Shiift Operation Signals
-  val SHIFT_W = 2
-  val SHIFT_X = 0
+  val SHIFT_VAL_W = 6 // maximum shift for 64 bit
+  val SHIFT_VAL_X = 0
+  val SHIFT_TYPE_W = 2
+  val SHIFT_TYPE_X = 0
   val LSL = 0
   val LSR = 1
   val ASR = 2
@@ -219,7 +224,7 @@ object DEC_LITS
       case I_LogSR => List(Y, Y, Y, N, Y, N, N, Y)
       case I_BImm  => List(N, N, N, Y, N, N, N, Y)
       case I_BCImm => List(N, N, N, Y, N, Y, N, Y)
-      case I_ASImm => List(Y, Y, N, Y, N, N, N, Y)
+      case I_ASImm => List(Y, Y, N, Y, Y, N, N, Y)
       case I_LSImm => List(Y, N, N, Y, N, N, N, Y)
     }
 }

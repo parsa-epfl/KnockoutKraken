@@ -31,7 +31,7 @@ class ExecuteALULog_SR(c: ExecuteUnit) extends PeekPokeTester(c)
 
       //val val2 = if(inst.getSig("imm_en") == 0) rVal2 else inst.getSig("imm").toInt
       val val2 = if(inst.shift_en == Y ) {
-        (inst.shift.toInt, inst.imm.toInt) match {
+        (inst.shift_type.toInt, inst.imm.toInt) match {
           case (LSL, imm)  => rVal2 <<  imm
           case (LSR, imm)  => rVal2 >>> imm
           case (ASR, imm)  => rVal2 >>  imm

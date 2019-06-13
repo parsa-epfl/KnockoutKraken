@@ -52,6 +52,13 @@ object PrintingTools {
     str.padTo(3, ' ')
   }
 
+  def get_imm(imm : BigInt, imm_en: BigInt) : String = {
+    imm_en.toInt match{
+      case Y => "IMM".padTo(8, ' ') + ": "+imm.toInt.toString
+      case N => "IMM".padTo(8, ' ') + ": "+"XXX"
+    }
+  }
+
   def get_reg_op(rd : BigInt, rs1 : BigInt, rs2 : BigInt, rd_en : BigInt, rs1_en : BigInt, rs2_en : BigInt) : String = {
     (rd_en.toInt, rs1_en.toInt, rs2_en.toInt) match {
       case (0,0,0) => "XXX" + " <- " + "XXX" + "," + "XXX"
@@ -85,7 +92,7 @@ object PrintingTools {
     str
   }
 
-  def get_shift(shift : BigInt, shift_en : BigInt, imm : BigInt) : String = {
+  def get_shift(shift : BigInt, shift_en : BigInt, shift_val : BigInt) : String = {
     val str = shift.toInt match {
       case LSL => "LSL"
       case LSR => "LSR"
@@ -93,7 +100,7 @@ object PrintingTools {
       case ROR => "ROR"
     }
     shift_en.toInt match {
-      case Y => "shift".padTo(8, ' ') + ": " + str + "#" + imm.toString
+      case Y => "shift".padTo(8, ' ') + ": " + str + "#" + shift_val.toString
       case N => "shift".padTo(8, ' ') + ": " + "XXX"
     }
   }
@@ -136,23 +143,24 @@ object PrintingTools {
 
 object SoftwareStructs {
   case class DInst (
-    val tag      : BigInt,
-    val itype    : BigInt,
-    val op       : BigInt,
-    val rd       : BigInt,
-    val rs1      : BigInt,
-    val rs2      : BigInt,
-    val imm      : BigInt,
-    val shift    : BigInt,
-    val cond     : BigInt,
-    val rd_en    : BigInt,
-    val rs1_en   : BigInt,
-    val rs2_en   : BigInt,
-    val imm_en   : BigInt,
-    val shift_en : BigInt,
-    val cond_en  : BigInt,
-    val nzcv_en  : BigInt,
-    val inst_en  : BigInt
+     val tag          : BigInt,
+     val itype        : BigInt,
+     val op           : BigInt,
+     val rd           : BigInt,
+     val rs1          : BigInt,
+     val rs2          : BigInt,
+     val imm          : BigInt,
+     val shift_val    : BigInt,
+     val shift_type   : BigInt,
+     val cond         : BigInt,
+     val rd_en        : BigInt,
+     val rs1_en       : BigInt,
+     val rs2_en       : BigInt,
+     val imm_en       : BigInt,
+     val shift_en     : BigInt,
+     val cond_en      : BigInt,
+     val nzcv_en      : BigInt,
+     val inst_en      : BigInt
   ) {
     override def toString() = {
       val str = Seq(
@@ -162,7 +170,8 @@ object SoftwareStructs {
           get_itype(itype: BigInt),
           get_op(itype: BigInt, op: BigInt),
           get_reg_op(rd: BigInt, rs1: BigInt, rs2: BigInt, rd_en: BigInt, rs1_en: BigInt, rs2_en: BigInt),
-          get_shift(shift, shift_en, imm_en),
+          get_imm(imm: BigInt, imm_en: BigInt),
+          get_shift(shift_type, shift_en, shift_val),
           get_cond(cond: BigInt, cond_en : BigInt),
           get_nzcv_is_update(nzcv_en),
           ).map(s => " |-- " + s).mkString("\n")
@@ -209,23 +218,24 @@ object SoftwareStructs {
   }
 
   def dinst(map : LinkedHashMap[String, BigInt], decoupled : Boolean = true) : DInst = {
-    val rd       = if(!decoupled) map("rd")       else map("bits.rd")
-    val rs1      = if(!decoupled) map("rs1")      else map("bits.rs1")
-    val rs2      = if(!decoupled) map("rs2")      else map("bits.rs2")
-    val imm      = if(!decoupled) map("imm")      else map("bits.imm")
-    val shift    = if(!decoupled) map("shift")    else map("bits.shift")
-    val cond     = if(!decoupled) map("cond")     else map("bits.cond")
-    val itype    = if(!decoupled) map("itype")    else map("bits.itype")
-    val op       = if(!decoupled) map("op")       else map("bits.op")
-    val rd_en    = if(!decoupled) map("rd_en")    else map("bits.rd_en")
-    val rs1_en   = if(!decoupled) map("rs1_en")   else map("bits.rs1_en")
-    val rs2_en   = if(!decoupled) map("rs2_en")   else map("bits.rs2_en")
-    val imm_en   = if(!decoupled) map("imm_en")   else map("bits.imm_en")
-    val shift_en = if(!decoupled) map("shift_en") else map("bits.shift_en")
-    val cond_en  = if(!decoupled) map("cond_en")  else map("bits.cond_en")
-    val nzcv_en  = if(!decoupled) map("nzcv_en")  else map("bits.nzcv_en")
-    val inst_en  = if(!decoupled) map("inst_en")  else map("bits.inst_en")
-    val tag      = if(!decoupled) map("tag")      else map("bits.tag")
+    val rd          = if(!decoupled) map("rd")          else map("bits.rd")
+    val rs1         = if(!decoupled) map("rs1")         else map("bits.rs1")
+    val rs2         = if(!decoupled) map("rs2")         else map("bits.rs2")
+    val imm         = if(!decoupled) map("imm")         else map("bits.imm")
+    val shift_val   = if(!decoupled) map("shift_val")   else map("bits.shift_type")
+    val shift_type  = if(!decoupled) map("shift_type")  else map("bits.shift_type")
+    val cond        = if(!decoupled) map("cond")        else map("bits.cond")
+    val itype       = if(!decoupled) map("itype")       else map("bits.itype")
+    val op          = if(!decoupled) map("op")          else map("bits.op")
+    val rd_en       = if(!decoupled) map("rd_en")       else map("bits.rd_en")
+    val rs1_en      = if(!decoupled) map("rs1_en")      else map("bits.rs1_en")
+    val rs2_en      = if(!decoupled) map("rs2_en")      else map("bits.rs2_en")
+    val imm_en      = if(!decoupled) map("imm_en")      else map("bits.imm_en")
+    val shift_en    = if(!decoupled) map("shift_en")    else map("bits.shift_en")
+    val cond_en     = if(!decoupled) map("cond_en")     else map("bits.cond_en")
+    val nzcv_en     = if(!decoupled) map("nzcv_en")     else map("bits.nzcv_en")
+    val inst_en     = if(!decoupled) map("inst_en")     else map("bits.inst_en")
+    val tag         = if(!decoupled) map("tag")         else map("bits.tag")
     new DInst(
       tag : BigInt,
       itype: BigInt,
@@ -234,7 +244,8 @@ object SoftwareStructs {
       rs1: BigInt,
       rs2: BigInt,
       imm: BigInt,
-      shift: BigInt,
+      shift_val: BigInt,
+      shift_type: BigInt,
       cond: BigInt,
       rd_en: BigInt,
       rs1_en: BigInt,

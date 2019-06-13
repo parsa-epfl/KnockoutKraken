@@ -2,8 +2,8 @@
 package protoflex
 
 import chisel3._
-import chisel3.util.{Queue,log2Ceil, EnqIO, DeqIO, PriorityEncoder, Reverse, PriorityMux, Valid}
-
+import chisel3.core.withReset
+import chisel3.util.{DeqIO, EnqIO, PriorityEncoder, PriorityMux, Queue, Reverse, Valid, log2Ceil}
 import common.PROCESSOR_TYPES._
 
 class RRArbiter(arbN: Int)
@@ -44,6 +44,8 @@ class RRArbiter(arbN: Int)
 }
 
 class IssueUnitIO extends Bundle {
+  // flush
+  val flush = Input(Bool())
   // Decode - Issue
   val enq = Flipped(EnqIO(new DInst))
 
@@ -80,7 +82,7 @@ class IssueUnit extends Module
     * sig_pipe_r This signal indicates whenever the register is ready to recieve the next instruction.
     */
   val reg_pipe   = RegInit(VecInit(Seq.fill(NUM_THREADS)(Wire(new DInst).empty())))
-  val reg_pipe_v = RegInit(VecInit(TAG_VEC_X.toBools))
+  val reg_pipe_v = withReset(io.flush) {RegInit(VecInit(TAG_VEC_X.toBools))}
   val sig_pipe_r = WireInit(VecInit(TAG_VEC_X.toBools))
 
   /** Issue stage buffer
@@ -93,7 +95,7 @@ class IssueUnit extends Module
     */
   def FIFO_i   = new Queue(new DInst, 2, pipe = true, flow = true)
   // Instanciates queue modules, expresses their IO through the vector
-  val fifo_vec = VecInit(Seq.fill(NUM_THREADS)(Module(FIFO_i).io))
+  val fifo_vec = withReset(io.flush) {VecInit(Seq.fill(NUM_THREADS)(Module(FIFO_i).io))}
 
   /** Issue stage arbiter
     * arbiter        Round Robin Arbiter

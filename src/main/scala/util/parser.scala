@@ -7,24 +7,24 @@ import common.DEC_LITS._
 
 case class AssemblyInstruction
   (
-    val line     : String,
-    val itype    : BigInt,
-    val op       : BigInt,
-    val rd       : BigInt,
-    val rs1      : BigInt,
-    val rs2      : BigInt,
-    val imm      : BigInt,
-    val shift    : BigInt,
-    val cond     : BigInt,
-    val rd_en    : BigInt,
-    val rs1_en   : BigInt,
-    val rs2_en   : BigInt,
-    val imm_en   : BigInt,
-    val shift_en : BigInt,
-    val cond_en  : BigInt,
-    val nzcv_en  : BigInt,
-    val inst_en  : BigInt,
-    val bitPat   : BigInt
+    val line        : String,
+    val itype       : BigInt,
+    val op          : BigInt,
+    val rd          : BigInt,
+    val rs1         : BigInt,
+    val rs2         : BigInt,
+    val imm         : BigInt,
+    val shift_type  : BigInt,
+    val cond        : BigInt,
+    val rd_en       : BigInt,
+    val rs1_en      : BigInt,
+    val rs2_en      : BigInt,
+    val imm_en      : BigInt,
+    val shift_en    : BigInt,
+    val cond_en     : BigInt,
+    val nzcv_en     : BigInt,
+    val inst_en     : BigInt,
+    val bitPat      : BigInt
   )
 {
   val io = Seq(
@@ -34,7 +34,7 @@ case class AssemblyInstruction
     rs1,
     rs2,
     imm,
-    shift,
+    shift_type,
     cond,
     rd_en,
     rs1_en,
@@ -147,7 +147,7 @@ object AssemblyInstruction
     var rs1   = REG_X
     var rs2   = REG_X
     var imm   = IMM_X
-    var shift = SHIFT_X
+    var shift_type = SHIFT_TYPE_X
     var cond  = COND_X
 
     (i_rd, i_rs1, i_rs2, i_imm, i_shift, i_cond) match {
@@ -163,9 +163,9 @@ object AssemblyInstruction
         imm = i_imm match { case Some(imm) => imm; case _ => IMM_X }
 
         // (shift_type)
-        shift = i_shift match {
-          case Some(s) => ShiftTypes.getOrElse(s.toUpperCase, SHIFT_X)
-          case None    => SHIFT_X
+        shift_type = i_shift match {
+          case Some(s) => ShiftTypes.getOrElse(s.toUpperCase, SHIFT_TYPE_X)
+          case None    => SHIFT_TYPE_X
         }
       }
 
@@ -194,9 +194,9 @@ object AssemblyInstruction
         rs1 = s1
         imm = i
         // (shift_type)
-        shift = i_shift match {
-          case Some(s) => ShiftTypes.getOrElse(s.toUpperCase, SHIFT_X)
-          case None    => SHIFT_X
+        shift_type = i_shift match {
+          case Some(s) => ShiftTypes.getOrElse(s.toUpperCase, SHIFT_TYPE_X)
+          case None    => SHIFT_TYPE_X
         }
       }
 
@@ -229,7 +229,7 @@ object AssemblyInstruction
       rs1,
       rs2,
       imm,
-      shift,
+      shift_type,
       cond,
       rd_en,
       rs1_en,

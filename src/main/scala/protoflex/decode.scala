@@ -6,7 +6,6 @@ import chisel3.util.{BitPat, ListLookup, MuxLookup, EnqIO, DeqIO, Cat}
 import common.PROCESSOR_TYPES._
 import common.DECODE_CONTROL_SIGNALS._
 import common.DECODE_MATCHING_TABLES._
-import common.INSTRUCTIONS._
 
 class DInst extends Bundle
 {
@@ -15,7 +14,8 @@ class DInst extends Bundle
   val rs1   = REG_T
   val rs2   = REG_T
   val imm   = IMM_T
-  val shift = SHIFT_T
+  val shift_val = SHIFT_VAL_T
+  val shift_type = SHIFT_TYPE_T
   val cond  = COND_T
 
   // Control
@@ -36,7 +36,7 @@ class DInst extends Bundle
 
   val tag = TAG_T
 
-  def decode(inst : UInt, tag : UInt) = {
+  def decode(inst : UInt, tag : UInt): DInst = {
     val decoder = ListLookup(inst, decode_default, decode_table)
 
     // Data
@@ -52,7 +52,9 @@ class DInst extends Bundle
                                               I_BCImm -> inst(23, 5),
                                               I_ASImm -> inst(21,10),
                                               I_LSImm -> inst(23,5)))
-    shift := MuxLookup(itype, SHIFT_X, Array( I_LogSR -> inst(23,22),
+    shift_val := MuxLookup(itype, SHIFT_VAL_X, Array(I_ASImm -> 12.U,
+                                                      I_LogSR -> imm))
+    shift_type := MuxLookup(itype, SHIFT_TYPE_X, Array( I_LogSR -> inst(23,22),
                                               I_ASImm -> inst(23,22)))
     cond  := MuxLookup(itype,  COND_X, Array( I_BCImm -> inst( 3, 0) ))
 
@@ -74,7 +76,8 @@ class DInst extends Bundle
     rs1   := REG_X
     rs2   := REG_X
     imm   := IMM_X
-    shift := SHIFT_X
+    shift_val := SHIFT_VAL_X
+    shift_type := SHIFT_TYPE_X
     cond  := COND_X
 
     // Control

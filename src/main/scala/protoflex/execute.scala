@@ -6,7 +6,6 @@ import chisel3.util.{Valid, MuxLookup, log2Ceil}
 
 import common.DECODE_CONTROL_SIGNALS._
 import common.PROCESSOR_TYPES._
-import common.INSTRUCTIONS._
 
 class EInst extends Bundle {
   val res  = DATA_T
@@ -68,8 +67,8 @@ class BasicALU extends Module {
 class ShiftALU extends Module {
   val io = IO(new Bundle {
                 val word = Input(DATA_T)
-                val amount = Input(UInt(log2Ceil(DATA_W.get).W))
-                val opcode = Input(SHIFT_T)
+                val amount = Input(SHIFT_VAL_T)
+                val opcode = Input(SHIFT_TYPE_T)
                 val res = Output(DATA_T)
                 val carry = Output(C_T)
               })
@@ -115,8 +114,8 @@ class ExecuteUnit extends Module
   // Shift
   val shiftALU = Module(new ShiftALU())
   shiftALU.io.word := interVal2
-  shiftALU.io.amount := io.dinst.imm
-  shiftALU.io.opcode := io.dinst.shift
+  shiftALU.io.amount := io.dinst.shift_val
+  shiftALU.io.opcode := io.dinst.shift_type
 
   // Choose shifted
   val aluVal2 = Mux(io.dinst.shift_en, shiftALU.io.res, interVal2)
@@ -138,10 +137,12 @@ class ExecuteUnit extends Module
 
   // Output
   io.einst.bits := einst
+  // invalid for non-data processing instructions
   io.einst.valid :=
     MuxLookup(io.dinst.itype, false.B,
               Array(
-                I_LogSR -> true.B
+                I_LogSR -> true.B,
+                I_ASImm -> true.B
               ))
 
 }

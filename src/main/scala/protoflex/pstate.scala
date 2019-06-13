@@ -64,6 +64,10 @@ class RFileIO extends Bundle
   val wen      = Input(Bool())
 }
 
+/**
+  *  Register file for each thread.
+  *  single write port and two read ports
+  */
 class RFile extends Module
 {
   val io = IO(new RFileIO())
