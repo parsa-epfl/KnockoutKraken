@@ -61,3 +61,6 @@ parallelExecution in Test := false
 scalacOptions ++= scalacOptionsVersion(scalaVersion.value)
 
 javacOptions ++= javacOptionsVersion(scalaVersion.value)
+
+
+val json4sNative = "org.json4s" %% "json4s-native" % "{latestVersion}"

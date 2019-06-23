@@ -142,6 +142,12 @@ object PrintingTools {
 
 
 object SoftwareStructs {
+  case class PState (
+    val xregs : List[Long],
+    val pc : Long,
+    val nzcv : Int
+  )
+
   case class DInst (
      val tag          : BigInt,
      val itype        : BigInt,
