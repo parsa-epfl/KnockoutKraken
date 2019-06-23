@@ -223,25 +223,25 @@ object SoftwareStructs {
     }
   }
 
-  def dinst(map : LinkedHashMap[String, BigInt], decoupled : Boolean = true) : DInst = {
-    val rd          = if(!decoupled) map("rd")          else map("bits.rd")
-    val rs1         = if(!decoupled) map("rs1")         else map("bits.rs1")
-    val rs2         = if(!decoupled) map("rs2")         else map("bits.rs2")
-    val imm         = if(!decoupled) map("imm")         else map("bits.imm")
-    val shift_val   = if(!decoupled) map("shift_val")   else map("bits.shift_type")
-    val shift_type  = if(!decoupled) map("shift_type")  else map("bits.shift_type")
-    val cond        = if(!decoupled) map("cond")        else map("bits.cond")
-    val itype       = if(!decoupled) map("itype")       else map("bits.itype")
-    val op          = if(!decoupled) map("op")          else map("bits.op")
-    val rd_en       = if(!decoupled) map("rd_en")       else map("bits.rd_en")
-    val rs1_en      = if(!decoupled) map("rs1_en")      else map("bits.rs1_en")
-    val rs2_en      = if(!decoupled) map("rs2_en")      else map("bits.rs2_en")
-    val imm_en      = if(!decoupled) map("imm_en")      else map("bits.imm_en")
-    val shift_en    = if(!decoupled) map("shift_en")    else map("bits.shift_en")
-    val cond_en     = if(!decoupled) map("cond_en")     else map("bits.cond_en")
-    val nzcv_en     = if(!decoupled) map("nzcv_en")     else map("bits.nzcv_en")
-    val inst_en     = if(!decoupled) map("inst_en")     else map("bits.inst_en")
-    val tag         = if(!decoupled) map("tag")         else map("bits.tag")
+  def dinst(map : LinkedHashMap[String, BigInt]) : DInst = {
+    val rd          = map("rd")
+    val rs1         = map("rs1")
+    val rs2         = map("rs2")
+    val imm         = map("imm")
+    val shift_val   = map("shift_val")
+    val shift_type  = map("shift_type")
+    val cond        = map("cond")
+    val itype       = map("itype")
+    val op          = map("op")
+    val rd_en       = map("rd_en")
+    val rs1_en      = map("rs1_en")
+    val rs2_en      = map("rs2_en")
+    val imm_en      = map("imm_en")
+    val shift_en    = map("shift_en")
+    val cond_en     = map("cond_en")
+    val nzcv_en     = map("nzcv_en")
+    val inst_en     = map("inst_en")
+    val tag         = map("tag")
     new DInst(
       tag : BigInt,
       itype: BigInt,
@@ -263,13 +263,13 @@ object SoftwareStructs {
       inst_en: BigInt)
   }
 
-  def einst(map : LinkedHashMap[String, BigInt], decoupled : Boolean = true) : EInst = {
-    val res       = if(!decoupled) map("res")    else map("bits.res")
-    val rd        = if(!decoupled) map("rd")     else map("bits.rd")
-    val rd_en     = if(!decoupled) map("rd_en")  else map("bits.rd_en")
-    val tag       = if(!decoupled) map("tag")    else map("bits.tag")
-    val nzcv      = if(!decoupled) map("nzcv")   else map("bits.nzcv")
-    val nzcv_en   = if(!decoupled) map("nzcv_en")else map("bits.nzcv_en")
+  def einst(map : LinkedHashMap[String, BigInt]) : EInst = {
+    val res       = map("res")
+    val rd        = map("rd")
+    val rd_en     = map("rd_en")
+    val tag       = map("tag")
+    val nzcv      = map("nzcv")
+    val nzcv_en   = map("nzcv_en")
     new EInst (
       res     : BigInt,
       rd      : BigInt,
@@ -280,9 +280,9 @@ object SoftwareStructs {
     )
   }
 
-  def binst(map : LinkedHashMap[String, BigInt], decoupled : Boolean = true) : BInst = {
-    val tag       = if(!decoupled) map("tag")    else map("bits.tag")
-    val offset    = if(!decoupled) map("offset") else map("bits.offset")
+  def binst(map : LinkedHashMap[String, BigInt]) : BInst = {
+    val tag       = map("tag")
+    val offset    = map("offset")
     new BInst (
       tag     : BigInt,
       offset  : BigInt,

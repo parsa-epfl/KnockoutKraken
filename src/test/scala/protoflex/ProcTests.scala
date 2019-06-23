@@ -13,11 +13,11 @@ import common.PROCESSOR_TYPES.{DATA_SZ, NUM_THREADS, REG_N}
 // base class contain utils for proc testing
 abstract class ProcTestsBase(c: Proc) extends PeekPokeTester(c){
   def printState() = {
-    val sFet = SoftwareStructs.dinst(peek(c.io.inst_in), false)
-    val sDec = if(peek(c.io.dec_reg.valid) == 1) SoftwareStructs.dinst(peek(c.io.dec_reg)) else "XXX"
-    val sIss = if(peek(c.io.issue_reg.valid) == 1) SoftwareStructs.dinst(peek(c.io.issue_reg)) else "XXX"
-    val sExe = if(peek(c.io.exe_reg.valid) == 1) SoftwareStructs.einst(peek(c.io.exe_reg)) else "XXX"
-    val sBr  = if(peek(c.io.br_reg.valid) == 1) SoftwareStructs.binst(peek(c.io.br_reg)) else "XXX"
+    val sFet = SoftwareStructs.dinst(peek(c.io.inst_in))
+    val sDec = if(peek(c.io.dec_reg.valid) == 1) SoftwareStructs.dinst(peek(c.io.dec_reg.bits)) else "XXX"
+    val sIss = if(peek(c.io.issue_reg.valid) == 1) SoftwareStructs.dinst(peek(c.io.issue_reg.bits)) else "XXX"
+    val sExe = if(peek(c.io.exe_reg.valid) == 1) SoftwareStructs.einst(peek(c.io.exe_reg.bits)) else "XXX"
+    val sBr  = if(peek(c.io.br_reg.valid) == 1) SoftwareStructs.binst(peek(c.io.br_reg.bits)) else "XXX"
     val wbEn =  peek(c.io.wen)
     val state = Seq(
       "+----------------------------------------------------------------------------------+",
@@ -156,7 +156,7 @@ abstract class ProcTestsPageBase(c: Proc) extends ProcTestsBase(c){
   val gn_reg_val = Array.ofDim[BigInt](NUM_THREADS, REG_N)
   val page = Array.ofDim[BigInt](PAGE_SZ/4)
 
-  def write_state_file(): Unit ={
+  def write_state_file(): Unit = {
     def read_gen_reg(): Array[Array[BigInt]] ={
       val reg_val = Array.ofDim[BigInt](NUM_THREADS, REG_N)
       for(i <- 0 until NUM_THREADS){
@@ -191,7 +191,7 @@ abstract class ProcTestsPageBase(c: Proc) extends ProcTestsBase(c){
     for(i <- 0 until PAGE_SZ/4){
       val bytes = Array.ofDim[Byte](5)
       rd_page.read(bytes,0,4)
-      page(i) = new BigInt(new BigInteger(bytes.reverse))
+      page(i) = BigInt(bytes.reverse)
     }
     rd_page.close()
   }
@@ -202,7 +202,7 @@ abstract class ProcTestsPageBase(c: Proc) extends ProcTestsBase(c){
     def read_file(sz: Int) = {
       val bytes = Array.ofDim[Byte](sz)
       rd_state.read(bytes)
-      new BigInt(new java.math.BigInteger(bytes))
+      BigInt(bytes)
     }
     for(i <- 0 until NUM_THREADS){
       sp_reg_val(i)(0) = read_file(DATA_SZ/8)
@@ -326,6 +326,7 @@ class ProcTestsInterface(c:Proc) extends ProcTestsPageBase(c) {
   Thread.sleep(1000)
   write(c_empty)
 }
+
 class ProcTester extends ChiselFlatSpec
 {
   behavior of "Proc"
