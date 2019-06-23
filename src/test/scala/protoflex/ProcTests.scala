@@ -1,18 +1,30 @@
 package protoflex
 
+import scala.collection.mutable
+
 import java.io.{FileInputStream, FileOutputStream, IOException}
 import java.math.BigInteger
 
 import chisel3._
-import chisel3.iotesters
-import chisel3.iotesters.{ChiselFlatSpec, Driver, PeekPokeTester}
+import chisel3.iotesters.{ChiselFlatSpec, Driver, PeekPokeTester, PeekPokeTests}
 import utils.AssemblyParser
 import utils.SoftwareStructs
 import common.PROCESSOR_TYPES.{DATA_SZ, NUM_THREADS, REG_N}
 
 // base class contain utils for proc testing
-abstract class ProcTestsBase(c: Proc) extends PeekPokeTester(c){
-  def printState() = {
+trait ProcTestsBase extends PeekPokeTests {
+  def int(x: Int): BigInt = { BigInt(x) }
+  def int(x: Long): BigInt = { BigInt(x) }
+
+  // These peek's are missingin PeekPokeTests trait,
+  // but are present in PeekPokeTester
+  def peek(signal: Aggregate): Seq[BigInt]
+  def peek(signal: Bundle): mutable.LinkedHashMap[String, BigInt]
+
+  val c: Proc
+  val random = scala.util.Random
+
+  def printState():Unit = {
     val sFet = SoftwareStructs.dinst(peek(c.io.inst_in))
     val sDec = if(peek(c.io.dec_reg.valid) == 1) SoftwareStructs.dinst(peek(c.io.dec_reg.bits)) else "XXX"
     val sIss = if(peek(c.io.issue_reg.valid) == 1) SoftwareStructs.dinst(peek(c.io.issue_reg.bits)) else "XXX"
@@ -119,9 +131,9 @@ abstract class ProcTestsBase(c: Proc) extends PeekPokeTester(c){
 }
 
 // test basic pipline
-class ProcTestsPipeline(c: Proc) extends ProcTestsBase(c)
+class ProcTestsPipeline(c_ : Proc) extends PeekPokeTester(c_) with ProcTestsBase
 {
-  val random = scala.util.Random
+  override val c = c_
   val insts = AssemblyParser.parse("alu.x")
   val br_insts = AssemblyParser.parse("branch.x")
   poke(c.io.br_reg.ready, 1)
@@ -130,7 +142,7 @@ class ProcTestsPipeline(c: Proc) extends ProcTestsBase(c)
   poke(c.io.mem_res.valid, 0)
   poke(c.io.mem_res.bits.data, 0)
   step(1)
-  for(i <- 0 until 20) {
+  for(i <- 0 until 3) {
     val itype = random.nextInt(2)
     val inst = if (itype == 0) insts(random.nextInt(insts.size)) else br_insts(random.nextInt(br_insts.size))
     poke(c.io.inst, inst.bitPat)
@@ -144,7 +156,9 @@ class ProcTestsPipeline(c: Proc) extends ProcTestsBase(c)
 }
 
 // test to run fixed number of instruction from page.x and write back states
-abstract class ProcTestsPageBase(c: Proc) extends ProcTestsBase(c){
+abstract class ProcTestsPageBase(c_ : Proc) extends PeekPokeTester(c_) with ProcTestsBase
+{
+  override val c = c_
   val PAGE_SZ = 4096
   val rd_state_filename = "state"
   val rd_page_filename = "program_page" // page file in little endian
