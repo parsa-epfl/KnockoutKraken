@@ -85,10 +85,10 @@ class QEMUSimulator(c_ : Proc, config: QEMUConfig) extends PeekPokeTester(c_) wi
     poke(c.io.tp_tag, tag)
     poke(c.io.tp_mode, 1)
     step(1)
-    val pc = peek(c.io.tp_PC).toLong
-    val sp = peek(c.io.tp_SP).toLong
-    val el = peek(c.io.tp_EL).toInt
-    val nzcv = peek(c.io.tp_NZCV).toInt
+    val pc = peek(c.io.tp_pstate_in.PC).toLong
+    val sp = peek(c.io.tp_pstate_in.SP).toLong
+    val el = peek(c.io.tp_pstate_in.EL).toInt
+    val nzcv = peek(c.io.tp_pstate_in.NZCV).toInt
     poke(c.io.tp_mode, 0)
     val xregs = for (r <- 0 until REG_N) yield read_reg(tag)(r).toLong
     val pstate = PState(xregs.toList, pc, nzcv)
