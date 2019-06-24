@@ -17,7 +17,7 @@ import utils.SoftwareStructs._
 /* sim : Chisel3 simulation
  * qemu: QEMU    simulation
  */
-case class QEMUConfig(
+case class SimulatorConfig(
   simStateFilename: String,
   simLockFilename: String,
   qemuStateFilename: String,
@@ -35,7 +35,7 @@ case class QEMUConfig(
   val pagePath      = rootPath + "/" + pageFilename
 }
 
-class QEMUSimulator(c_ : Proc, config: QEMUConfig) extends PeekPokeTester(c_) with ProcTestsBase {
+class SimulatorTests(c_ : Proc, config: SimulatorConfig) extends PeekPokeTester(c_) with ProcTestsBase {
   val INSN_SIZE = 4
   override val c = c_
 
@@ -60,12 +60,6 @@ class QEMUSimulator(c_ : Proc, config: QEMUConfig) extends PeekPokeTester(c_) wi
       hex += ByteBuffer.wrap(insn_LE).getInt.toHexString + "\n"
     }
     writeFile(path+"_dis", hex) // Disassemble for debug
-  }
-
-  def writeProgramPageDebug(path: String) = {
-    for(i <- 0 until config.pageSize/INSN_SIZE) {
-    }
-
   }
 
   def writeProgramPageFPGA() = {
@@ -126,4 +120,27 @@ class QEMUSimulator(c_ : Proc, config: QEMUConfig) extends PeekPokeTester(c_) wi
     }
   }
 
+  val json = readFile(config.qemuStatePath)
+  updatePState(json, 0)
 }
+
+class SimulatorTester(cfg: SimulatorConfig) extends ChiselFlatSpec {
+  override val backends = Array("verilator")
+  println("Starting Simulator")
+  iotesters.Driver.execute(Array("--is-verbose", "--backend-name", "verilator"), () => new Proc) {
+      c => new SimulatorTests(c, cfg)
+  } should be(true)
+  println("Done Simulator")
+}
+
+object SimulatorMain extends App {
+  assert(args.length >= 8)
+  val cfg = new SimulatorConfig(
+    args(0), args(1),
+    args(2), args(3), args(4),
+    args(5), args(6).toInt,
+    args(7)
+  )
+  new SimulatorTester(cfg: SimulatorConfig)
+}
+
