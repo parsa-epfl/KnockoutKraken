@@ -44,7 +44,7 @@ class Proc extends Module
     val state_bram = new BRAMPort(0)(stateBRAMc)
 
     // initialization qemu->armflex
-    val tp_mode = Input(Bool())
+    val tp_en = Input(Bool())
     val tp_reg_waddr = Input(REG_T)
     val tp_reg_wdata = Input(DATA_T)
     val tp_reg_wen = Input(DATA_T)
@@ -65,6 +65,14 @@ class Proc extends Module
   // Program PAGE BRAM
   val ppage = Module(new BRAM()(ppageBRAMc))
   ppage.io.getPort(0) <> io.ppage_bram
+  // fetch <> ppage
+  ppage.io.getPort(1).dataIn.get := 0.U
+  ppage.io.getPort(1).addr := fetch.io.addr
+  ppage.io.getPort(1).en := fetch.io.rd_en
+  ppage.io.getPort(1).writeEn.get := false.B
+  fetch.io.data := ppage.io.getPort(1).dataOut.get
+
+
   // State BRAM
   val state = Module(new BRAM()(stateBRAMc))
   state.io.getPort(0) <> io.state_bram
@@ -75,18 +83,16 @@ class Proc extends Module
   state.io.getPort(1).writeEn.get := false.B
   val stateRead = state.io.getPort(1).dataOut.get
 
-  ppage.io.getPort(1).dataIn.get := 0.U
-  ppage.io.getPort(1).addr := 0.U
-  ppage.io.getPort(1).en := false.B
-  ppage.io.getPort(1).writeEn.get := false.B
-  val ppageRead = ppage.io.getPort(1).dataOut.get
 
   // PCs
-  val curr_PC = Wire(REG_T)
-  val next_PC = Wire(REG_T)
+  val curr_PC = Wire(DATA_T)
+  val next_PC = Wire(DATA_T)
 
   // Pipeline
   val flush = io.flush || reset.toBool()
+
+  // Fetch
+  val fetch = Module(new FetchUnit()(ppageBRAMc))
 
   // Decode
   val decoder = Module(new DecodeUnit())
@@ -108,6 +114,10 @@ class Proc extends Module
   val lsu = Module(new LoadStoreUnit())
   val lsu_reg = withReset(flush){Module(new Queue(new MInst, 1, pipe = true, flow = false))}
 
+  // Transplant Unit
+  val tp = Module(new TransplantUnit())
+
+
   // PState
   // Writeback
   val vec_rfile = VecInit(Seq.fill(NUM_THREADS)(Module(new RFile).io))
@@ -121,9 +131,15 @@ class Proc extends Module
   io.br_reg    <> br_reg.io.deq
   io.lsu_reg   <> lsu_reg.io.deq
 
+  // IRAM(ppage)-> Fetch
+  fetch.io.en := tp.io.start
+  fetch.io.PC := next_PC;
+  fetch.io.inst.ready := true.B // TODO: for now always ready
+  fetch.io.tag_in := io.tag
+
   // Fetch -> Decode
-  decoder.io.inst := io.inst
-  decoder.io.tag := io.tag
+  decoder.io.inst := Mux(fetch.io.inst.valid, fetch.io.inst.bits, INST_X)
+  decoder.io.tag := fetch.io.tag_out
 
   // Register instruction (DInst)
   io.ready := dec_reg.io.enq.ready
@@ -137,15 +153,15 @@ class Proc extends Module
   // Execute : Issue -> Execute
   val issued_dinst = issuer.io.deq.bits
   val issued_tag = issued_dinst.tag
-  val tag_select = Mux(io.tp_mode, io.tp_tag, issued_tag)
+  val tag_select = Mux(io.tp_en, io.tp_tag, issued_tag)
   issuer.io.deq.ready := exe_reg.io.enq.ready || br_reg.io.enq.ready
   // Check for front pressure
   issuer.io.exe_reg.bits := exe_reg.io.deq.bits
   issuer.io.exe_reg.valid :=  exe_reg.io.deq.valid
 
   /** Execute */
-  val rs1_addr = Mux(io.tp_mode, io.tp_reg_rs1_addr, issued_dinst.rs1)
-  val rs2_addr = Mux(io.tp_mode, io.tp_reg_rs2_addr, issued_dinst.rs2)
+  val rs1_addr = Mux(io.tp_en, io.tp_reg_rs1_addr, issued_dinst.rs1)
+  val rs2_addr = Mux(io.tp_en, io.tp_reg_rs2_addr, issued_dinst.rs2)
   // connect rfile read(address) interface
   vec_rfile map { case rfile =>
     rfile.rs1_addr := rs1_addr
@@ -199,14 +215,14 @@ class Proc extends Module
   br_reg.io.deq.ready := true.B
 
   // connect RFile's write interface
-  val waddr = Mux(io.tp_mode, io.tp_reg_waddr, exe_reg.io.deq.bits.rd)
-  val wdata = Mux(io.tp_mode, io.tp_reg_wdata, exe_reg.io.deq.bits.res)
+  val waddr = Mux(io.tp_en, io.tp_reg_waddr, exe_reg.io.deq.bits.rd)
+  val wdata = Mux(io.tp_en, io.tp_reg_wdata, exe_reg.io.deq.bits.res)
   vec_rfile map { case rfile =>
     rfile.waddr := waddr
     rfile.wdata := wdata
     rfile.wen := false.B
   }
-  val wen = Mux(io.tp_mode, io.tp_reg_wen, exe_reg.io.deq.bits.rd_en && exe_reg.io.deq.valid)
+  val wen = Mux(io.tp_en, io.tp_reg_wen, exe_reg.io.deq.bits.rd_en && exe_reg.io.deq.valid)
   vec_rfile(tag_select).wen := wen
   io.wen := exe_reg.io.deq.bits.rd_en && exe_reg.io.deq.valid
 
@@ -229,7 +245,7 @@ class Proc extends Module
   io.tp_pstate_out.SP := vec_pregs(io.tp_tag).SP
   io.tp_pstate_out.EL := vec_pregs(io.tp_tag).EL
   io.tp_pstate_out.NZCV := vec_pregs(io.tp_tag).NZCV
-  when(io.tp_mode && io.tp_pstate_wen){
+  when(io.tp_en && io.tp_pstate_wen){
     vec_pregs(io.tp_tag).PC := io.tp_pstate_in.PC
     vec_pregs(io.tp_tag).SP := io.tp_pstate_in.SP
     vec_pregs(io.tp_tag).EL := io.tp_pstate_in.EL

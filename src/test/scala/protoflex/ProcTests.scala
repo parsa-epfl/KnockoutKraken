@@ -80,36 +80,36 @@ trait ProcTestsBase extends PeekPokeTests {
   // helper functions
   def write_reg(tag: BigInt)(add: BigInt, value: BigInt){
     poke(c.io.tp_tag, tag)
-    poke(c.io.tp_mode, 1)
+    poke(c.io.tp_en, 1)
     poke(c.io.tp_reg_wen, 1)
     poke(c.io.tp_reg_waddr, add)
     poke(c.io.tp_reg_wdata, value)
     step(1)
     poke(c.io.tp_reg_wen, 0)
-    poke(c.io.tp_mode, 0)
+    poke(c.io.tp_en, 0)
   }
 
   def read_reg(tag:BigInt)(add: BigInt): BigInt ={
     poke(c.io.tp_tag, tag)
-    poke(c.io.tp_mode, 1)
+    poke(c.io.tp_en, 1)
     poke(c.io.tp_reg_wen, 0)
     poke(c.io.tp_reg_rs1_addr, add)
     step(1)
     val x = peek(c.io.tp_rs1)
-    poke(c.io.tp_mode, 0)
+    poke(c.io.tp_en, 0)
     x
   }
 
   def write_pstate(tag: Int)(PC: BigInt, SP: BigInt, EL: BigInt, NZCV: BigInt): Unit ={
     poke(c.io.tp_tag, tag)
     poke(c.io.tp_pstate_wen, 1)
-    poke(c.io.tp_mode, 1)
+    poke(c.io.tp_en, 1)
     poke(c.io.tp_pstate_in.PC, PC)
     poke(c.io.tp_pstate_in.SP, SP)
     poke(c.io.tp_pstate_in.EL, EL)
     poke(c.io.tp_pstate_in.NZCV, NZCV)
     step(1)
-    poke(c.io.tp_mode, 0)
+    poke(c.io.tp_en, 0)
     poke(c.io.tp_pstate_wen, 0)
   }
 
@@ -117,13 +117,13 @@ trait ProcTestsBase extends PeekPokeTests {
     val sp_reg_val = Array.ofDim[BigInt](NUM_THREADS, 4)
     for(tag <- 0 until NUM_THREADS){
       poke(c.io.tp_tag, tag)
-      poke(c.io.tp_mode, 1)
+      poke(c.io.tp_en, 1)
       step(1)
       sp_reg_val(tag)(0) = peek(c.io.tp_pstate_out.PC)
       sp_reg_val(tag)(1) = peek(c.io.tp_pstate_out.SP)
       sp_reg_val(tag)(2) = peek(c.io.tp_pstate_out.EL)
       sp_reg_val(tag)(3) = peek(c.io.tp_pstate_out.NZCV)
-      poke(c.io.tp_mode, 0)
+      poke(c.io.tp_en, 0)
     }
     sp_reg_val
   }
