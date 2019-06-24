@@ -53,14 +53,8 @@ class Proc extends Module
     val tp_rs2 = Output(DATA_T)
     // pstate
     val tp_pstate_wen = Input(Bool())
-    val tp_PC = Input(DATA_T)
-    val tp_SP = Input(DATA_T)
-    val tp_EL = Input(DATA_T)
-    val tp_NZCV = Input(NZCV_T)
-    val tp_PC_o = Output(DATA_T)
-    val tp_SP_o = Output(DATA_T)
-    val tp_EL_o = Output(DATA_T)
-    val tp_NZCV_o = Output(NZCV_T)
+    val tp_pstate_in = Input(new PStateRegs)
+    val tp_pstate_out = Output(new PStateRegs)
 
     // transplant.scala armflex->qemu
     val tp_reg_rs1_addr = Input(REG_T)
@@ -231,15 +225,15 @@ class Proc extends Module
   io.next_PC := next_PC
 
   // pstate in tp mode
-  io.tp_PC_o := vec_pregs(io.tp_tag).PC
-  io.tp_SP_o := vec_pregs(io.tp_tag).SP
-  io.tp_EL_o := vec_pregs(io.tp_tag).EL
-  io.tp_NZCV_o := vec_pregs(io.tp_tag).NZCV
+  io.tp_pstate_out.PC := vec_pregs(io.tp_tag).PC
+  io.tp_pstate_out.SP := vec_pregs(io.tp_tag).SP
+  io.tp_pstate_out.EL := vec_pregs(io.tp_tag).EL
+  io.tp_pstate_out.NZCV := vec_pregs(io.tp_tag).NZCV
   when(io.tp_mode && io.tp_pstate_wen){
-    vec_pregs(io.tp_tag).PC := io.tp_PC
-    vec_pregs(io.tp_tag).SP := io.tp_SP
-    vec_pregs(io.tp_tag).EL := io.tp_EL
-    vec_pregs(io.tp_tag).NZCV := io.tp_NZCV
+    vec_pregs(io.tp_tag).PC := io.tp_pstate_in.PC
+    vec_pregs(io.tp_tag).SP := io.tp_pstate_in.SP
+    vec_pregs(io.tp_tag).EL := io.tp_pstate_in.EL
+    vec_pregs(io.tp_tag).NZCV := io.tp_pstate_in.NZCV
   }
   // update PC
   when(br_reg.io.deq.valid) {
