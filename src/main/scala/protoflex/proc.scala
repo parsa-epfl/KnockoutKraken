@@ -5,12 +5,18 @@ import chisel3._
 import chisel3.core.withReset
 import chisel3.util.{DeqIO, Queue, Valid}
 import common.PROCESSOR_TYPES._
+import common.constBRAM
+import common.{BRAM, BRAMConfig, BRAMPort}
 
 /** Processor
   *
   */
 class Proc extends Module
 {
+  val ppageBRAMc = new BRAMConfig(Seq(constBRAM.TDPBRAM36ParamDict(36),
+                                       constBRAM.TDPBRAM36ParamDict(36)))
+  val stateBRAMc = new BRAMConfig(Seq(constBRAM.TDPBRAM36ParamDict(36),
+                                       constBRAM.TDPBRAM36ParamDict(36)))
   val io = IO(new Bundle {
     // Fetche simulator
     val tag  = Input(TAG_T)
@@ -32,6 +38,10 @@ class Proc extends Module
     // memory interface
     val mem_req = Output(Valid(new MemRes))
     val mem_res = Input(Valid(new MemRes))
+
+    // BRAM Ports
+    val ppage_bram = new BRAMPort(0)(ppageBRAMc)
+    val state_bram = new BRAMPort(0)(stateBRAMc)
 
     // initialization qemu->armflex
     val tp_mode = Input(Bool())
@@ -58,6 +68,25 @@ class Proc extends Module
 
     val flush = Input(Bool())
   })
+  // Program PAGE BRAM
+  val ppage = Module(new BRAM()(ppageBRAMc))
+  ppage.io.getPort(0) <> io.ppage_bram
+  // State BRAM
+  val state = Module(new BRAM()(stateBRAMc))
+  state.io.getPort(0) <> io.state_bram
+
+  state.io.getPort(1).dataIn.get := 0.U
+  state.io.getPort(1).addr := 0.U
+  state.io.getPort(1).en := false.B
+  state.io.getPort(1).writeEn.get := false.B
+  val stateRead = state.io.getPort(1).dataOut.get
+
+  ppage.io.getPort(1).dataIn.get := 0.U
+  ppage.io.getPort(1).addr := 0.U
+  ppage.io.getPort(1).en := false.B
+  ppage.io.getPort(1).writeEn.get := false.B
+  val ppageRead = ppage.io.getPort(1).dataOut.get
+
   // PCs
   val curr_PC = Wire(REG_T)
   val next_PC = Wire(REG_T)
