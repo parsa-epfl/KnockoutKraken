@@ -65,24 +65,13 @@ class Proc extends Module
   // Program PAGE BRAM
   val ppage = Module(new BRAM()(ppageBRAMc))
   ppage.io.getPort(0) <> io.ppage_bram
-  // fetch <> ppage
-  ppage.io.getPort(1).dataIn.get := 0.U
-  ppage.io.getPort(1).addr := fetch.io.addr
-  ppage.io.getPort(1).en := fetch.io.rd_en
-  ppage.io.getPort(1).writeEn.get := false.B
-  fetch.io.data := ppage.io.getPort(1).dataOut.get
 
 
   // State BRAM
   val state = Module(new BRAM()(stateBRAMc))
   state.io.getPort(0) <> io.state_bram
 
-  state.io.getPort(1).dataIn.get := 0.U
-  state.io.getPort(1).addr := 0.U
-  state.io.getPort(1).en := false.B
-  state.io.getPort(1).writeEn.get := false.B
   val stateRead = state.io.getPort(1).dataOut.get
-
 
   // PCs
   val curr_PC = Wire(DATA_T)
@@ -115,7 +104,7 @@ class Proc extends Module
   val lsu_reg = withReset(flush){Module(new Queue(new MInst, 1, pipe = true, flow = false))}
 
   // Transplant Unit
-  val tp = Module(new TransplantUnit())
+  //val tp = Module(new TransplantUnit())
 
 
   // PState
@@ -131,8 +120,21 @@ class Proc extends Module
   io.br_reg    <> br_reg.io.deq
   io.lsu_reg   <> lsu_reg.io.deq
 
+  // fetch <> ppage
+  ppage.io.getPort(1).dataIn.get := 0.U
+  ppage.io.getPort(1).addr := fetch.io.addr
+  ppage.io.getPort(1).en := fetch.io.rd_en
+  ppage.io.getPort(1).writeEn.get := false.B
+  fetch.io.data := ppage.io.getPort(1).dataOut.get
+
+  // To Connect to transplant unit
+  state.io.getPort(1).dataIn.get := 0.U
+  state.io.getPort(1).addr := 0.U
+  state.io.getPort(1).en := false.B
+  state.io.getPort(1).writeEn.get := false.B
+ 
   // IRAM(ppage)-> Fetch
-  fetch.io.en := tp.io.start
+  fetch.io.en := false.B//tp.io.start
   fetch.io.PC := next_PC;
   fetch.io.inst.ready := true.B // TODO: for now always ready
   fetch.io.tag_in := io.tag

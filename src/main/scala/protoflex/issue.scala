@@ -82,7 +82,7 @@ class IssueUnit extends Module
     * sig_pipe_r This signal indicates whenever the register is ready to recieve the next instruction.
     */
   val reg_pipe   = RegInit(VecInit(Seq.fill(NUM_THREADS)(Wire(new DInst).empty())))
-  val reg_pipe_v = withReset(io.flush) {RegInit(VecInit(TAG_VEC_X.toBools))}
+  val reg_pipe_v = withReset(io.flush || this.reset.toBool) {RegInit(VecInit(TAG_VEC_X.toBools))}
   val sig_pipe_r = WireInit(VecInit(TAG_VEC_X.toBools))
 
   /** Issue stage buffer
@@ -95,7 +95,7 @@ class IssueUnit extends Module
     */
   def FIFO_i   = new Queue(new DInst, 2, pipe = true, flow = true)
   // Instanciates queue modules, expresses their IO through the vector
-  val fifo_vec = withReset(io.flush) {VecInit(Seq.fill(NUM_THREADS)(Module(FIFO_i).io))}
+  val fifo_vec = withReset(io.flush || this.reset.toBool) {VecInit(Seq.fill(NUM_THREADS)(Module(FIFO_i).io))}
 
   /** Issue stage arbiter
     * arbiter        Round Robin Arbiter
