@@ -7,6 +7,9 @@ import org.json4s.native.Serialization.write
 import scala.language.implicitConversions
 
 object ArmflexJson {
+  implicit val formats = DefaultFormats
+
+  private case class JSONCmd(val cmd: String, val addr: String)
   private case class JSONPState(val xregs : List[String], val pc : String, val nzcv : String)
 
   private def jp2sp(jp: JSONPState) : SoftwareStructs.PState = {
@@ -19,14 +22,13 @@ object ArmflexJson {
 
   private def sp2jp(sp: SoftwareStructs.PState) : JSONPState = {
     JSONPState(
-      sp.xregs.map(_.toHexString.padTo(16, '0')),
-      sp.pc.toHexString.padTo(16, '0'),
-      sp.nzcv.toHexString.padTo(8, '0')
+      sp.xregs.map(r => f"${r}%016x"),
+      f"${sp.pc}%016x",
+      f"${sp.nzcv}%08x"
     )
   }
 
   def json2state(sjson : String) : SoftwareStructs.PState = {
-    implicit val formats = DefaultFormats
     val json: JValue = parse(sjson)
     val jsonp = json.extract[JSONPState]
     jp2sp(jsonp)
@@ -35,5 +37,18 @@ object ArmflexJson {
   def state2json(pstate : SoftwareStructs.PState):String= {
     implicit val formats = Serialization.formats(NoTypeHints)
     write(sp2jp(pstate))
+  }
+
+  def cmd2json(cmd : Int, addr : Long) : String = {
+    val json = new JSONCmd(cmd.toString, f"${addr}%016x")
+    write(json)
+  }
+
+  def json2cmd(sjson: String) : (Int, Long)= {
+    val json: JValue = parse(sjson)
+    val jsonp = json.extract[JSONCmd]
+    val cmd = jsonp.cmd.toInt
+    val addr = BigInt(jsonp.addr, 16).toLong
+    (cmd, addr)
   }
 }

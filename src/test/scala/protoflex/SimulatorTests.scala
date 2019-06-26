@@ -14,36 +14,55 @@ import common.PROCESSOR_TYPES.REG_N
 import utils.ArmflexJson
 import utils.SoftwareStructs._
 
+object FA_QflexCmds {
+  // Commands SIM->QEMU
+  val DATA_LOAD   = 0
+  val DATA_STORE  = 1
+  val INST_FETCH  = 2
+  val INST_UNDEF  = 3
+  val SIM_EXCP   = 4
+  // Commands QEMU->SIM
+  val SIM_START  = 5 // Load state from QEMU
+  val SIM_STOP   = 6
+  // Commands QEMU<->SIM
+  val LOCK_WAIT   = 7
+}
+
 /* sim : Chisel3 simulation
  * qemu: QEMU    simulation
  */
 case class SimulatorConfig(
   simStateFilename: String,
   simLockFilename: String,
+  simCmdFilename : String,
+
   qemuStateFilename: String,
   qemuLockFilename: String,
   qemuCmdFilename: String,
+
   pageFilename:String,
-  val pageSize:Int,
+  val pageSizeBytes:Int,
   val rootPath : String = "/dev/shm/qflex",
 ) {
   val simStatePath  = rootPath + "/" + simStateFilename
   val simLockPath   = rootPath + "/" + simLockFilename
+  val simCmdPath    = rootPath + "/" + simCmdFilename
   val qemuStatePath = rootPath + "/" + qemuStateFilename
   val qemuLockPath  = rootPath + "/" + qemuLockFilename
   val qemuCmdPath   = rootPath + "/" + qemuCmdFilename
   val pagePath      = rootPath + "/" + pageFilename
 }
 
-class SimulatorTests(c_ : Proc, config: SimulatorConfig) extends PeekPokeTester(c_) with ProcTestsBase {
+class SimulatorTests(c_ : Proc, cfg: SimulatorConfig) extends PeekPokeTester(c_) with ProcTestsBase {
   val INSN_SIZE = 4
+  val pageSize = cfg.pageSizeBytes/INSN_SIZE
   override val c = c_
 
-  val program_page = Array.ofDim[Int](config.pageSize/INSN_SIZE)
+  val program_page = Array.ofDim[Int](pageSize)
 
   def readProgramPageFile(path: String) ={
     val f = new BufferedInputStream(new FileInputStream(path)) // page file in little endian
-    for(i <- 0 until config.pageSize/INSN_SIZE){
+    for(i <- 0 until pageSize){
       val bytes = Array.ofDim[Byte](INSN_SIZE)
       f.read(bytes,0,INSN_SIZE)
       program_page(i) = ByteBuffer.wrap(bytes.reverse).getInt
@@ -54,15 +73,12 @@ class SimulatorTests(c_ : Proc, config: SimulatorConfig) extends PeekPokeTester(
   def updateProgramPage(path: String) = {
     val bytearray: Array[Byte] = Files.readAllBytes(Paths.get(path))
     var hex = ""
-    for(i <- 0 until config.pageSize/INSN_SIZE) {
+    for(i <- 0 until pageSize) {
       val insn_LE = bytearray.slice(i*INSN_SIZE, i*INSN_SIZE+INSN_SIZE)
       program_page(i) = ByteBuffer.wrap(insn_LE.reverse).getInt
       hex += ByteBuffer.wrap(insn_LE).getInt.toHexString + "\n"
     }
     writeFile(path+"_dis", hex) // Disassemble for debug
-  }
-
-  def writeProgramPageFPGA() = {
   }
 
   def readFile(path: String):String= {
@@ -104,42 +120,86 @@ class SimulatorTests(c_ : Proc, config: SimulatorConfig) extends PeekPokeTester(
   }
 
   def run(insts: Int, tag: Int): Unit = {
-    for(i <- 0 until insts) {
-      // Load inst
-      val pc = peek(c.io.curr_PC).toLong
-      val inst = program_page(pc % config.pageSize)
-      println(f"instruction ${inst}%x")
-      do {
-        poke(c.io.inst, inst)
-        poke(c.io.tag, tag)
-        poke(c.io.valid, 1)
-        step(1)
-      } while(peek(c.io.ready) == 0);
-      poke(c.io.valid, 0)
-      // Wait for next inst
+      for(i <- 0 until insts) {
+        // Load inst
+        val pc = peek(c.io.curr_PC).toLong
+        val inst = program_page(pc % pageSize)
+        do {
+          poke(c.io.inst, inst)
+          poke(c.io.tag, tag)
+          poke(c.io.valid, 1)
+          step(1)
+        } while(peek(c.io.ready) == 0);
+        poke(c.io.valid, 0)
+        // Wait for next inst
+      }
+  }
+
+  var tf = System.nanoTime
+  var ti = System.nanoTime
+  val timeoutms = 10000
+
+  def timedOut = {
+    val isTimeOut = (tf - ti) / 1e9d > timeoutms
+    if(isTimeOut) {
+      println("TIMED OUT")
+      System.exit(1)
+    }
+    isTimeOut
+  }
+
+  def waitForCmd(filepath:String, timeoutms : Long): Int = {
+    ti = System.nanoTime
+    var cmd: Int = FA_QflexCmds.LOCK_WAIT
+    do {
+      Thread.sleep(500)
+      cmd = ArmflexJson.json2cmd(readFile(filepath))._1
+      tf = System.nanoTime
+    } while(cmd == FA_QflexCmds.LOCK_WAIT && !timedOut);
+    cmd
+  }
+
+  def runSimulator(timeoutms: Long):Unit = {
+    var ti = System.nanoTime
+    var tf = System.nanoTime
+    while(!timedOut) {
+      val cmd = waitForCmd(cfg.simCmdPath, timeoutms)
+      ti = System.nanoTime
+      cmd match {
+        case FA_QflexCmds.SIM_START =>
+          println("SIMULATION START")
+          updatePState(readFile(cfg.qemuStatePath), 0)
+          updateProgramPage(cfg.pagePath)
+        case FA_QflexCmds.SIM_STOP =>
+          println("SIMULATION STOP")
+          return
+      }
+      tf = System.nanoTime
     }
   }
 
-  val json = readFile(config.qemuStatePath)
-  updatePState(json, 0)
+  // Simulation routine
+  runSimulator(10000)
 }
 
 class SimulatorTester(cfg: SimulatorConfig) extends ChiselFlatSpec {
   override val backends = Array("verilator")
   println("Starting Simulator")
-  iotesters.Driver.execute(Array("--is-verbose", "--backend-name", "verilator"), () => new Proc) {
+  // Extra usefull args : --is-verbose
+  val chiselArgs = Array("-tn", "proc", "-td","./test/Sim", "--backend-name", "verilator")
+  iotesters.Driver.execute(chiselArgs, () => new Proc) {
       c => new SimulatorTests(c, cfg)
   } should be(true)
   println("Done Simulator")
 }
 
 object SimulatorMain extends App {
-  assert(args.length >= 8)
+  assert(args.length == 9)
   val cfg = new SimulatorConfig(
-    args(0), args(1),
-    args(2), args(3), args(4),
-    args(5), args(6).toInt,
-    args(7)
+    args(0), args(1), args(2),
+    args(3), args(4), args(5),
+    args(6), args(7).toInt,
+    args(8)
   )
   new SimulatorTester(cfg: SimulatorConfig)
 }
