@@ -47,7 +47,7 @@ class Proc extends Module
     val tp_en = Input(Bool())
     val tp_reg_waddr = Input(REG_T)
     val tp_reg_wdata = Input(DATA_T)
-    val tp_reg_wen = Input(DATA_T)
+    val tp_reg_wen = Input(Bool())
     val tp_tag = Input(TAG_T)
     val tp_rs1 = Output(DATA_T)
     val tp_rs2 = Output(DATA_T)
@@ -136,7 +136,7 @@ class Proc extends Module
   // IRAM(ppage)-> Fetch
   fetch.io.en := false.B//tp.io.start
   fetch.io.PC := next_PC;
-  fetch.io.inst.ready := true.B // TODO: for now always ready
+  fetch.io.inst.ready := true.B // TODO: for now always ready ( change decoder to wait for branch instruction)
   fetch.io.tag_in := io.tag
 
   // Fetch -> Decode

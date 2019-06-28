@@ -33,6 +33,7 @@ object PROCESSOR_TYPES
   val REG_X = 0.U(REG_W)
 
   // Special Regs
+  val SP_REG_N = 4
   val NZCV_SZ = 4
   val NZCV_W = NZCV_SZ.W
   def NZCV_T = UInt(NZCV_W)

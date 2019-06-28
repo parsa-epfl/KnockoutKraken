@@ -47,7 +47,7 @@ class PStateRegs extends Bundle
     PC := DATA_X
     SP := DATA_X
     EL := DATA_X
-    NZCV := DATA_X
+    NZCV := NZCV_X
     this
   }
 }
