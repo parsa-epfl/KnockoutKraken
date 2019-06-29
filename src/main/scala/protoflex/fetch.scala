@@ -23,7 +23,7 @@ class FetchUnitIO() extends Bundle
 }
 
 
-class FetchUnit(implicit val c: BRAMConfig) extends Module
+class FetchUnit(implicit val cfg: ProcConfig) extends Module
 {
   val io = IO(new FetchUnitIO())
   val enable = io.en && io.inst.ready
@@ -33,7 +33,7 @@ class FetchUnit(implicit val c: BRAMConfig) extends Module
 
 
   // assuming BRAM read latency 2
-  require(c.readLatency == 2)
+  require(cfg.ppageBRAMc.readLatency == 2)
   io.inst.valid := RegNext(RegNext(enable))
 
   io.tag_out := io.tag_in // TODO: modify for multiple thread

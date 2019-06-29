@@ -347,7 +347,7 @@ class ProcTester extends ChiselFlatSpec
 
   backends foreach { backend =>
     "ProcTestsReadyValid" should s"test Proc pipeline (with $backend)" in {
-      Driver(() => new Proc, backend)((c) => new ProcTestsPipeline(c)) should be (true)
+      Driver(() => new Proc()(new ProcConfig(0)), backend)((c) => new ProcTestsPipeline(c)) should be (true)
     }
   }
 }
@@ -358,7 +358,7 @@ class ProcInitTester extends ChiselFlatSpec
 
   backends foreach { backend =>
     "ProcTestsPage" should s"test Proc executing few instruction from page (with $backend)" in {
-      Driver(() => new Proc, backend)((c) => new ProcTestsPage(c)) should be (true)
+      Driver(() => new Proc()(new ProcConfig(0)), backend)((c) => new ProcTestsPage(c)) should be (true)
     }
   }
 }
@@ -369,7 +369,7 @@ class ProcInterfaceTester extends ChiselFlatSpec
 
   backends foreach { backend =>
     "ProcTestsPage" should s"test Proc executing few instruction from page (with $backend)" in {
-      Driver(() => new Proc, backend)((c) => new ProcTestsInterface(c)) should be (true)
+      Driver(() => new Proc()(new ProcConfig(0)), backend)((c) => new ProcTestsInterface(c)) should be (true)
     }
   }
 }

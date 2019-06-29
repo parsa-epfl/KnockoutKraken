@@ -6,10 +6,11 @@ import common.{BRAMConfig, BRAMPort}
 import common.PROCESSOR_TYPES._
 
 
-class TransplantUnitIO(implicit val c: BRAMConfig) extends Bundle
+class TransplantUnitIO(implicit val cfg: ProcConfig) extends Bundle
 {
+  implicit val stateBRAMc = cfg.stateBRAMc
   // TP <-> proc
-    val flush = Output(Bool())
+  val flush = Output(Bool())
   val tp_en = Output(Bool())
   val tp_req = Input(Bool())
   val tp_tag = Output(TAG_T)
@@ -25,26 +26,23 @@ class TransplantUnitIO(implicit val c: BRAMConfig) extends Bundle
   val tp_pstate_in = Input(new PStateRegs)
   val tp_pstate_out = Output(new PStateRegs)
 
-
-
   // TP <-> Bram for now use bram interface
   val start = Input(Bool())
+  val done = Output(Bool())
   val bram_port = Flipped(new BRAMPort(1))
 
   // decouble bram interface from module
   //  val raddr = Output(DATA_T)
-//  val rdata = Input(DATA_T)
-//  val rd_en = Output(Bool())
-//  val wdata = Input(INST_T)
-//  val waddr = Output(DATA_T)
-//  val w_en = Output(Bool())
+  //  val rdata = Input(DATA_T)
+  //  val rd_en = Output(Bool())
+  //  val wdata = Input(INST_T)
+  //  val waddr = Output(DATA_T)
+  //  val w_en = Output(Bool())
 }
 
 
-class TransplantUnit(implicit val c: BRAMConfig) extends Module{
+class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   val io = IO(new TransplantUnitIO)
-
-
 
   val g_reg_count = RegInit(0.U(REG_W))
   val sp_reg_count = RegInit(0.U(SP_REG_N.W))
