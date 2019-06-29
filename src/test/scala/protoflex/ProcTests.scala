@@ -3,6 +3,8 @@ package protoflex
 import scala.collection.mutable
 
 import java.io.{FileInputStream, FileOutputStream, IOException}
+import java.nio.ByteBuffer
+
 import java.math.BigInteger
 
 import chisel3._
@@ -10,6 +12,7 @@ import chisel3.iotesters.{ChiselFlatSpec, Driver, PeekPokeTester, PeekPokeTests}
 import utils.AssemblyParser
 import utils.SoftwareStructs
 import common.PROCESSOR_TYPES.{DATA_SZ, NUM_THREADS, REG_N}
+
 
 // base class contain utils for proc testing
 trait ProcTestsBase extends PeekPokeTests {
@@ -78,56 +81,108 @@ trait ProcTestsBase extends PeekPokeTests {
   }
 
   // helper functions
-  def write_reg(tag: BigInt)(add: BigInt, value: BigInt){
+
+  def getPState(tag: Int): SoftwareStructs.PState = {
     poke(c.io.tp_tag, tag)
     poke(c.io.tp_en, 1)
-    poke(c.io.tp_reg_wen, 1)
-    poke(c.io.tp_reg_waddr, add)
-    poke(c.io.tp_reg_wdata, value)
     step(1)
-    poke(c.io.tp_reg_wen, 0)
+    val pc = peek(c.io.tp_pstate_in.PC).toLong
+    val sp = peek(c.io.tp_pstate_in.SP).toLong
+    val el = peek(c.io.tp_pstate_in.EL).toInt
+    val nzcv = peek(c.io.tp_pstate_in.NZCV).toInt
     poke(c.io.tp_en, 0)
+    val xregs = for (r <- 0 until REG_N) yield read_reg(tag)(r).toLong
+    val pstate = PState(xregs.toList, pc, nzcv)
+    pstate
   }
 
-  def read_reg(tag:BigInt)(add: BigInt): BigInt ={
-    poke(c.io.tp_tag, tag)
-    poke(c.io.tp_en, 1)
-    poke(c.io.tp_reg_wen, 0)
-    poke(c.io.tp_reg_rs1_addr, add)
+
+  def write_ppage(inst: Int, offst: Int) = {
+    poke(c.io.ppage_bram.en, 1)
+    poke(c.io.ppage_bram.writeEn.get, 1)
+    poke(c.io.ppage_bram.addr, offst)
+    poke(c.io.ppage_bram.dataIn.get, inst)
     step(1)
-    val x = peek(c.io.tp_rs1)
-    poke(c.io.tp_en, 0)
-    x
+    poke(c.io.ppage_bram.en, 0)
+    poke(c.io.ppage_bram.writeEn.get, 0)
   }
 
-  def write_pstate(tag: Int)(PC: BigInt, SP: BigInt, EL: BigInt, NZCV: BigInt): Unit ={
-    poke(c.io.tp_tag, tag)
-    poke(c.io.tp_pstate_wen, 1)
-    poke(c.io.tp_en, 1)
-    poke(c.io.tp_pstate_in.PC, PC)
-    poke(c.io.tp_pstate_in.SP, SP)
-    poke(c.io.tp_pstate_in.EL, EL)
-    poke(c.io.tp_pstate_in.NZCV, NZCV)
-    step(1)
-    poke(c.io.tp_en, 0)
-    poke(c.io.tp_pstate_wen, 0)
-  }
-
-  def read_pstate(): Array[Array[BigInt]] ={
-    val sp_reg_val = Array.ofDim[BigInt](NUM_THREADS, 4)
-    for(tag <- 0 until NUM_THREADS){
-      poke(c.io.tp_tag, tag)
-      poke(c.io.tp_en, 1)
-      step(1)
-      sp_reg_val(tag)(0) = peek(c.io.tp_pstate_out.PC)
-      sp_reg_val(tag)(1) = peek(c.io.tp_pstate_out.SP)
-      sp_reg_val(tag)(2) = peek(c.io.tp_pstate_out.EL)
-      sp_reg_val(tag)(3) = peek(c.io.tp_pstate_out.NZCV)
-      poke(c.io.tp_en, 0)
+  def writeFullPPage(ppage: Array[Int], page_size: Int) = {
+    for(i <- 0 to page_size) {
+      write_ppage(ppage(i), i)
     }
-    sp_reg_val
   }
 
+  def write32b_pstate(word: Int, offst: Int) = {
+    poke(c.io.state_bram.en, 1)
+    poke(c.io.state_bram.writeEn.get, 1)
+    poke(c.io.state_bram.addr, offst)
+    poke(c.io.state_bram.dataIn.get, word)
+    step(1)
+    poke(c.io.state_bram.en, 0)
+    poke(c.io.state_bram.writeEn.get, 0)
+  }
+
+  // NOTE: Writes 2 words
+  def write64b_pstate(lw: Long, offst: Int) = {
+    val bytes = Array.fill(8)(0.toByte)
+    for( i <- 0 to 7 ) bytes(i) = ((lw >> ((7-i) * 8)) & 0xFF).toByte
+    val msb = ByteBuffer.wrap(bytes.slice(0, 4)).getInt
+    val lsb = ByteBuffer.wrap(bytes.slice(4, 8)).getInt
+    println("MSB:" + msb + "LSB:" + lsb)
+    write32b_pstate(msb, offst)
+    write32b_pstate(lsb, offst+1)
+  }
+
+
+
+  def write_pstate(tag: Int, pstate: SoftwareStructs.PState): Unit ={
+    var offst = 0
+    for(i <- 0 until 32 ) {
+      write64b_pstate(pstate.xregs(i), offst); offst += 2
+    }
+    write64b_pstate(pstate.pc, offst: Int); offst+=2
+    write32b_pstate(0, offst); offst+=1
+    write32b_pstate(0, offst); offst+=1
+    write32b_pstate(pstate.nzcv, offst); offst+=1
+  }
+
+  def read32b_pstate(offst:Int):Int = {
+    poke(c.io.state_bram.en, 1)
+    poke(c.io.state_bram.writeEn.get, 0)
+    poke(c.io.state_bram.addr, offst)
+    step(1)
+    poke(c.io.state_bram.en, 0)
+    poke(c.io.state_bram.writeEn.get, 0)
+    val uint32 = peek(c.io.state_bram.dataOut.get)
+    return uint32.toInt
+  }
+
+  def read64b_pstate(offst:Int):Long = {
+    val msb = read32b_pstate(offst)
+    val lsb = read32b_pstate(offst+1)
+    val byte_msb = Array.fill(4)(0.toByte)
+    val byte_lsb = Array.fill(4)(0.toByte)
+    for (i <- 0 to 3) byte_msb(i) = ((msb >> ((3-i) * 8)) & 0xFF).toByte
+    for (i <- 0 to 3) byte_lsb(i) = ((lsb >> ((3-i) * 8)) & 0xFF).toByte
+    ByteBuffer.wrap((byte_msb ++ byte_lsb)).getLong
+  }
+
+  def read_pstate(tag: Int): SoftwareStructs.PState ={
+    var offst = 0
+    val xregs = for(i <- 0 until 32 ) yield  {
+      val reg = read64b_pstate(offst)
+      offst += 2
+      reg
+    }
+
+    val pc = read64b_pstate(offst: Int); offst+=2
+    val el = read32b_pstate(offst); offst+=1
+    val sp = read32b_pstate(offst); offst+=1
+    val nzcv = read32b_pstate(offst); offst+=1
+
+    new SoftwareStructs.PState(xregs.toList: List[Long], pc: Long, nzcv: Int)
+  }
 }
 
 // test basic pipline

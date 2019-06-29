@@ -91,48 +91,14 @@ class SimulatorTests(c_ : Proc, cfg: SimulatorConfig) extends PeekPokeTester(c_)
     Files.write(Paths.get(path), text.getBytes(StandardCharsets.UTF_8))
   }
 
-  def getPState(tag: Int): PState= {
-    poke(c.io.tp_tag, tag)
-    poke(c.io.tp_en, 1)
-    step(1)
-    val pc = peek(c.io.tp_pstate_in.PC).toLong
-    val sp = peek(c.io.tp_pstate_in.SP).toLong
-    val el = peek(c.io.tp_pstate_in.EL).toInt
-    val nzcv = peek(c.io.tp_pstate_in.NZCV).toInt
-    poke(c.io.tp_en, 0)
-    val xregs = for (r <- 0 until REG_N) yield read_reg(tag)(r).toLong
-    val pstate = PState(xregs.toList, pc, nzcv)
-    pstate
-  }
-
-  def writePState(path: String, tag: Int): Unit = {
+  def writePState2File(path: String, tag: Int): Unit = {
     val json = ArmflexJson.state2json(getPState(tag))
     writeFile(path, json)
   }
 
   def updatePState(json: String, tag : Int):Unit = {
     val pstate: PState = ArmflexJson.json2state(json)
-    poke(c.io.flush,0)
-    for(r <- 0 until REG_N) {
-      write_reg(tag)(r, pstate.xregs(r))
-    }
-    write_pstate(tag)(pstate.pc, 0, 0, pstate.nzcv)
-  }
-
-  def run(insts: Int, tag: Int): Unit = {
-      for(i <- 0 until insts) {
-        // Load inst
-        val pc = peek(c.io.curr_PC).toLong
-        val inst = program_page(pc % pageSize)
-        do {
-          poke(c.io.inst, inst)
-          poke(c.io.tag, tag)
-          poke(c.io.valid, 1)
-          step(1)
-        } while(peek(c.io.ready) == 0);
-        poke(c.io.valid, 0)
-        // Wait for next inst
-      }
+    write_pstate(tag,pstate)
   }
 
   var tf = System.nanoTime
@@ -156,7 +122,17 @@ class SimulatorTests(c_ : Proc, cfg: SimulatorConfig) extends PeekPokeTester(c_)
       cmd = ArmflexJson.json2cmd(readFile(filepath))._1
       tf = System.nanoTime
     } while(cmd == FA_QflexCmds.LOCK_WAIT && !timedOut);
+    writeCmd((FA_QflexCmds.LOCK_WAIT, 0), filepath)
     cmd
+  }
+
+  def writeCmd(cmd: (Int, Long), path: String) =
+    writeFile(path, ArmflexJson.cmd2json(cmd._1, cmd._2))
+
+  def run() = {
+    do {
+
+    } while()
   }
 
   def runSimulator(timeoutms: Long):Unit = {
@@ -170,6 +146,7 @@ class SimulatorTests(c_ : Proc, cfg: SimulatorConfig) extends PeekPokeTester(c_)
           println("SIMULATION START")
           updatePState(readFile(cfg.qemuStatePath), 0)
           updateProgramPage(cfg.pagePath)
+          run
         case FA_QflexCmds.SIM_STOP =>
           println("SIMULATION STOP")
           return

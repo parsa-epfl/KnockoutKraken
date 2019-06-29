@@ -34,13 +34,13 @@ object ArmflexJson {
     jp2sp(jsonp)
   }
 
-  def state2json(pstate : SoftwareStructs.PState):String= {
+  def state2json(pstate : SoftwareStructs.PState):String = {
     implicit val formats = Serialization.formats(NoTypeHints)
     write(sp2jp(pstate))
   }
 
-  def cmd2json(cmd : Int, addr : Long) : String = {
-    val json = new JSONCmd(cmd.toString, f"${addr}%016x")
+  def cmd2json(cmd : (Int, Long)) : String = {
+    val json = new JSONCmd(cmd._1.toString, f"${cmd._2}%016x")
     write(json)
   }
 
