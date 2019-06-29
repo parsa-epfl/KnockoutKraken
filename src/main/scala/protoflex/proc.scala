@@ -5,83 +5,75 @@ import chisel3._
 import chisel3.core.withReset
 import chisel3.util.{DeqIO, Queue, Valid}
 import common.PROCESSOR_TYPES._
-import common.constBRAM
+import common.constBRAM.{TDPBRAM36ParamDict}
 import common.{BRAM, BRAMConfig, BRAMPort}
+
+case class ProcConfig(widthExample: Int) {
+   val ppageBRAMc = new BRAMConfig(Seq(TDPBRAM36ParamDict(36), TDPBRAM36ParamDict(36)))
+   val stateBRAMc = new BRAMConfig(Seq(TDPBRAM36ParamDict(36), TDPBRAM36ParamDict(36)))
+  // Move from object describing types to trait implementing methods
+  // From argument passed to the ProcConfig ?
+  def makeExUInt = UInt(widthExample.W)
+}
 
 /** Processor
   *
   */
-class Proc extends Module
+class Proc(implicit val cfg: ProcConfig) extends Module
 {
-  val ppageBRAMc = new BRAMConfig(Seq(constBRAM.TDPBRAM36ParamDict(36),
-                                       constBRAM.TDPBRAM36ParamDict(36)))
-  val stateBRAMc = new BRAMConfig(Seq(constBRAM.TDPBRAM36ParamDict(36),
-                                       constBRAM.TDPBRAM36ParamDict(36)))
   val io = IO(new Bundle {
-    // Fetche simulator
+    // TODO: 3 signals
     val tag  = Input(TAG_T)
-    val inst = Input(INST_T)
     val valid = Input(Bool())
     val ready = Output(Bool())
 
     // State
-    val inst_in = Output(new DInst)
-    val dec_reg = Flipped(DeqIO(new DInst))
+    val inst_in   = Output(new DInst)
+    val dec_reg   = Flipped(DeqIO(new DInst))
     val issue_reg = Flipped(DeqIO(new DInst))
-    val exe_reg = Flipped(DeqIO(new EInst))
-    val br_reg = Flipped(DeqIO(new BInst))
-    val lsu_reg = Flipped(DeqIO(new MInst))
-    val curr_PC = Output(DATA_T)
-    val next_PC = Output(DATA_T)
-    val wen = Output(Bool())
+    val exe_reg   = Flipped(DeqIO(new EInst))
+    val br_reg    = Flipped(DeqIO(new BInst))
+    val lsu_reg   = Flipped(DeqIO(new MInst))
+    val curr_PC   = Output(DATA_T)
+    val next_PC   = Output(DATA_T)
+    val wen       = Output(Bool())
 
     // memory interface
     val mem_req = Output(Valid(new MemRes))
     val mem_res = Input(Valid(new MemRes))
 
     // BRAM Ports
-    val ppage_bram = new BRAMPort(0)(ppageBRAMc)
-    val state_bram = new BRAMPort(0)(stateBRAMc)
+    val ppage_bram = new BRAMPort(0)(cfg.ppageBRAMc)
+    val state_bram = new BRAMPort(0)(cfg.stateBRAMc)
 
-    // initialization qemu->armflex
-    val tp_en = Input(Bool())
-    val tp_reg_waddr = Input(REG_T)
-    val tp_reg_wdata = Input(DATA_T)
-    val tp_reg_wen = Input(Bool())
-    val tp_tag = Input(TAG_T)
-    val tp_rs1 = Output(DATA_T)
-    val tp_rs2 = Output(DATA_T)
-    // pstate
-    val tp_pstate_wen = Input(Bool())
-    val tp_pstate_in = Input(new PStateRegs)
-    val tp_pstate_out = Output(new PStateRegs)
-
-    // transplant.scala armflex->qemu
-    val tp_reg_rs1_addr = Input(REG_T)
-    val tp_reg_rs2_addr = Input(REG_T)
-
-    val flush = Input(Bool())
+    // AXI Host Communication
+    val tp_start = Input(Bool())
+    val tp_done = Output(Bool())
   })
-  // Program PAGE BRAM
-  val ppage = Module(new BRAM()(ppageBRAMc))
+
+  // Program page BRAM
+  val ppage = Module(new BRAM()(cfg.ppageBRAMc))
   ppage.io.getPort(0) <> io.ppage_bram
 
-
   // State BRAM
-  val state = Module(new BRAM()(stateBRAMc))
+  val state = Module(new BRAM()(cfg.stateBRAMc))
   state.io.getPort(0) <> io.state_bram
 
   val stateRead = state.io.getPort(1).dataOut.get
+
+  // Transplant Unit
+  val tp = Module(new TransplantUnit())
+  tp.io.start := io.tp_start
+  io.tp_done := tp.io.done
+  val flush = tp.io.flush || reset.toBool()
 
   // PCs
   val curr_PC = Wire(DATA_T)
   val next_PC = Wire(DATA_T)
 
   // Pipeline
-  val flush = io.flush || reset.toBool()
-
   // Fetch
-  val fetch = Module(new FetchUnit()(ppageBRAMc))
+  val fetch = Module(new FetchUnit())
 
   // Decode
   val decoder = Module(new DecodeUnit())
@@ -91,20 +83,19 @@ class Proc extends Module
   val issuer = Module(new IssueUnit())
   // issue_reg in unit
 
-  // Execute
+  // | Execute |        |            |
   val executer = Module(new ExecuteUnit())
   val exe_reg = withReset(flush){Module(new Queue(new EInst, 1, pipe = true, flow = false))}
 
-  // Branch
+  // |         | Branch |            |
   val brancher = Module(new BranchUnit())
   val br_reg = withReset(flush){Module(new Queue(new BInst, 1, pipe = true, flow = false))}
 
-  // Load Store
+  // |         |        | Load Store |
   val lsu = Module(new LoadStoreUnit())
   val lsu_reg = withReset(flush){Module(new Queue(new MInst, 1, pipe = true, flow = false))}
 
   // Transplant Unit
-  //val tp = Module(new TransplantUnit())
 
 
   // PState
@@ -155,15 +146,15 @@ class Proc extends Module
   // Execute : Issue -> Execute
   val issued_dinst = issuer.io.deq.bits
   val issued_tag = issued_dinst.tag
-  val tag_select = Mux(io.tp_en, io.tp_tag, issued_tag)
+  val tag_select = Mux(tp.io.tp_en, tp.io.tp_tag, issued_tag)
   issuer.io.deq.ready := exe_reg.io.enq.ready || br_reg.io.enq.ready
   // Check for front pressure
   issuer.io.exe_reg.bits := exe_reg.io.deq.bits
   issuer.io.exe_reg.valid :=  exe_reg.io.deq.valid
 
   /** Execute */
-  val rs1_addr = Mux(io.tp_en, io.tp_reg_rs1_addr, issued_dinst.rs1)
-  val rs2_addr = Mux(io.tp_en, io.tp_reg_rs2_addr, issued_dinst.rs2)
+  val rs1_addr = Mux(tp.io.tp_en, tp.io.tp_reg_raddr, issued_dinst.rs1)
+  val rs2_addr = Mux(tp.io.tp_en, tp.io.tp_reg_raddr, issued_dinst.rs2)
   // connect rfile read(address) interface
   vec_rfile map { case rfile =>
     rfile.rs1_addr := rs1_addr
@@ -174,8 +165,8 @@ class Proc extends Module
   val rVal2 = vec_rfile(tag_select).rs2_data
 
   // reading register: transplant.scala
-  io.tp_rs1 := rVal1
-  io.tp_rs2 := rVal2
+  tp.io.tp_reg_rdata := rVal1
+  tp.io.tp_reg_rdata := rVal2
 
   // connect executeUnit interface
   executer.io.rVal1 := rVal1
@@ -217,14 +208,14 @@ class Proc extends Module
   br_reg.io.deq.ready := true.B
 
   // connect RFile's write interface
-  val waddr = Mux(io.tp_en, io.tp_reg_waddr, exe_reg.io.deq.bits.rd)
-  val wdata = Mux(io.tp_en, io.tp_reg_wdata, exe_reg.io.deq.bits.res)
+  val waddr = Mux(tp.io.tp_en, tp.io.tp_reg_waddr, exe_reg.io.deq.bits.rd)
+  val wdata = Mux(tp.io.tp_en, tp.io.tp_reg_wdata, exe_reg.io.deq.bits.res)
   vec_rfile map { case rfile =>
     rfile.waddr := waddr
     rfile.wdata := wdata
     rfile.wen := false.B
   }
-  val wen = Mux(io.tp_en, io.tp_reg_wen, exe_reg.io.deq.bits.rd_en && exe_reg.io.deq.valid)
+  val wen = Mux(tp.io.tp_en, tp.io.tp_reg_wen, exe_reg.io.deq.bits.rd_en && exe_reg.io.deq.valid)
   vec_rfile(tag_select).wen := wen
   io.wen := exe_reg.io.deq.bits.rd_en && exe_reg.io.deq.valid
 
@@ -243,15 +234,15 @@ class Proc extends Module
   io.next_PC := next_PC
 
   // pstate in tp mode
-  io.tp_pstate_out.PC := vec_pregs(io.tp_tag).PC
-  io.tp_pstate_out.SP := vec_pregs(io.tp_tag).SP
-  io.tp_pstate_out.EL := vec_pregs(io.tp_tag).EL
-  io.tp_pstate_out.NZCV := vec_pregs(io.tp_tag).NZCV
-  when(io.tp_en && io.tp_pstate_wen){
-    vec_pregs(io.tp_tag).PC := io.tp_pstate_in.PC
-    vec_pregs(io.tp_tag).SP := io.tp_pstate_in.SP
-    vec_pregs(io.tp_tag).EL := io.tp_pstate_in.EL
-    vec_pregs(io.tp_tag).NZCV := io.tp_pstate_in.NZCV
+  tp.io.tp_pstate_out.PC := vec_pregs(tp.io.tp_tag).PC
+  tp.io.tp_pstate_out.SP := vec_pregs(tp.io.tp_tag).SP
+  tp.io.tp_pstate_out.EL := vec_pregs(tp.io.tp_tag).EL
+  tp.io.tp_pstate_out.NZCV := vec_pregs(tp.io.tp_tag).NZCV
+  when(tp.io.tp_en && tp.io.tp_pstate_wen){
+    vec_pregs(tp.io.tp_tag).PC := tp.io.tp_pstate_in.PC
+    vec_pregs(tp.io.tp_tag).SP := tp.io.tp_pstate_in.SP
+    vec_pregs(tp.io.tp_tag).EL := tp.io.tp_pstate_in.EL
+    vec_pregs(tp.io.tp_tag).NZCV := tp.io.tp_pstate_in.NZCV
   }
   // update PC
   when(br_reg.io.deq.valid) {

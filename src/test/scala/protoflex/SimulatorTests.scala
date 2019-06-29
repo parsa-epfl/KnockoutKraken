@@ -187,7 +187,7 @@ class SimulatorTester(cfg: SimulatorConfig) extends ChiselFlatSpec {
   println("Starting Simulator")
   // Extra usefull args : --is-verbose
   val chiselArgs = Array("-tn", "proc", "-td","./test/Sim", "--backend-name", "verilator")
-  iotesters.Driver.execute(chiselArgs, () => new Proc) {
+  iotesters.Driver.execute(chiselArgs, () => new Proc()(new ProcConfig(0))) {
       c => new SimulatorTests(c, cfg)
   } should be(true)
   println("Done Simulator")
