@@ -92,7 +92,7 @@ class SimulatorTests(c_ : Proc, cfg: SimulatorConfig) extends PeekPokeTester(c_)
   }
 
   def writePState2File(path: String, tag: Int): Unit = {
-    val json = ArmflexJson.state2json(getPState(tag))
+    val json = ArmflexJson.state2json(read_pstate(tag))
     writeFile(path, json)
   }
 
@@ -130,9 +130,7 @@ class SimulatorTests(c_ : Proc, cfg: SimulatorConfig) extends PeekPokeTester(c_)
     writeFile(path, ArmflexJson.cmd2json(cmd._1, cmd._2))
 
   def run() = {
-    do {
-
-    } while()
+    do { step(1) } while(peek(c.io.tp_done) == 0);
   }
 
   def runSimulator(timeoutms: Long):Unit = {
@@ -146,11 +144,13 @@ class SimulatorTests(c_ : Proc, cfg: SimulatorConfig) extends PeekPokeTester(c_)
           println("SIMULATION START")
           updatePState(readFile(cfg.qemuStatePath), 0)
           updateProgramPage(cfg.pagePath)
-          run
+          run()
         case FA_QflexCmds.SIM_STOP =>
           println("SIMULATION STOP")
           return
       }
+      writePState2File(cfg.simStatePath, 0)
+      writeCmd((FA_QflexCmds.INST_UNDEF, 0), cfg.simCmdPath)
       tf = System.nanoTime
     }
   }

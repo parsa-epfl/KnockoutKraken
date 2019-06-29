@@ -82,21 +82,6 @@ trait ProcTestsBase extends PeekPokeTests {
 
   // helper functions
 
-  def getPState(tag: Int): SoftwareStructs.PState = {
-    poke(c.io.tp_tag, tag)
-    poke(c.io.tp_en, 1)
-    step(1)
-    val pc = peek(c.io.tp_pstate_in.PC).toLong
-    val sp = peek(c.io.tp_pstate_in.SP).toLong
-    val el = peek(c.io.tp_pstate_in.EL).toInt
-    val nzcv = peek(c.io.tp_pstate_in.NZCV).toInt
-    poke(c.io.tp_en, 0)
-    val xregs = for (r <- 0 until REG_N) yield read_reg(tag)(r).toLong
-    val pstate = PState(xregs.toList, pc, nzcv)
-    pstate
-  }
-
-
   def write_ppage(inst: Int, offst: Int) = {
     poke(c.io.ppage_bram.en, 1)
     poke(c.io.ppage_bram.writeEn.get, 1)
@@ -133,8 +118,6 @@ trait ProcTestsBase extends PeekPokeTests {
     write32b_pstate(msb, offst)
     write32b_pstate(lsb, offst+1)
   }
-
-
 
   def write_pstate(tag: Int, pstate: SoftwareStructs.PState): Unit ={
     var offst = 0
