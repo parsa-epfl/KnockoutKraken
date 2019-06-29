@@ -130,7 +130,12 @@ class SimulatorTests(c_ : Proc, cfg: SimulatorConfig) extends PeekPokeTester(c_)
     writeFile(path, ArmflexJson.cmd2json(cmd._1, cmd._2))
 
   def run() = {
-    do { step(1) } while(peek(c.io.tp_done) == 0);
+    ti = System.nanoTime
+    start_rtl()
+    do {
+      step(1)
+      tf = System.nanoTime
+    } while(peek(c.io.tp_done) == 0 && !timedOut);
   }
 
   def runSimulator(timeoutms: Long):Unit = {

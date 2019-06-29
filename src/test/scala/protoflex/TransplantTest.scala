@@ -39,7 +39,7 @@ class TransplantTester extends ChiselFlatSpec{
 
   backends foreach {backend =>
     it should s"Transplant testing with ${backend}" in {
-      Driver(() => new TransplantUnit, backend)((c)=> new TransplantTest(c)) should be (true)
+      Driver(() => new TransplantUnit()(new ProcConfig(0)), backend)((c)=> new TransplantTest(c)) should be (true)
     }
   }
 }
@@ -48,7 +48,7 @@ object TransplantMain extends App {
   implicit val stateBRAMc = new BRAMConfig(Seq(constBRAM.TDPBRAM36ParamDict(36), constBRAM.TDPBRAM36ParamDict(36)))
 
   val chiselArgs = Array("-tn", "TransplantUnit", "-td","./test_result", "--backend-name", "verilator")
-  iotesters.Driver.execute(chiselArgs, () => new TransplantUnit) {
+  iotesters.Driver.execute(chiselArgs, () => new TransplantUnit()(new ProcConfig(0))) {
     c => new TransplantTest(c)
   }
 }
