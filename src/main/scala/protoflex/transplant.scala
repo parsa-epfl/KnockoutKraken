@@ -5,11 +5,16 @@ import chisel3.util._
 import common.{BRAMConfig, BRAMPort}
 import common.PROCESSOR_TYPES._
 
-
+/*
+* Transplant unit: do following function
+* 1. Initialize Proc : read processor state from Bram and update Proc
+* 2. Transplant : flush pipeline and write back state to Bram
+* */
 class TransplantUnitIO(implicit val cfg: ProcConfig) extends Bundle
 {
   implicit val stateBRAMc = cfg.stateBRAMc
   // TP <-> proc
+
   val flush = Output(Bool())
   val tp_en = Output(Bool())
   val tp_req = Input(Bool())
@@ -26,9 +31,12 @@ class TransplantUnitIO(implicit val cfg: ProcConfig) extends Bundle
   val tp_pstate_in = Input(new PStateRegs)
   val tp_pstate_out = Output(new PStateRegs)
 
-  // TP <-> Bram for now use bram interface
+
+  // TP <--> magic block
   val start = Input(Bool())
   val done = Output(Bool())
+
+  // TP <--> Bram for now use bram interface
   val bram_port = Flipped(new BRAMPort(1))
 
   // decouble bram interface from module
@@ -52,9 +60,11 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
     g_reg_count := 0.U
     sp_reg_count := 0.U
     wait_r := 0.U
+    done_r := 0.U
   }
   val w_pstate_reg = RegInit(Wire(new PStateRegs()).empty)
   val bram_out_r = RegInit(io.bram_port.dataOut.get)
+  val done_r = RegInit(0.U(1.W))
 
 
   // default values
@@ -66,31 +76,30 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   io.tp_reg_wen := false.B
   io.tp_reg_raddr := g_reg_count
   io.flush := io.tp_req
+  io.done := done_r
 
-  //  io.flush := false.B
-
-  // bram
+  // bram interface
   io.bram_port.addr := (g_reg_count << 1.U) | wait_r
   io.bram_port.dataIn.get := 0.U
   io.bram_port.writeEn.get := 0.U
   io.bram_port.en := false.B
 
-  val s_IDLE :: write_gen_reg:: write_sp_reg :: read_gen_reg  :: read_sp_reg :: Nil = Enum(5)
+  val s_IDLE :: bram_to_proc_reg:: bram_to_proc_pstate :: proc_to_bram_reg  :: proc_to_bram_pstate :: Nil = Enum(5)
   val state = RegInit(s_IDLE)
   io.tp_en := (state =/= s_IDLE)
 
   switch(state) {
     is(s_IDLE) {
       when(io.start) {
-        state := write_gen_reg
+        state := bram_to_proc_reg
         resetCounter()
       }
       when(io.tp_req){
-        state := read_gen_reg
+        state := proc_to_bram_reg
         resetCounter()
       }
     }
-    is(read_gen_reg){
+    is(proc_to_bram_reg){
       io.bram_port.writeEn.get := true.B
       wait_r := wait_r + 1.U
       when( wait_r === 0.U){
@@ -99,11 +108,11 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
         io.bram_port.dataIn.get := io.tp_reg_rdata((DATA_SZ/2)-1,0)
         g_reg_count := g_reg_count + 1.U
         when(g_reg_count === (REG_N - 1).U){
-          state := read_sp_reg
+          state := proc_to_bram_pstate
         }
       }
     }
-    is(read_sp_reg){
+    is(proc_to_bram_pstate){
       sp_reg_count := sp_reg_count + 1.U
       // do this in better way
       when(sp_reg_count === 0.U){
@@ -119,10 +128,11 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
         io.bram_port.dataIn.get := io.tp_pstate_in.NZCV
       }
       when(sp_reg_count === (SP_REG_N - 1).U){
+        done_r := true.B
         state := s_IDLE
       }
     }
-    is(write_gen_reg){
+    is(bram_to_proc_reg){
       io.bram_port.en := true.B
       wait_r := wait_r + 1.U
       when(wait_r === 0.U){ // 1st clock cycle
@@ -131,11 +141,11 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
         g_reg_count := g_reg_count + 1.U
         io.tp_reg_wen := true.B
         when(g_reg_count === (REG_N - 1).U){ // done
-          state := write_sp_reg
+          state := bram_to_proc_pstate
         }
       }
     }
-    is(write_sp_reg){ // TODO: multiple thread
+    is(bram_to_proc_pstate){ // TODO: multiple thread
       sp_reg_count := sp_reg_count + 1.U
       // ugly way, do it better, 1 cycle for each special register (32bit value from qemu)
       require(SP_REG_N == 4)
@@ -156,6 +166,5 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
         state := s_IDLE
       }
     }
-
   }
 }

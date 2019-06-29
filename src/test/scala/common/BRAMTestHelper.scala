@@ -24,7 +24,7 @@ trait BRAMTestHelper extends PeekPokeTests {
 
 
   val b:BRAMPort
-  val c = b.c
+  val configs = b.c
 
   // need function to:
   //   1) set random address/data
@@ -43,18 +43,18 @@ trait BRAMTestHelper extends PeekPokeTests {
     poke(getPort(portNbr).addr, addr)
 
   def getReadPort(portNbr: Int): Int = {
-    if (c.isTrueDualPort){ portNbr }
-    else { c.sdpReadPortIdx } }
+    if (configs.isTrueDualPort){ portNbr }
+    else { configs.sdpReadPortIdx } }
 
   def getWritePort(portNbr: Int): Int = {
-    if (c.isTrueDualPort){ portNbr }
-    else { c.sdpWritePortIdx } }
+    if (configs.isTrueDualPort){ portNbr }
+    else { configs.sdpWritePortIdx } }
 
   def limitWidth(x: BigInt, w: Int, signed: Boolean = false): BigInt = {
     x % BigDecimal(pow(2, w)).toBigInt}
 
   def limitWidth(portNbr: Int, data: BigInt): BigInt = {
-    limitWidth(data, c.dataWidthVec(portNbr))
+    limitWidth(data, configs.dataWidthVec(portNbr))
   }
 
   def disableWrite(portNbr: Int): Unit = {
@@ -92,14 +92,14 @@ trait BRAMTestHelper extends PeekPokeTests {
   }
 
   def getWritePortWidth(portNbr: Int): Int = {
-    c.dataWidthVec(getWritePort(portNbr)) }
+    configs.dataWidthVec(getWritePort(portNbr)) }
   def getReadPortWidth(portNbr: Int): Int = {
-    c.dataWidthVec(getReadPort(portNbr)) }
+    configs.dataWidthVec(getReadPort(portNbr)) }
 
   def seqWrite(portNbr: Int, dataQ: Queue[BigInt], offset: Int = 10){
     val port = getWritePort(portNbr)
     val localDataQ = dataQ.clone()
-    for ( addr <- 0 until c.sizeVec(port) ) {
+    for ( addr <- 0 until configs.sizeVec(port) ) {
       val writeAddr = addr + offset
       val data = localDataQ.dequeue()
       writeAtAddr(portNbr, writeAddr, data) } }
@@ -114,7 +114,7 @@ trait BRAMTestHelper extends PeekPokeTests {
     // Make sure write is not enabled
     val port = getReadPort(portNbr)
     val readQ = new Queue[BigInt]
-    for ( addr <- 0 until c.sizeVec(port) ) {
+    for ( addr <- 0 until configs.sizeVec(port) ) {
       val readAddr = addr + offset
       readQ.enqueue(readAtAddr(port, readAddr)) }
     readQ }
@@ -134,7 +134,7 @@ trait BRAMTestHelper extends PeekPokeTests {
     val binaryReadQ = readQ.map(_.toString(2).reverse.padTo(readPortWidth,  '0').reverse)
     val mergedReadQ = Queue[BigInt]()
     var baseStr = ""
-    for(i <- 0 until c.sizeVec(c.sdpWritePortIdx))  {
+    for(i <- 0 until configs.sizeVec(configs.sdpWritePortIdx))  {
       baseStr = ""
       for(j <- 0 until widthRatio){
         val dataRead = binaryReadQ(i*widthRatio + j)

@@ -8,28 +8,27 @@ import common.{BRAMConfig, constBRAM, BRAMTestHelper}
 
 
 class TransplantTest(c: TransplantUnit) extends PeekPokeTester(c) {
-  // testing write back
   poke(c.io.bram_port.dataOut.get, 0)
-  println(" not req")
-  poke(c.io.tp_req, 0)
+
+  // start/initialize proc
+  poke(c.io.start, 0)
   step(2)
-  println(" tp req ")
+  println("Maigc->TP: start signal")
+  poke(c.io.start, 1)
+  step(1)
+  poke(c.io.start, 0)
+  step(100) // proc is running simulation
+
+  // proc is requesting transplant
+  println("Proc->TP: transplant request")
   poke(c.io.tp_req, 1)
   step(1)
   poke(c.io.start, 0)
-  step(100)
-
-  // testing initializatoin
-  //  println(" not start")
-  //  poke(c.io.start, 0)
-  //  step(2)
-  //  println(" starting ")
-  //  poke(c.io.start, 1)
-  //  step(1)
-  //  poke(c.io.start, 0)
-  //  step(100)
-
-
+  while(peek(c.io.done)==0){
+    step(100)
+  }
+  println("TP->Magic: done ")
+  step(5)
 
 }
 
