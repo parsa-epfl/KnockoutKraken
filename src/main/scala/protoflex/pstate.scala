@@ -26,8 +26,8 @@ import common.PROCESSOR_TYPES._
 class PStateRegs extends Bundle
 {
   val PC = DATA_T
-  val SP = DATA_T // Normaly 4 levels
-  val EL = DATA_T // Normaly 4 levels
+  val SP = INST_T // Normaly 4 levels 32 bits
+  val EL = INST_T // Normaly 4 levels 32 bits
 
   // PSTATE
   // Condition flags

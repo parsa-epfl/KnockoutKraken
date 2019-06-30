@@ -119,12 +119,12 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   // transplant unit <> pstate
   state.io.getPort(1) <> tp.io.bram_port
 
-  val fetch_en = withReset(flush){RegInit(0.U(1.W))}
+  val fetch_en = withReset(flush){RegInit(false.B)}
   when(tp.io.fetch_start){fetch_en := true.B}
   tp.io.tp_req := Mux(RegNext(fetch_en.toBool()), decoder.io.tp_req, false.B)
 
   // IRAM(ppage)-> Fetch
-  fetch.io.en := fetch_en.toBool()
+  fetch.io.en := fetch_en
   fetch.io.PC := next_PC
   fetch.io.inst.ready := true.B // TODO: for now always ready ( change decoder to wait for branch instruction)
   fetch.io.tag_in := io.tag

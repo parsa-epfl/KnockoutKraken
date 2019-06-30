@@ -80,7 +80,7 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   // default values
   io.tp_tag := 0.U // TODO: Transplant multiple threads
   val wire_64bits = WireInit(Cat(bram_out_r(31,0), io.bram_port.dataOut.get(31,0)))
-  io.tp_pstate_wen := false.B
+  val tp_pstate_wen = WireInit(false.B)
   io.tp_pstate_out := w_pstate_reg
   val w_pstate_pc_en = WireInit(false.B)
   val w_pstate_sp_en = WireInit(false.B)
@@ -155,9 +155,8 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
         when(sp_reg_count === 3.U){
           io.bram_port.dataIn.get := io.tp_pstate_in.NZCV
         }
-        when(sp_reg_count === (SP_REG_N - 1).U){
+        when(sp_reg_count === SP_REG_N.U){
           done_r := true.B
-          io.fetch_start := true.B
           state := s_IDLE
         }
       }
@@ -199,8 +198,11 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
         when(sp_reg_count === 3.U){ // NZCV
           w_pstate_nzcv_en := true.B
         }
-        when(sp_reg_count === (SP_REG_N - 1).U){
-          io.tp_pstate_wen := true.B
+        when(sp_reg_count === 4.U){ // Write back state
+          tp_pstate_wen := true.B
+        }
+        when(sp_reg_count === 5.U){ // Done transplanting
+          io.fetch_start := true.B
           state := s_IDLE
         }
       }
@@ -214,4 +216,5 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   w_pstate_reg.SP := Mux(RegNext(w_pstate_sp_en), io.bram_port.dataOut.get(31,0), w_pstate_reg.SP)
   w_pstate_reg.EL := Mux(RegNext(w_pstate_el_en), io.bram_port.dataOut.get(31,0), w_pstate_reg.EL)
   w_pstate_reg.NZCV := Mux(RegNext(w_pstate_nzcv_en), io.bram_port.dataOut.get(31,0), w_pstate_reg.NZCV)
+  io.tp_pstate_wen := RegNext(tp_pstate_wen)
 }
