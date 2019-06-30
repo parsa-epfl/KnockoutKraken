@@ -23,9 +23,9 @@ class TransplantTest(c: TransplantUnit) extends PeekPokeTester(c) {
   println("Proc->TP: transplant request")
   poke(c.io.tp_req, 1)
   step(1)
-  poke(c.io.start, 0)
+  poke(c.io.tp_req, 0)
   while(peek(c.io.done)==0){
-    step(100)
+    step(1)
   }
   println("TP->Magic: done ")
   step(5)
@@ -33,7 +33,7 @@ class TransplantTest(c: TransplantUnit) extends PeekPokeTester(c) {
 }
 
 class TransplantTester extends ChiselFlatSpec{
-  implicit val stateBRAMc = new BRAMConfig(Seq(constBRAM.TDPBRAM36ParamDict(36), constBRAM.TDPBRAM36ParamDict(36)))
+  implicit val config = new ProcConfig(0)
 
   behavior of "transplant unit"
 
@@ -45,7 +45,7 @@ class TransplantTester extends ChiselFlatSpec{
 }
 
 object TransplantMain extends App {
-  implicit val stateBRAMc = new BRAMConfig(Seq(constBRAM.TDPBRAM36ParamDict(36), constBRAM.TDPBRAM36ParamDict(36)))
+  implicit val config = new ProcConfig(0)
 
   val chiselArgs = Array("-tn", "TransplantUnit", "-td","./test_result", "--backend-name", "verilator")
   iotesters.Driver.execute(chiselArgs, () => new TransplantUnit()(new ProcConfig(0))) {

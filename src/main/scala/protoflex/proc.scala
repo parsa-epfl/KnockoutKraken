@@ -3,9 +3,9 @@ package protoflex
 
 import chisel3._
 import chisel3.core.withReset
-import chisel3.util.{DeqIO, Queue, Valid}
+import chisel3.util.{DeqIO, Queue, RegEnable, Valid}
 import common.PROCESSOR_TYPES._
-import common.constBRAM.{TDPBRAM36ParamDict}
+import common.constBRAM.TDPBRAM36ParamDict
 import common.{BRAM, BRAMConfig, BRAMPort}
 
 case class ProcConfig(widthExample: Int) {
@@ -95,8 +95,6 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   val lsu = Module(new LoadStoreUnit())
   val lsu_reg = withReset(flush){Module(new Queue(new MInst, 1, pipe = true, flow = false))}
 
-  // Transplant Unit
-
 
   // PState
   // Writeback
@@ -118,15 +116,16 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   ppage.io.getPort(1).writeEn.get := false.B
   fetch.io.data := ppage.io.getPort(1).dataOut.get
 
-  // To Connect to transplant unit
-  state.io.getPort(1).dataIn.get := 0.U
-  state.io.getPort(1).addr := 0.U
-  state.io.getPort(1).en := false.B
-  state.io.getPort(1).writeEn.get := false.B
- 
+  // transplant unit <> pstate
+  state.io.getPort(1) <> tp.io.bram_port
+
+  val fetch_en = withReset(flush){RegInit(Bool())}
+  when(tp.io.fetch_start){fetch_en := true.B}
+  tp.io.tp_req := Mux(RegNext(fetch_en), decoder.io.tp_req, false.B)
+
   // IRAM(ppage)-> Fetch
-  fetch.io.en := false.B//tp.io.start
-  fetch.io.PC := next_PC;
+  fetch.io.en := fetch_en
+  fetch.io.PC := next_PC
   fetch.io.inst.ready := true.B // TODO: for now always ready ( change decoder to wait for branch instruction)
   fetch.io.tag_in := io.tag
 
@@ -164,7 +163,7 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   val rVal1 = vec_rfile(tag_select).rs1_data
   val rVal2 = vec_rfile(tag_select).rs2_data
 
-  // reading register: transplant.scala
+  // reading register: transplant
   tp.io.tp_reg_rdata := rVal1
   tp.io.tp_reg_rdata := rVal2
 

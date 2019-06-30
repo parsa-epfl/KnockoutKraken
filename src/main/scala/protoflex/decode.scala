@@ -107,6 +107,7 @@ class DecodeUnitIO extends Bundle
   // Fetch - Decode
   val inst = Input(INST_T)
   val tag  = Input(TAG_T)
+  val tp_req = Output(Bool())
 
   // Decode - Issue
   val dinst = Output(new DInst)
@@ -120,4 +121,5 @@ class DecodeUnit extends Module
   val io = IO(new DecodeUnitIO)
   val dinst = Wire(new DInst).decode(io.inst, io.tag)
   io.dinst := dinst
+  io.tp_req := dinst.inst_en
 }
