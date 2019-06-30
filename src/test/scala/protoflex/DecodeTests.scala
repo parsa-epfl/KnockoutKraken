@@ -3,10 +3,7 @@ package protoflex
 import chisel3._
 import chisel3.iotesters
 import chisel3.iotesters.{ChiselFlatSpec, Driver, PeekPokeTester}
-
-import utils.AssemblyParser
-import utils.AssemblyInstruction
-import utils.DInstExtractor
+import utils.{AssemblyInstruction, AssemblyParser, DInstExtractor, SoftwareStructs}
 
 class DecodeInstructionTest(c: DecodeUnit) extends PeekPokeTester(c)
 {
@@ -18,7 +15,9 @@ class DecodeInstructionTest(c: DecodeUnit) extends PeekPokeTester(c)
         poke(c.io.inst, inst.bitPat)
         poke(c.io.tag, 1)
         step(1)
-
+        val dinst_str = SoftwareStructs.dinst(peek(c.io.dinst))
+        println(f"Input : 0x${inst.bitPat}%08X")
+        println(s"Output : ${dinst_str}")
         if (peek(c.io.dinst.inst_en) != 0) {
           dinst_out zip inst.io map { case (out, in) => expect(out, in)}
           expect(c.io.dinst.tag, 1)

@@ -119,12 +119,12 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   // transplant unit <> pstate
   state.io.getPort(1) <> tp.io.bram_port
 
-  val fetch_en = withReset(flush){RegInit(Bool())}
+  val fetch_en = withReset(flush){RegInit(0.U(1.W))}
   when(tp.io.fetch_start){fetch_en := true.B}
-  tp.io.tp_req := Mux(RegNext(fetch_en), decoder.io.tp_req, false.B)
+  tp.io.tp_req := Mux(RegNext(fetch_en.toBool()), decoder.io.tp_req, false.B)
 
   // IRAM(ppage)-> Fetch
-  fetch.io.en := fetch_en
+  fetch.io.en := fetch_en.toBool()
   fetch.io.PC := next_PC
   fetch.io.inst.ready := true.B // TODO: for now always ready ( change decoder to wait for branch instruction)
   fetch.io.tag_in := io.tag
@@ -233,15 +233,15 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   io.next_PC := next_PC
 
   // pstate in tp mode
-  tp.io.tp_pstate_out.PC := vec_pregs(tp.io.tp_tag).PC
-  tp.io.tp_pstate_out.SP := vec_pregs(tp.io.tp_tag).SP
-  tp.io.tp_pstate_out.EL := vec_pregs(tp.io.tp_tag).EL
-  tp.io.tp_pstate_out.NZCV := vec_pregs(tp.io.tp_tag).NZCV
+  tp.io.tp_pstate_in.PC := vec_pregs(tp.io.tp_tag).PC
+  tp.io.tp_pstate_in.SP := vec_pregs(tp.io.tp_tag).SP
+  tp.io.tp_pstate_in.EL := vec_pregs(tp.io.tp_tag).EL
+  tp.io.tp_pstate_in.NZCV := vec_pregs(tp.io.tp_tag).NZCV
   when(tp.io.tp_en && tp.io.tp_pstate_wen){
-    vec_pregs(tp.io.tp_tag).PC := tp.io.tp_pstate_in.PC
-    vec_pregs(tp.io.tp_tag).SP := tp.io.tp_pstate_in.SP
-    vec_pregs(tp.io.tp_tag).EL := tp.io.tp_pstate_in.EL
-    vec_pregs(tp.io.tp_tag).NZCV := tp.io.tp_pstate_in.NZCV
+    vec_pregs(tp.io.tp_tag).PC := tp.io.tp_pstate_out.PC
+    vec_pregs(tp.io.tp_tag).SP := tp.io.tp_pstate_out.SP
+    vec_pregs(tp.io.tp_tag).EL := tp.io.tp_pstate_out.EL
+    vec_pregs(tp.io.tp_tag).NZCV := tp.io.tp_pstate_out.NZCV
   }
   // update PC
   when(br_reg.io.deq.valid) {
