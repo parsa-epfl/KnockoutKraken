@@ -26,6 +26,18 @@ object FA_QflexCmds {
   val SIM_STOP   = 6
   // Commands QEMU<->SIM
   val LOCK_WAIT   = 7
+  def printCmd(cmd: Int)= {
+    cmd match {
+      case DATA_LOAD  => println("DATA_LOAD ")
+      case DATA_STORE => println("DATA_STORE")
+      case INST_FETCH => println("INST_FETCH")
+      case INST_UNDEF => println("INST_UNDEF")
+      case SIM_EXCP   => println("SIM_EXCP  ")
+      case SIM_START  => println("SIM_START ")
+      case SIM_STOP   => println("SIM_STOP  ")
+      case LOCK_WAIT  => println("LOCK_WAIT ")
+    }
+  }
 }
 
 /* sim : Chisel3 simulation
@@ -106,7 +118,8 @@ class SimulatorTests(c_ : Proc, cfg: SimulatorConfig) extends PeekPokeTester(c_)
   val timeoutms = 10000
 
   def timedOut = {
-    val isTimeOut = (tf - ti) / 1e9d > timeoutms
+    val isTimeOut = (tf - ti) / 1e6d > timeoutms
+    //println("time_elapsed:" + (tf - ti) / 1e9d)
     if(isTimeOut) {
       println("TIMED OUT")
       System.exit(1)
@@ -115,6 +128,7 @@ class SimulatorTests(c_ : Proc, cfg: SimulatorConfig) extends PeekPokeTester(c_)
   }
 
   def waitForCmd(filepath:String, timeoutms : Long): Int = {
+    println("WAITING FOR COMMAND")
     ti = System.nanoTime
     var cmd: Int = FA_QflexCmds.LOCK_WAIT
     do {
@@ -123,6 +137,7 @@ class SimulatorTests(c_ : Proc, cfg: SimulatorConfig) extends PeekPokeTester(c_)
       tf = System.nanoTime
     } while(cmd == FA_QflexCmds.LOCK_WAIT && !timedOut);
     writeCmd((FA_QflexCmds.LOCK_WAIT, 0), filepath)
+    println()
     cmd
   }
 
@@ -130,12 +145,14 @@ class SimulatorTests(c_ : Proc, cfg: SimulatorConfig) extends PeekPokeTester(c_)
     writeFile(path, ArmflexJson.cmd2json(cmd._1, cmd._2))
 
   def run() = {
+    println("RUN START")
     ti = System.nanoTime
     start_rtl()
     do {
       step(1)
       tf = System.nanoTime
     } while(peek(c.io.tp_done) == 0 && !timedOut);
+    println("RUN DONE")
   }
 
   def runSimulator(timeoutms: Long):Unit = {
@@ -150,13 +167,13 @@ class SimulatorTests(c_ : Proc, cfg: SimulatorConfig) extends PeekPokeTester(c_)
           updatePState(readFile(cfg.qemuStatePath), 0)
           updateProgramPage(cfg.pagePath)
           run()
+          writePState2File(cfg.simStatePath, 0)
+          writeCmd((FA_QflexCmds.INST_UNDEF, 0), cfg.qemuCmdPath)
         case FA_QflexCmds.SIM_STOP =>
           println("SIMULATION STOP")
           return
       }
-      writePState2File(cfg.simStatePath, 0)
-      writeCmd((FA_QflexCmds.INST_UNDEF, 0), cfg.simCmdPath)
-      tf = System.nanoTime
+     tf = System.nanoTime
     }
   }
 

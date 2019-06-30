@@ -120,9 +120,9 @@ trait ProcTestsBase extends PeekPokeTests {
     for( i <- 0 to 7 ) bytes(i) = ((lw >> ((7-i) * 8)) & 0xFF).toByte
     val msb = ByteBuffer.wrap(bytes.slice(0, 4)).getInt
     val lsb = ByteBuffer.wrap(bytes.slice(4, 8)).getInt
-    println("MSB:" + msb + "LSB:" + lsb)
     write32b_pstate(msb, offst)
     write32b_pstate(lsb, offst+1)
+    println(lw.toHexString + "=" + msb.toHexString + "|" + lsb.toHexString)
   }
 
   def write_pstate(tag: Int, pstate: SoftwareStructs.PState): Unit ={

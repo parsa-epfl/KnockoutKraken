@@ -62,5 +62,6 @@ scalacOptions ++= scalacOptionsVersion(scalaVersion.value)
 
 javacOptions ++= javacOptionsVersion(scalaVersion.value)
 
+fork in run := true
 
 val json4sNative = "org.json4s" %% "json4s-native" % "{latestVersion}"
