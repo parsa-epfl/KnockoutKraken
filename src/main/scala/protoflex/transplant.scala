@@ -79,9 +79,14 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
 
   // default values
   io.tp_tag := 0.U // TODO: Transplant multiple threads
-  io.tp_reg_wdata := Cat(bram_out_r(31,0), io.bram_port.dataOut.get(31,0)) // TODO: check endiness
+  val wire_64bits = WireInit(Cat(bram_out_r(31,0), io.bram_port.dataOut.get(31,0)))
   io.tp_pstate_wen := false.B
   io.tp_pstate_out := w_pstate_reg
+  val w_pstate_pc_en = WireInit(false.B)
+  val w_pstate_sp_en = WireInit(false.B)
+  val w_pstate_el_en = WireInit(false.B)
+  val w_pstate_nzcv_en = WireInit(false.B)
+
   val tp_reg_wen = WireInit(false.B)
   io.flush := io.tp_req
   io.done := done_r
@@ -178,22 +183,21 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
       sp_cnt := sp_cnt + 1.U
       bram_offset :=  sp_cnt
       when(sp_reg_count === 0.U){ // PC
-        val pc_msb = RegNext(io.bram_port.dataOut.get)
         pc_wait := pc_wait + 1.U
         when(pc_wait === 1.U){
-          w_pstate_reg.PC := Cat(pc_msb, io.bram_port.dataOut.get)
+          w_pstate_pc_en := true.B
           sp_reg_count := sp_reg_count + 1.U
         }
       }.otherwise{
         sp_reg_count := sp_reg_count + 1.U
         when(sp_reg_count === 1.U){ // SP
-          w_pstate_reg.SP := io.bram_port.dataOut.get
+          w_pstate_sp_en := true.B
         }
         when(sp_reg_count === 2.U){ // EL
-          w_pstate_reg.EL := io.bram_port.dataOut.get
+          w_pstate_el_en := true.B
         }
         when(sp_reg_count === 3.U){ // NZCV
-          w_pstate_reg.NZCV := io.bram_port.dataOut.get
+          w_pstate_nzcv_en := true.B
         }
         when(sp_reg_count === (SP_REG_N - 1).U){
           io.tp_pstate_wen := true.B
@@ -205,4 +209,9 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   io.tp_reg_wen := RegNext(tp_reg_wen)
   io.tp_reg_waddr := RegNext(g_reg_count)
   io.tp_reg_raddr := RegNext(g_reg_count)
+  io.tp_reg_wdata := wire_64bits
+  w_pstate_reg.PC := Mux(RegNext(w_pstate_pc_en), wire_64bits, w_pstate_reg.PC)
+  w_pstate_reg.SP := Mux(RegNext(w_pstate_sp_en), io.bram_port.dataOut.get(31,0), w_pstate_reg.SP)
+  w_pstate_reg.EL := Mux(RegNext(w_pstate_el_en), io.bram_port.dataOut.get(31,0), w_pstate_reg.EL)
+  w_pstate_reg.NZCV := Mux(RegNext(w_pstate_nzcv_en), io.bram_port.dataOut.get(31,0), w_pstate_reg.NZCV)
 }
