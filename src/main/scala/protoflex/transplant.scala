@@ -73,18 +73,16 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
     done_r := 0.U
   }
   val w_pstate_reg = RegInit(Wire(new PStateRegs()).empty)
-  val bram_out_r = RegInit(io.bram_port.dataOut.get)
+  val bram_out_r = RegNext(io.bram_port.dataOut.get)
   val done_r = RegInit(0.U(1.W))
 
 
   // default values
   io.tp_tag := 0.U // TODO: Transplant multiple threads
-  io.tp_reg_waddr := g_reg_count
-  io.tp_reg_wdata := Cat(bram_out_r, io.bram_port.dataOut.get) // TODO: check endiness
+  io.tp_reg_wdata := Cat(bram_out_r(31,0), io.bram_port.dataOut.get(31,0)) // TODO: check endiness
   io.tp_pstate_wen := false.B
   io.tp_pstate_out := w_pstate_reg
-  io.tp_reg_wen := false.B
-  io.tp_reg_raddr := g_reg_count
+  val tp_reg_wen = WireInit(false.B)
   io.flush := io.tp_req
   io.done := done_r
   io.fetch_start := false.B
@@ -166,7 +164,7 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
 
       }.otherwise{ // 2nd clock cycle
         g_reg_count := g_reg_count + 1.U
-        io.tp_reg_wen := true.B
+        tp_reg_wen := true.B
         when(g_reg_count === (REG_N - 1).U){ // done
           state := bram_to_proc_pstate
           bram_base := SP_ADDR
@@ -204,4 +202,7 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
       }
     }
   }
+  io.tp_reg_wen := RegNext(tp_reg_wen)
+  io.tp_reg_waddr := RegNext(g_reg_count)
+  io.tp_reg_raddr := RegNext(g_reg_count)
 }
