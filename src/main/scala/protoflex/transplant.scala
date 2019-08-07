@@ -6,6 +6,35 @@ import common.{BRAMConfig, BRAMPort}
 import common.PROCESSOR_TYPES._
 
 /*
+ * Fire : Host prepared state in BRAM and fires to tp start the transplant, completed HOST -> BRAM, now BRAM -> CPU by TP
+ * FireTag : Which Thread to transplant, it also clears the Done flag if it's still set up.
+ * Done : TP has a done flag vector to be consumed by the host, completed CPU -> BRAM, now BRAM -> HOST by HOST
+ */
+class TransplantUnitHostIO(implicit val cfg: ProcConfig) extends Bundle
+{
+  val fire    = Input(Bool())
+  val fireTag = Input(cfg.TAG_T)
+  val done    = Output(cfg.TAG_VEC_T)
+}
+
+/*
+ * Fire : TP has prepared state in CPU, CPU starts processing, completed BRAM -> CPU by TP, start CPU
+ * Done : CPU has hit a situation that requieres transplant back to Host, start CPU -> BRAM by TP
+ * Flush : Clears the CPU pipeline
+ * Freeze : Freezes threads which are waiting for it's state to be transplanted (CPU -> BRAM or BRAM -> CPU)
+ */
+class TransplantUnitCPUIO(implicit val cfg: ProcConfig) extends Bundle
+{
+  val fire = Output(Bool())
+  val done = Input(Bool())
+  val flush = Output(Bool())
+  val freeze = Output(cfg.TAG_VEC_T)
+  val fireTag = Output(cfg.TAG_T)
+  val doneTag = Input(cfg.TAG_T)
+  val flushTag = Output(cfg.TAG_T)
+}
+
+/*
 * Transplant unit: do following function
 * 1. Initialize Proc : read processor state from Bram and update Proc
 * 2. Transplant : flush pipeline and write back state to Bram
@@ -13,12 +42,14 @@ import common.PROCESSOR_TYPES._
 class TransplantUnitIO(implicit val cfg: ProcConfig) extends Bundle
 {
   implicit val stateBRAMc = cfg.stateBRAMc
-  // TP <-> proc
+  val host2tp = new TransplantUnitHostIO
+  val tp2cpu = new TransplantUnitCPUIO
 
+  // TP <-> proc
   val flush = Output(Bool())
   val tp_en = Output(Bool())
   val tp_req = Input(Bool())
-  val tp_tag = Output(TAG_T)
+  val tp_tag = Output(cfg.TAG_T)
   val fetch_start = Output(Bool())
   //general purpose register
   val tp_reg_waddr = Output(REG_T)
@@ -31,11 +62,6 @@ class TransplantUnitIO(implicit val cfg: ProcConfig) extends Bundle
   val tp_pstate_wen = Output(Bool())
   val tp_pstate_in = Input(new PStateRegs)
   val tp_pstate_out = Output(new PStateRegs)
-
-
-  // TP <--> magic block
-  val start = Input(Bool())
-  val done = Output(Bool())
 
   // TP <--> Bram for now use bram interface
   val bram_port = Flipped(new BRAMPort(1))
@@ -89,7 +115,7 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
 
   val tp_reg_wen = WireInit(false.B)
   io.flush := io.tp_req
-  io.done := done_r
+  val todoTag = 0.U // TODO
   io.fetch_start := false.B
   bram_offset := 0.U
 
@@ -98,14 +124,14 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   io.bram_port.dataIn.get := 0.U
   io.bram_port.writeEn.get := 0.U
 
-  val s_IDLE :: bram_to_proc_reg:: bram_to_proc_pstate :: proc_to_bram_reg  :: proc_to_bram_pstate :: Nil = Enum(5)
+  val s_IDLE :: bram_to_proc_reg :: bram_to_proc_pstate :: proc_to_bram_reg  :: proc_to_bram_pstate :: Nil = Enum(5)
   val state = RegInit(s_IDLE)
   io.tp_en := (state =/= s_IDLE)
   io.bram_port.en := (state =/= s_IDLE)
 
   switch(state) {
     is(s_IDLE) {
-      when(io.start) {
+      when(io.host2tp.fire) {
         state := bram_to_proc_reg
         bram_base := GEN_ADDR
         resetCounter()
@@ -116,6 +142,7 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
         resetCounter()
       }
     }
+
     is(proc_to_bram_reg){
       bram_offset := (g_reg_count<<1.U) | wait_r
       io.bram_port.writeEn.get := true.B
@@ -131,6 +158,7 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
         }
       }
     }
+
     is(proc_to_bram_pstate){
       sp_cnt := sp_cnt + 1.U
       bram_offset :=  sp_cnt
@@ -217,4 +245,15 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   w_pstate_reg.EL := Mux(RegNext(w_pstate_el_en), io.bram_port.dataOut.get(31,0), w_pstate_reg.EL)
   w_pstate_reg.NZCV := Mux(RegNext(w_pstate_nzcv_en), io.bram_port.dataOut.get(31,0), w_pstate_reg.NZCV)
   io.tp_pstate_wen := RegNext(tp_pstate_wen)
+
+
+  // TODO Signals
+  io.tp2cpu.flush := false.B
+  io.tp2cpu.fire := false.B
+  io.tp2cpu.freeze := 0.U
+  io.tp2cpu.flushTag := 0.U
+  io.tp2cpu.fireTag := 0.U
+  val doneVec = RegInit(VecInit(cfg.TAG_VEC_X.toBools))
+  doneVec(todoTag) := done_r
+  io.host2tp.done := doneVec.asUInt
 }

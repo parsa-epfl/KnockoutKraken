@@ -65,22 +65,12 @@ case class SimulatorConfig(
   val pagePath      = rootPath + "/" + pageFilename
 }
 
-class SimulatorTests(c_ : Proc, cfg: SimulatorConfig) extends PeekPokeTester(c_) with ProcTestsBase {
+class SimulatorTests(c_ : Proc, val cfg: SimulatorConfig) extends PeekPokeTester(c_) with ProcTestsBase {
   val INSN_SIZE = 4
   val pageSize = cfg.pageSizeBytes/INSN_SIZE
   override val c = c_
 
   val program_page = Array.ofDim[Int](pageSize)
-
-  def readProgramPageFile(path: String) ={
-    val f = new BufferedInputStream(new FileInputStream(path)) // page file in little endian
-    for(i <- 0 until pageSize){
-      val bytes = Array.ofDim[Byte](INSN_SIZE)
-      f.read(bytes,0,INSN_SIZE)
-      program_page(i) = ByteBuffer.wrap(bytes.reverse).getInt
-    }
-    f.close()
-  }
 
   def updateProgramPage(path: String) = {
     val bytearray: Array[Byte] = Files.readAllBytes(Paths.get(path))
@@ -88,9 +78,11 @@ class SimulatorTests(c_ : Proc, cfg: SimulatorConfig) extends PeekPokeTester(c_)
     for(i <- 0 until pageSize) {
       val insn_LE = bytearray.slice(i*INSN_SIZE, i*INSN_SIZE+INSN_SIZE)
       program_page(i) = ByteBuffer.wrap(insn_LE.reverse).getInt
-      hex += ByteBuffer.wrap(insn_LE).getInt.toHexString + "\n"
+      // Write Instruction word to BRAM
+      write_ppage(program_page(i), i)
+      //hex += ByteBuffer.wrap(insn_LE).getInt.toHexString + "\n" // Disassemble for debug
     }
-    writeFile(path+"_dis", hex) // Disassemble for debug
+    //writeFile(path + "_dis", hex) // Disassemble for debug
   }
 
   def readFile(path: String):String= {
@@ -151,7 +143,7 @@ class SimulatorTests(c_ : Proc, cfg: SimulatorConfig) extends PeekPokeTester(c_)
     do {
       step(1)
       tf = System.nanoTime
-    } while(peek(c.io.tp_done) == 0 && !timedOut);
+    } while(peek(c.io.host2tp.done) == 0 && !timedOut);
     println("RUN DONE")
   }
 
@@ -164,8 +156,8 @@ class SimulatorTests(c_ : Proc, cfg: SimulatorConfig) extends PeekPokeTester(c_)
       cmd match {
         case FA_QflexCmds.SIM_START =>
           println("SIMULATION START")
-          updatePState(readFile(cfg.qemuStatePath), 0)
           updateProgramPage(cfg.pagePath)
+          updatePState(readFile(cfg.qemuStatePath), 0)
           run()
           writePState2File(cfg.simStatePath, 0)
           writeCmd((FA_QflexCmds.INST_UNDEF, 0), cfg.qemuCmdPath)
@@ -181,12 +173,12 @@ class SimulatorTests(c_ : Proc, cfg: SimulatorConfig) extends PeekPokeTester(c_)
   runSimulator(10000)
 }
 
-class SimulatorTester(cfg: SimulatorConfig) extends ChiselFlatSpec {
+class SimulatorTester(val cfg: SimulatorConfig) extends ChiselFlatSpec with ArmflexBaseFlatSpec {
   override val backends = Array("verilator")
   println("Starting Simulator")
   // Extra usefull args : --is-verbose
   val chiselArgs = Array("-tn", "proc", "-td","./test/Sim", "--backend-name", "verilator")
-  iotesters.Driver.execute(chiselArgs, () => new Proc()(new ProcConfig(0))) {
+  iotesters.Driver.execute(chiselArgs, () => new Proc()) {
       c => new SimulatorTests(c, cfg)
   } should be(true)
   println("Done Simulator")

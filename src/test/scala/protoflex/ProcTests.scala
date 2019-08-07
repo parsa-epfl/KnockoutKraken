@@ -72,7 +72,7 @@ trait ProcTestsBase extends PeekPokeTests {
       "                    |      ",
       "------------------------------- WB STAGE -------------------------------------------",
       "                                                                               ",
-      " PC : " + peek(c.io.curr_PC) + " -> " + peek(c.io.next_PC),
+      " PC : " + peek(procStateDBG.curr_PC) + " -> " + peek(procStateDBG.next_PC),
       "+----------------------------------------------------------------------------------+",
       "|                                   DONE                                           |",
       "+-----------------------------------------------------------------------------------\n",
@@ -91,19 +91,20 @@ trait ProcTestsBase extends PeekPokeTests {
   // helper functions
 
   def start_rtl() = {
-    poke(c.io.tp_start, 1)
+    poke(c.io.host2tp.fire, 1)
+    poke(c.io.host2tp.fireTag, 0)
     step(1)
-    poke(c.io.tp_start, 0)
+    poke(c.io.host2tp.fire, 0)
   }
 
   def write_ppage(inst: Int, offst: Int) = {
-    poke(c.io.ppage_bram.en, 1)
-    poke(c.io.ppage_bram.writeEn.get, 1)
-    poke(c.io.ppage_bram.addr, offst)
-    poke(c.io.ppage_bram.dataIn.get, inst)
+    poke(c.io.ppageBRAM.en, 1)
+    poke(c.io.ppageBRAM.writeEn.get, 1)
+    poke(c.io.ppageBRAM.addr, offst)
+    poke(c.io.ppageBRAM.dataIn.get, inst)
     step(1)
-    poke(c.io.ppage_bram.en, 0)
-    poke(c.io.ppage_bram.writeEn.get, 0)
+    poke(c.io.ppageBRAM.en, 0)
+    poke(c.io.ppageBRAM.writeEn.get, 0)
   }
 
   def writeFullPPage(ppage: Array[Int], page_size: Int) = {
@@ -113,13 +114,13 @@ trait ProcTestsBase extends PeekPokeTests {
   }
 
   def write32b_pstate(word: Int, offst: Int) = {
-    poke(c.io.state_bram.en, 1)
-    poke(c.io.state_bram.writeEn.get, 1)
-    poke(c.io.state_bram.addr, offst)
-    poke(c.io.state_bram.dataIn.get, word)
+    poke(c.io.stateBRAM.en, 1)
+    poke(c.io.stateBRAM.writeEn.get, 1)
+    poke(c.io.stateBRAM.addr, offst)
+    poke(c.io.stateBRAM.dataIn.get, word)
     step(1)
-    poke(c.io.state_bram.en, 0)
-    poke(c.io.state_bram.writeEn.get, 0)
+    poke(c.io.stateBRAM.en, 0)
+    poke(c.io.stateBRAM.writeEn.get, 0)
   }
 
   // NOTE: Writes 2 words
@@ -130,28 +131,33 @@ trait ProcTestsBase extends PeekPokeTests {
     val lsb = ByteBuffer.wrap(bytes.slice(4, 8)).getInt
     write32b_pstate(msb, offst)
     write32b_pstate(lsb, offst+1)
-    println(lw.toHexString + "=" + msb.toHexString + "|" + lsb.toHexString)
   }
 
   def write_pstate(tag: Int, pstate: SoftwareStructs.PState): Unit ={
+    println("WRITE PSTATE")
     var offst = 0
     for(i <- 0 until 32 ) {
+      println(s"${PrintingTools.getReg(i)}:" + "%016x".format(pstate.xregs(i)))
       write64b_pstate(pstate.xregs(i), offst); offst += 2
     }
+    println("PC :" + "%016x".format(pstate.pc))
     write64b_pstate(pstate.pc, offst: Int); offst+=2
+    println("SP :" + 0)
     write32b_pstate(0, offst); offst+=1
+    println("EL :" + 0)
     write32b_pstate(0, offst); offst+=1
+    println("NZCV" + ":" + pstate.nzcv.toBinaryString)
     write32b_pstate(pstate.nzcv, offst); offst+=1
   }
 
   def read32b_pstate(offst:Int):Int = {
-    poke(c.io.state_bram.en, 1)
-    poke(c.io.state_bram.writeEn.get, 0)
-    poke(c.io.state_bram.addr, offst)
+    poke(c.io.stateBRAM.en, 1)
+    poke(c.io.stateBRAM.writeEn.get, 0)
+    poke(c.io.stateBRAM.addr, offst)
     step(1)
-    poke(c.io.state_bram.en, 0)
-    poke(c.io.state_bram.writeEn.get, 0)
-    val uint32 = peek(c.io.state_bram.dataOut.get)
+    poke(c.io.stateBRAM.en, 0)
+    poke(c.io.stateBRAM.writeEn.get, 0)
+    val uint32 = peek(c.io.stateBRAM.dataOut.get)
     return uint32.toInt
   }
 
