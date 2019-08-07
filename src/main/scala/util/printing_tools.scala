@@ -47,7 +47,7 @@ object PrintingTools {
     "op".padTo(8, ' ') + ": " + str
   }
 
-  def get_reg(r : BigInt) : String = {
+  def getReg(r : BigInt) : String = {
     val str = "X" + r.toInt.toString
     str.padTo(3, ' ')
   }
@@ -59,20 +59,20 @@ object PrintingTools {
     }
   }
 
-  def get_reg_op(rd : BigInt, rs1 : BigInt, rs2 : BigInt, rd_en : BigInt, rs1_en : BigInt, rs2_en : BigInt) : String = {
+  def getReg_op(rd : BigInt, rs1 : BigInt, rs2 : BigInt, rd_en : BigInt, rs1_en : BigInt, rs2_en : BigInt) : String = {
     (rd_en.toInt, rs1_en.toInt, rs2_en.toInt) match {
       case (0,0,0) => "XXX" + " <- " + "XXX" + "," + "XXX"
-      case (1,0,0) => get_reg(rd) + " <- "
-      case (0,1,0) => "XXX" + " <- " + get_reg(rs1)
-      case (1,1,0) => get_reg(rd) + " <- " + get_reg(rs1)
-      case (1,1,1) => get_reg(rd) + " <- " + get_reg(rs1) + "," + get_reg(rs2)
+      case (1,0,0) => getReg(rd) + " <- "
+      case (0,1,0) => "XXX" + " <- " + getReg(rs1)
+      case (1,1,0) => getReg(rd) + " <- " + getReg(rs1)
+      case (1,1,1) => getReg(rd) + " <- " + getReg(rs1) + "," + getReg(rs2)
       case _ => "? <-   ?,   ?"
     }
   }
 
   def get_rd_res(rd : BigInt, res : BigInt, rd_en : BigInt) : String = {
     rd_en.toInt match {
-      case Y => get_reg(rd) + " <- " + res.toInt
+      case Y => getReg(rd) + " <- " + res.toInt
       case N => "" // "XXX" + " <- " + "XXX"
     }
   }
@@ -175,7 +175,7 @@ object SoftwareStructs {
           "tag: " + tag.toString,
           get_itype(itype: BigInt),
           get_op(itype: BigInt, op: BigInt),
-          get_reg_op(rd: BigInt, rs1: BigInt, rs2: BigInt, rd_en: BigInt, rs1_en: BigInt, rs2_en: BigInt),
+          getReg_op(rd: BigInt, rs1: BigInt, rs2: BigInt, rd_en: BigInt, rs1_en: BigInt, rs2_en: BigInt),
           get_imm(imm: BigInt, imm_en: BigInt),
           get_shift(shift_type, shift_en, shift_val),
           get_cond(cond: BigInt, cond_en : BigInt),
