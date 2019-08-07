@@ -7,7 +7,7 @@ import common.PROCESSOR_TYPES._
 import common.DECODE_CONTROL_SIGNALS._
 import common.DECODE_MATCHING_TABLES._
 
-class DInst extends Bundle
+class DInst(implicit val cfg: ProcConfig) extends Bundle
 {
   // Data
   val rd    = REG_T
@@ -34,7 +34,7 @@ class DInst extends Bundle
   // Instruction is Valid
   val inst_en = Bool()
 
-  val tag = TAG_T
+  val tag = cfg.TAG_T
 
   def decode(inst : UInt, tag : UInt): DInst = {
     val decoder = ListLookup(inst, decode_default, decode_table)
@@ -96,17 +96,17 @@ class DInst extends Bundle
     // Instruction is Valid
     inst_en := N
 
-    tag := TAG_X
+    tag := cfg.TAG_X
 
     this
   }
 }
 
-class DecodeUnitIO extends Bundle
+class DecodeUnitIO(implicit val cfg: ProcConfig) extends Bundle
 {
   // Fetch - Decode
   val inst = Input(INST_T)
-  val tag  = Input(TAG_T)
+  val tag  = Input(cfg.TAG_T)
   val tp_req = Output(Bool())
 
   // Decode - Issue
@@ -116,7 +116,7 @@ class DecodeUnitIO extends Bundle
 /** Decode unit
   * Fowards the decoded instruction to the issue stage
   */
-class DecodeUnit extends Module
+class DecodeUnit(implicit val cfg: ProcConfig) extends Module
 {
   val io = IO(new DecodeUnitIO)
   val dinst = Wire(new DInst).decode(io.inst, io.tag)

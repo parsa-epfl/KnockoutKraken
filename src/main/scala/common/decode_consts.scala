@@ -77,7 +77,7 @@ object DECODE_CONTROL_SIGNALS
   // Instruction Types for chisel
   val TYPE_W = 3.W
   def I_T = UInt(TYPE_W)
-  val I_X = 0.U(TYPE_W)
+  val I_X = DEC_LITS.I_X.U(TYPE_W)
   val I_LogSR = DEC_LITS.I_LogSR.U(TYPE_W)
   val I_BImm  = DEC_LITS.I_BImm.U(TYPE_W)
   val I_BCImm = DEC_LITS.I_BCImm.U(TYPE_W)

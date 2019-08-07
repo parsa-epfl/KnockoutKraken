@@ -9,13 +9,6 @@ import chisel3.util.{BitPat,log2Ceil}
  */
 object PROCESSOR_TYPES
 {
-  // Number of threads
-  val NUM_THREADS = 4
-  val NUM_THREAD_W = log2Ceil(NUM_THREADS).W // 4 Threads
-  def TAG_T = UInt(NUM_THREAD_W)
-  val TAG_X = 0.U(NUM_THREAD_W)
-  val TAG_VEC_X = 0.U(NUM_THREADS.W)
-
   // Data
   val DATA_SZ = 64
   val DATA_W = DATA_SZ.W
@@ -49,6 +42,5 @@ object PROCESSOR_TYPES
   val TLB_SZ = log2Ceil(TLB_ENTRIES)
   val TLB_TAG =  VADDR - PG_OFFSET - TLB_SZ
   val PPN = PADDR - PG_OFFSET
-
 }
 

@@ -108,7 +108,7 @@ class ExecuteLog_SRCond(c: ExecuteUnit) extends PeekPokeTester(c)
 }
 
 
-class ExecuteTester extends ChiselFlatSpec
+class ExecuteTester extends ChiselFlatSpec with ArmflexBaseFlatSpec
 {
   behavior of "Executer"
 
@@ -126,7 +126,7 @@ class ExecuteTester extends ChiselFlatSpec
   }
 }
 
-object ExecuteRepl extends App {
+object ExecuteRepl extends App with ArmflexBaseFlatSpec {
   iotesters.Driver.executeFirrtlRepl(args, () => new ExecuteUnit)
 }
 

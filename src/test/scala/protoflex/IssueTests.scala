@@ -141,7 +141,7 @@ class IssueTestsPriority(c: IssueUnit) extends PeekPokeTester(c)
   cycle(12, false, 0, 0,  true, false,  true, 0, 0)
 }
 
-class IssueTester extends ChiselFlatSpec
+class IssueTester extends ChiselFlatSpec with ArmflexBaseFlatSpec
 {
   behavior of "IssueUnit"
 
@@ -164,10 +164,10 @@ class IssueTester extends ChiselFlatSpec
   * in an interactive shell. This can be very helpful as a debugging
   * technique. Type help to see a list of commands.
   */
-object IssueRepl extends App {
+object IssueRepl extends App with ArmflexBaseFlatSpec {
   iotesters.Driver.executeFirrtlRepl(args, () => new RRArbiter(4))
 }
 
-object IssueMain extends App {
+object IssueMain extends App with ArmflexBaseFlatSpec {
   chisel3.Driver.execute(args, () => new IssueUnit)
 }

@@ -61,7 +61,7 @@ class LSUTests(c: LoadStoreUnit) extends PeekPokeTester(c)
 
 }
 
-class LSUTester extends ChiselFlatSpec
+class LSUTester extends ChiselFlatSpec with ArmflexBaseFlatSpec
 {
   behavior of "Load Store"
 

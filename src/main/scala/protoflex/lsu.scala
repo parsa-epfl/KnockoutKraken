@@ -7,26 +7,26 @@ import common.DECODE_CONTROL_SIGNALS._
 import common.PROCESSOR_TYPES._
 
 // Minst is executed memory instruction
-class MInst extends Bundle {
+class MInst(implicit val cfg: ProcConfig) extends Bundle {
   val res  = DATA_T
   val rd   = REG_T
   val rd_en = C_T
-  val tag  = TAG_T
+  val tag  = cfg.TAG_T
 }
 
 // memory request from lsu to cache
-class MemReq extends Bundle{
+class MemReq(implicit val cfg: ProcConfig) extends Bundle{
   val addr = UInt(PADDR.W)
   val rw = C_T
   val data = DATA_T
 }
 
 // memory response from cache to lsu
-class MemRes extends Bundle{
+class MemRes(implicit val cfg: ProcConfig) extends Bundle{
   val data = DATA_T
 }
 
-class LoadStoreUnitIO extends Bundle
+class LoadStoreUnitIO(implicit val cfg: ProcConfig) extends Bundle
 {
   val dinst = Input(new DInst)
   val minst = Output(Valid(new MInst))
@@ -48,7 +48,7 @@ class LoadStoreUnitIO extends Bundle
   * rVal1 & rVal2 - input register values
   * pc - program counter (for pc relative addressing)
   * */
-class LoadStoreUnit extends Module
+class LoadStoreUnit(implicit val cfg: ProcConfig) extends Module
 {
   val io = IO(new LoadStoreUnitIO)
 

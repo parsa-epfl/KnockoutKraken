@@ -23,7 +23,7 @@ import common.PROCESSOR_TYPES._
  * the register can be accessed.
  */
 
-class PStateRegs extends Bundle
+class PStateRegs(implicit val cfg : ProcConfig) extends Bundle
 {
   val PC = DATA_T
   val SP = INST_T // Normaly 4 levels 32 bits
@@ -52,7 +52,7 @@ class PStateRegs extends Bundle
   }
 }
 
-class RFileIO extends Bundle
+class RFileIO(implicit val cfg : ProcConfig) extends Bundle
 {
   val rs1_addr = Input(REG_T)
   val rs1_data = Output(DATA_T)
@@ -68,7 +68,7 @@ class RFileIO extends Bundle
   *  Register file for each thread.
   *  single write port and two read ports
   */
-class RFile extends Module
+class RFile(implicit val cfg : ProcConfig) extends Module
 {
   val io = IO(new RFileIO())
 

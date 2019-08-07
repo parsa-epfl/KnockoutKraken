@@ -7,17 +7,17 @@ import chisel3.util.{Valid, MuxLookup, log2Ceil}
 import common.DECODE_CONTROL_SIGNALS._
 import common.PROCESSOR_TYPES._
 
-class EInst extends Bundle {
+class EInst(implicit val cfg: ProcConfig) extends Bundle {
   val res  = DATA_T
   val rd   = REG_T
   val rd_en = C_T
-  val tag  = TAG_T
+  val tag  = cfg.TAG_T
 
   val nzcv = NZCV_T
   val nzcv_en = C_T
 }
 
-class BasicALU extends Module {
+class BasicALU(implicit val cfg: ProcConfig) extends Module {
   val io = IO(new Bundle {
                 val a = Input(DATA_T)
                 val b = Input(DATA_T)
@@ -64,7 +64,7 @@ class BasicALU extends Module {
   io.res := res
 }
 
-class ShiftALU extends Module {
+class ShiftALU(implicit val cfg: ProcConfig) extends Module {
   val io = IO(new Bundle {
                 val word = Input(DATA_T)
                 val amount = Input(SHIFT_VAL_T)
@@ -95,7 +95,7 @@ class ShiftALU extends Module {
   io.res := res
 }
 
-class ExecuteUnitIO extends Bundle
+class ExecuteUnitIO(implicit val cfg: ProcConfig) extends Bundle
 {
   val dinst = Input(new DInst)
   val rVal1 = Input(DATA_T)
@@ -104,7 +104,7 @@ class ExecuteUnitIO extends Bundle
   val einst = Output(Valid(new EInst))
 }
 
-class ExecuteUnit extends Module
+class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
 {
   val io = IO(new ExecuteUnitIO)
 

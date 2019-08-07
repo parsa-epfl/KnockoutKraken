@@ -7,12 +7,12 @@ import chisel3.util.{MuxLookup, Valid}
 import common.DECODE_CONTROL_SIGNALS._
 import common.PROCESSOR_TYPES._
 
-class BInst extends Bundle {
+class BInst(implicit val cfg: ProcConfig) extends Bundle {
   val offset = DATA_T
-  val tag = TAG_T
+  val tag = cfg.TAG_T
 }
 
-class CondUnit extends Module
+class CondUnit(implicit val cfg: ProcConfig) extends Module
 {
   val io = IO( new Bundle {
                 val cond = Input(COND_T)
@@ -36,7 +36,7 @@ class CondUnit extends Module
   }
 }
 
-class BranchUnitIO extends Bundle
+class BranchUnitIO(implicit val cfg: ProcConfig) extends Bundle
 {
   val dinst = Input(new DInst)
   val nzcv  = Input(NZCV_T)
@@ -44,7 +44,7 @@ class BranchUnitIO extends Bundle
   val binst = Output(Valid(new BInst))
 }
 
-class BranchUnit extends Module
+class BranchUnit(implicit val cfg: ProcConfig) extends Module
 {
   val io = IO(new BranchUnitIO)
 

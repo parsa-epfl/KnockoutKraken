@@ -1,6 +1,7 @@
 package protoflex
 
 import scala.collection.mutable
+import scala.language.implicitConversions
 
 import java.io.{FileInputStream, FileOutputStream, IOException}
 import java.nio.ByteBuffer
@@ -11,11 +12,14 @@ import chisel3._
 import chisel3.iotesters.{ChiselFlatSpec, Driver, PeekPokeTester, PeekPokeTests}
 import utils.AssemblyParser
 import utils.SoftwareStructs
-import common.PROCESSOR_TYPES.{DATA_SZ, NUM_THREADS, REG_N}
+
+import common.PROCESSOR_TYPES.{DATA_SZ, REG_N}
+import utils.PrintingTools
 
 
 // base class contain utils for proc testing
 trait ProcTestsBase extends PeekPokeTests {
+  implicit def bigint2boolean(b:BigInt):Boolean = if(b != 0) true else false
   def int(x: Int): BigInt = { BigInt(x) }
   def int(x: Long): BigInt = { BigInt(x) }
 
@@ -28,12 +32,16 @@ trait ProcTestsBase extends PeekPokeTests {
   val random = scala.util.Random
 
   def printState():Unit = {
-    val sFet = SoftwareStructs.dinst(peek(c.io.inst_in))
-    val sDec = if(peek(c.io.dec_reg.valid) == 1) SoftwareStructs.dinst(peek(c.io.dec_reg.bits)) else "XXX"
-    val sIss = if(peek(c.io.issue_reg.valid) == 1) SoftwareStructs.dinst(peek(c.io.issue_reg.bits)) else "XXX"
-    val sExe = if(peek(c.io.exe_reg.valid) == 1) SoftwareStructs.einst(peek(c.io.exe_reg.bits)) else "XXX"
-    val sBr  = if(peek(c.io.br_reg.valid) == 1) SoftwareStructs.binst(peek(c.io.br_reg.bits)) else "XXX"
-    val wbEn =  peek(c.io.wen)
+    if(!c.cfg.DebugSignals) {
+      println("ProcStateDBG signals are not available")
+      return
+    }
+    val procStateDBG = c.io.procStateDBG.get
+    val sFet = SoftwareStructs.dinst(peek(procStateDBG.inst_in))
+    val sDec = if(peek(procStateDBG.decReg.valid))   SoftwareStructs.dinst(peek(procStateDBG.decReg.bits)) else "XXX"
+    val sIss = if(peek(procStateDBG.issueReg.valid)) SoftwareStructs.dinst(peek(procStateDBG.issueReg.bits)) else "XXX"
+    val sExe = if(peek(procStateDBG.exeReg.valid))   SoftwareStructs.einst(peek(procStateDBG.exeReg.bits)) else "XXX"
+    val sBr  = if(peek(procStateDBG.brReg.valid))    SoftwareStructs.binst(peek(procStateDBG.brReg.bits)) else "XXX"
     val state = Seq(
       "+----------------------------------------------------------------------------------+",
       "|                                   STATE                                          |",
@@ -182,8 +190,8 @@ class ProcTestsPipeline(c_ : Proc) extends PeekPokeTester(c_) with ProcTestsBase
 
   val insts = AssemblyParser.parse("alu.x")
   val br_insts = AssemblyParser.parse("branch.x")
-  poke(c.io.br_reg.ready, 1)
-  poke(c.io.exe_reg.ready, 1)
+  poke(c.io.brReg.ready, 1)
+  poke(c.io.exeReg.ready, 1)
   poke(c.io.valid, 0)
   poke(c.io.mem_res.valid, 0)
   poke(c.io.mem_res.bits.data, 0)
@@ -201,7 +209,7 @@ class ProcTestsPipeline(c_ : Proc) extends PeekPokeTester(c_) with ProcTestsBase
 
 }
 
-class ProcTester extends ChiselFlatSpec
+class ProcTester extends ChiselFlatSpec with ArmflexBaseFlatSpec
 {
   behavior of "Proc"
 

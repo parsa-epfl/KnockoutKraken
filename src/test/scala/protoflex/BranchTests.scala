@@ -66,7 +66,7 @@ class BranchTest(c: BranchUnit) extends PeekPokeTester(c)
     nzcv_all_cases.map { nzcv => cycle(i, nzcv : Seq[Int])}
 }
 
-class BranchTester extends ChiselFlatSpec
+class BranchTester extends ChiselFlatSpec with ArmflexBaseFlatSpec
 {
   behavior of "Branching"
 
@@ -78,10 +78,10 @@ class BranchTester extends ChiselFlatSpec
 
 }
 
-object BranchRepl extends App {
+object BranchRepl extends App with ArmflexBaseFlatSpec {
   iotesters.Driver.executeFirrtlRepl(args, () => new BranchUnit)
 }
 
-object BranchReplCondUnit extends App {
+object BranchReplCondUnit extends App with ArmflexBaseFlatSpec {
   iotesters.Driver.executeFirrtlRepl(args, () => new CondUnit)
 }

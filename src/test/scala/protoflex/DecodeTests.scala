@@ -46,7 +46,7 @@ class DecodeLDR_I(c: DecodeUnit) extends PeekPokeTester(c)
   val execute = new DecodeInstructionTest(c).decode(c, insts)
 }
 
-class DecodeTester extends ChiselFlatSpec
+class DecodeTester extends ChiselFlatSpec with ArmflexBaseFlatSpec
 {
   behavior of "Decoder"
 

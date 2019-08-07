@@ -7,14 +7,14 @@ import common.{BRAMConfig, BRAMPort}
 import common.PROCESSOR_TYPES._
 
 
-class FetchUnitIO() extends Bundle
+class FetchUnitIO(implicit val cfg: ProcConfig) extends Bundle
 {
   val en = Input(Bool())
   val PC = Input(DATA_T)
-  val tag_in  = Input(TAG_T)
+  val tag_in  = Input(cfg.TAG_T)
   // Fetch - decode
   val inst = Flipped(DeqIO(INST_T))
-  val tag_out  = Output(TAG_T)
+  val tag_out  = Output(cfg.TAG_T)
 
   // memory interface
   val data = Input(INST_T)

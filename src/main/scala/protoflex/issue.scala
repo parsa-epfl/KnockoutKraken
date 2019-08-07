@@ -43,7 +43,7 @@ class RRArbiter(arbN: Int)
   when(io.next.ready && valid) { curr := next + 1.U}
 }
 
-class IssueUnitIO extends Bundle {
+class IssueUnitIO(implicit val cfg: ProcConfig) extends Bundle {
   // flush
   val flush = Input(Bool())
   // Decode - Issue
@@ -53,11 +53,11 @@ class IssueUnitIO extends Bundle {
   val deq = Flipped(DeqIO(new DInst))
 
   //`Exec - Issue
-  val exe_reg = Flipped(Valid(new EInst))
+  val exeReg = Flipped(Valid(new EInst))
 
   // Mem - Issue
 //  val mem_rd = Input(REG_T)
-//  val mem_tag = Input(TAG_T)
+//  val mem_tag = Input(cfg.TAG_T)
 //  val mem_rd_v =Input(Bool())
 }
 
@@ -71,7 +71,7 @@ class IssueUnitIO extends Bundle {
   *
   * It's capable of buffering 3 instructions per thread.
   */
-class IssueUnit extends Module
+class IssueUnit(implicit val cfg: ProcConfig) extends Module
 {
   val io = IO(new IssueUnitIO)
 
@@ -81,9 +81,9 @@ class IssueUnit extends Module
     * reg_pipe_v The valid bit indicates whenever the register contains a valid decoded instruction.
     * sig_pipe_r This signal indicates whenever the register is ready to recieve the next instruction.
     */
-  val reg_pipe   = RegInit(VecInit(Seq.fill(NUM_THREADS)(Wire(new DInst).empty())))
-  val reg_pipe_v = withReset(io.flush || this.reset.toBool) {RegInit(VecInit(TAG_VEC_X.toBools))}
-  val sig_pipe_r = WireInit(VecInit(TAG_VEC_X.toBools))
+  val reg_pipe   = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(Wire(new DInst).empty())))
+  val reg_pipe_v = withReset(io.flush || this.reset.toBool) {RegInit(VecInit(cfg.TAG_VEC_X.toBools))}
+  val sig_pipe_r = WireInit(VecInit(cfg.TAG_VEC_X.toBools))
 
   /** Issue stage buffer
     * FIFO_i To buffer instructions we have a FIFO queue with flow and pipe modes enabled per thread.
@@ -95,16 +95,16 @@ class IssueUnit extends Module
     */
   def FIFO_i   = new Queue(new DInst, 2, pipe = true, flow = true)
   // Instanciates queue modules, expresses their IO through the vector
-  val fifo_vec = withReset(io.flush || this.reset.toBool) {VecInit(Seq.fill(NUM_THREADS)(Module(FIFO_i).io))}
+  val fifo_vec = withReset(io.flush || this.reset.toBool) {VecInit(Seq.fill(cfg.NB_THREADS)(Module(FIFO_i).io))}
 
   /** Issue stage arbiter
     * arbiter        Round Robin Arbiter
     * sig_pipe_i     This signal indicates which threads are ready to be issued
     * sig_next_idx   This signal indicates the next instruction to issue
     */
-  val arbiter       = Module(new RRArbiter(NUM_THREADS))
-  val sig_pipe_i    = VecInit(TAG_VEC_X.toBools)
-  val sig_next_idx  = WireInit(TAG_X)
+  val arbiter       = Module(new RRArbiter(cfg.NB_THREADS))
+  val sig_pipe_i    = VecInit(cfg.TAG_VEC_X.toBools)
+  val sig_next_idx  = WireInit(cfg.TAG_X)
 
   /** Managing backpressure
     */
@@ -135,11 +135,11 @@ class IssueUnit extends Module
   sig_pipe_i zip reg_pipe_v map { case (sig_rdy,reg_v) => sig_rdy := reg_v}
 
 
-  val rfile_wb_pending = io.exe_reg.valid && io.exe_reg.bits.rd_en
+  val rfile_wb_pending = io.exeReg.valid && io.exeReg.bits.rd_en
   exe_stall := rfile_wb_pending &&
-    ((reg_pipe(io.exe_reg.bits.tag).rs1 === io.exe_reg.bits.rd) ||
-       (reg_pipe(io.exe_reg.bits.tag).rs2 === io.exe_reg.bits.rd))
-  sig_pipe_i(io.exe_reg.bits.tag) := reg_pipe_v(io.exe_reg.bits.tag) && !exe_stall
+    ((reg_pipe(io.exeReg.bits.tag).rs1 === io.exeReg.bits.rd) ||
+       (reg_pipe(io.exeReg.bits.tag).rs2 === io.exeReg.bits.rd))
+  sig_pipe_i(io.exeReg.bits.tag) := reg_pipe_v(io.exeReg.bits.tag) && !exe_stall
   /*
    exe_stall := (io.exe_rd_v && ((reg_pipe(io.exe_tag).rs1 === io.exe_rd) || (reg_pipe(io.exe_tag).rs2 === io.exe_rd)))
    mem_stall := (io.mem_rd_v && ((reg_pipe(io.mem_tag).rs1 === io.mem_rd) || (reg_pipe(io.mem_tag).rs2 === io.mem_rd)))
