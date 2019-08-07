@@ -167,8 +167,7 @@ class BRAMTDP(implicit val c: BRAMConfig) extends Module {
            " must be greater or equal to the size of port1")
 
   val blackBoxBRAMTDP = Module(new BlackBoxBRAMTDP)
-  blackBoxBRAMTDP.io.clkA := this.clock
-  blackBoxBRAMTDP.io.clkB := this.clock
+  blackBoxBRAMTDP.io.clk := this.clock
 
   val portA = io.portA
   blackBoxBRAMTDP.io.weA   <> portA.writeEn.get
@@ -207,8 +206,7 @@ class BlackBoxBRAMTDP(implicit val c: BRAMConfig) extends BlackBox(
       "SIZE_B"         -> c.sizeVec(1)))
     with HasBlackBoxInline {
   val io = IO(new Bundle(){
-                val clkA  = Input(Clock())
-                val clkB  = Input(Clock())
+                val clk   = Input(Clock())
                 val enA   = Input(Bool())
                 val enB   = Input(Bool())
                 val weA   = Input(Bool())
@@ -226,92 +224,75 @@ class BlackBoxBRAMTDP(implicit val c: BRAMConfig) extends BlackBox(
       |// Dual-Port Block RAM with Two Write Ports
       |
       |module BlackBoxBRAMTDP #(
-      |    parameter ADDR_WIDTH_A = ${c.addrWidthVec(0)},
-      |    parameter DATA_WIDTH_A = ${c.dataWidthVec(0)},
-      |    parameter ADDR_WIDTH_B = ${c.addrWidthVec(1)},
-      |    parameter DATA_WIDTH_B = ${c.dataWidthVec(1)},
-      |    parameter SIZE_A       = ${c.sizeVec(0)},
-      |    parameter SIZE_B       = ${c.sizeVec(1)})
-      |   (clkA,clkB,enA,enB,weA,weB,addrA,addrB,diA,diB,doA,doB);
+      |                         parameter ADDR_WIDTH_A = ${c.addrWidthVec(0)},
+      |                         parameter DATA_WIDTH_A = ${c.dataWidthVec(0)},
+      |                         parameter ADDR_WIDTH_B = ${c.addrWidthVec(1)},
+      |                         parameter DATA_WIDTH_B = ${c.dataWidthVec(1)},
+      |                         parameter SIZE_A       = ${c.sizeVec(0)},
+      |                         parameter SIZE_B       = ${c.sizeVec(1)})
+      |   (clk,enA,enB,weA,weB,addrA,addrB,diA,diB,doA,doB);
       |
-      |input clkA,clkB,enA,enB,weA,weB;
-      |input [ADDR_WIDTH_A-1:0] addrA;
-      |input [ADDR_WIDTH_B-1:0] addrB;
-      |input [DATA_WIDTH_A-1:0] diA;
-      |input [DATA_WIDTH_B-1:0] diB;
-      |output [DATA_WIDTH_A-1:0] doA;
-      |output [DATA_WIDTH_B-1:0] doB;
-      |
+      |   input clk,enA,enB,weA,weB;
+      |   input [ADDR_WIDTH_A-1:0] addrA;
+      |   input [ADDR_WIDTH_B-1:0] addrB;
+      |   input [DATA_WIDTH_A-1:0] diA;
+      |   input [DATA_WIDTH_B-1:0] diB;
+      |   output [DATA_WIDTH_A-1:0] doA;
+      |   output [DATA_WIDTH_B-1:0] doB;
       |
       |`define max(a,b) {(a) > (b) ? (a) : (b)}
       |`define min(a,b) {(a) < (b) ? (a) : (b)}
       |
-      |function integer log2;
-      |input integer value;
-      |reg [31:0] shifted;
-      |integer res;
-      |begin
-      |  if (value < 2)
-      |  	 log2 = value;
-      |  else
-      |  begin
-      |  	 shifted = value-1;
-      |  	 for (res=0; shifted>0; res=res+1)
-      |  		 shifted = shifted>>1;
-      |  	 log2 = res;
-      |  end
-      |end
-      |endfunction
-      |
-      |localparam maxSIZE  = `max(SIZE_A, SIZE_B);
-      |localparam maxWIDTH = `max(DATA_WIDTH_A, DATA_WIDTH_B);
-      |localparam minWIDTH = `min(DATA_WIDTH_A, DATA_WIDTH_B);
-      |
-      |localparam RATIO = maxWIDTH / minWIDTH;
-      |localparam log2RATIO = log2(RATIO);
-      |
-      |reg[minWIDTH-1:0] ram [0:maxSIZE-1];
-      |reg[DATA_WIDTH_A-1:0] readA;
-      |reg[DATA_WIDTH_B-1:0] readB;
-      |
-      |always @(posedge clkB)
-      |begin
-      |  if (enB)
-      |  begin
-      |    if (weB)
-      |      ram[addrB] <= diB;
-      |    readB <= ram[addrB];
-      |  end
-      |end
-      |
-      |generate
-      |if(RATIO > 1)
-      |  always @(posedge clkA)
-      |  begin : portA
-      |    integer i;
-      |    reg [log2RATIO-1:0] lsbaddr;
-      |    for (i=0; i < RATIO; i = i + 1) begin
-      |      lsbaddr = i;
-      |      if (enA) begin
-      |        if (weA)
-      |          ram[{addrA, lsbaddr}] <= diA[(i+1)*minWIDTH-1 -: minWIDTH];
-      |        readA[(i+1)*minWIDTH-1 -: minWIDTH] <= ram[{addrA, lsbaddr}];
+      |   function integer log2;
+      |      input integer          value;
+      |      reg [31:0]             shifted;
+      |      integer                res;
+      |      begin
+      |         if (value < 2)
+      |  	       log2 = value;
+      |         else
+      |           begin
+      |  	          shifted = value-1;
+      |  	          for (res=0; shifted>0; res=res+1)
+      |  		          shifted = shifted>>1;
+      |  	          log2 = res;
+      |           end
       |      end
-      |    end
-      |  end
-      |else
-      |  always @(posedge clkA)
-      |  begin : portA
-      |    if (enA) begin
-      |      if (weA)
-      |        ram[addrA] <= diA;
-      |      readA <= ram[addrA];
-      |    end
-      |  end
-      |endgenerate
+      |   endfunction
       |
-      |assign doA = readA;
-      |assign doB = readB;
+      |   localparam maxSIZE  = `max(SIZE_A, SIZE_B);
+      |   localparam maxWIDTH = `max(DATA_WIDTH_A, DATA_WIDTH_B);
+      |   localparam minWIDTH = `min(DATA_WIDTH_A, DATA_WIDTH_B);
+      |
+      |   localparam RATIO = maxWIDTH / minWIDTH;
+      |   localparam log2RATIO = log2(RATIO);
+      |
+      |   reg[minWIDTH-1:0] ram [0:maxSIZE-1];
+      |   reg [DATA_WIDTH_A-1:0] readA;
+      |   reg [DATA_WIDTH_B-1:0] readB;
+      |
+      |   always @(posedge clk)
+      |     begin
+      |        if (enB)
+      |          begin
+      |             if (weB)
+      |               ram[addrB] <= diB;
+      |             readB <= ram[addrB];
+      |          end
+      |     end
+      |
+      |   always @(posedge clk)
+      |     begin
+      |        if (enA)
+      |          begin
+      |             if (weA)
+      |               ram[addrA] <= diA;
+      |             readA <= ram[addrA];
+      |          end
+      |     end
+      |
+      |   assign doA = readA;
+      |   assign doB = readB;
       |
       |endmodule
   """.stripMargin)
