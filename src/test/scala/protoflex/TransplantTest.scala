@@ -6,7 +6,7 @@ import chisel3.iotesters.{ChiselFlatSpec, Driver, PeekPokeTester}
 import common.{BRAMConfig, constBRAM, BRAMTestHelper}
 
 class TransplantTest(c: TransplantUnit) extends PeekPokeTester(c) {
-  poke(c.io.bram_port.dataOut.get, 0)
+  poke(c.io.stateBRAM.dataOut.get, 0)
 
   // start/initialize proc
   poke(c.io.host2tp.fireTag, 0)

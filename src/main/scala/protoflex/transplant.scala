@@ -111,13 +111,12 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
     done_r := 0.U
   }
   val w_pstate_reg = RegInit(Wire(new PStateRegs()).empty)
-  val bram_out_r = RegNext(io.bram_port.dataOut.get)
+  val bram_out_r = RegNext(io.stateBRAM.dataOut.get)
   val done_r = RegInit(0.U(1.W))
 
 
   // default values
-  io.tp_tag := 0.U // TODO: Transplant multiple threads
-  val wire_64bits = WireInit(Cat(bram_out_r(31,0), io.bram_port.dataOut.get(31,0)))
+  val wire_64bits = WireInit(Cat(bram_out_r(31,0), io.stateBRAM.dataOut.get(31,0)))
   val tp_pstate_wen = WireInit(false.B)
   io.tp_pstate_out := w_pstate_reg
   val w_pstate_pc_en = WireInit(false.B)
@@ -126,20 +125,20 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   val w_pstate_nzcv_en = WireInit(false.B)
 
   val tp_reg_wen = WireInit(false.B)
-  io.flush := io.tp_req
+  io.tp2cpu.flush := io.host2tp.fire
   val todoTag = 0.U // TODO
-  io.fetch_start := false.B
+  io.tp2cpu.fire := false.B
   bram_offset := 0.U
 
   // bram interface
-  io.bram_port.addr := bram_base + bram_offset
-  io.bram_port.dataIn.get := 0.U
-  io.bram_port.writeEn.get := 0.U
+  io.stateBRAM.addr := bram_base + bram_offset
+  io.stateBRAM.dataIn.get := 0.U
+  io.stateBRAM.writeEn.get := 0.U
 
   val s_IDLE :: bram_to_proc_reg :: bram_to_proc_pstate :: proc_to_bram_reg  :: proc_to_bram_pstate :: Nil = Enum(5)
   val state = RegInit(s_IDLE)
   io.tp_en := (state =/= s_IDLE)
-  io.bram_port.en := (state =/= s_IDLE)
+  io.stateBRAM.en := (state =/= s_IDLE)
 
   switch(state) {
     is(s_IDLE) {
@@ -148,7 +147,7 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
         bram_base := GEN_ADDR
         resetCounter()
       }
-      when(io.tp_req){
+      when(io.host2tp.fire){
         state := proc_to_bram_reg
         bram_base := GEN_ADDR
         resetCounter()
@@ -157,12 +156,12 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
 
     is(proc_to_bram_reg){
       bram_offset := (g_reg_count<<1.U) | wait_r
-      io.bram_port.writeEn.get := true.B
+      io.stateBRAM.writeEn.get := true.B
       wait_r := wait_r + 1.U
       when( wait_r === 0.U){
-        io.bram_port.dataIn.get := io.tp_reg_rdata(DATA_SZ - 1,DATA_SZ/2)
+        io.stateBRAM.dataIn.get := io.tp_reg_rdata(DATA_SZ - 1,DATA_SZ/2)
       }.otherwise{
-        io.bram_port.dataIn.get := io.tp_reg_rdata((DATA_SZ/2)-1,0)
+        io.stateBRAM.dataIn.get := io.tp_reg_rdata((DATA_SZ/2)-1,0)
         g_reg_count := g_reg_count + 1.U
         when(g_reg_count === (REG_N - 1).U){
           state := proc_to_bram_pstate
@@ -174,26 +173,26 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
     is(proc_to_bram_pstate){
       sp_cnt := sp_cnt + 1.U
       bram_offset :=  sp_cnt
-      io.bram_port.writeEn.get := true.B
+      io.stateBRAM.writeEn.get := true.B
       // do this in better way
       when(sp_reg_count === 0.U){
         pc_wait := pc_wait + 1.U
         when(pc_wait === 0.U){
-          io.bram_port.dataIn.get := io.tp_pstate_in.PC(DATA_SZ - 1,DATA_SZ/2)
+          io.stateBRAM.dataIn.get := io.tp_pstate_in.PC(DATA_SZ - 1,DATA_SZ/2)
         }.otherwise{
-          io.bram_port.dataIn.get := io.tp_pstate_in.PC((DATA_SZ/2)-1,0)
+          io.stateBRAM.dataIn.get := io.tp_pstate_in.PC((DATA_SZ/2)-1,0)
           sp_reg_count := sp_reg_count + 1.U
         }
       }.otherwise{
         sp_reg_count := sp_reg_count + 1.U
         when(sp_reg_count === 1.U){
-          io.bram_port.dataIn.get := io.tp_pstate_in.SP
+          io.stateBRAM.dataIn.get := io.tp_pstate_in.SP
         }
         when(sp_reg_count === 2.U){
-          io.bram_port.dataIn.get := io.tp_pstate_in.EL
+          io.stateBRAM.dataIn.get := io.tp_pstate_in.EL
         }
         when(sp_reg_count === 3.U){
-          io.bram_port.dataIn.get := io.tp_pstate_in.NZCV
+          io.stateBRAM.dataIn.get := io.tp_pstate_in.NZCV
         }
         when(sp_reg_count === SP_REG_N.U){
           done_r := true.B
@@ -242,22 +241,23 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
           tp_pstate_wen := true.B
         }
         when(sp_reg_count === 5.U){ // Done transplanting
-          io.fetch_start := true.B
+          io.tp2cpu.fire := true.B
           state := s_IDLE
         }
       }
     }
   }
-  io.tp_reg_wen := RegNext(tp_reg_wen)
-  io.tp_reg_waddr := RegNext(g_reg_count)
-  io.tp_reg_raddr := RegNext(g_reg_count)
-  io.tp_reg_wdata := wire_64bits
-  w_pstate_reg.PC := Mux(RegNext(w_pstate_pc_en), wire_64bits, w_pstate_reg.PC)
-  w_pstate_reg.SP := Mux(RegNext(w_pstate_sp_en), io.bram_port.dataOut.get(31,0), w_pstate_reg.SP)
-  w_pstate_reg.EL := Mux(RegNext(w_pstate_el_en), io.bram_port.dataOut.get(31,0), w_pstate_reg.EL)
-  w_pstate_reg.NZCV := Mux(RegNext(w_pstate_nzcv_en), io.bram_port.dataOut.get(31,0), w_pstate_reg.NZCV)
-  io.tp_pstate_wen := RegNext(tp_pstate_wen)
+  io.rfile.rs1_addr := RegNext(g_reg_count)
 
+  // Transplant Unit : BRAM -> CPU
+  io.rfile.wen := RegNext(tp_reg_wen)
+  io.rfile.waddr := RegNext(g_reg_count)
+  io.rfile.wdata := wire_64bits
+
+  io.tp2cpustate.PC := wire_64bits
+  io.tp2cpustate.SP := TPU2STATE.PStateGet_SP(bram_out_r)
+  io.tp2cpustate.EL := TPU2STATE.PStateGet_EL(bram_out_r)
+  io.tp2cpustate.NZCV := TPU2STATE.PStateGet_NZCV(bram_out_r)
 
   // TODO Signals
   io.tp2cpu.flush := false.B
@@ -265,7 +265,14 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   io.tp2cpu.freeze := 0.U
   io.tp2cpu.flushTag := 0.U
   io.tp2cpu.fireTag := 0.U
-  val doneVec = RegInit(VecInit(cfg.TAG_VEC_X.toBools))
-  doneVec(todoTag) := done_r
-  io.host2tp.done := doneVec.asUInt
+  io.host2tp.done := done_r
+
 }
+
+object TPU2STATE {
+  val r_WAIT :: r_PC :: r_SP_EL_NZCV :: Nil = Enum(2)
+  def PStateGet_NZCV(word: UInt): UInt = word(3,0)
+  def PStateGet_EL(word: UInt): UInt = word(4,4)
+  def PStateGet_SP(word: UInt): UInt = word(5,5)
+}
+

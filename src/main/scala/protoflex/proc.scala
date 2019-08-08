@@ -63,10 +63,10 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   // BRAM PC State
   val state = Module(new BRAM()(cfg.stateBRAMc))
   // Transplant Unit
-  val tp = Module(new TransplantUnit())
+  val tpu = Module(new TransplantUnit())
 
-  // Reset | Clear thread state
-  val flush = (tp.io.flush || reset.toBool)
+  // Reset | Clear thread state TODO
+  val flush = (tpu.io.flush || reset.toBool)
 
   // Pipeline -----------------------------------------------
   // Fetch
@@ -89,8 +89,9 @@ class Proc(implicit val cfg: ProcConfig) extends Module
 
   // Internal State -----------------------------------------
   // PState
+  val emptyPStateRegs = Wire(new PStateRegs()).empty
   val vec_rfile = VecInit(Seq.fill(cfg.NB_THREADS)(Module(new RFile).io))
-  val vec_pregs = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(Wire(new PStateRegs()).empty)))
+  val vec_pregs = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(emptyPStateRegs)))
   // PCs
   val curr_PC = Wire(DATA_T)
   val next_PC = Wire(DATA_T)
@@ -101,11 +102,12 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   io.ppageBRAM <> ppage.io.getPort(0)
   io.stateBRAM <> state.io.getPort(0)
 
-  io.host2tp <> tp.io.host2tp
+  io.host2tp <> tpu.io.host2tp
 
   // Transplant Unit TP <> CPU
-  tp.io.tp2cpu.done := false.B
-  tp.io.tp2cpu.doneTag := 0.U
+  state.io.getPort(1) <> tpu.io.stateBRAM
+  tpu.io.tp2cpu.done := false.B
+  tpu.io.tp2cpu.doneTag := 0.U
 
   // fetch <> ppage
   ppage.io.getPort(1).dataIn.get := 0.U
@@ -115,11 +117,10 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   fetch.io.data := ppage.io.getPort(1).dataOut.get
 
   // transplant unit <> pstate
-  state.io.getPort(1) <> tp.io.bram_port
 
   val fetch_en = withReset(flush){RegInit(false.B)}
-  when(tp.io.fetch_start) { fetch_en := true.B }
-  tp.io.tp_req := Mux(RegNext(fetch_en.toBool()), decoder.io.tp_req, false.B)
+  when(tpu.io.fetch_start) { fetch_en := true.B }
+  tpu.io.tp_req := Mux(RegNext(fetch_en.toBool()), decoder.io.tp_req, false.B)
 
   // IRAM(ppage)-> Fetch TODO
   fetch.io.en := fetch_en
@@ -143,15 +144,15 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   // Execute : Issue -> Execute
   val issued_dinst = issuer.io.deq.bits
   val issued_tag = issued_dinst.tag
-  val tag_select = Mux(tp.io.tp_en, tp.io.tp_tag, issued_tag)
+  val tag_select = Mux(tpu.io.tp_en, tpu.io.tp_tag, issued_tag)
   issuer.io.deq.ready := exeReg.io.enq.ready || brReg.io.enq.ready
   // Check for front pressure
   issuer.io.exeReg.bits := exeReg.io.deq.bits
   issuer.io.exeReg.valid :=  exeReg.io.deq.valid
 
   /** Execute */
-  val rs1_addr = Mux(tp.io.tp_en, tp.io.tp_reg_raddr, issued_dinst.rs1)
-  val rs2_addr = Mux(tp.io.tp_en, tp.io.tp_reg_raddr, issued_dinst.rs2)
+  val rs1_addr = Mux(tpu.io.tp_en, tpu.io.tp_reg_raddr, issued_dinst.rs1)
+  val rs2_addr = Mux(tpu.io.tp_en, tpu.io.tp_reg_raddr, issued_dinst.rs2)
   // connect rfile read(address) interface
   vec_rfile map { case rfile =>
     rfile.rs1_addr := rs1_addr
@@ -162,8 +163,8 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   val rVal2 = vec_rfile(tag_select).rs2_data
 
   // reading register: transplant
-  tp.io.tp_reg_rdata := rVal1
-  tp.io.tp_reg_rdata := rVal2
+  tpu.io.tp_reg_rdata := rVal1
+  tpu.io.tp_reg_rdata := rVal2
 
   // connect executeUnit interface
   executer.io.rVal1 := rVal1
@@ -206,14 +207,14 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   brReg.io.deq.ready := true.B
 
   // connect RFile's write interface
-  val waddr = Mux(tp.io.tp_en, tp.io.tp_reg_waddr, exeReg.io.deq.bits.rd)
-  val wdata = Mux(tp.io.tp_en, tp.io.tp_reg_wdata, exeReg.io.deq.bits.res)
+  val waddr = Mux(tpu.io.tp_en, tpu.io.tp_reg_waddr, exeReg.io.deq.bits.rd)
+  val wdata = Mux(tpu.io.tp_en, tpu.io.tp_reg_wdata, exeReg.io.deq.bits.res)
   vec_rfile map { case rfile =>
     rfile.waddr := waddr
     rfile.wdata := wdata
     rfile.wen := false.B
   }
-  val wen = Mux(tp.io.tp_en, tp.io.tp_reg_wen, exeReg.io.deq.bits.rd_en && exeReg.io.deq.valid)
+  val wen = Mux(tpu.io.tp_en, tpu.io.tp_reg_wen, exeReg.io.deq.bits.rd_en && exeReg.io.deq.valid)
   vec_rfile(tag_select).wen := wen
 
   // PState Regs
@@ -226,18 +227,7 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   curr_PC := vec_pregs(last_thread).PC
   next_PC := vec_pregs(last_thread).PC
 
-  // pstate in tp mode
-  tp.io.tp_pstate_in.PC := vec_pregs(tp.io.tp_tag).PC
-  tp.io.tp_pstate_in.SP := vec_pregs(tp.io.tp_tag).SP
-  tp.io.tp_pstate_in.EL := vec_pregs(tp.io.tp_tag).EL
-  tp.io.tp_pstate_in.NZCV := vec_pregs(tp.io.tp_tag).NZCV
-  when(tp.io.tp_en && tp.io.tp_pstate_wen){
-    vec_pregs(tp.io.tp_tag).PC := tp.io.tp_pstate_out.PC
-    vec_pregs(tp.io.tp_tag).SP := tp.io.tp_pstate_out.SP
-    vec_pregs(tp.io.tp_tag).EL := tp.io.tp_pstate_out.EL
-    vec_pregs(tp.io.tp_tag).NZCV := tp.io.tp_pstate_out.NZCV
-  }
-  // update PC
+ // update PC
   when(brReg.io.deq.valid) {
     vec_pregs(brReg.io.deq.bits.tag).PC := (vec_pregs(brReg.io.deq.bits.tag).PC.zext + brReg.io.deq.bits.offset.asSInt).asUInt()
     curr_PC := vec_pregs(brReg.io.deq.bits.tag).PC
@@ -250,7 +240,23 @@ class Proc(implicit val cfg: ProcConfig) extends Module
     last_thread := exeReg.io.deq.bits.tag
   }
 
-  // DEBUG Signals
+  // Transplant Activated ----------------------------------------------------
+  tpu.io.cpustate2tp := vec_pregs(tpu.io.tp2cpu.freezeTag)
+  when(tpu.io.tp2cpu.freeze) {
+    vec_rfile(tpu.io.tp2cpu.freezeTag) <> tpu.io.rfile
+    when(tpu.io.tp2cpustateReg === TPU2STATE.r_PC) {
+      vec_pregs(tpu.io.tp2cpu.freezeTag).PC := tpu.io.tp2cpustate.PC
+    }.elsewhen(tpu.io.tp2cpustateReg === TPU2STATE.r_SP_EL_NZCV){
+      vec_pregs(tpu.io.tp2cpu.freezeTag).SP := tpu.io.tp2cpustate.SP
+      vec_pregs(tpu.io.tp2cpu.freezeTag).EL := tpu.io.tp2cpustate.EL
+      vec_pregs(tpu.io.tp2cpu.freezeTag).NZCV := tpu.io.tp2cpustate.NZCV
+    }.otherwise {
+      // Freeze PSTATE, When not written by TPU
+      vec_pregs(tpu.io.tp2cpu.freezeTag) := vec_pregs(tpu.io.tp2cpu.freezeTag)
+    }
+  }
+
+  // DEBUG Signals ------------------------------------------------------------
   if(cfg.DebugSignals) {
     io.procStateDBG.get.inst_in   := decoder.io.dinst
 
