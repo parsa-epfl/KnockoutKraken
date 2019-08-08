@@ -6,51 +6,35 @@ import common.{BRAMConfig, BRAMPort}
 import common.PROCESSOR_TYPES._
 
 /*
- * Fire : Host prepared state in BRAM and fires to tp start the transplant, completed HOST -> BRAM, now BRAM -> CPU by TP
- * FireTag : Which Thread to transplant, it also clears the Done flag if it's still set up.
- * Done : TP has a done flag vector to be consumed by the host, completed CPU -> BRAM, now BRAM -> HOST by HOST
+ * Transplant Unit (TPU):
+ * 0. Beforehand STATE -> BRAM by HOST
+ * 1. When host2cpu fire
+ *    1. freeze CPU (tp2cpu.freeze)
+ *    2. transplant state BRAM -> CPU
+ *    3. unfreeze CPU
+ *    4. fire CPU   (tp2cpu.fire)
+ * 2. When tp2cpu done
+ *    1. freeze CPU (tp2cpu.freeze)
+ *    2. transplant state CPU -> BRAM
+ *    3. unfreeze CPU
+ *    4. flush CPU
+ *    5. Set host2cpu done
+ * 3. Afterhand by HOST
+ *    1. Read BRAM -> HOST
  */
-class TransplantUnitHostIO(implicit val cfg: ProcConfig) extends Bundle
-{
-  val fire    = Input(Bool())
-  val fireTag = Input(cfg.TAG_T)
-  val done    = Output(cfg.TAG_VEC_T)
-}
-
-/*
- * Fire : TP has prepared state in CPU, CPU starts processing, completed BRAM -> CPU by TP, start CPU
- * Done : CPU has hit a situation that requieres transplant back to Host, start CPU -> BRAM by TP
- * Flush : Clears the CPU pipeline
- * Freeze : Freezes threads which are waiting for it's state to be transplanted (CPU -> BRAM or BRAM -> CPU)
- */
-class TransplantUnitCPUIO(implicit val cfg: ProcConfig) extends Bundle
-{
-  val fire = Output(Bool())
-  val done = Input(Bool())
-  val flush = Output(Bool())
-  val freeze = Output(cfg.TAG_VEC_T)
-  val fireTag = Output(cfg.TAG_T)
-  val doneTag = Input(cfg.TAG_T)
-  val flushTag = Output(cfg.TAG_T)
-}
-
-/*
-* Transplant unit: do following function
-* 1. Initialize Proc : read processor state from Bram and update Proc
-* 2. Transplant : flush pipeline and write back state to Bram
-* */
 class TransplantUnitIO(implicit val cfg: ProcConfig) extends Bundle
 {
   implicit val stateBRAMc = cfg.stateBRAMc
   val host2tp = new TransplantUnitHostIO
   val tp2cpu = new TransplantUnitCPUIO
 
-  // TP <-> proc
-  val flush = Output(Bool())
+  val tp2cpustateReg = Output(TPU2STATE.r_PC.cloneType) // Current state reg being written
+  val tp2cpustate = Output(new PStateRegs)
+  val cpustate2tp = Input(new PStateRegs)
+  val rfile = Flipped(new RFileIO)
+
   val tp_en = Output(Bool())
-  val tp_req = Input(Bool())
-  val tp_tag = Output(cfg.TAG_T)
-  val fetch_start = Output(Bool())
+
   //general purpose register
   val tp_reg_waddr = Output(REG_T)
   val tp_reg_wdata = Output(DATA_T)
@@ -63,18 +47,46 @@ class TransplantUnitIO(implicit val cfg: ProcConfig) extends Bundle
   val tp_pstate_in = Input(new PStateRegs)
   val tp_pstate_out = Output(new PStateRegs)
 
-  // TP <--> Bram for now use bram interface
-  val bram_port = Flipped(new BRAMPort(1))
-
-  // decouble bram interface from module
-  //  val raddr = Output(DATA_T)
-  //  val rdata = Input(DATA_T)
-  //  val rd_en = Output(Bool())
-  //  val wdata = Input(INST_T)
-  //  val waddr = Output(DATA_T)
-  //  val w_en = Output(Bool())
+  // TPU <--> Bram for now use bram interface
+  val stateBRAM = Flipped(new BRAMPort(1))
 }
 
+/*
+ * Fire    : Host prepared state in BRAM and fires to tp start the transplant,
+ *           completed HOST -> BRAM, now BRAM -> CPU by TPU
+ * FireTag : Which Thread to transplant.
+ * Done    : CPU hit a transplant condition
+ *           TPU has completed the CPU -> BRAM
+ *           Now instruct HOST to perform BRAM -> HOST
+ *
+ * Note: Fire and FireTag are expected to be Pulsed
+ */
+class TransplantUnitHostIO(implicit val cfg: ProcConfig) extends Bundle
+{
+  val fire    = Input(Bool())
+  val fireTag = Input(cfg.TAG_T)
+  val done    = Output(cfg.TAG_T)
+}
+
+/*
+ * Freeze : Freezes thread which state's is being transplanted (CPU -> BRAM or BRAM -> CPU)
+ * Fire : TPU has complted state transfer : BRAM -> CPU
+ *        Now instruct CPU to start processing
+ * Done : CPU has hit a transplant condition
+ *        Now TPU has to bring state to BRAM : CPU -> BRAM
+ * Flush : Clears the CPU pipeline
+ */
+class TransplantUnitCPUIO(implicit val cfg: ProcConfig) extends Bundle
+{
+  val flush = Output(Bool())
+  val freeze = Output(Bool())
+  val fire = Output(Bool())
+  val done = Input(Bool())
+  val flushTag = Output(cfg.TAG_T)
+  val fireTag = Output(cfg.TAG_T)
+  val freezeTag = Output(cfg.TAG_T)
+  val doneTag = Input(cfg.TAG_T)
+}
 
 class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   val io = IO(new TransplantUnitIO)
