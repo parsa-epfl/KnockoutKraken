@@ -91,10 +91,10 @@ trait ProcTestsBase extends PeekPokeTests {
   // helper functions
 
   def start_rtl() = {
-    poke(c.io.host2tp.fire, 1)
-    poke(c.io.host2tp.fireTag, 0)
+    poke(c.io.host2tpu.fire, 1)
+    poke(c.io.host2tpu.fireTag, 0)
     step(1)
-    poke(c.io.host2tp.fire, 0)
+    poke(c.io.host2tpu.fire, 0)
   }
 
   def write_ppage(inst: Int, offst: Int) = {
@@ -142,10 +142,9 @@ trait ProcTestsBase extends PeekPokeTests {
     }
     println("PC :" + "%016x".format(pstate.pc))
     write64b_pstate(pstate.pc, offst: Int); offst+=2
+    // TODO Write SP, EL and NZCV as Cat(EL, SP, NZCV)
     println("SP :" + 0)
-    write32b_pstate(0, offst); offst+=1
     println("EL :" + 0)
-    write32b_pstate(0, offst); offst+=1
     println("NZCV" + ":" + pstate.nzcv.toBinaryString)
     write32b_pstate(pstate.nzcv, offst); offst+=1
   }

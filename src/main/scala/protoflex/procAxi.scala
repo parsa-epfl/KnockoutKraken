@@ -28,7 +28,7 @@ class procAxiWrap(implicit val cfg: ProcConfig) extends Module {
   // 0 -> RDONLY, 1 -> Pulse, 2 -> CTRL, 3 -> CTRL
   def reg(reg:Int, offst:Int, size:Int) = regFile.io.regsValues(reg)(offst+(size-1),offst)
 
-  val host2tp = Wire(new TransplantUnitHostIO)
+  val host2tpu = Wire(new TransplantUnitHostIO)
   /** Register 0 (Pulse-Only)
     * +----------------------------------------------------+
     * |                 to Transplant Cmds                 |
@@ -39,8 +39,8 @@ class procAxiWrap(implicit val cfg: ProcConfig) extends Module {
     * +-----------+--------------------+-------------------+
     *
     */
-  proc.io.host2tp.fire    := RegNext(reg(0, 31, 1))
-  proc.io.host2tp.fireTag := RegNext(reg(0, 0, cfg.NB_THREADS))
+  proc.io.host2tpu.fire    := RegNext(reg(0, 31, 1))
+  proc.io.host2tpu.fireTag := RegNext(reg(0, 0, cfg.NB_THREADS))
 
   /** Register 1 (Read-Only)
     * +----------------------------------------+
@@ -52,7 +52,7 @@ class procAxiWrap(implicit val cfg: ProcConfig) extends Module {
     * +-----------------+----------+-----------+
     *
     */
-  reg(1, 0, cfg.NB_THREADS) := proc.io.host2tp.done
+  reg(1, 0, cfg.NB_THREADS) := proc.io.host2tpu.done
 
   /** Register 2
     * +----------------------------------------+

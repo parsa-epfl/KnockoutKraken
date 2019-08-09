@@ -107,7 +107,7 @@ class SimulatorTests(c_ : Proc, val cfg: SimulatorConfig) extends PeekPokeTester
 
   var tf = System.nanoTime
   var ti = System.nanoTime
-  val timeoutms = 10000
+  val timeoutms = 15000
 
   def timedOut = {
     val isTimeOut = (tf - ti) / 1e6d > timeoutms
@@ -141,9 +141,9 @@ class SimulatorTests(c_ : Proc, val cfg: SimulatorConfig) extends PeekPokeTester
     ti = System.nanoTime
     start_rtl()
     do {
-      step(1)
+      step(10)
       tf = System.nanoTime
-    } while(peek(c.io.host2tp.done) == 0 && !timedOut);
+    } while(peek(c.io.host2tpu.done) == 0 && !timedOut);
     println("RUN DONE")
   }
 

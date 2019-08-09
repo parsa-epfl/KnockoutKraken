@@ -4,17 +4,18 @@ import chisel3.{core, _}
 import chisel3.util._
 import common.{BRAMConfig, BRAMPort}
 import common.PROCESSOR_TYPES._
+import protoflex.TPU2STATE._
 
 /*
  * Transplant Unit (TPU):
  * 0. Beforehand STATE -> BRAM by HOST
  * 1. When host2cpu fire
- *    1. freeze CPU (tp2cpu.freeze)
+ *    1. freeze CPU (tpu2cpu.freeze)
  *    2. transplant state BRAM -> CPU
  *    3. unfreeze CPU
- *    4. fire CPU   (tp2cpu.fire)
- * 2. When tp2cpu done
- *    1. freeze CPU (tp2cpu.freeze)
+ *    4. fire CPU   (tpu2cpu.fire)
+ * 2. When tpu2cpu done
+ *    1. freeze CPU (tpu2cpu.freeze)
  *    2. transplant state CPU -> BRAM
  *    3. unfreeze CPU
  *    4. flush CPU
@@ -24,30 +25,15 @@ import common.PROCESSOR_TYPES._
  */
 class TransplantUnitIO(implicit val cfg: ProcConfig) extends Bundle
 {
-  implicit val stateBRAMc = cfg.stateBRAMc
-  val host2tp = new TransplantUnitHostIO
-  val tp2cpu = new TransplantUnitCPUIO
+  private implicit val stateBRAMc = cfg.stateBRAMc
+  val host2tpu = new TransplantUnitHostIO
+  val tpu2cpu = new TransplantUnitCPUIO
 
-  val tp2cpustateReg = Output(TPU2STATE.r_PC.cloneType) // Current state reg being written
-  val tp2cpustate = Output(new PStateRegs)
-  val cpustate2tp = Input(new PStateRegs)
+  val tpu2cpuStateReg = Output(Valid(r_NULL.cloneType)) // Current state reg being written
+  val tpu2cpuState = Output(new PStateRegs)
+  val cpu2tpuState = Input(new PStateRegs)
   val rfile = Flipped(new RFileIO)
 
-  val tp_en = Output(Bool())
-
-  //general purpose register
-  val tp_reg_waddr = Output(REG_T)
-  val tp_reg_wdata = Output(DATA_T)
-  val tp_reg_wen = Output(Bool())
-
-  val tp_reg_raddr = Output(REG_T) // there are two read port but only use one
-  val tp_reg_rdata = Input(DATA_T)
-  // pstate
-  val tp_pstate_wen = Output(Bool())
-  val tp_pstate_in = Input(new PStateRegs)
-  val tp_pstate_out = Output(new PStateRegs)
-
-  // TPU <--> Bram for now use bram interface
   val stateBRAM = Flipped(new BRAMPort(1))
 }
 
@@ -89,190 +75,134 @@ class TransplantUnitCPUIO(implicit val cfg: ProcConfig) extends Bundle
 }
 
 class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
+  val stateAddrW = cfg.stateBRAMc.addrWidthVec(1)
+
   val io = IO(new TransplantUnitIO)
 
-  val g_reg_count = RegInit(0.U(REG_W))
-  def addr_width = cfg.stateBRAMc.addrWidthVec(1)
-  def GEN_ADDR = 0.U
-  def SP_ADDR = 64.U
-  val bram_base = RegInit(0.U(addr_width.W))
-  val bram_offset = Wire(UInt(addr_width.W))
-  val sp_reg_count = RegInit(0.U(SP_REG_N.W))
-  // for now use wait_r to read 64 bit data (2cycles)
-  val wait_r = RegInit(0.U(1.W))
-  val pc_wait = RegInit(0.U(1.W))
-  val sp_cnt = RegInit(0.U(8.W))
-  def resetCounter(): Unit ={
-    g_reg_count := 0.U
-    sp_reg_count := 0.U
-    sp_cnt := 0.U
-    wait_r := 0.U
-    pc_wait := 0.U
-    done_r := 0.U
-  }
-  val w_pstate_reg = RegInit(Wire(new PStateRegs()).empty)
-  val bram_out_r = RegNext(io.stateBRAM.dataOut.get)
-  val done_r = RegInit(0.U(1.W))
+  val bramOFFST = RegInit(0.U(log2Ceil(ARCH_MAX_OFFST).W))
+  val bramOut = WireInit(io.stateBRAM.dataOut.get(31,0)) // 32 Bits read of BRAM
+  // BRAM is 32b, so if we read two words in a row, we get a 64b word (usefull for XREGS and PC)
+  val bramOut1CD = RegNext(bramOut) // 1 Cycle Delay
+  val bramOut64b = WireInit(Cat(bramOut1CD, bramOut))
 
+  // Only port rs1 of RFILE is used
+  val regDataIn = io.rfile.rs1_data
+  val regDataInMSB = regDataIn(63,32)
+  val regDataInLSB = regDataIn(31, 0)
+  // RFILE is 64bits, BRAM is 32bits. XREGS are first 32 words
+  // By shifting lsb, we get the RFILE addr from BRAM offst
+  val regAddr = bramOFFST >> 1.U
+  io.rfile.rs1_addr := regAddr
+  io.rfile.rs2_addr := 0.U
 
-  // default values
-  val wire_64bits = WireInit(Cat(bram_out_r(31,0), io.stateBRAM.dataOut.get(31,0)))
-  val tp_pstate_wen = WireInit(false.B)
-  io.tp_pstate_out := w_pstate_reg
-  val w_pstate_pc_en = WireInit(false.B)
-  val w_pstate_sp_en = WireInit(false.B)
-  val w_pstate_el_en = WireInit(false.B)
-  val w_pstate_nzcv_en = WireInit(false.B)
-
-  val tp_reg_wen = WireInit(false.B)
-  io.tp2cpu.flush := io.host2tp.fire
-  val todoTag = 0.U // TODO
-  io.tp2cpu.fire := false.B
-  bram_offset := 0.U
-
-  // bram interface
-  io.stateBRAM.addr := bram_base + bram_offset
-  io.stateBRAM.dataIn.get := 0.U
-  io.stateBRAM.writeEn.get := 0.U
-
-  val s_IDLE :: bram_to_proc_reg :: bram_to_proc_pstate :: proc_to_bram_reg  :: proc_to_bram_pstate :: Nil = Enum(5)
+  val s_IDLE :: s_TRANS :: Nil = Enum(2)
+  val s_BRAM2CPU :: s_CPU2BRAM :: Nil = Enum(2)
   val state = RegInit(s_IDLE)
-  io.tp_en := (state =/= s_IDLE)
-  io.stateBRAM.en := (state =/= s_IDLE)
+  val stateDir = RegInit(s_BRAM2CPU)
+  val stateRegType = RegInit(r_NULL)
+
+  // Freeze toggles till transplant is done (when resetState is called)
+  val freeze = RegInit(false.B)
+  val freezeTag = RegInit(cfg.TAG_X)
+  // Flush when transplant to host is done (when resetState is called)
+  val flushSig = WireInit(false.B)
+  val flushReg = RegInit(false.B)
+  // Fire pulses for a cycle when fireSig is set true.
+  val fireSig = WireInit(false.B)
+  val fireReg = RegNext(fireSig)
+  // Done pulses for a cycle when doneSig is set true.
+  val doneSig = WireInit(false.B)
+  val doneReg = RegNext(fireSig)
+ 
+  def resetState = {
+    bramOFFST := 0.U
+    stateRegType := r_NULL
+    freeze := false.B
+
+    state := s_IDLE
+  }
 
   switch(state) {
     is(s_IDLE) {
-      when(io.host2tp.fire) {
-        state := bram_to_proc_reg
-        bram_base := GEN_ADDR
-        resetCounter()
-      }
-      when(io.host2tp.fire){
-        state := proc_to_bram_reg
-        bram_base := GEN_ADDR
-        resetCounter()
+      when(io.host2tpu.fire) {
+        freeze := true.B
+        freezeTag := io.host2tpu.fireTag
+        stateDir := s_BRAM2CPU
+        stateRegType := r_XREGS
+        bramOFFST := ARCH_XREGS_OFFST.U
+
+        state := s_TRANS
+      }.elsewhen(io.tpu2cpu.done) {
+        freeze := true.B
+        freezeTag := io.tpu2cpu.doneTag
+        stateDir := s_CPU2BRAM
+        stateRegType := r_XREGS
+        bramOFFST := ARCH_XREGS_OFFST.U
+
+        state := s_TRANS
       }
     }
 
-    is(proc_to_bram_reg){
-      bram_offset := (g_reg_count<<1.U) | wait_r
-      io.stateBRAM.writeEn.get := true.B
-      wait_r := wait_r + 1.U
-      when( wait_r === 0.U){
-        io.stateBRAM.dataIn.get := io.tp_reg_rdata(DATA_SZ - 1,DATA_SZ/2)
-      }.otherwise{
-        io.stateBRAM.dataIn.get := io.tp_reg_rdata((DATA_SZ/2)-1,0)
-        g_reg_count := g_reg_count + 1.U
-        when(g_reg_count === (REG_N - 1).U){
-          state := proc_to_bram_pstate
-          bram_base := SP_ADDR
+    is(s_TRANS) {
+      bramOFFST := bramOFFST + 1.U
+      when(bramOFFST === ARCH_PC_OFFST.U) {
+        stateRegType := r_PC
+      }.elsewhen( bramOFFST === ARCH_PSTATE_OFFST.U) {
+        stateRegType := r_SP_EL_NZCV
+      }.elsewhen( bramOFFST === ARCH_MAX_OFFST.U ) {
+        when(stateDir === s_BRAM2CPU) {
+          fireSig := true.B
+        }.elsewhen(stateDir === s_CPU2BRAM) {
+          doneSig := true.B
         }
-      }
-    }
-
-    is(proc_to_bram_pstate){
-      sp_cnt := sp_cnt + 1.U
-      bram_offset :=  sp_cnt
-      io.stateBRAM.writeEn.get := true.B
-      // do this in better way
-      when(sp_reg_count === 0.U){
-        pc_wait := pc_wait + 1.U
-        when(pc_wait === 0.U){
-          io.stateBRAM.dataIn.get := io.tp_pstate_in.PC(DATA_SZ - 1,DATA_SZ/2)
-        }.otherwise{
-          io.stateBRAM.dataIn.get := io.tp_pstate_in.PC((DATA_SZ/2)-1,0)
-          sp_reg_count := sp_reg_count + 1.U
-        }
-      }.otherwise{
-        sp_reg_count := sp_reg_count + 1.U
-        when(sp_reg_count === 1.U){
-          io.stateBRAM.dataIn.get := io.tp_pstate_in.SP
-        }
-        when(sp_reg_count === 2.U){
-          io.stateBRAM.dataIn.get := io.tp_pstate_in.EL
-        }
-        when(sp_reg_count === 3.U){
-          io.stateBRAM.dataIn.get := io.tp_pstate_in.NZCV
-        }
-        when(sp_reg_count === SP_REG_N.U){
-          done_r := true.B
-          state := s_IDLE
-        }
-      }
-    }
-    is(bram_to_proc_reg){
-      bram_offset := (g_reg_count<<1.U) | wait_r
-      wait_r := wait_r + 1.U
-      when(wait_r === 0.U){ // 1st clock cycle
-
-      }.otherwise{ // 2nd clock cycle
-        g_reg_count := g_reg_count + 1.U
-        tp_reg_wen := true.B
-        when(g_reg_count === (REG_N - 1).U){ // done
-          state := bram_to_proc_pstate
-          bram_base := SP_ADDR
-        }
-      }
-    }
-    is(bram_to_proc_pstate){ // TODO: multiple thread
-      // ugly way, do it better, 1 cycle for each special register (32bit value from qemu)
-      require(SP_REG_N == 4)
-
-      sp_cnt := sp_cnt + 1.U
-      bram_offset :=  sp_cnt
-      when(sp_reg_count === 0.U){ // PC
-        pc_wait := pc_wait + 1.U
-        when(pc_wait === 1.U){
-          w_pstate_pc_en := true.B
-          sp_reg_count := sp_reg_count + 1.U
-        }
-      }.otherwise{
-        sp_reg_count := sp_reg_count + 1.U
-        when(sp_reg_count === 1.U){ // SP
-          w_pstate_sp_en := true.B
-        }
-        when(sp_reg_count === 2.U){ // EL
-          w_pstate_el_en := true.B
-        }
-        when(sp_reg_count === 3.U){ // NZCV
-          w_pstate_nzcv_en := true.B
-        }
-        when(sp_reg_count === 4.U){ // Write back state
-          tp_pstate_wen := true.B
-        }
-        when(sp_reg_count === 5.U){ // Done transplanting
-          io.tp2cpu.fire := true.B
-          state := s_IDLE
-        }
+        resetState
       }
     }
   }
-  io.rfile.rs1_addr := RegNext(g_reg_count)
 
-  // Transplant Unit : BRAM -> CPU
-  io.rfile.wen := RegNext(tp_reg_wen)
-  io.rfile.waddr := RegNext(g_reg_count)
-  io.rfile.wdata := wire_64bits
+  io.stateBRAM.en := true.B
+  io.stateBRAM.writeEn.get := stateDir === s_CPU2BRAM
+  io.stateBRAM.addr := bramOFFST
+  when(stateRegType === r_XREGS) {
+    io.stateBRAM.dataIn.get := Mux(bramOFFST(0), regDataInMSB, regDataInLSB)
+  }.elsewhen(stateRegType === r_PC) {
+    io.stateBRAM.dataIn.get := Mux(bramOFFST(0), io.cpu2tpuState.PC(63,32), io.cpu2tpuState.PC(31,0))
+  }.elsewhen(stateRegType === r_SP_EL_NZCV) {
+    io.stateBRAM.dataIn.get := Cat(0.U, io.cpu2tpuState.SP(0), io.cpu2tpuState.EL(0), io.cpu2tpuState.NZCV(3,0))
+  }.otherwise {
+    io.stateBRAM.dataIn.get := 0.U
+  }
 
-  io.tp2cpustate.PC := wire_64bits
-  io.tp2cpustate.SP := TPU2STATE.PStateGet_SP(bram_out_r)
-  io.tp2cpustate.EL := TPU2STATE.PStateGet_EL(bram_out_r)
-  io.tp2cpustate.NZCV := TPU2STATE.PStateGet_NZCV(bram_out_r)
+  io.rfile.wen := stateDir === s_BRAM2CPU && stateRegType === r_XREGS
+  // 1 Cycle delay from BRAM read
+  io.rfile.waddr := RegNext(regAddr)
+  io.rfile.wdata := bramOut64b
 
-  // TODO Signals
-  io.tp2cpu.flush := false.B
-  io.tp2cpu.fire := false.B
-  io.tp2cpu.freeze := 0.U
-  io.tp2cpu.flushTag := 0.U
-  io.tp2cpu.fireTag := 0.U
-  io.host2tp.done := done_r
+  io.tpu2cpuState.PC := bramOut64b
+  io.tpu2cpuState.SP := TPU2STATE.PStateGet_SP(bramOut)
+  io.tpu2cpuState.EL := TPU2STATE.PStateGet_EL(bramOut)
+  io.tpu2cpuState.NZCV := TPU2STATE.PStateGet_NZCV(bramOut)
+  io.tpu2cpuStateReg.bits := stateRegType
+  io.tpu2cpuStateReg.valid := stateDir === s_BRAM2CPU
 
+  io.tpu2cpu.fire := fireReg
+  io.tpu2cpu.fireTag := RegNext(freezeTag) // Get the current freezeTag with the 1 cycle delay from fireReg
+  io.tpu2cpu.freeze := freeze
+  io.tpu2cpu.freezeTag := freezeTag
+  io.tpu2cpu.flush := flushSig
+  io.tpu2cpu.flushTag := RegNext(freezeTag)
+  io.host2tpu.done := doneReg
 }
 
+// In parsa-epfl/qemu/fa-qflex
+// Read fa-qflex-helper.c to get indexes of values
 object TPU2STATE {
-  val r_WAIT :: r_PC :: r_SP_EL_NZCV :: Nil = Enum(2)
+  val r_NULL :: r_XREGS :: r_PC :: r_SP_EL_NZCV :: Nil = Enum(4)
   def PStateGet_NZCV(word: UInt): UInt = word(3,0)
   def PStateGet_EL(word: UInt): UInt = word(4,4)
   def PStateGet_SP(word: UInt): UInt = word(5,5)
+  val ARCH_XREGS_OFFST = 0
+  val ARCH_PC_OFFST    = 64
+  val ARCH_PSTATE_OFFST = 66
+  val ARCH_MAX_OFFST = ARCH_PSTATE_OFFST + 1
 }
-
