@@ -28,11 +28,12 @@ class MemRes(implicit val cfg: ProcConfig) extends Bundle{
 
 class LoadStoreUnitIO(implicit val cfg: ProcConfig) extends Bundle
 {
-  val dinst = Input(new DInst)
-  val minst = Output(Valid(new MInst))
+  val dinst = Input(Valid(new DInst))
   val rVal1 = Input(DATA_T)
   val rVal2 = Input(DATA_T)
   val pc  = Input(DATA_T)
+
+  val minst = Output(Valid(new MInst))
 
   // memory interface
   val memReq = Output(Valid(new MemReq))
@@ -53,15 +54,15 @@ class LoadStoreUnit(implicit val cfg: ProcConfig) extends Module
   val io = IO(new LoadStoreUnitIO)
 
   // register l/s instruction
-  val dinst_reg = Reg(io.dinst.cloneType)
+  val dinst_reg = Reg(io.dinst.bits.cloneType)
 
   // base address as SInt
   val base = io.pc.zext()
 
   // Offset
   val imm_sign_extened = Wire(SInt(DATA_W))
-  imm_sign_extened := io.dinst.imm.asSInt
-//  val offset = Mux(io.dinst.imm_en , 0.S(DATA_W), imm_sign_extened)
+  imm_sign_extened := io.dinst.bits.imm.asSInt
+  // val offset = Mux(io.dinst.imm_en , 0.S(DATA_W), imm_sign_extened)
   val offset = imm_sign_extened
 
   // address calculation
@@ -73,7 +74,7 @@ class LoadStoreUnit(implicit val cfg: ProcConfig) extends Module
   vaddr_IO.set := vaddr(PG_OFFSET+TLB_SZ-1,PG_OFFSET)
   vaddr_IO.tag := vaddr(VADDR-1, PG_OFFSET+TLB_SZ)
 
-    // data for write
+  // data for write
   val data  = WireInit(DATA_X)
   val rw = true.B //TODO make it depend on itype
 
@@ -93,31 +94,19 @@ class LoadStoreUnit(implicit val cfg: ProcConfig) extends Module
   io.memReq.bits.data := data
   io.memReq.bits.rw := rw
 
-
   val res = WireInit(DATA_X)
   when (io.memRes.valid){
     res := io.memRes.bits.data
   }
-
-  // create Minst output
-  val minst = Wire(new MInst)
-  minst.res := io.memRes.bits.data
-  minst.rd  := dinst_reg.rd
-  minst.rd_en := dinst_reg.rd_en
-  minst.tag := dinst_reg.tag
-
-  // Output
-  io.minst.bits := minst
-  io.minst.valid := false.B
 
   // State machine of lsu
   val s_IDLE :: s_TLB_CHK :: s_MEM_REQ :: Nil = Enum(3)
   val state = RegInit(s_IDLE)
   switch (state) {
     is(s_IDLE){
-      when(io.dinst.itype === I_LSImm) {
-        dinst_reg := io.dinst
-        tlb.io.vaddr.valid := true.B // tlb request
+      when(io.dinst.bits.itype === I_LSImm) {
+        dinst_reg := io.dinst.bits
+        tlb.io.vaddr.valid := io.dinst.valid // tlb request
         state := s_TLB_CHK
       }
     }
@@ -134,9 +123,18 @@ class LoadStoreUnit(implicit val cfg: ProcConfig) extends Module
     }
     is(s_MEM_REQ){
       when(io.memRes.valid.toBool()){
-        io.minst.valid := true.B
         state := s_IDLE
       }
     }
   }
+
+  // create Minst output
+  val minst = Wire(new MInst)
+  minst.res := io.memRes.bits.data
+  minst.rd := dinst_reg.rd
+  minst.rd_en := dinst_reg.rd_en
+  minst.tag := dinst_reg.tag
+
+  io.minst.bits := minst
+  io.minst.valid := state === s_MEM_REQ && io.memRes.valid.toBool
 }
