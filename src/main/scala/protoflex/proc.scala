@@ -104,41 +104,35 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   io.host2tpu <> tpu.io.host2tpu
 
   // Transplant Unit TP <> CPU
-  state.io.getPort(1) <> tpu.io.stateBRAM
+  tpu.io.stateBRAM <> state.io.getPort(1)
   tpu.io.tpu2cpu.done := false.B
   tpu.io.tpu2cpu.doneTag := 0.U
 
-  // fetch <> ppage
-  ppage.io.getPort(1).dataIn.get := 0.U
-  ppage.io.getPort(1).addr := fetch.io.addr
-  ppage.io.getPort(1).en := fetch.io.rd_en
-  ppage.io.getPort(1).writeEn.get := false.B
-  fetch.io.data := ppage.io.getPort(1).dataOut.get
+  // PState -> Fetch
+  fetch.io.ppageBRAM <> ppage.io.getPort(1)
 
-  // transplant unit <> pstate
+  val fetch_tag = WireInit(0.U)
+  for (i <- 0 until cfg.NB_THREADS) {
+    when(fetch_en(i)) {
+      fetch_tag := i.U
+    }
+  }
+  fetch.io.tagIn := fetch_tag
+  fetch.io.en := fetch_en(fetch_tag)
+  fetch.io.PC := fake_PC
+  when(fetch.io.incr) {
+    fake_PC := fake_PC + 4.U
+  }
 
-  val fetch_en = withReset(flush){RegInit(false.B)}
-  when(tpu.io.tpu2cpu.fire) { fetch_en := true.B }
-  tpu.io.tpu2cpu.done := Mux(RegNext(fetch_en.toBool()), decoder.io.tp_req, false.B)
+  // Fetch -> Decode
+  decoder.io.finst := fetch.io.deq.bits
+  decReg.io.enq.bits := decoder.io.dinst
 
-  // IRAM(ppage)-> Fetch TODO
-  fetch.io.en := fetch_en
-  fetch.io.PC := next_PC
-  fetch.io.inst.ready := true.B // TODO: for now always ready ( change decoder to wait for branch instruction)
-  fetch.io.tag_in := 0.U // TODO
-
-  // Fetch -> Decode TODO
-  decoder.io.inst := Mux(fetch.io.inst.valid, fetch.io.inst.bits, INST_X)
-  decoder.io.tag := fetch.io.tag_out
-
-  // Register instruction (DInst) // TODO
-  // consumeFetch := decReg.io.enq.ready TODO
-  decReg.io.enq.valid := decoder.io.dinst.itype =/= DECODE_CONTROL_SIGNALS.I_X
-  decReg.io.enq.bits  := decoder.io.dinst
+  fetch.io.deq.ready := decReg.io.enq.ready
+  decReg.io.enq.valid := fetch.io.deq.valid
 
   // Decode -> Issue
   issuer.io.enq <> decReg.io.deq
-  issuer.io.flush := flush
 
   // Execute : Issue -> Execute
   val issued_dinst = issuer.io.deq.bits
@@ -176,10 +170,11 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   brReg.io.enq.bits.tag := brancher.io.binst.bits.tag
 
   // connect LDSTUnit interface
-  ldstU.io.dinst := issued_dinst
+  ldstU.io.dinst.bits := issuer.io.deq.bits
+  ldstU.io.dinst.valid := issuer.io.deq.valid
   ldstU.io.rVal1 := rVal1
   ldstU.io.rVal2 := rVal2
-  ldstU.io.pc    := curr_PC
+  ldstU.io.pc    := vec_pregs(issued_dinst.tag).PC
   io.mem_req := ldstU.io.memReq
   ldstU.io.memRes := io.mem_res
 
@@ -190,21 +185,34 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   // Register LDSTUnit output MInst
   ldstUReg.io.enq.valid := ldstU.io.minst.valid && issuer.io.deq.valid // TODO: check condition
   ldstUReg.io.enq.bits := ldstU.io.minst.bits
-  ldstUReg.io.deq.ready := true.B // This register is just for debugging, flush continously
 
+  // ---- Commit STATE ----
   // Writeback : Execute -> PState
-  // NOTE: Always dequeue executions stage
+  // NOTE: Always dequeue executions stage, because always ready for writeback
   exeReg.io.deq.ready := true.B
   brReg.io.deq.ready := true.B
+  ldstUReg.io.deq.ready := true.B
 
   // connect RFile's write interface
-  for( cpu <- 0 until cfg.NB_THREADS) {
-    vec_rfile(cpu).waddr := exeReg.io.deq.bits.rd
-    vec_rfile(cpu).wdata := exeReg.io.deq.bits.res
+  for(cpu <- 0 until cfg.NB_THREADS) {
+    when(exeReg.io.deq.valid) {
+      vec_rfile(cpu).waddr := exeReg.io.deq.bits.rd
+      vec_rfile(cpu).wdata := exeReg.io.deq.bits.res
+    }.elsewhen(ldstUReg.io.deq.valid) {
+      vec_rfile(cpu).waddr := ldstUReg.io.deq.bits.rd
+      vec_rfile(cpu).wdata := ldstUReg.io.deq.bits.res
+    }.otherwise{
+      vec_rfile(cpu).waddr := exeReg.io.deq.bits.rd
+      vec_rfile(cpu).wdata := exeReg.io.deq.bits.res
+    }
     vec_rfile(cpu).wen := false.B
   }
-  vec_rfile(exeReg.io.deq.bits.tag).wen := exeReg.io.deq.bits.rd_en
-
+  when(exeReg.io.deq.valid) {
+    vec_rfile(exeReg.io.deq.bits.tag).wen := exeReg.io.deq.bits.rd_en
+  }.elsewhen(ldstUReg.io.deq.valid) {
+    vec_rfile(ldstUReg.io.deq.bits.tag).wen := ldstUReg.io.deq.bits.rd_en
+  }
+ 
   // PState Regs
   when (exeReg.io.deq.valid && exeReg.io.deq.bits.nzcv_en) {
     vec_pregs(exeReg.io.deq.bits.tag).NZCV := exeReg.io.deq.bits.nzcv
@@ -266,18 +274,28 @@ class Proc(implicit val cfg: ProcConfig) extends Module
     }
   }
 
+  // Start and stop
+  when(tpu.io.tpu2cpu.fire) {
+    fake_PC := vec_pregs(tpu.io.tpu2cpu.fireTag).PC
+    fetch_en(tpu.io.tpu2cpu.fireTag) := true.B
+  }
+  tpu.io.tpu2cpu.done := issuer.io.deq.valid && issued_dinst.itype === DECODE_CONTROL_SIGNALS.I_X
+  tpu.io.tpu2cpu.doneTag := issued_dinst.tag
+  when(issuer.io.deq.valid && issued_dinst.itype === DECODE_CONTROL_SIGNALS.I_X) {
+    fetch_en(tpu.io.tpu2cpu.flushTag) := false.B
+  }
+
   // DEBUG Signals ------------------------------------------------------------
   if(cfg.DebugSignals) {
-    io.procStateDBG.get.inst_in   := decoder.io.dinst
-
+    io.procStateDBG.get.fetchReg <> fetch.io.deq
     io.procStateDBG.get.decReg   <> decReg.io.deq
     io.procStateDBG.get.issueReg <> issuer.io.deq
     io.procStateDBG.get.exeReg   <> exeReg.io.deq
     io.procStateDBG.get.brReg    <> brReg.io.deq
-    io.procStateDBG.get.ldstUReg   <> ldstUReg.io.deq
+    io.procStateDBG.get.ldstUReg <> ldstUReg.io.deq
 
-    io.procStateDBG.get.curr_PC := curr_PC
-    io.procStateDBG.get.next_PC := next_PC
+    io.procStateDBG.get.curr_PC := vec_pregs(last_thread).PC
+    io.procStateDBG.get.next_PC := vec_pregs(last_thread).PC
   }
 
 
