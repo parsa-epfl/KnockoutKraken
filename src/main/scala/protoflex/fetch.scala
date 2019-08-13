@@ -6,35 +6,53 @@ import chisel3.util._
 import common.{BRAMConfig, BRAMPort}
 import common.PROCESSOR_TYPES._
 
+class FInst(implicit val cfg: ProcConfig) extends Bundle
+{
+  val inst = INST_T
+  val tag = cfg.TAG_T
+}
 
 class FetchUnitIO(implicit val cfg: ProcConfig) extends Bundle
 {
   val en = Input(Bool())
   val PC = Input(DATA_T)
-  val tag_in  = Input(cfg.TAG_T)
-  // Fetch - decode
-  val inst = Flipped(DeqIO(INST_T))
-  val tag_out  = Output(cfg.TAG_T)
+  val tagIn  = Input(cfg.TAG_T)
 
-  // memory interface
-  val data = Input(INST_T)
-  val addr = Output(DATA_T)
-  val rd_en = Output(Bool())
+  val incr = Output(Bool())
+  val flush = Input(Bool())
+
+  // Program Page
+  val ppageBRAM = Flipped(new BRAMPort(1)(cfg.ppageBRAMc))
+  // Fetch -> decode
+  val deq = Flipped(DeqIO(new FInst))
 }
 
 
 class FetchUnit(implicit val cfg: ProcConfig) extends Module
 {
   val io = IO(new FetchUnitIO())
-  val enable = io.en && io.inst.ready
-  io.addr := io.PC
-  io.rd_en := enable
-  io.inst.bits := io.data
 
+  io.ppageBRAM.en := true.B
+  io.ppageBRAM.addr := io.PC >> 2.U // PC is byte addressed, BRAM is 32bit word addressed
+  io.ppageBRAM.dataIn.get := 0.U
+  io.ppageBRAM.writeEn.get := false.B
 
-  // assuming BRAM read latency 2
-  require(cfg.ppageBRAMc.readLatency == 2)
-  io.inst.valid := RegNext(RegNext(enable))
+  // One cycle delay for BRAM
+  val valid = RegInit(false.B)
+  val finst = Reg(new FInst)
 
-  io.tag_out := io.tag_in // TODO: modify for multiple thread
+  when(io.deq.ready || io.flush) {
+    valid := io.en
+    finst.inst := io.ppageBRAM.dataOut.get
+    finst.tag := io.tagIn
+  }.otherwise {
+    valid := valid
+    finst := finst
+  }
+
+  io.incr := io.deq.ready
+
+  io.deq.valid := valid && !io.flush
+  io.deq.bits := finst
+
 }

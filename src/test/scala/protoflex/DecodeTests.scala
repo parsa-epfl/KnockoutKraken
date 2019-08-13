@@ -12,8 +12,8 @@ class DecodeInstructionTest(c: DecodeUnit) extends PeekPokeTester(c)
     insts map {
       case inst =>
         println(inst.line)
-        poke(c.io.inst, inst.bitPat)
-        poke(c.io.tag, 1)
+        poke(c.io.finst.inst, inst.bitPat)
+        poke(c.io.finst.tag, 1)
         step(1)
         val dinst_str = SoftwareStructs.dinst(peek(c.io.dinst))
         println(f"Input : 0x${inst.bitPat}%08X")

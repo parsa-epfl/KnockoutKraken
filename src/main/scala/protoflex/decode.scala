@@ -105,8 +105,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
 class DecodeUnitIO(implicit val cfg: ProcConfig) extends Bundle
 {
   // Fetch - Decode
-  val inst = Input(INST_T)
-  val tag  = Input(cfg.TAG_T)
+  val finst = Input(new FInst)
   val tp_req = Output(Bool())
 
   // Decode - Issue
@@ -119,7 +118,9 @@ class DecodeUnitIO(implicit val cfg: ProcConfig) extends Bundle
 class DecodeUnit(implicit val cfg: ProcConfig) extends Module
 {
   val io = IO(new DecodeUnitIO)
-  val dinst = Wire(new DInst).decode(io.inst, io.tag)
+  val inst = io.finst.inst
+  //val instLE = WireInit(Cat(inst(7,0), inst(15,8), inst(23,16), inst(31,24)))
+  val dinst = Wire(new DInst).decode(inst, io.finst.tag)
   io.dinst := dinst
   io.tp_req := dinst.inst_en
 }

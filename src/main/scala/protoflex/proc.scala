@@ -7,7 +7,7 @@ import chisel3.util.{DeqIO, Queue, RegEnable, Valid, log2Ceil}
 
 import common.PROCESSOR_TYPES._
 import common.constBRAM.TDPBRAM36ParamDict
-import common.{BRAM, BRAMConfig, BRAMPort, DECODE_CONTROL_SIGNALS}
+import common.{BRAM, BRAMConfig, BRAMPort, DECODE_CONTROL_SIGNALS, FReg}
 
 case class ProcConfig(val NB_THREADS : Int = 4, val DebugSignals : Boolean = false) {
   val ppageBRAMc = new BRAMConfig(Seq(TDPBRAM36ParamDict(36), TDPBRAM36ParamDict(36)))
@@ -22,8 +22,7 @@ case class ProcConfig(val NB_THREADS : Int = 4, val DebugSignals : Boolean = fal
 
 class ProcStateDBG(implicit val cfg : ProcConfig) extends Bundle
 {
-  val inst_in  = Output(new DInst)
-
+  val fetchReg = Output(DeqIO(new FInst))
   val decReg   = Output(DeqIO(new DInst))
   val issueReg = Output(DeqIO(new DInst))
   val exeReg   = Output(DeqIO(new EInst))
@@ -65,36 +64,36 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   // Transplant Unit
   val tpu = Module(new TransplantUnit())
 
-  // Reset | Clear thread state TODO
-  val flush = (tpu.io.tpu2cpu.flush || reset.toBool)
-
-  // Pipeline -----------------------------------------------
-  // Fetch
-  val fetch = Module(new FetchUnit())
-  // Decode
-  val decoder = Module(new DecodeUnit())
-  val decReg = withReset(flush){Module(new Queue(new DInst, 1, pipe = true, flow = false))}
-  // Issue
-  val issuer = Module(new IssueUnit())
-  // issueReg in unit
-  // | Execute |        |            |
-  val executer = Module(new ExecuteUnit())
-  val exeReg = withReset(flush){Module(new Queue(new EInst, 1, pipe = true, flow = false))}
-  // |         | Branch |            |
-  val brancher = Module(new BranchUnit())
-  val brReg   = withReset(flush){Module(new Queue(new BInst, 1, pipe = true, flow = false))}
-  // |         |        | Load Store |
-  val ldstU = Module(new LoadStoreUnit())
-  val ldstUReg = withReset(flush){Module(new Queue(new MInst, 1, pipe = true, flow = false))}
-
   // Internal State -----------------------------------------
   // PState
   val emptyPStateRegs = Wire(new PStateRegs()).empty
   val vec_rfile = VecInit(Seq.fill(cfg.NB_THREADS)(Module(new RFile).io))
   val vec_pregs = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(emptyPStateRegs)))
-  // PCs
-  val curr_PC = Wire(DATA_T)
-  val next_PC = Wire(DATA_T)
+
+  // Pipeline -----------------------------------------------
+  val specPCReg = RegInit(false.B)
+  // Fetch
+  val fetch = Module(new FetchUnit())
+  // fetchReg in Fetch Unit
+  // Decode
+  val decoder = Module(new DecodeUnit())
+  val decReg = Module(new FReg(new DInst))
+  // Issue
+  val issuer = Module(new IssueUnit())
+  // issueReg in Issue Unit
+  // | Execute |        |            |
+  val executer = Module(new ExecuteUnit())
+  val exeReg = Module(new FReg(new EInst))
+  // |         | Branch |            |
+  val brancher = Module(new BranchUnit())
+  val brReg = Module(new FReg(new BInst))
+  // |         |        | Load Store |
+  val ldstU = Module(new LoadStoreUnit())
+  val ldstUReg = Module(new FReg(new MInst))
+
+  // Extra Regs and wires
+  val fake_PC = RegInit(0.U)
+  val fetch_en = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(false.B)))
 
   // Interconnect -------------------------------------------
 
@@ -160,17 +159,16 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   val rVal2 = vec_rfile(issued_dinst.tag).rs2_data
 
   // connect executeUnit interface
+  executer.io.dinst := issued_dinst
   executer.io.rVal1 := rVal1
   executer.io.rVal2 := rVal2
-  executer.io.dinst := issued_dinst
-
   // Register ExecuteUnit output
   exeReg.io.enq.valid := executer.io.einst.valid && issuer.io.deq.valid
   exeReg.io.enq.bits  := executer.io.einst.bits
 
   // connect BranchUnit interface
-  brancher.io.nzcv := vec_pregs(issued_dinst.tag).NZCV
   brancher.io.dinst := issued_dinst
+  brancher.io.nzcv := vec_pregs(issued_dinst.tag).NZCV
 
   // Register BranchUnit output
   brReg.io.enq.valid := issuer.io.deq.valid && brancher.io.binst.valid
@@ -214,20 +212,36 @@ class Proc(implicit val cfg: ProcConfig) extends Module
 
   val last_thread = Reg(cfg.TAG_T)
   // do not update PC when an instruction(branch/execute) instruction didn't executed
-  curr_PC := vec_pregs(last_thread).PC
-  next_PC := vec_pregs(last_thread).PC
-
   // update PC
   when(brReg.io.deq.valid) {
+    fake_PC := (vec_pregs(brReg.io.deq.bits.tag).PC.zext + brReg.io.deq.bits.offset.asSInt).asUInt()
     vec_pregs(brReg.io.deq.bits.tag).PC := (vec_pregs(brReg.io.deq.bits.tag).PC.zext + brReg.io.deq.bits.offset.asSInt).asUInt()
-    curr_PC := vec_pregs(brReg.io.deq.bits.tag).PC
-    next_PC := (vec_pregs(brReg.io.deq.bits.tag).PC.zext + brReg.io.deq.bits.offset.asSInt).asUInt()
     last_thread := brReg.io.deq.bits.tag
   }.elsewhen(exeReg.io.deq.valid) {
-    vec_pregs(exeReg.io.deq.bits.tag).PC := vec_pregs(exeReg.io.deq.bits.tag).PC + 1.U
-    curr_PC := vec_pregs(exeReg.io.deq.bits.tag).PC
-    next_PC := vec_pregs(exeReg.io.deq.bits.tag).PC + 1.U
+    vec_pregs(exeReg.io.deq.bits.tag).PC := vec_pregs(exeReg.io.deq.bits.tag).PC + 4.U
     last_thread := exeReg.io.deq.bits.tag
+  }.elsewhen(ldstUReg.io.deq.valid) {
+    vec_pregs(ldstUReg.io.deq.bits.tag).PC := vec_pregs(ldstUReg.io.deq.bits.tag).PC + 4.U
+    last_thread := exeReg.io.deq.bits.tag
+  }
+
+
+  // Flushing ----------------------------------------------------------------
+  issuer.io.flushTag := tpu.io.tpu2cpu.flushTag
+  when(tpu.io.tpu2cpu.flush) {
+    fetch.io.flush := tpu.io.tpu2cpu.flush
+    issuer.io.flush := tpu.io.tpu2cpu.flush
+    decReg.io.flush := decReg.io.deq.bits.tag === tpu.io.tpu2cpu.flushTag
+    brReg.io.flush := brReg.io.deq.bits.tag === tpu.io.tpu2cpu.flushTag
+    exeReg.io.flush := exeReg.io.deq.bits.tag === tpu.io.tpu2cpu.flushTag
+    ldstUReg.io.flush := ldstUReg.io.deq.bits.tag === tpu.io.tpu2cpu.flushTag
+  }.otherwise {
+    fetch.io.flush := false.B
+    issuer.io.flush := false.B
+    decReg.io.flush := false.B
+    brReg.io.flush := false.B
+    exeReg.io.flush := false.B
+    ldstUReg.io.flush := false.B
   }
 
   // Transplant Activated ----------------------------------------------------
@@ -237,6 +251,7 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   tpu.io.rfile.rs2_data := vec_rfile(0).rs2_data
   // When working
   when(tpu.io.tpu2cpu.freeze) {
+    // Redirect freezed cpu to tpu
     vec_rfile(tpu.io.tpu2cpu.freezeTag) <> tpu.io.rfile
     // Freeze PSTATE, When not written by TPU
     vec_pregs(tpu.io.tpu2cpu.freezeTag) := vec_pregs(tpu.io.tpu2cpu.freezeTag)

@@ -37,7 +37,7 @@ trait ProcTestsBase extends PeekPokeTests {
       return
     }
     val procStateDBG = c.io.procStateDBG.get
-    val sFet = SoftwareStructs.dinst(peek(procStateDBG.inst_in))
+    val sFet = if(peek(procStateDBG.fetchReg.valid)) SoftwareStructs.dinst(peek(procStateDBG.fetchReg.bits)) else "XXX"
     val sDec = if(peek(procStateDBG.decReg.valid))   SoftwareStructs.dinst(peek(procStateDBG.decReg.bits)) else "XXX"
     val sIss = if(peek(procStateDBG.issueReg.valid)) SoftwareStructs.dinst(peek(procStateDBG.issueReg.bits)) else "XXX"
     val sExe = if(peek(procStateDBG.exeReg.valid))   SoftwareStructs.einst(peek(procStateDBG.exeReg.bits)) else "XXX"
@@ -46,8 +46,8 @@ trait ProcTestsBase extends PeekPokeTests {
       "+----------------------------------------------------------------------------------+",
       "|                                   STATE                                          |",
       "+----------------------------------------------------------------------------------+",
-      "-------------------------------- DECODE STAGE --------------------------------------",
-      "Inst in : \n" + sFet,
+      "-------------------------------- FETCH STAGE ---------------------------------------",
+      "RegFetch: \n" + sFet,
       "-------------------------------- DECODE STAGE --------------------------------------",
       "Reg_Dec : \n" + sDec,
       "-------------------------------- ISSUE STAGE ---------------------------------------",
@@ -83,7 +83,8 @@ trait ProcTestsBase extends PeekPokeTests {
   def printCycle(cycle: Int) = {
     val cycle_str = Seq(
       "+----------------------------------------------------------------------------------+",
-      "|                                Cycle : "+cycle.toString.padTo(2,' ')+ "                                        |",
+      "|                                Cycle : "+cycle.toString.padTo(2,' ') +
+        "                                        |",
       "+-----------------------------------------------------------------------------------\n").mkString("\n")
     print(cycle_str)
   }

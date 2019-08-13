@@ -142,11 +142,28 @@ object PrintingTools {
 
 
 object SoftwareStructs {
+
   case class PState (
     val xregs : List[Long],
     val pc : Long,
     val nzcv : Int
   )
+
+  case class FInst (
+    val tag : Int,
+    val inst : Int
+  ) {
+    override def toString() = {
+      val str = Seq(
+        "FInst",
+        Seq(
+          "tag:  " + tag.toString,
+          "insn: " + inst
+        )
+      ).mkString("\n")
+      str + "\n"
+    }
+  }
 
   case class DInst (
      val tag          : BigInt,

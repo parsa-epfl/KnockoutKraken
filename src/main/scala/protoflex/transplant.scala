@@ -51,7 +51,8 @@ class TransplantUnitHostIO(implicit val cfg: ProcConfig) extends Bundle
 {
   val fire    = Input(Bool())
   val fireTag = Input(cfg.TAG_T)
-  val done    = Output(cfg.TAG_T)
+  val done    = Output(Bool())
+  val doneTag = Output(cfg.TAG_T)
 }
 
 /*
@@ -109,10 +110,8 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   val flushReg = RegInit(false.B)
   // Fire pulses for a cycle when fireSig is set true.
   val fireSig = WireInit(false.B)
-  val fireReg = RegNext(fireSig)
   // Done pulses for a cycle when doneSig is set true.
   val doneSig = WireInit(false.B)
-  val doneReg = RegNext(fireSig)
  
   def resetState = {
     bramOFFST := 0.U
@@ -138,6 +137,7 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
         stateDir := s_CPU2BRAM
         stateRegType := r_XREGS
         bramOFFST := ARCH_XREGS_OFFST.U
+        flushSig := true.B
 
         state := s_TRANS
       }
@@ -185,13 +185,14 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   io.tpu2cpuStateReg.bits := stateRegType
   io.tpu2cpuStateReg.valid := stateDir === s_BRAM2CPU
 
-  io.tpu2cpu.fire := fireReg
+  io.tpu2cpu.fire := RegNext(fireSig)
   io.tpu2cpu.fireTag := RegNext(freezeTag) // Get the current freezeTag with the 1 cycle delay from fireReg
   io.tpu2cpu.freeze := freeze
   io.tpu2cpu.freezeTag := freezeTag
-  io.tpu2cpu.flush := flushSig
+  io.tpu2cpu.flush := RegNext(flushSig)
   io.tpu2cpu.flushTag := RegNext(freezeTag)
-  io.host2tpu.done := doneReg
+  io.host2tpu.done := RegNext(doneSig)
+  io.host2tpu.doneTag := RegNext(freezeTag)
 }
 
 // In parsa-epfl/qemu/fa-qflex

@@ -46,6 +46,7 @@ class RRArbiter(arbN: Int)
 class IssueUnitIO(implicit val cfg: ProcConfig) extends Bundle {
   // flush
   val flush = Input(Bool())
+  val flushTag = Input(cfg.TAG_T)
   // Decode - Issue
   val enq = Flipped(EnqIO(new DInst))
 
@@ -81,8 +82,9 @@ class IssueUnit(implicit val cfg: ProcConfig) extends Module
     * reg_pipe_v The valid bit indicates whenever the register contains a valid decoded instruction.
     * sig_pipe_r This signal indicates whenever the register is ready to recieve the next instruction.
     */
-  val reg_pipe   = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(Wire(new DInst).empty())))
-  val reg_pipe_v = withReset(io.flush || this.reset.toBool) {RegInit(VecInit(cfg.TAG_VEC_X.toBools))}
+  def emptyDInst = Wire(new DInst).empty()
+  val reg_pipe   = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(emptyDInst)))
+  val reg_pipe_v = RegInit(VecInit(cfg.TAG_VEC_X.toBools))
   val sig_pipe_r = WireInit(VecInit(cfg.TAG_VEC_X.toBools))
 
   /** Issue stage buffer
@@ -95,7 +97,8 @@ class IssueUnit(implicit val cfg: ProcConfig) extends Module
     */
   def FIFO_i   = new Queue(new DInst, 2, pipe = true, flow = true)
   // Instanciates queue modules, expresses their IO through the vector
-  val fifo_vec = withReset(io.flush || this.reset.toBool) {VecInit(Seq.fill(cfg.NB_THREADS)(Module(FIFO_i).io))}
+  val fifo_vec = VecInit(Seq.tabulate(cfg.NB_THREADS)(
+                           cpu => withReset(reset.toBool || (cpu.U === io.flushTag && io.flush)) { Module(FIFO_i).io }))
 
   /** Issue stage arbiter
     * arbiter        Round Robin Arbiter
@@ -166,6 +169,13 @@ class IssueUnit(implicit val cfg: ProcConfig) extends Module
     fifo_vec(sig_next_idx).deq.ready := true.B
     reg_pipe_v(sig_next_idx) := fifo_vec(sig_next_idx).deq.valid
     reg_pipe(sig_next_idx) := fifo_vec(sig_next_idx).deq.bits
+  }
+
+  // Flushing ----------------------------------------------------------------
+  when(io.flush) {
+    reg_pipe(io.flushTag) := emptyDInst
+    reg_pipe_v(io.flushTag) := false.B
+    sig_pipe_i(io.flushTag) := false.B
   }
 }
 
