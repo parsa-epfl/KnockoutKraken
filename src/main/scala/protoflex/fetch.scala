@@ -39,20 +39,36 @@ class FetchUnit(implicit val cfg: ProcConfig) extends Module
 
   // One cycle delay for BRAM
   val valid = RegInit(false.B)
-  val finst = Reg(new FInst)
-
-  when(io.deq.ready || io.flush) {
+  val tag = RegInit(0.U)
+  val readIns = io.deq.ready || io.flush
+  when(readIns) {
     valid := io.en
-    finst.inst := io.ppageBRAM.dataOut.get
-    finst.tag := io.tagIn
+    tag := io.tagIn
   }.otherwise {
     valid := valid
-    finst := finst
+    tag := tag
   }
 
-  io.incr := io.deq.ready
+  // Save last valid inst
+  def vinstInit = {
+    val wire = Wire(Valid(INST_T))
+    wire.valid := false.B
+    wire.bits := 0.U
+    wire
+  }
 
+  val instV = RegInit(vinstInit)
+  when(!io.deq.ready && RegNext(io.deq.ready)) {
+    instV.valid := true.B
+    instV.bits := io.ppageBRAM.dataOut.get
+  }
+
+  when(io.deq.ready) {
+    instV.valid := false.B
+  }
+
+  io.incr := io.deq.ready && io.en
   io.deq.valid := valid && !io.flush
-  io.deq.bits := finst
-
+  io.deq.bits.tag := tag
+  io.deq.bits.inst := Mux(instV.valid, instV.bits, io.ppageBRAM.dataOut.get)
 }

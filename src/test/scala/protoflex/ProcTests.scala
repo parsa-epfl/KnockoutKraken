@@ -172,18 +172,26 @@ trait ProcTestsBase extends PeekPokeTests {
   }
 
   def read_pstate(tag: Int): SoftwareStructs.PState ={
+    println("READ PSTATE")
     var offst = 0
     val xregs = for(i <- 0 until 32 ) yield  {
       val reg = read64b_pstate(offst)
       offst += 2
+      println(s"${PrintingTools.getReg(i)}:" + "%016x".format(reg))
       reg
     }
 
     val pc = read64b_pstate(offst: Int); offst+=2
-    val el = read32b_pstate(offst); offst+=1
-    val sp = read32b_pstate(offst); offst+=1
-    val nzcv = read32b_pstate(offst); offst+=1
-
+    println("PC :" + "%016x".format(pc))
+    val sp_el_nzcv = read32b_pstate(offst)
+    val sp = sp_el_nzcv.toBinaryString.slice(5, 6)
+    val el = sp_el_nzcv.toBinaryString.slice(4, 5)
+    val nzcv = Integer.parseInt(sp_el_nzcv.toBinaryString.slice(0, 4), 2)
+    offst+=1
+    println("SP :" + 0)
+    println("EL :" + 0)
+    println("NZCV" + ":" + nzcv.toBinaryString)
+ 
     new SoftwareStructs.PState(xregs.toList: List[Long], pc: Long, nzcv: Int)
   }
 }

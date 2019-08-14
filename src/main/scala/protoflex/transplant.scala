@@ -29,7 +29,7 @@ class TransplantUnitIO(implicit val cfg: ProcConfig) extends Bundle
   val host2tpu = new TransplantUnitHostIO
   val tpu2cpu = new TransplantUnitCPUIO
 
-  val tpu2cpuStateReg = Output(Valid(r_NULL.cloneType)) // Current state reg being written
+  val tpu2cpuStateReg = Output(Valid(r_DONE.cloneType)) // Current state reg being written
   val tpu2cpuState = Output(new PStateRegs)
   val cpu2tpuState = Input(new PStateRegs)
   val rfile = Flipped(new RFileIO)
@@ -100,7 +100,7 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   val s_BRAM2CPU :: s_CPU2BRAM :: Nil = Enum(2)
   val state = RegInit(s_IDLE)
   val stateDir = RegInit(s_BRAM2CPU)
-  val stateRegType = RegInit(r_NULL)
+  val stateRegType = RegInit(r_DONE)
 
   // Freeze toggles till transplant is done (when resetState is called)
   val freeze = RegInit(false.B)
@@ -115,7 +115,7 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
  
   def resetState = {
     bramOFFST := 0.U
-    stateRegType := r_NULL
+    stateRegType := r_DONE
     freeze := false.B
 
     state := s_IDLE
@@ -145,11 +145,13 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
 
     is(s_TRANS) {
       bramOFFST := bramOFFST + 1.U
-      when(bramOFFST === ARCH_PC_OFFST.U) {
+      when(bramOFFST === (ARCH_PC_OFFST - 1).U) {
         stateRegType := r_PC
-      }.elsewhen( bramOFFST === ARCH_PSTATE_OFFST.U) {
+      }.elsewhen( bramOFFST === (ARCH_PSTATE_OFFST - 1).U) {
         stateRegType := r_SP_EL_NZCV
-      }.elsewhen( bramOFFST === ARCH_MAX_OFFST.U ) {
+      }.elsewhen( bramOFFST === (ARCH_MAX_OFFST - 1).U ) {
+        stateRegType := r_DONE
+      }.elsewhen( stateRegType === r_DONE ){
         when(stateDir === s_BRAM2CPU) {
           fireSig := true.B
         }.elsewhen(stateDir === s_CPU2BRAM) {
@@ -164,17 +166,17 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   io.stateBRAM.writeEn.get := stateDir === s_CPU2BRAM
   io.stateBRAM.addr := bramOFFST
   when(stateRegType === r_XREGS) {
-    io.stateBRAM.dataIn.get := Mux(bramOFFST(0), regDataInMSB, regDataInLSB)
+    io.stateBRAM.dataIn.get := Mux(bramOFFST(0), regDataInLSB, regDataInMSB)
   }.elsewhen(stateRegType === r_PC) {
-    io.stateBRAM.dataIn.get := Mux(bramOFFST(0), io.cpu2tpuState.PC(63,32), io.cpu2tpuState.PC(31,0))
+    io.stateBRAM.dataIn.get := Mux(bramOFFST(0), io.cpu2tpuState.PC(31,0) ,io.cpu2tpuState.PC(63,32))
   }.elsewhen(stateRegType === r_SP_EL_NZCV) {
     io.stateBRAM.dataIn.get := Cat(0.U, io.cpu2tpuState.SP(0), io.cpu2tpuState.EL(0), io.cpu2tpuState.NZCV(3,0))
   }.otherwise {
     io.stateBRAM.dataIn.get := 0.U
   }
 
-  io.rfile.wen := stateDir === s_BRAM2CPU && stateRegType === r_XREGS
-  // 1 Cycle delay from BRAM read
+  // One cycle delay from BRAM read
+  io.rfile.wen := RegNext(stateDir === s_BRAM2CPU && stateRegType === r_XREGS)
   io.rfile.waddr := RegNext(regAddr)
   io.rfile.wdata := bramOut64b
 
@@ -182,23 +184,26 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   io.tpu2cpuState.SP := TPU2STATE.PStateGet_SP(bramOut)
   io.tpu2cpuState.EL := TPU2STATE.PStateGet_EL(bramOut)
   io.tpu2cpuState.NZCV := TPU2STATE.PStateGet_NZCV(bramOut)
-  io.tpu2cpuStateReg.bits := stateRegType
-  io.tpu2cpuStateReg.valid := stateDir === s_BRAM2CPU
+  // One cycle delay from BRAM read
+  io.tpu2cpuStateReg.bits := RegNext(stateRegType)
+  io.tpu2cpuStateReg.valid := RegNext(stateDir === s_BRAM2CPU)
 
+  // Signals come with 1 cycle delay as cmd signals start when State machine is back to IDLE
+  val freezeTag1D = RegNext(freezeTag)
   io.tpu2cpu.fire := RegNext(fireSig)
-  io.tpu2cpu.fireTag := RegNext(freezeTag) // Get the current freezeTag with the 1 cycle delay from fireReg
+  io.tpu2cpu.fireTag := freezeTag1D 
   io.tpu2cpu.freeze := freeze
   io.tpu2cpu.freezeTag := freezeTag
   io.tpu2cpu.flush := RegNext(flushSig)
-  io.tpu2cpu.flushTag := RegNext(freezeTag)
+  io.tpu2cpu.flushTag := freezeTag1D
   io.host2tpu.done := RegNext(doneSig)
-  io.host2tpu.doneTag := RegNext(freezeTag)
+  io.host2tpu.doneTag := freezeTag1D
 }
 
 // In parsa-epfl/qemu/fa-qflex
 // Read fa-qflex-helper.c to get indexes of values
 object TPU2STATE {
-  val r_NULL :: r_XREGS :: r_PC :: r_SP_EL_NZCV :: Nil = Enum(4)
+  val r_DONE :: r_XREGS :: r_PC :: r_SP_EL_NZCV :: Nil = Enum(4)
   def PStateGet_NZCV(word: UInt): UInt = word(3,0)
   def PStateGet_EL(word: UInt): UInt = word(4,4)
   def PStateGet_SP(word: UInt): UInt = word(5,5)

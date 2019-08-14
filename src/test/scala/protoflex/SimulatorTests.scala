@@ -107,13 +107,14 @@ class SimulatorTests(c_ : Proc, val cfg: SimulatorConfig) extends PeekPokeTester
 
   var tf = System.nanoTime
   var ti = System.nanoTime
-  val timeoutms = 15000
+  var timeoutms = 10000
 
   def timedOut = {
     val isTimeOut = (tf - ti) / 1e6d > timeoutms
     //println("time_elapsed:" + (tf - ti) / 1e9d)
     if(isTimeOut) {
       println("TIMED OUT")
+      backend.finish
       System.exit(1)
     }
     isTimeOut
@@ -128,28 +129,33 @@ class SimulatorTests(c_ : Proc, val cfg: SimulatorConfig) extends PeekPokeTester
       cmd = ArmflexJson.json2cmd(readFile(filepath))._1
       tf = System.nanoTime
     } while(cmd == FA_QflexCmds.LOCK_WAIT && !timedOut);
-    writeCmd((FA_QflexCmds.LOCK_WAIT, 0), filepath)
-    println()
+    writeCmd((FA_QflexCmds.LOCK_WAIT, 0), filepath) // Consume Command
+    println(s"CONSUMED COMMAND : ${cmd}")
     cmd
   }
 
-  def writeCmd(cmd: (Int, Long), path: String) =
-    writeFile(path, ArmflexJson.cmd2json(cmd._1, cmd._2))
+  def writeCmd(cmd: (Int, Long), path: String) = {
+    val json = ArmflexJson.cmd2json(cmd._1, cmd._2)
+    println(s"Writing command in ${path}, json: ${json}")
+    writeFile(path, json)
+  }
 
   def run() = {
     println("RUN START")
     ti = System.nanoTime
     start_rtl()
     do {
-      step(10)
+      step(1)
       tf = System.nanoTime
     } while(peek(c.io.host2tpu.done) == 0 && !timedOut);
+    step(10)
     println("RUN DONE")
   }
 
-  def runSimulator(timeoutms: Long):Unit = {
-    var ti = System.nanoTime
-    var tf = System.nanoTime
+  def runSimulator(timeoutms_i: Long):Unit = {
+    ti = System.nanoTime
+    tf = System.nanoTime
+    timeoutms = timeoutms_i
     while(!timedOut) {
       val cmd = waitForCmd(cfg.simCmdPath, timeoutms)
       ti = System.nanoTime
@@ -170,7 +176,7 @@ class SimulatorTests(c_ : Proc, val cfg: SimulatorConfig) extends PeekPokeTester
   }
 
   // Simulation routine
-  runSimulator(10000)
+  runSimulator(50000)
 }
 
 class SimulatorTester(val cfg: SimulatorConfig) extends ChiselFlatSpec with ArmflexBaseFlatSpec {

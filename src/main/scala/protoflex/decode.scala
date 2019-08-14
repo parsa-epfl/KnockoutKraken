@@ -52,7 +52,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
                                               I_BCImm -> inst(23, 5),
                                               I_ASImm -> inst(21,10),
                                               I_LSImm -> inst(23,5)))
-    shift_val := MuxLookup(itype, SHIFT_VAL_X, Array(I_ASImm -> 12.U,
+    shift_val := MuxLookup(itype, SHIFT_VAL_X, Array(I_ASImm -> Mux(inst(22), 12.U, 0.U),
                                                       I_LogSR -> imm))
     shift_type := MuxLookup(itype, SHIFT_TYPE_X, Array( I_LogSR -> inst(23,22),
                                               I_ASImm -> inst(23,22)))

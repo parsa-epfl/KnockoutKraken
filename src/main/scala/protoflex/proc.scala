@@ -139,8 +139,8 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   val issued_tag = issued_dinst.tag
   issuer.io.deq.ready := exeReg.io.enq.ready || brReg.io.enq.ready
   // Check for front pressure
-  issuer.io.exeReg.bits := exeReg.io.deq.bits
-  issuer.io.exeReg.valid :=  exeReg.io.deq.valid
+  issuer.io.exeReg.bits  := exeReg.io.deq.bits
+  issuer.io.exeReg.valid := exeReg.io.deq.valid
 
   /** Execute */
   // connect rfile read(address) interface
@@ -157,7 +157,7 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   executer.io.rVal1 := rVal1
   executer.io.rVal2 := rVal2
   // Register ExecuteUnit output
-  exeReg.io.enq.valid := executer.io.einst.valid && issuer.io.deq.valid
+  exeReg.io.enq.valid := executer.io.einst.valid && issuer.io.deq.valid && exeReg.io.enq.ready
   exeReg.io.enq.bits  := executer.io.einst.bits
 
   // connect BranchUnit interface
@@ -237,7 +237,7 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   // Flushing ----------------------------------------------------------------
   issuer.io.flushTag := tpu.io.tpu2cpu.flushTag
   when(tpu.io.tpu2cpu.flush) {
-    fetch.io.flush := tpu.io.tpu2cpu.flush
+    fetch.io.flush := fetch.io.deq.bits.tag === tpu.io.tpu2cpu.flushTag
     issuer.io.flush := tpu.io.tpu2cpu.flush
     decReg.io.flush := decReg.io.deq.bits.tag === tpu.io.tpu2cpu.flushTag
     brReg.io.flush := brReg.io.deq.bits.tag === tpu.io.tpu2cpu.flushTag
@@ -287,13 +287,24 @@ class Proc(implicit val cfg: ProcConfig) extends Module
 
   // DEBUG Signals ------------------------------------------------------------
   if(cfg.DebugSignals) {
-    io.procStateDBG.get.fetchReg <> fetch.io.deq
-    io.procStateDBG.get.decReg   <> decReg.io.deq
-    io.procStateDBG.get.issueReg <> issuer.io.deq
-    io.procStateDBG.get.exeReg   <> exeReg.io.deq
-    io.procStateDBG.get.brReg    <> brReg.io.deq
-    io.procStateDBG.get.ldstUReg <> ldstUReg.io.deq
-
+    io.procStateDBG.get.fetchReg.ready := decReg.io.enq.ready
+    io.procStateDBG.get.fetchReg.valid := fetch.io.deq.valid
+    io.procStateDBG.get.fetchReg.bits  := fetch.io.deq.bits
+    io.procStateDBG.get.decReg.ready   := issuer.io.enq.ready
+    io.procStateDBG.get.decReg.valid   := decReg.io.deq.valid
+    io.procStateDBG.get.decReg.bits    := decReg.io.deq.bits
+    io.procStateDBG.get.issueReg.ready := exeReg.io.enq.ready || brReg.io.enq.ready
+    io.procStateDBG.get.issueReg.valid := issuer.io.deq.valid
+    io.procStateDBG.get.issueReg.bits  := issuer.io.deq.bits
+    io.procStateDBG.get.exeReg.ready   := true.B
+    io.procStateDBG.get.exeReg.valid   := exeReg.io.deq.valid
+    io.procStateDBG.get.exeReg.bits    := exeReg.io.deq.bits
+    io.procStateDBG.get.brReg.ready    := true.B
+    io.procStateDBG.get.brReg.valid    := brReg.io.deq.valid
+    io.procStateDBG.get.brReg.bits     := brReg.io.deq.bits
+    io.procStateDBG.get.ldstUReg.ready := true.B
+    io.procStateDBG.get.ldstUReg.valid := ldstUReg.io.deq.valid
+    io.procStateDBG.get.ldstUReg.bits  := ldstUReg.io.deq.bits
     io.procStateDBG.get.curr_PC := vec_pregs(last_thread).PC
     io.procStateDBG.get.next_PC := vec_pregs(last_thread).PC
   }

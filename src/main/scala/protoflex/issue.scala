@@ -123,36 +123,25 @@ class IssueUnit(implicit val cfg: ProcConfig) extends Module
   io.enq.ready := fifo_vec(io.enq.bits.tag).enq.ready
   fifo_vec(io.enq.bits.tag).enq.valid := io.enq.valid
 
-  // Dequeing buffers interface : FIFO -> Reg
-  // Registers who are invalid are ready to recieve new value
-  sig_pipe_r zip reg_pipe_v map { case (sig_r, reg_v) => sig_r := ~reg_v}
-  fifo_vec zip (reg_pipe, reg_pipe_v, sig_pipe_r).zipped.toSeq map {
-    case (fifo, (reg, reg_v, sig_r)) =>
-      fifo.deq.ready := sig_r
-      reg   := Mux(sig_r, fifo.deq.bits, reg)
-      reg_v := Mux(sig_r, fifo.deq.valid, reg_v)
+  for (cpu <- 0 until cfg.NB_THREADS) {
+    // Dequeing buffers interface : FIFO -> Reg
+    // Registers who are invalid are ready to recieve new value
+    sig_pipe_r(cpu) := ~reg_pipe_v(cpu)
+
+    fifo_vec(cpu).deq.ready := sig_pipe_r(cpu)
+    reg_pipe(cpu)   := Mux(sig_pipe_r(cpu), fifo_vec(cpu).deq.bits, reg_pipe(cpu))
+    reg_pipe_v(cpu) := Mux(sig_pipe_r(cpu), fifo_vec(cpu).deq.valid, reg_pipe_v(cpu))
+
+    // Choose next thread to Issue (Reg status + hazards -> idx)
+    // Thread is ready to be issued if it has a valid decoded instruction in register and has no hazard detected.
+    sig_pipe_i(cpu) := reg_pipe_v(cpu)
   }
-
-  // Choose next thread to Issue (Reg status + hazards -> idx)
-  // Thread is ready to be issued if it has a valid decoded instruction in register and has no hazard detected.
-  sig_pipe_i zip reg_pipe_v map { case (sig_rdy,reg_v) => sig_rdy := reg_v}
-
 
   val rfile_wb_pending = io.exeReg.valid && io.exeReg.bits.rd_en
   exe_stall := rfile_wb_pending &&
     ((reg_pipe(io.exeReg.bits.tag).rs1 === io.exeReg.bits.rd) ||
        (reg_pipe(io.exeReg.bits.tag).rs2 === io.exeReg.bits.rd))
   sig_pipe_i(io.exeReg.bits.tag) := reg_pipe_v(io.exeReg.bits.tag) && !exe_stall
-  /*
-   exe_stall := (io.exe_rd_v && ((reg_pipe(io.exe_tag).rs1 === io.exe_rd) || (reg_pipe(io.exe_tag).rs2 === io.exe_rd)))
-   mem_stall := (io.mem_rd_v && ((reg_pipe(io.mem_tag).rs1 === io.mem_rd) || (reg_pipe(io.mem_tag).rs2 === io.mem_rd)))
-   when(io.exe_tag === io.mem_tag) {
-   sig_pipe_i(io.exe_tag) := reg_pipe_v(io.exe_tag) && !(exe_stall || mem_stall)
-   }.otherwise {
-   sig_pipe_i(io.exe_tag) := reg_pipe_v(io.exe_tag) && !exe_stall
-   sig_pipe_i(io.mem_tag) := reg_pipe_v(io.mem_tag) && !mem_stall
-   }
-   */
 
   // Issue -> Exec
   // Get idx to issue
