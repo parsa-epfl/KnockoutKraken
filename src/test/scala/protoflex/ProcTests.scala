@@ -89,6 +89,20 @@ trait ProcTestsBase extends PeekPokeTests {
     print(cycle_str)
   }
 
+  def getPStateInternal(cpu: Int): SoftwareStructs.PState = {
+    if(!c.cfg.DebugSignals) {
+      println("ProcStateDBG signals are not available: Enable DebugSignals in ProcConfig")
+      return SoftwareStructs.PState(List(404), 404, 404)
+    }
+    val procStateDBG = c.io.procStateDBG.get
+    val pstate = procStateDBG.vecPRegs(cpu)
+    val rfile = procStateDBG.vecRFiles(cpu)
+    val xregs = for(reg <- 0 until 32) yield peek(rfile(reg)).toLong
+    val pc = peek(pstate.PC).toLong
+    val nzcv = peek(pstate.NZCV).toInt
+    new SoftwareStructs.PState(xregs.toList: List[Long], pc: Long, nzcv: Int)
+  }
+
   // helper functions
 
   def start_rtl() = {
@@ -136,17 +150,13 @@ trait ProcTestsBase extends PeekPokeTests {
 
   def write_pstate(tag: Int, pstate: SoftwareStructs.PState): Unit ={
     println("WRITE PSTATE")
+    println(pstate.toString())
     var offst = 0
     for(i <- 0 until 32 ) {
-      println(s"${PrintingTools.getReg(i)}:" + "%016x".format(pstate.xregs(i)))
       write64b_pstate(pstate.xregs(i), offst); offst += 2
     }
-    println("PC :" + "%016x".format(pstate.pc))
     write64b_pstate(pstate.pc, offst: Int); offst+=2
     // TODO Write SP, EL and NZCV as Cat(EL, SP, NZCV)
-    println("SP :" + 0)
-    println("EL :" + 0)
-    println("NZCV" + ":" + pstate.nzcv.toBinaryString)
     write32b_pstate(pstate.nzcv, offst); offst+=1
   }
 
@@ -177,22 +187,18 @@ trait ProcTestsBase extends PeekPokeTests {
     val xregs = for(i <- 0 until 32 ) yield  {
       val reg = read64b_pstate(offst)
       offst += 2
-      println(s"${PrintingTools.getReg(i)}:" + "%016x".format(reg))
       reg
     }
 
     val pc = read64b_pstate(offst: Int); offst+=2
-    println("PC :" + "%016x".format(pc))
     val sp_el_nzcv = read32b_pstate(offst)
     val sp = sp_el_nzcv.toBinaryString.slice(5, 6)
     val el = sp_el_nzcv.toBinaryString.slice(4, 5)
     val nzcv = Integer.parseInt(sp_el_nzcv.toBinaryString.slice(0, 4), 2)
     offst+=1
-    println("SP :" + 0)
-    println("EL :" + 0)
-    println("NZCV" + ":" + nzcv.toBinaryString)
- 
-    new SoftwareStructs.PState(xregs.toList: List[Long], pc: Long, nzcv: Int)
+    val pstate = new SoftwareStructs.PState(xregs.toList: List[Long], pc: Long, nzcv: Int)
+    println(pstate.toString())
+    pstate
   }
 }
 

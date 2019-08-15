@@ -62,6 +62,8 @@ class RFileIO(implicit val cfg : ProcConfig) extends Bundle
   val waddr    = Input(REG_T)
   val wdata    = Input(DATA_T)
   val wen      = Input(Bool())
+
+  val vecRFile = if(cfg.DebugSignals) Some(Output(Vec(REG_N, DATA_T))) else None
 }
 
 /**
@@ -81,5 +83,12 @@ class RFile(implicit val cfg : ProcConfig) extends Module
 
   io.rs1_data := regfile(io.rs1_addr)
   io.rs2_data := regfile(io.rs2_addr)
+
+  // DEBUG Signals ------------------------------------------------------------
+  if(cfg.DebugSignals) {
+    val  vecRFile = Wire(Vec(REG_N, DATA_T))
+    for(reg <- 0 until REG_N) vecRFile(reg) := regfile(reg)
+    io.vecRFile.get := vecRFile
+  }
 }
 

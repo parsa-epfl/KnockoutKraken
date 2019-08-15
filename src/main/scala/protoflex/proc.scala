@@ -29,8 +29,13 @@ class ProcStateDBG(implicit val cfg : ProcConfig) extends Bundle
   val brReg    = Output(DeqIO(new BInst))
   val ldstUReg = Output(DeqIO(new MInst))
 
-  val curr_PC  = Output(DATA_T)
-  val next_PC  = Output(DATA_T)
+  val vecPRegs = Output(Vec(cfg.NB_THREADS, new PStateRegs))
+  val vecRFiles = Output(Vec(cfg.NB_THREADS, Vec(REG_N, DATA_T)))
+
+  val tuWorking = Output(Bool())
+  val tuWorkingTag = Output(cfg.TAG_T)
+
+  val comited = Output(Bool())
 }
 
 /** Processor
@@ -233,6 +238,17 @@ class Proc(implicit val cfg: ProcConfig) extends Module
     last_thread := exeReg.io.deq.bits.tag
   }
 
+  // Start and stop
+  when(tpu.io.tpu2cpu.fire) {
+    fake_PC := vec_pregs(tpu.io.tpu2cpu.fireTag).PC
+    fetch_en(tpu.io.tpu2cpu.fireTag) := true.B
+  }
+  tpu.io.tpu2cpu.done := issuer.io.deq.valid && issued_dinst.itype === DECODE_CONTROL_SIGNALS.I_X
+  tpu.io.tpu2cpu.doneTag := issued_dinst.tag
+  when(issuer.io.deq.valid && issued_dinst.itype === DECODE_CONTROL_SIGNALS.I_X) {
+    fetch_en(tpu.io.tpu2cpu.flushTag) := false.B
+  }
+
 
   // Flushing ----------------------------------------------------------------
   issuer.io.flushTag := tpu.io.tpu2cpu.flushTag
@@ -274,39 +290,41 @@ class Proc(implicit val cfg: ProcConfig) extends Module
     }
   }
 
-  // Start and stop
-  when(tpu.io.tpu2cpu.fire) {
-    fake_PC := vec_pregs(tpu.io.tpu2cpu.fireTag).PC
-    fetch_en(tpu.io.tpu2cpu.fireTag) := true.B
-  }
-  tpu.io.tpu2cpu.done := issuer.io.deq.valid && issued_dinst.itype === DECODE_CONTROL_SIGNALS.I_X
-  tpu.io.tpu2cpu.doneTag := issued_dinst.tag
-  when(issuer.io.deq.valid && issued_dinst.itype === DECODE_CONTROL_SIGNALS.I_X) {
-    fetch_en(tpu.io.tpu2cpu.flushTag) := false.B
-  }
-
   // DEBUG Signals ------------------------------------------------------------
   if(cfg.DebugSignals) {
-    io.procStateDBG.get.fetchReg.ready := decReg.io.enq.ready
-    io.procStateDBG.get.fetchReg.valid := fetch.io.deq.valid
-    io.procStateDBG.get.fetchReg.bits  := fetch.io.deq.bits
-    io.procStateDBG.get.decReg.ready   := issuer.io.enq.ready
-    io.procStateDBG.get.decReg.valid   := decReg.io.deq.valid
-    io.procStateDBG.get.decReg.bits    := decReg.io.deq.bits
-    io.procStateDBG.get.issueReg.ready := exeReg.io.enq.ready || brReg.io.enq.ready
-    io.procStateDBG.get.issueReg.valid := issuer.io.deq.valid
-    io.procStateDBG.get.issueReg.bits  := issuer.io.deq.bits
-    io.procStateDBG.get.exeReg.ready   := true.B
-    io.procStateDBG.get.exeReg.valid   := exeReg.io.deq.valid
-    io.procStateDBG.get.exeReg.bits    := exeReg.io.deq.bits
-    io.procStateDBG.get.brReg.ready    := true.B
-    io.procStateDBG.get.brReg.valid    := brReg.io.deq.valid
-    io.procStateDBG.get.brReg.bits     := brReg.io.deq.bits
-    io.procStateDBG.get.ldstUReg.ready := true.B
-    io.procStateDBG.get.ldstUReg.valid := ldstUReg.io.deq.valid
-    io.procStateDBG.get.ldstUReg.bits  := ldstUReg.io.deq.bits
-    io.procStateDBG.get.curr_PC := vec_pregs(last_thread).PC
-    io.procStateDBG.get.next_PC := vec_pregs(last_thread).PC
+    val procStateDBG = io.procStateDBG.get
+    procStateDBG.fetchReg.ready := decReg.io.enq.ready
+    procStateDBG.fetchReg.valid := fetch.io.deq.valid
+    procStateDBG.fetchReg.bits  := fetch.io.deq.bits
+    procStateDBG.decReg.ready   := issuer.io.enq.ready
+    procStateDBG.decReg.valid   := decReg.io.deq.valid
+    procStateDBG.decReg.bits    := decReg.io.deq.bits
+    procStateDBG.issueReg.ready := exeReg.io.enq.ready || brReg.io.enq.ready
+    procStateDBG.issueReg.valid := issuer.io.deq.valid
+    procStateDBG.issueReg.bits  := issuer.io.deq.bits
+    procStateDBG.exeReg.ready   := true.B
+    procStateDBG.exeReg.valid   := exeReg.io.deq.valid
+    procStateDBG.exeReg.bits    := exeReg.io.deq.bits
+    procStateDBG.brReg.ready    := true.B
+    procStateDBG.brReg.valid    := brReg.io.deq.valid
+    procStateDBG.brReg.bits     := brReg.io.deq.bits
+    procStateDBG.ldstUReg.ready := true.B
+    procStateDBG.ldstUReg.valid := ldstUReg.io.deq.valid
+    procStateDBG.ldstUReg.bits  := ldstUReg.io.deq.bits
+
+    // Processor State (XREGS + PSTATE)
+    val vecRFiles = Wire(Vec(cfg.NB_THREADS, Vec(REG_N, DATA_T)))
+    for(cpu <- 0 until cfg.NB_THREADS) {
+      vecRFiles(cpu) := vec_rfile(cpu).vecRFile.get
+    }
+    tpu.io.rfile.vecRFile.get := vecRFiles(0) // Give a default assignement
+    procStateDBG.vecRFiles := vecRFiles
+    procStateDBG.vecPRegs := vec_pregs
+    procStateDBG.tuWorking := tpu.io.tpu2cpu.freeze
+    procStateDBG.tuWorkingTag := tpu.io.tpu2cpu.freezeTag
+
+    val comited = RegNext((exeReg.io.deq.valid || brReg.io.deq.valid || ldstUReg.io.deq.valid))
+    procStateDBG.comited := comited
   }
 
 
