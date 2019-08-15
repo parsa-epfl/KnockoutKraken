@@ -26,16 +26,18 @@ object FA_QflexCmds {
   val SIM_STOP   = 6
   // Commands QEMU<->SIM
   val LOCK_WAIT   = 7
+  val CHECK_N_STEP = 8
   def printCmd(cmd: Int)= {
     cmd match {
-      case DATA_LOAD  => println("DATA_LOAD ")
-      case DATA_STORE => println("DATA_STORE")
-      case INST_FETCH => println("INST_FETCH")
-      case INST_UNDEF => println("INST_UNDEF")
-      case SIM_EXCP   => println("SIM_EXCP  ")
-      case SIM_START  => println("SIM_START ")
-      case SIM_STOP   => println("SIM_STOP  ")
-      case LOCK_WAIT  => println("LOCK_WAIT ")
+      case DATA_LOAD    => println("DATA_LOAD  ")
+      case DATA_STORE   => println("DATA_STORE ")
+      case INST_FETCH   => println("INST_FETCH ")
+      case INST_UNDEF   => println("INST_UNDEF ")
+      case SIM_EXCP     => println("SIM_EXCP   ")
+      case SIM_START    => println("SIM_START  ")
+      case SIM_STOP     => println("SIM_STOP   ")
+      case LOCK_WAIT    => println("LOCK_WAIT  ")
+      case CHECK_N_STEP => println("CHECK_N_STEP")
     }
   }
 }
@@ -65,7 +67,7 @@ case class SimulatorConfig(
   val pagePath      = rootPath + "/" + pageFilename
 }
 
-class SimulatorTests(c_ : Proc, val cfg: SimulatorConfig) extends PeekPokeTester(c_) with ProcTestsBase {
+class SimulatorTests(c_ : Proc, val cfg: SimulatorConfig)(implicit val procCfg: ProcConfig) extends PeekPokeTester(c_) with ProcTestsBase {
   val INSN_SIZE = 4
   val pageSize = cfg.pageSizeBytes/INSN_SIZE
   override val c = c_
@@ -95,8 +97,8 @@ class SimulatorTests(c_ : Proc, val cfg: SimulatorConfig) extends PeekPokeTester
     Files.write(Paths.get(path), text.getBytes(StandardCharsets.UTF_8))
   }
 
-  def writePState2File(path: String, tag: Int): Unit = {
-    val json = ArmflexJson.state2json(read_pstate(tag))
+  def writePState2File(path: String, pstate: PState): Unit = {
+    val json = ArmflexJson.state2json(pstate)
     writeFile(path, json)
   }
 
@@ -120,7 +122,7 @@ class SimulatorTests(c_ : Proc, val cfg: SimulatorConfig) extends PeekPokeTester
     isTimeOut
   }
 
-  def waitForCmd(filepath:String, timeoutms : Long): Int = {
+  def waitForCmd(filepath:String): Int = {
     println("WAITING FOR COMMAND")
     ti = System.nanoTime
     var cmd: Int = FA_QflexCmds.LOCK_WAIT
@@ -129,8 +131,8 @@ class SimulatorTests(c_ : Proc, val cfg: SimulatorConfig) extends PeekPokeTester
       cmd = ArmflexJson.json2cmd(readFile(filepath))._1
       tf = System.nanoTime
     } while(cmd == FA_QflexCmds.LOCK_WAIT && !timedOut);
-    writeCmd((FA_QflexCmds.LOCK_WAIT, 0), filepath) // Consume Command
     println(s"CONSUMED COMMAND : ${cmd}")
+    writeCmd((FA_QflexCmds.LOCK_WAIT, 0), filepath) // Consume Command
     cmd
   }
 
@@ -152,20 +154,43 @@ class SimulatorTests(c_ : Proc, val cfg: SimulatorConfig) extends PeekPokeTester
     println("RUN DONE")
   }
 
+
+  def runStepping() = {
+    println("RUN START")
+    ti = System.nanoTime
+    start_rtl()
+    do {
+      step(1)
+      if(peek(c.io.procStateDBG.get.comited)) {
+        val rtlPState = getPStateInternal(0)
+        writePState2File(cfg.simStatePath, rtlPState)
+        writeCmd((FA_QflexCmds.CHECK_N_STEP, 0), cfg.qemuCmdPath)
+        waitForCmd(cfg.simCmdPath)
+        val qemuPState = ArmflexJson.json2state(readFile(cfg.qemuStatePath))
+        println("Comparing States: QEMU <-> RTL")
+        qemuPState.compare(rtlPState)
+      }
+      tf = System.nanoTime
+    } while(peek(c.io.host2tpu.done) == 0 && !timedOut);
+    step(10)
+    println("RUN DONE")
+  }
+
+
   def runSimulator(timeoutms_i: Long):Unit = {
     ti = System.nanoTime
     tf = System.nanoTime
     timeoutms = timeoutms_i
     while(!timedOut) {
-      val cmd = waitForCmd(cfg.simCmdPath, timeoutms)
+      val cmd = waitForCmd(cfg.simCmdPath)
       ti = System.nanoTime
       cmd match {
         case FA_QflexCmds.SIM_START =>
           println("SIMULATION START")
           updateProgramPage(cfg.pagePath)
           updatePState(readFile(cfg.qemuStatePath), 0)
-          run()
-          writePState2File(cfg.simStatePath, 0)
+          runStepping()
+          writePState2File(cfg.simStatePath, read_pstate(0))
           writeCmd((FA_QflexCmds.INST_UNDEF, 0), cfg.qemuCmdPath)
         case FA_QflexCmds.SIM_STOP =>
           println("SIMULATION STOP")
