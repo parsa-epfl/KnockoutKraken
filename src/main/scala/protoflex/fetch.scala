@@ -10,6 +10,7 @@ class FInst(implicit val cfg: ProcConfig) extends Bundle
 {
   val inst = INST_T
   val tag = cfg.TAG_T
+  val pc = DATA_T
 }
 
 class FetchUnitIO(implicit val cfg: ProcConfig) extends Bundle
@@ -40,13 +41,16 @@ class FetchUnit(implicit val cfg: ProcConfig) extends Module
   // One cycle delay for BRAM
   val valid = RegInit(false.B)
   val tag = RegInit(0.U)
+  val pc = RegInit(0.U)
   val readIns = io.deq.ready || io.flush
   when(readIns) {
     valid := io.en
     tag := io.tagIn
+    pc := io.PC
   }.otherwise {
     valid := valid
     tag := tag
+    pc := pc
   }
 
   // Save last valid inst
@@ -70,5 +74,6 @@ class FetchUnit(implicit val cfg: ProcConfig) extends Module
   io.incr := io.deq.ready && io.en
   io.deq.valid := valid && !io.flush
   io.deq.bits.tag := tag
+  io.deq.bits.pc := pc
   io.deq.bits.inst := Mux(instV.valid, instV.bits, io.ppageBRAM.dataOut.get)
 }

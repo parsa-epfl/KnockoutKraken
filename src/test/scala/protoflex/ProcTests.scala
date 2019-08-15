@@ -33,11 +33,11 @@ trait ProcTestsBase extends PeekPokeTests {
 
   def printState():Unit = {
     if(!c.cfg.DebugSignals) {
-      println("ProcStateDBG signals are not available")
+      println("ProcStateDBG signals are not available: Enable DebugSignals in ProcConfig")
       return
     }
     val procStateDBG = c.io.procStateDBG.get
-    val sFet = if(peek(procStateDBG.fetchReg.valid)) SoftwareStructs.dinst(peek(procStateDBG.fetchReg.bits)) else "XXX"
+    val sFet = if(peek(procStateDBG.fetchReg.valid)) SoftwareStructs.finst(peek(procStateDBG.fetchReg.bits)) else "XXX"
     val sDec = if(peek(procStateDBG.decReg.valid))   SoftwareStructs.dinst(peek(procStateDBG.decReg.bits)) else "XXX"
     val sIss = if(peek(procStateDBG.issueReg.valid)) SoftwareStructs.dinst(peek(procStateDBG.issueReg.bits)) else "XXX"
     val sExe = if(peek(procStateDBG.exeReg.valid))   SoftwareStructs.einst(peek(procStateDBG.exeReg.bits)) else "XXX"
@@ -72,7 +72,7 @@ trait ProcTestsBase extends PeekPokeTests {
       "                    |      ",
       "------------------------------- WB STAGE -------------------------------------------",
       "                                                                               ",
-      " PC : " + peek(procStateDBG.curr_PC) + " -> " + peek(procStateDBG.next_PC),
+      " PC : " + peek(procStateDBG.vecPRegs(0).PC),
       "+----------------------------------------------------------------------------------+",
       "|                                   DONE                                           |",
       "+-----------------------------------------------------------------------------------\n",

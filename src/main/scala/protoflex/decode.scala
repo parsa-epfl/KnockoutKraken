@@ -35,6 +35,9 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
   val inst_en = Bool()
 
   val tag = cfg.TAG_T
+  val inst = INST_T
+
+  val pc = DATA_T
 
   def decode(inst : UInt, tag : UInt): DInst = {
     val decoder = ListLookup(inst, decode_default, decode_table)
@@ -63,8 +66,10 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
     val csignals = Seq(op, rd_en, rs1_en, rs2_en, imm_en, shift_en, cond_en, nzcv_en, inst_en)
     csignals zip cdecoder map { case (s, d) => s:= d }
 
-    this.tag := tag
     this.itype := itype
+
+    this.tag := tag
+    this.inst := inst
 
     this
   }
@@ -97,6 +102,9 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
     inst_en := N
 
     tag := cfg.TAG_X
+    inst := INST_X
+
+    pc := DATA_X
 
     this
   }
@@ -121,6 +129,7 @@ class DecodeUnit(implicit val cfg: ProcConfig) extends Module
   val inst = io.finst.inst
   //val instLE = WireInit(Cat(inst(7,0), inst(15,8), inst(23,16), inst(31,24)))
   val dinst = Wire(new DInst).decode(inst, io.finst.tag)
+  dinst.pc := io.finst.pc
   io.dinst := dinst
   io.tp_req := dinst.inst_en
 }

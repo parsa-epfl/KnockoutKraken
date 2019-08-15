@@ -147,9 +147,42 @@ object SoftwareStructs {
     val xregs : List[Long],
     val pc : Long,
     val nzcv : Int
-  )
+  ) {
+    override def toString() = {
+      val name = s"PROC STATE:"
+      val regs = xregs.zipWithIndex.map {case (reg, i) => s"${PrintingTools.getReg(i)}:${"%016x".format(reg)}"}.mkString("\n")
+      val str = Seq(
+        name,
+        regs,
+        "PC :" + "%016x".format(pc),
+        "SP :" + 0,
+        "EL :" + 0,
+        "NZCV" + ":" + nzcv.toBinaryString
+      ).mkString("\n")
+      str + "\n"
+    }
+    def compare(other: PState): Unit = {
+      val diffXRegs = (this.xregs zip other.xregs).zipWithIndex.filter {
+        case ((t,o), i) => t != o
+      }
+      if(!diffXRegs.isEmpty || this.pc != other.pc || this.nzcv != other.nzcv) {
+        println("PState didn't match, differences:")
+        diffXRegs foreach {
+          case ((t, o), i) =>
+            println(s"${PrintingTools.getReg(i)}:${t} != ${o}")
+        }
+        if(this.pc != other.pc)
+          println(s"PC:${"%016x".format(this.pc)} != ${"%016x".format(other.pc)}")
+        if(this.nzcv != other.nzcv)
+          println(s"NZCV:${"%016x".format(this.nzcv.toBinaryString)} != ${other.nzcv.toBinaryString}")
+      } else {
+        println("PState matched.")
+      }
+    }
+  }
 
   case class FInst (
+    val pc : Long,
     val tag : Int,
     val inst : Int
   ) {
@@ -157,6 +190,7 @@ object SoftwareStructs {
       val str = Seq(
         "FInst",
         Seq(
+          "pc:   " + pc.toString,
           "tag:  " + tag.toString,
           "insn: " + inst
         )
@@ -183,7 +217,8 @@ object SoftwareStructs {
      val shift_en     : BigInt,
      val cond_en      : BigInt,
      val nzcv_en      : BigInt,
-     val inst_en      : BigInt
+     val inst_en      : BigInt,
+     val pc : BigInt = 0
   ) {
     override def toString() = {
       val str = Seq(
@@ -240,6 +275,17 @@ object SoftwareStructs {
     }
   }
 
+  def finst(map : LinkedHashMap[String, BigInt]) : FInst = {
+    val pc   = map("pc")
+    val tag  = map("tag")
+    val inst = map("inst")
+    new FInst (
+      pc.toLong  : Long,
+      tag.toInt  : Int,
+      inst.toInt : Int
+      )
+  }
+
   def dinst(map : LinkedHashMap[String, BigInt]) : DInst = {
     val rd          = map("rd")
     val rs1         = map("rs1")
@@ -259,6 +305,7 @@ object SoftwareStructs {
     val nzcv_en     = map("nzcv_en")
     val inst_en     = map("inst_en")
     val tag         = map("tag")
+    val pc          = map("pc")
     new DInst(
       tag : BigInt,
       itype: BigInt,
@@ -277,7 +324,8 @@ object SoftwareStructs {
       shift_en: BigInt,
       cond_en: BigInt,
       nzcv_en: BigInt,
-      inst_en: BigInt)
+      inst_en: BigInt,
+      pc : BigInt)
   }
 
   def einst(map : LinkedHashMap[String, BigInt]) : EInst = {
