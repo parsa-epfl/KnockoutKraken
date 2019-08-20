@@ -1,18 +1,23 @@
 package protoflex
 
 import chisel3._
+import chisel3.util.{Cat}
 import common.{AxiLiteSlave,AxiMemoryMappedConfig, AxiMemoryMappedWithRegs}
 import common.{BRAM, BRAMConfig, BRAMPort}
 import common.PROCESSOR_TYPES._
 
-class procAxiWrap(implicit val cfg: ProcConfig) extends Module {
+object AxiDriver extends App {
+  chisel3.Driver.execute(Array("-tn", "ProcAxi", "-td", "Verilog", "-fsm"), () => new ProcAxiWrap()(new ProcConfig(2, false)))
+}
+
+class ProcAxiWrap(implicit val cfg: ProcConfig) extends Module {
   def str2bool(c:Char):Boolean = c match {
     case '0' => false
     case '1' => true
   }
 
-  val readOnly  = "0001".map(str2bool)
-  val pulseOnly = "0010".map(str2bool)
+  val readOnly  = "0100".map(str2bool)
+  val pulseOnly = "1000".map(str2bool)
   val cfgAxiMM = new AxiMemoryMappedConfig(4, readOnly, pulseOnly)
   val regFile  = Module(new AxiMemoryMappedWithRegs()(cfgAxiMM))
   val proc = Module(new Proc())
@@ -21,14 +26,20 @@ class procAxiWrap(implicit val cfg: ProcConfig) extends Module {
                 val axiLite = AxiLiteSlave(cfgAxiMM.axiLiteConfig)
                 val ppageBRAM = new BRAMPort(0)(cfg.ppageBRAMc)
                 val stateBRAM = new BRAMPort(0)(cfg.stateBRAMc)
+
+                val procStateDBG = if(cfg.DebugSignals) Some(new ProcStateDBG) else None
               })
+
   io.ppageBRAM <> proc.io.ppageBRAM
   io.stateBRAM <> proc.io.stateBRAM
+  io.axiLite <> regFile.io.axiLite
 
   // 0 -> RDONLY, 1 -> Pulse, 2 -> CTRL, 3 -> CTRL
-  def reg(reg:Int, offst:Int, size:Int) = regFile.io.regsValues(reg)(offst+(size-1),offst)
+  val regValues = WireInit(VecInit(Seq.fill(cfgAxiMM.nbrReg)(0.U(cfgAxiMM.dataWidth.W))))
+  def regOut(reg:Int, offst:Int, size:Int) = regFile.io.regsValues(reg)(offst+(size-1),offst)
+  def regIn(reg:Int) = regValues(reg)
+  regFile.io.moduleInputs := regValues
 
-  val host2tpu = Wire(new TransplantUnitHostIO)
   /** Register 0 (Pulse-Only)
     * +----------------------------------------------------+
     * |                 to Transplant Cmds                 |
@@ -39,8 +50,10 @@ class procAxiWrap(implicit val cfg: ProcConfig) extends Module {
     * +-----------+--------------------+-------------------+
     *
     */
-  proc.io.host2tpu.fire    := RegNext(reg(0, 31, 1))
-  proc.io.host2tpu.fireTag := RegNext(reg(0, 0, cfg.NB_THREADS))
+  val fireReg    = regOut(0, 31, 1).toBool
+  val fireTagReg = regOut(0, 0, cfg.NB_THREADS)
+  proc.io.host2tpu.fire    := fireReg
+  proc.io.host2tpu.fireTag := fireTagReg
 
   /** Register 1 (Read-Only)
     * +----------------------------------------+
@@ -52,7 +65,15 @@ class procAxiWrap(implicit val cfg: ProcConfig) extends Module {
     * +-----------------+----------+-----------+
     *
     */
-  reg(1, 0, cfg.NB_THREADS) := proc.io.host2tpu.done
+  val doneVec = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(false.B)))
+  regIn(1):= Cat(0.U, doneVec.asUInt)
+
+  when(proc.io.host2tpu.done) {
+    doneVec(proc.io.host2tpu.doneTag) := true.B
+  }
+  when(fireReg) {
+    doneVec(fireTagReg) := false.B
+  }
 
   /** Register 2
     * +----------------------------------------+
@@ -77,4 +98,9 @@ class procAxiWrap(implicit val cfg: ProcConfig) extends Module {
     *
     */
   // reg(3, 0, 1)
+
+  // DEBUG Signals ------------------------------------------------------------
+  if(cfg.DebugSignals) {
+    io.procStateDBG.get := proc.io.procStateDBG.get
+  }
 }

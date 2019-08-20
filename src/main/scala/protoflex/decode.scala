@@ -127,8 +127,8 @@ class DecodeUnit(implicit val cfg: ProcConfig) extends Module
 {
   val io = IO(new DecodeUnitIO)
   val inst = io.finst.inst
-  //val instLE = WireInit(Cat(inst(7,0), inst(15,8), inst(23,16), inst(31,24)))
-  val dinst = Wire(new DInst).decode(inst, io.finst.tag)
+  val instBE = WireInit(Cat(inst(7,0), inst(15,8), inst(23,16), inst(31,24))) // Little Endian processor
+  val dinst = Wire(new DInst).decode(instBE, io.finst.tag)
   dinst.pc := io.finst.pc
   io.dinst := dinst
   io.tp_req := dinst.inst_en

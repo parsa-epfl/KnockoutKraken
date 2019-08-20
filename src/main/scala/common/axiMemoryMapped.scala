@@ -115,12 +115,10 @@ class AxiMemoryMapped(implicit c: AxiMemoryMappedConfig) extends Module{
 
 class AxiMemoryMappedWithRegs(implicit val c: AxiMemoryMappedConfig) extends Module{
   val io = IO(new Bundle{
-                val resetn       = Input(Bool())
                 val axiLite      = AxiLiteSlave(c.axiLiteConfig)
                 val moduleInputs = Input(Vec(c.nbrReg,  UInt(c.dataWidth.W)))
                 val regsValues   = Output(Vec(c.nbrReg, UInt(c.dataWidth.W)))
               })
-  withReset(~(io.resetn)){
     val axiMemoryMapped = Module(new AxiMemoryMapped())
     val registerMap     = Module(new RegisterMap()(c.regMapConfig))
 
@@ -128,5 +126,4 @@ class AxiMemoryMappedWithRegs(implicit val c: AxiMemoryMappedConfig) extends Mod
     registerMap.io.port <> axiMemoryMapped.io.regPort
     io.moduleInputs     <> registerMap.io.moduleInputs
     io.regsValues       <> registerMap.io.regsValues
-  }
 }

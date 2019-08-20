@@ -45,7 +45,7 @@ object FA_QflexCmds {
 /* sim : Chisel3 simulation
  * qemu: QEMU    simulation
  */
-case class SimulatorConfig(
+case class SimulatorConfig (
   simStateFilename: String,
   simLockFilename: String,
   simCmdFilename : String,
@@ -67,27 +67,37 @@ case class SimulatorConfig(
   val pagePath      = rootPath + "/" + pageFilename
 }
 
-class SimulatorTests(c_ : Proc, val cfg: SimulatorConfig)(implicit val procCfg: ProcConfig) extends PeekPokeTester(c_) with ProcTestsBase {
-  val INSN_SIZE = 4
-  val pageSize = cfg.pageSizeBytes/INSN_SIZE
-  override val c = c_
+trait SimulatorTestsBase extends ProcTestsBase {
+  val cfgSim: SimulatorConfig
+  def pageSize = cfgSim.pageSizeBytes/INSN_SIZE
 
-  val program_page = Array.ofDim[Int](pageSize)
+  var tf = System.nanoTime
+  var ti = System.nanoTime
+  var timeoutms = 10000
 
-  def updateProgramPage(path: String) = {
+  def exit: Unit
+
+  def timedOut = {
+    val isTimeOut = (tf - ti) / 1e6d > timeoutms
+    //println("time_elapsed:" + (tf - ti) / 1e9d)
+    if(isTimeOut) {
+      println("TIMED OUT")
+      exit
+    }
+    isTimeOut
+  }
+
+  def updateProgramPage(path: String): Unit = {
     val bytearray: Array[Byte] = Files.readAllBytes(Paths.get(path))
     var hex = ""
     for(i <- 0 until pageSize) {
       val insn_LE = bytearray.slice(i*INSN_SIZE, i*INSN_SIZE+INSN_SIZE)
-      program_page(i) = ByteBuffer.wrap(insn_LE.reverse).getInt
-      // Write Instruction word to BRAM
-      write_ppage(program_page(i), i)
-      //hex += ByteBuffer.wrap(insn_LE).getInt.toHexString + "\n" // Disassemble for debug
+      val insn = ByteBuffer.wrap(insn_LE).getInt
+      wrBRAM32b(portPPage, insn, i)
     }
-    //writeFile(path + "_dis", hex) // Disassemble for debug
   }
 
-  def readFile(path: String):String= {
+  def readFile(path: String): String= {
     val source = scala.io.Source.fromFile(path)
     val lines = try source.mkString finally source.close()
     lines
@@ -102,24 +112,9 @@ class SimulatorTests(c_ : Proc, val cfg: SimulatorConfig)(implicit val procCfg: 
     writeFile(path, json)
   }
 
-  def updatePState(json: String, tag : Int):Unit = {
+  def updatePState(json: String, tag : Int): Unit = {
     val pstate: PState = ArmflexJson.json2state(json)
-    write_pstate(tag,pstate)
-  }
-
-  var tf = System.nanoTime
-  var ti = System.nanoTime
-  var timeoutms = 10000
-
-  def timedOut = {
-    val isTimeOut = (tf - ti) / 1e6d > timeoutms
-    //println("time_elapsed:" + (tf - ti) / 1e9d)
-    if(isTimeOut) {
-      println("TIMED OUT")
-      backend.finish
-      System.exit(1)
-    }
-    isTimeOut
+    wrPSTATE2BRAM(tag, pstate)
   }
 
   def waitForCmd(filepath:String): Int = {
@@ -142,76 +137,128 @@ class SimulatorTests(c_ : Proc, val cfg: SimulatorConfig)(implicit val procCfg: 
     writeFile(path, json)
   }
 
+  def stepVerification() = {
+    step(1)
+    if(peek(procStateDBG_.get.comited)) {
+      val rtlPState = getPStateInternal(0)
+
+      writePState2File(cfgSim.simStatePath, rtlPState)
+      writeCmd((FA_QflexCmds.CHECK_N_STEP, 0), cfgSim.qemuCmdPath)
+      waitForCmd(cfgSim.simCmdPath)
+
+      val qemuPState = ArmflexJson.json2state(readFile(cfgSim.qemuStatePath))
+      println("Comparing States: QEMU <-> RTL")
+      qemuPState.compare(rtlPState)
+    } else {
+      println("DebugSignals not enabled, enable them to run with verification; EXIT")
+      exit
+    }
+    tf = System.nanoTime
+  }
+
   def run() = {
     println("RUN START")
     ti = System.nanoTime
-    start_rtl()
+    fireThread(0)
     do {
       step(1)
       tf = System.nanoTime
-    } while(peek(c.io.host2tpu.done) == 0 && !timedOut);
+    } while(!procIsDone._1 && !timedOut);
     step(10)
     println("RUN DONE")
   }
 
-
-  def runStepping() = {
-    println("RUN START")
-    ti = System.nanoTime
-    start_rtl()
-    do {
-      step(1)
-      if(peek(c.io.procStateDBG.get.comited)) {
-        val rtlPState = getPStateInternal(0)
-        writePState2File(cfg.simStatePath, rtlPState)
-        writeCmd((FA_QflexCmds.CHECK_N_STEP, 0), cfg.qemuCmdPath)
-        waitForCmd(cfg.simCmdPath)
-        val qemuPState = ArmflexJson.json2state(readFile(cfg.qemuStatePath))
-        println("Comparing States: QEMU <-> RTL")
-        qemuPState.compare(rtlPState)
-      }
-      tf = System.nanoTime
-    } while(peek(c.io.host2tpu.done) == 0 && !timedOut);
-    step(10)
-    println("RUN DONE")
-  }
-
-
-  def runSimulator(timeoutms_i: Long):Unit = {
+  def runSimulator(timeoutms_i: Int):Unit = {
     ti = System.nanoTime
     tf = System.nanoTime
     timeoutms = timeoutms_i
     while(!timedOut) {
-      val cmd = waitForCmd(cfg.simCmdPath)
+      val cmd = waitForCmd(cfgSim.simCmdPath)
       ti = System.nanoTime
       cmd match {
         case FA_QflexCmds.SIM_START =>
           println("SIMULATION START")
-          updateProgramPage(cfg.pagePath)
-          updatePState(readFile(cfg.qemuStatePath), 0)
-          runStepping()
-          writePState2File(cfg.simStatePath, read_pstate(0))
-          writeCmd((FA_QflexCmds.INST_UNDEF, 0), cfg.qemuCmdPath)
+          updateProgramPage(cfgSim.pagePath)
+          updatePState(readFile(cfgSim.qemuStatePath), 0)
+          run()
+          writePState2File(cfgSim.simStatePath, rdBRAM2PSTATE(0))
+          writeCmd((FA_QflexCmds.INST_UNDEF, 0), cfgSim.qemuCmdPath)
         case FA_QflexCmds.SIM_STOP =>
           println("SIMULATION STOP")
           return
       }
-     tf = System.nanoTime
+      tf = System.nanoTime
     }
   }
 
-  // Simulation routine
-  runSimulator(50000)
 }
 
-class SimulatorTester(val cfg: SimulatorConfig) extends ChiselFlatSpec with ArmflexBaseFlatSpec {
+
+/* sim : Chisel3 simulation
+ * qemu: QEMU    simulation
+ */
+class SimulatorAxiTests(c_ : ProcAxiWrap, val cfgSim_ : SimulatorConfig)(implicit val cfgProc_ : ProcConfig)
+    extends PeekPokeTester(c_) with SimulatorTestsBase with ProcAxiWrapTestsBase {
+
+  val cfgSim = cfgSim_
+  val cfgProc = cfgProc_
+
+  val cProcAxi = c_
+  val axiLiteList = List(cProcAxi.io.axiLite)
+
+  val portPPage = cProcAxi.io.ppageBRAM
+  val portPState = cProcAxi.io.stateBRAM
+  val procStateDBG_ = cProcAxi.io.procStateDBG
+
+  def exit = {
+    backend.finish
+    System.exit(1)
+  }
+
+  // Simulation routine
+  runSimulator(1000)
+}
+
+
+class SimulatorMainTests(c_ : Proc, val cfgSim_ : SimulatorConfig)(implicit val cfgProc_ : ProcConfig)
+    extends PeekPokeTester(c_) with SimulatorTestsBase with ProcMainTestsBase {
+
+  val cfgSim = cfgSim_
+  val cfgProc = cfgProc_
+
+  val cProc = c_
+
+  val portPPage = cProc.io.ppageBRAM
+  val portPState = cProc.io.stateBRAM
+  val procStateDBG_ = cProc.io.procStateDBG
+
+  def exit = {
+    backend.finish
+    System.exit(1)
+  }
+
+  // Simulation routine
+  runSimulator(1000)
+}
+
+class SimulatorAxiTester(val cfg: SimulatorConfig) extends ChiselFlatSpec with ArmflexBaseFlatSpec {
   override val backends = Array("verilator")
   println("Starting Simulator")
   // Extra usefull args : --is-verbose
-  val chiselArgs = Array("-tn", "proc", "-td","./test/Sim", "--backend-name", "verilator")
-  iotesters.Driver.execute(chiselArgs, () => new Proc()) {
-      c => new SimulatorTests(c, cfg)
+
+  /*
+   iotesters.Driver.execute(Array("-tn", "proc", "-td","./test/Sim/Axi", "--backend-name", "verilator"), () => new ProcAxiWrap()) {
+    c => new SimulatorAxiTests(c, cfg)
   } should be(true)
+  // */
+
+  //*
+  iotesters.Driver.execute(Array("-tn", "proc", "-td","./test/Sim/Main", "--backend-name", "verilator"), () => new Proc()) {
+    c => new SimulatorMainTests(c, cfg)
+  } should be(true)
+  // */
+
+
   println("Done Simulator")
 }
 
@@ -223,6 +270,6 @@ object SimulatorMain extends App {
     args(6), args(7).toInt,
     args(8)
   )
-  new SimulatorTester(cfg: SimulatorConfig)
+  new SimulatorAxiTester(cfg: SimulatorConfig)
 }
 

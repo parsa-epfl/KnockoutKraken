@@ -44,9 +44,9 @@ class ProcStateDBG(implicit val cfg : ProcConfig) extends Bundle
 class Proc(implicit val cfg: ProcConfig) extends Module
 {
   val io = IO(new Bundle {
-    // memory interface
-    val mem_req = Output(Valid(new MemRes))
-    val mem_res = Input(Valid(new MemRes))
+    // memory interface TODO
+    // val mem_req = Output(Valid(new MemRes))
+    // val mem_res = Input(Valid(new MemRes))
 
     // BRAM Host Ports
     val ppageBRAM = new BRAMPort(0)(cfg.ppageBRAMc)
@@ -180,8 +180,10 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   ldstU.io.rVal1 := rVal1
   ldstU.io.rVal2 := rVal2
   ldstU.io.pc    := vec_pregs(issued_dinst.tag).PC
-  io.mem_req := ldstU.io.memReq
-  ldstU.io.memRes := io.mem_res
+  // io.mem_req := ldstU.io.memReq
+  ldstU.io.memRes.valid := false.B // TODO
+  ldstU.io.memRes.bits.data := 0.U     // TODO
+
 
   // testing only
   ldstU.io.write_tlb_vaddr := DontCare

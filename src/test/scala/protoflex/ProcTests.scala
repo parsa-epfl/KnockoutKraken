@@ -1,47 +1,92 @@
 package protoflex
 
-import scala.collection.mutable
-import scala.language.implicitConversions
-
 import java.io.{FileInputStream, FileOutputStream, IOException}
 import java.nio.ByteBuffer
-
 import java.math.BigInteger
 
 import chisel3._
 import chisel3.iotesters.{ChiselFlatSpec, Driver, PeekPokeTester, PeekPokeTests}
-import utils.AssemblyParser
-import utils.SoftwareStructs
+import utils.{AssemblyParser, PrintingTools}
+import utils.SoftwareStructs._
 
 import common.PROCESSOR_TYPES.{DATA_SZ, REG_N}
-import utils.PrintingTools
+import common.{HighLevelAxiLiteTestInterface, BRAMPort, BRAMPortHelper}
 
+trait ProcTestsBase extends ArmflexBasePeekPokeTests with BRAMPortHelper {
+  val cfgProc: ProcConfig
 
-// base class contain utils for proc testing
-trait ProcTestsBase extends PeekPokeTests {
-  implicit def bigint2boolean(b:BigInt):Boolean = if(b != 0) true else false
-  def int(x: Int): BigInt = { BigInt(x) }
-  def int(x: Long): BigInt = { BigInt(x) }
+  val INSN_SIZE = 4
+  val portPPage : BRAMPort
+  val portPState : BRAMPort
+  val procStateDBG_ : Option[ProcStateDBG]
 
-  // These peek's are missingin PeekPokeTests trait,
-  // but are present in PeekPokeTester
-  def peek(signal: Aggregate): Seq[BigInt]
-  def peek(signal: Bundle): mutable.LinkedHashMap[String, BigInt]
+  def fireThread(tag: Int): Unit
+  def procIsDone(): (Boolean, Int)
 
-  val c: Proc
-  val random = scala.util.Random
+  def writeFullPPage(ppage: Array[Int], page_size: Int) = {
+    for(i <- 0 to page_size) {
+      wrBRAM32b(portPPage, ppage(i), i)
+    }
+  }
+
+  def wrPSTATE2BRAM(tag: Int, pstate: PState): Unit ={
+    println("WRITE PSTATE")
+    //println(pstate.toString())
+    var offst = 0
+    for(i <- 0 until 32 ) {
+      wrBRAM64b(portPState, pstate.xregs(i), offst); offst += 2
+    }
+    wrBRAM64b(portPState, pstate.pc, offst: Int); offst+=2
+    // TODO Write SP, EL and NZCV as Cat(EL, SP, NZCV)
+    wrBRAM32b(portPState, pstate.nzcv, offst); offst+=1
+  }
+
+  def rdBRAM2PSTATE(tag: Int): PState ={
+    println("READ PSTATE")
+    var offst = 0
+    val xregs = for(i <- 0 until 32 ) yield  {
+      val reg = rdBRAM64b(portPState, offst); offst+=2
+      reg
+    }
+
+    val pc = rdBRAM64b(portPState, offst: Int); offst+=2
+    val sp_el_nzcv = rdBRAM32b(portPState,offst); offst+=1
+
+    val s_sp_el_nzcv = sp_el_nzcv.toBinaryString
+    val sp = s_sp_el_nzcv.slice(5, 6)
+    val el = s_sp_el_nzcv.slice(4, 5)
+    val nzcv = Integer.parseInt(s_sp_el_nzcv.slice(0, 4), 2)
+    val pstate = new PState(xregs.toList: List[Long], pc: Long, nzcv: Int)
+    //println(pstate.toString())
+    pstate
+  }
+
+  // DEBUG Functions ------------------------------------------------------------
+  def getPStateInternal(cpu: Int): PState = {
+    if(!cfgProc.DebugSignals) {
+      println("ProportPStateDBG signals are not available: Enable DebugSignals in ProcConfig")
+      return PState(List(404), 404, 404)
+    }
+    val procStateDBG = procStateDBG_.get
+    val pstate = procStateDBG.vecPRegs(cpu)
+    val rfile = procStateDBG.vecRFiles(cpu)
+    val xregs = for(reg <- 0 until 32) yield peek(rfile(reg)).toLong
+    val pc = peek(pstate.PC).toLong
+    val nzcv = peek(pstate.NZCV).toInt
+    new PState(xregs.toList: List[Long], pc: Long, nzcv: Int)
+  }
 
   def printState():Unit = {
-    if(!c.cfg.DebugSignals) {
-      println("ProcStateDBG signals are not available: Enable DebugSignals in ProcConfig")
+    if(!cfgProc.DebugSignals) {
+      println("ProportPStateDBG signals are not available: Enable DebugSignals in ProcConfig")
       return
     }
-    val procStateDBG = c.io.procStateDBG.get
-    val sFet = if(peek(procStateDBG.fetchReg.valid)) SoftwareStructs.finst(peek(procStateDBG.fetchReg.bits)) else "XXX"
-    val sDec = if(peek(procStateDBG.decReg.valid))   SoftwareStructs.dinst(peek(procStateDBG.decReg.bits)) else "XXX"
-    val sIss = if(peek(procStateDBG.issueReg.valid)) SoftwareStructs.dinst(peek(procStateDBG.issueReg.bits)) else "XXX"
-    val sExe = if(peek(procStateDBG.exeReg.valid))   SoftwareStructs.einst(peek(procStateDBG.exeReg.bits)) else "XXX"
-    val sBr  = if(peek(procStateDBG.brReg.valid))    SoftwareStructs.binst(peek(procStateDBG.brReg.bits)) else "XXX"
+    val procStateDBG = procStateDBG_.get
+    val sFet = if(peek(procStateDBG.fetchReg.valid)) finst(peek(procStateDBG.fetchReg.bits)) else "XXX"
+    val sDec = if(peek(procStateDBG.decReg.valid))   dinst(peek(procStateDBG.decReg.bits))   else "XXX"
+    val sIss = if(peek(procStateDBG.issueReg.valid)) dinst(peek(procStateDBG.issueReg.bits)) else "XXX"
+    val sExe = if(peek(procStateDBG.exeReg.valid))   einst(peek(procStateDBG.exeReg.bits))   else "XXX"
+    val sBr  = if(peek(procStateDBG.brReg.valid))    binst(peek(procStateDBG.brReg.bits))    else "XXX"
     val state = Seq(
       "+----------------------------------------------------------------------------------+",
       "|                                   STATE                                          |",
@@ -83,160 +128,71 @@ trait ProcTestsBase extends PeekPokeTests {
   def printCycle(cycle: Int) = {
     val cycle_str = Seq(
       "+----------------------------------------------------------------------------------+",
-      "|                                Cycle : "+cycle.toString.padTo(2,' ') +
-        "                                        |",
+      "|                                Cycle : "+cycle.toString.padTo(2,' ')
+        + "                                        |",
       "+-----------------------------------------------------------------------------------\n").mkString("\n")
     print(cycle_str)
   }
+}
 
-  def getPStateInternal(cpu: Int): SoftwareStructs.PState = {
-    if(!c.cfg.DebugSignals) {
-      println("ProcStateDBG signals are not available: Enable DebugSignals in ProcConfig")
-      return SoftwareStructs.PState(List(404), 404, 404)
-    }
-    val procStateDBG = c.io.procStateDBG.get
-    val pstate = procStateDBG.vecPRegs(cpu)
-    val rfile = procStateDBG.vecRFiles(cpu)
-    val xregs = for(reg <- 0 until 32) yield peek(rfile(reg)).toLong
-    val pc = peek(pstate.PC).toLong
-    val nzcv = peek(pstate.NZCV).toInt
-    new SoftwareStructs.PState(xregs.toList: List[Long], pc: Long, nzcv: Int)
-  }
+// base class contain utils for proc testing
+trait ProcMainTestsBase extends ProcTestsBase with BRAMPortHelper {
+  val cProc: Proc
 
-  // helper functions
+  val random = scala.util.Random
 
-  def start_rtl() = {
-    poke(c.io.host2tpu.fire, 1)
-    poke(c.io.host2tpu.fireTag, 0)
+  def fireThread(tag: Int) = {
+    poke(cProc.io.host2tpu.fire, 1)
+    poke(cProc.io.host2tpu.fireTag, tag)
     step(1)
-    poke(c.io.host2tpu.fire, 0)
+    poke(cProc.io.host2tpu.fire, 0)
   }
-
-  def write_ppage(inst: Int, offst: Int) = {
-    poke(c.io.ppageBRAM.en, 1)
-    poke(c.io.ppageBRAM.writeEn.get, 1)
-    poke(c.io.ppageBRAM.addr, offst)
-    poke(c.io.ppageBRAM.dataIn.get, inst)
-    step(1)
-    poke(c.io.ppageBRAM.en, 0)
-    poke(c.io.ppageBRAM.writeEn.get, 0)
-  }
-
-  def writeFullPPage(ppage: Array[Int], page_size: Int) = {
-    for(i <- 0 to page_size) {
-      write_ppage(ppage(i), i)
-    }
-  }
-
-  def write32b_pstate(word: Int, offst: Int) = {
-    poke(c.io.stateBRAM.en, 1)
-    poke(c.io.stateBRAM.writeEn.get, 1)
-    poke(c.io.stateBRAM.addr, offst)
-    poke(c.io.stateBRAM.dataIn.get, word)
-    step(1)
-    poke(c.io.stateBRAM.en, 0)
-    poke(c.io.stateBRAM.writeEn.get, 0)
-  }
-
-  // NOTE: Writes 2 words
-  def write64b_pstate(lw: Long, offst: Int) = {
-    val bytes = Array.fill(8)(0.toByte)
-    for( i <- 0 to 7 ) bytes(i) = ((lw >> ((7-i) * 8)) & 0xFF).toByte
-    val msb = ByteBuffer.wrap(bytes.slice(0, 4)).getInt
-    val lsb = ByteBuffer.wrap(bytes.slice(4, 8)).getInt
-    write32b_pstate(msb, offst)
-    write32b_pstate(lsb, offst+1)
-  }
-
-  def write_pstate(tag: Int, pstate: SoftwareStructs.PState): Unit ={
-    println("WRITE PSTATE")
-    println(pstate.toString())
-    var offst = 0
-    for(i <- 0 until 32 ) {
-      write64b_pstate(pstate.xregs(i), offst); offst += 2
-    }
-    write64b_pstate(pstate.pc, offst: Int); offst+=2
-    // TODO Write SP, EL and NZCV as Cat(EL, SP, NZCV)
-    write32b_pstate(pstate.nzcv, offst); offst+=1
-  }
-
-  def read32b_pstate(offst:Int):Int = {
-    poke(c.io.stateBRAM.en, 1)
-    poke(c.io.stateBRAM.writeEn.get, 0)
-    poke(c.io.stateBRAM.addr, offst)
-    step(1)
-    poke(c.io.stateBRAM.en, 0)
-    poke(c.io.stateBRAM.writeEn.get, 0)
-    val uint32 = peek(c.io.stateBRAM.dataOut.get)
-    return uint32.toInt
-  }
-
-  def read64b_pstate(offst:Int):Long = {
-    val msb = read32b_pstate(offst)
-    val lsb = read32b_pstate(offst+1)
-    val byte_msb = Array.fill(4)(0.toByte)
-    val byte_lsb = Array.fill(4)(0.toByte)
-    for (i <- 0 to 3) byte_msb(i) = ((msb >> ((3-i) * 8)) & 0xFF).toByte
-    for (i <- 0 to 3) byte_lsb(i) = ((lsb >> ((3-i) * 8)) & 0xFF).toByte
-    ByteBuffer.wrap((byte_msb ++ byte_lsb)).getLong
-  }
-
-  def read_pstate(tag: Int): SoftwareStructs.PState ={
-    println("READ PSTATE")
-    var offst = 0
-    val xregs = for(i <- 0 until 32 ) yield  {
-      val reg = read64b_pstate(offst)
-      offst += 2
-      reg
-    }
-
-    val pc = read64b_pstate(offst: Int); offst+=2
-    val sp_el_nzcv = read32b_pstate(offst)
-    val sp = sp_el_nzcv.toBinaryString.slice(5, 6)
-    val el = sp_el_nzcv.toBinaryString.slice(4, 5)
-    val nzcv = Integer.parseInt(sp_el_nzcv.toBinaryString.slice(0, 4), 2)
-    offst+=1
-    val pstate = new SoftwareStructs.PState(xregs.toList: List[Long], pc: Long, nzcv: Int)
-    println(pstate.toString())
-    pstate
+  def procIsDone() : (Boolean, Int) = {
+    (peek(cProc.io.host2tpu.done), peek(cProc.io.host2tpu.doneTag).toInt)
   }
 }
 
-// test basic pipline TODO fix deprecated
-/*
-class ProcTestsPipeline(c_ : Proc) extends PeekPokeTester(c_) with ProcTestsBase
-{
-  override val c = c_
+trait ProcAxiWrapTestsBase extends ProcTestsBase with HighLevelAxiLiteTestInterface {
 
-  val insts = AssemblyParser.parse("alu.x")
-  val br_insts = AssemblyParser.parse("branch.x")
-  poke(c.io.brReg.ready, 1)
-  poke(c.io.exeReg.ready, 1)
-  poke(c.io.valid, 0)
-  poke(c.io.mem_res.valid, 0)
-  poke(c.io.mem_res.bits.data, 0)
-  step(1)
-  for(i <- 0 until 3) {
-    val itype = random.nextInt(2)
-    val inst = if (itype == 0) insts(random.nextInt(insts.size)) else br_insts(random.nextInt(br_insts.size))
-    poke(c.io.inst, inst.bitPat)
-    poke(c.io.tag, random.nextInt(4))
-    poke(c.io.valid, 1)
-    printCycle(i)
-    printState()
-    step(1)
+  val cProcAxi: ProcAxiWrap
+  dataWidth = 32
+
+  def readData32Bit(addr: BigInt) : BigInt = {
+    setReadAddressAndGetData(addr << 2)._1
   }
 
-}
+  // Note: FireReg = 0; DoneReg = 1, see ProcAxi.scala
+  /** Register 0 (Pulse-Only)
+    * +----------------------------------------------------+
+    * |                 to Transplant Cmds                 |
+    * |-----------+--------------------+-------------------+
+    * |   fire    |      RESERVED      |        Tag        |
+    * +-----------+--------------------+-------------------+
+    * |31       31|30        NB_THREADS|NB_THREADS-1      0|
+    * +-----------+--------------------+-------------------+
+    *
+    */
+  def fireThread(tag: Int): Unit = {
+    val data = (1 << 31) | tag
+    writeData32Bit(0: BigInt, data: BigInt)
+  }
 
-class ProcTester extends ChiselFlatSpec with ArmflexBaseFlatSpec
-{
-  behavior of "Proc"
-
-  backends foreach { backend =>
-    "ProcTestsReadyValid" should s"test Proc pipeline (with $backend)" in {
-      Driver(() => new Proc()(new ProcConfig(0)), backend)((c) => new ProcTestsPipeline(c)) should be (true)
+  /** Register 1 (Read-Only)
+    * +----------------------------------------+
+    * |          to Host Cmds                  |
+    * +-----------------+----------------------+
+    * |    RESERVED     |        done          |
+    * +-----------------+----------------------+
+    * |31      NB_THREAD|NB_THREADS-1         0|
+    * +-----------------+----------+-----------+
+    *
+    */
+  def procIsDone(): (Boolean, Int) = {
+    val doneVec = readData32Bit(1).toInt
+    if(doneVec != 0) {
+      return (true, doneVec)
+    } else {
+      return (false, doneVec)
     }
   }
 }
- */

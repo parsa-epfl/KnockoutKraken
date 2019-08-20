@@ -163,7 +163,7 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   }
 
   io.stateBRAM.en := true.B
-  io.stateBRAM.writeEn.get := stateDir === s_CPU2BRAM
+  io.stateBRAM.writeEn.get := stateDir === s_CPU2BRAM && stateRegType =/= r_DONE
   io.stateBRAM.addr := bramOFFST
   when(stateRegType === r_XREGS) {
     io.stateBRAM.dataIn.get := Mux(bramOFFST(0), regDataInLSB, regDataInMSB)
