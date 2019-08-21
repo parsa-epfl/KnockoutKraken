@@ -26,6 +26,12 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends Module {
                 val axiLite = AxiLiteSlave(cfgAxiMM.axiLiteConfig)
                 val ppageBRAM = new BRAMPort(0)(cfg.ppageBRAMc)
                 val stateBRAM = new BRAMPort(0)(cfg.stateBRAMc)
+                // To Infer bram
+                val ppageBRAM_clk = Input(Bool())
+                val ppageBRAM_rst = Input(Bool())
+                val stateBRAM_clk = Input(Bool())
+                val stateBRAM_rst = Input(Bool())
+
 
                 val procStateDBG = if(cfg.DebugSignals) Some(new ProcStateDBG) else None
               })
