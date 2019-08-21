@@ -1,38 +1,55 @@
 module ProcAxiWrap( // @[:@3427.2]
+  (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 <interface_name> EN" *)
+  // Uncomment the following to set interface specific parameter on the bus interface.
+  //  (* X_INTERFACE_PARAMETER = "MASTER_TYPE <value>,MEM_ECC <value>,MEM_WIDTH <value>,MEM_SIZE <value>,READ_WRITE_MODE <value>" *)
   input         clock, // @[:@3428.4]
   input         reset, // @[:@3429.4]
-  input  [3:0]  io_axiLite_awaddr, // @[:@3430.4]
-  input  [2:0]  io_axiLite_awprot, // @[:@3430.4]
+  input [3:0]   io_axiLite_awaddr, // @[:@3430.4]
+  input [2:0]   io_axiLite_awprot, // @[:@3430.4]
   input         io_axiLite_awvalid, // @[:@3430.4]
   output        io_axiLite_awready, // @[:@3430.4]
-  input  [31:0] io_axiLite_wdata, // @[:@3430.4]
-  input  [3:0]  io_axiLite_wstrb, // @[:@3430.4]
+  input [31:0]  io_axiLite_wdata, // @[:@3430.4]
+  input [3:0]   io_axiLite_wstrb, // @[:@3430.4]
   input         io_axiLite_wvalid, // @[:@3430.4]
   output        io_axiLite_wready, // @[:@3430.4]
   output [1:0]  io_axiLite_bresp, // @[:@3430.4]
   output        io_axiLite_bvalid, // @[:@3430.4]
   input         io_axiLite_bready, // @[:@3430.4]
-  input  [3:0]  io_axiLite_araddr, // @[:@3430.4]
-  input  [2:0]  io_axiLite_arprot, // @[:@3430.4]
+  input [3:0]   io_axiLite_araddr, // @[:@3430.4]
+  input [2:0]   io_axiLite_arprot, // @[:@3430.4]
   input         io_axiLite_arvalid, // @[:@3430.4]
   output        io_axiLite_arready, // @[:@3430.4]
   output [31:0] io_axiLite_rdata, // @[:@3430.4]
   output [1:0]  io_axiLite_rresp, // @[:@3430.4]
   output        io_axiLite_rvalid, // @[:@3430.4]
   input         io_axiLite_rready, // @[:@3430.4]
+  (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 ppageBRAM WE" *)
   input         io_ppageBRAM_writeEn, // @[:@3430.4]
+  (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 ppageBRAM EN" *)
   input         io_ppageBRAM_en, // @[:@3430.4]
-  input  [9:0]  io_ppageBRAM_addr, // @[:@3430.4]
-  input  [35:0] io_ppageBRAM_dataIn, // @[:@3430.4]
+  (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 ppageBRAM ADDR" *)
+  input [9:0]   io_ppageBRAM_addr, // @[:@3430.4]
+  (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 ppageBRAM DIN" *)
+  input [35:0]  io_ppageBRAM_dataIn, // @[:@3430.4]
+  (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 ppageBRAM DOUT" *)
   output [35:0] io_ppageBRAM_dataOut, // @[:@3430.4]
+  (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 stateBRAM WE" *)
   input         io_stateBRAM_writeEn, // @[:@3430.4]
+  (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 stateBRAM EN" *)
   input         io_stateBRAM_en, // @[:@3430.4]
-  input  [9:0]  io_stateBRAM_addr, // @[:@3430.4]
-  input  [35:0] io_stateBRAM_dataIn, // @[:@3430.4]
+  (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 stateBRAM ADDR" *)
+  input [9:0]   io_stateBRAM_addr, // @[:@3430.4]
+  (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 stateBRAM DIN" *)
+  input [35:0]  io_stateBRAM_dataIn, // @[:@3430.4]
+  (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 stateBRAM DOUT" *)
   output [35:0] io_stateBRAM_dataOut, // @[:@3430.4]
+  (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 ppageBRAM CLK" *)
   input         io_ppageBRAM_clk, // @[:@3430.4]
+  (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 ppageBRAM RST" *)
   input         io_ppageBRAM_rst, // @[:@3430.4]
+  (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 stateBRAM CLK" *)
   input         io_stateBRAM_clk, // @[:@3430.4]
+  (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 stateBRAM RST" *)
   input         io_stateBRAM_rst // @[:@3430.4]
 );
   wire  regFile_clock; // @[ProcAxi.scala 22:24:@3432.4]
