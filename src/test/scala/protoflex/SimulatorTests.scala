@@ -246,13 +246,13 @@ class SimulatorAxiTester(val cfg: SimulatorConfig) extends ChiselFlatSpec with A
   println("Starting Simulator")
   // Extra usefull args : --is-verbose
 
-  /*
+  //*
    iotesters.Driver.execute(Array("-tn", "proc", "-td","./test/Sim/Axi", "--backend-name", "verilator"), () => new ProcAxiWrap()) {
     c => new SimulatorAxiTests(c, cfg)
   } should be(true)
   // */
 
-  //*
+  /*
   iotesters.Driver.execute(Array("-tn", "proc", "-td","./test/Sim/Main", "--backend-name", "verilator"), () => new Proc()) {
     c => new SimulatorMainTests(c, cfg)
   } should be(true)
