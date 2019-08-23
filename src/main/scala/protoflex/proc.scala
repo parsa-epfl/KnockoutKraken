@@ -181,10 +181,9 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   ldstU.io.dinst.valid := issuer.io.deq.valid
   ldstU.io.rVal1 := rVal1
   ldstU.io.rVal2 := rVal2
-  ldstU.io.pc    := vec_pregs(issued_dinst.tag).PC
   // io.mem_req := ldstU.io.memReq
   ldstU.io.memRes.valid := false.B // TODO
-  ldstU.io.memRes.bits.data := 0.U     // TODO
+  ldstU.io.memRes.bits.data := 0.U // TODO
 
 
   // testing only

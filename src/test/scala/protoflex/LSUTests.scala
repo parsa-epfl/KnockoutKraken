@@ -43,7 +43,7 @@ class LSUTests(c: LoadStoreUnit) extends PeekPokeTester(c)
     pc = pc + 0
     dinst_in zip insts(inst).io map { case (io, v) => poke(io, v) }
     print(SoftwareStructs.dinst(peek(c.io.dinst)))
-    poke(c.io.pc, pc) // pc or pc-4 ?
+    poke(c.io.dinst.bits.pc, pc) // pc or pc-4 ?
   }
 
 

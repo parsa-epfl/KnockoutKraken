@@ -31,7 +31,6 @@ class LoadStoreUnitIO(implicit val cfg: ProcConfig) extends Bundle
   val dinst = Input(Valid(new DInst))
   val rVal1 = Input(DATA_T)
   val rVal2 = Input(DATA_T)
-  val pc  = Input(DATA_T)
 
   val minst = Output(Valid(new MInst))
 
@@ -57,7 +56,7 @@ class LoadStoreUnit(implicit val cfg: ProcConfig) extends Module
   val dinst_reg = Reg(io.dinst.bits.cloneType)
 
   // base address as SInt
-  val base = io.pc.zext()
+  val base = dinst_reg.pc.zext()
 
   // Offset
   val imm_sign_extened = Wire(SInt(DATA_W))
