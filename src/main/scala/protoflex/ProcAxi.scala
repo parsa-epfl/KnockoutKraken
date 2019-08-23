@@ -24,15 +24,46 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends Module {
 
   val io = IO(new Bundle {
                 val axiLite = AxiLiteSlave(cfgAxiMM.axiLiteConfig)
+
                 val ppageBRAM = new BRAMPort(0)(cfg.ppageBRAMc)
-                val stateBRAM = new BRAMPort(0)(cfg.stateBRAMc)
-                // To Infer bram
                 val ppageBRAM_clk = Input(Bool())
                 val ppageBRAM_rst = Input(Bool())
+                val stateBRAM = new BRAMPort(0)(cfg.stateBRAMc)
                 val stateBRAM_clk = Input(Bool())
                 val stateBRAM_rst = Input(Bool())
+               /* To Infer bram port, add these attributes to ports in the following manner
 
+                (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 ppageBRAM WE" *)
+                input         io_ppageBRAM_writeEn, // @[:@3430.4]
+                (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 ppageBRAM EN" *)
+                input         io_ppageBRAM_en, // @[:@3430.4]
+                (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 ppageBRAM ADDR" *)
+                input [9:0]   io_ppageBRAM_addr, // @[:@3430.4]
+                (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 ppageBRAM DIN" *)
+                input [35:0]  io_ppageBRAM_dataIn, // @[:@3430.4]
+                (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 ppageBRAM DOUT" *)
+                output [35:0] io_ppageBRAM_dataOut, // @[:@3430.4]
+                (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 ppageBRAM CLK" *)
+                input         io_ppageBRAM_clk, // @[:@3430.4]
+                (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 ppageBRAM RST" *)
+                input         io_ppageBRAM_rst, // @[:@3430.4]
+                (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 stateBRAM WE" *)
+                input         io_stateBRAM_writeEn, // @[:@3430.4]
+                (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 stateBRAM EN" *)
+                input         io_stateBRAM_en, // @[:@3430.4]
+                (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 stateBRAM ADDR" *)
+                input [9:0]   io_stateBRAM_addr, // @[:@3430.4]
+                (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 stateBRAM DIN" *)
+                input [35:0]  io_stateBRAM_dataIn, // @[:@3430.4]
+                (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 stateBRAM DOUT" *)
+                output [35:0] io_stateBRAM_dataOut, // @[:@3430.4]
+                (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 stateBRAM CLK" *)
+                input         io_stateBRAM_clk, // @[:@3430.4]
+                (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 stateBRAM RST" *)
+                input         io_stateBRAM_rst // @[:@3430.4]
 
+                 */
+                // Debug
                 val procStateDBG = if(cfg.DebugSignals) Some(new ProcStateDBG) else None
               })
 
