@@ -1,3 +1,7 @@
+/** Credits to my friend Laurier Loiselle
+  *  source: https://github.com/laurierloi/fpgabits/
+  */
+
 package common
 
 import scala.language.reflectiveCalls
