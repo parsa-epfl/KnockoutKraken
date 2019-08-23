@@ -86,6 +86,7 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   // Issue
   val issuer = Module(new IssueUnit())
   // issueReg in Issue Unit
+  // Commitement stage
   // | Execute |        |            |
   val executer = Module(new ExecuteUnit())
   val exeReg = Module(new FReg(new EInst))
@@ -95,9 +96,10 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   // |         |        | Load Store |
   val ldstU = Module(new LoadStoreUnit())
   val ldstUReg = Module(new FReg(new MInst))
+  // |  UNDEF  |        |            |
+  val undefINSN = Wire(Valid(cfg.TAG_T))
 
   // Extra Regs and wires
-  val fake_PC = RegInit(0.U)
   val fetch_en = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(false.B)))
 
   // Interconnect -------------------------------------------
@@ -113,21 +115,21 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   tpu.io.tpu2cpu.done := false.B
   tpu.io.tpu2cpu.doneTag := 0.U
 
-  // PState -> Fetch
-  fetch.io.ppageBRAM <> ppage.io.getPort(1)
-
-  val fetch_tag = WireInit(0.U)
+  // PState + Branching -> Fetch
+  val fetch_tag = WireInit(0.U) // TODO, better arbiter for the tag to fetch
   for (i <- 0 until cfg.NB_THREADS) {
     when(fetch_en(i)) {
       fetch_tag := i.U
     }
   }
+  fetch.io.fire.valid := tpu.io.tpu2cpu.fire
+  fetch.io.fire.bits := tpu.io.tpu2cpu.fireTag
   fetch.io.tagIn := fetch_tag
   fetch.io.en := fetch_en(fetch_tag)
-  fetch.io.PC := fake_PC
-  when(fetch.io.incr) {
-    fake_PC := fake_PC + 4.U
-  }
+  fetch.io.vecPC zip vec_pregs foreach {case (fPC, pPC) => fPC := pPC.PC}
+  fetch.io.ppageBRAM <> ppage.io.getPort(1)
+  fetch.io.branch.valid := brReg.io.deq.valid
+  fetch.io.branch.bits := brReg.io.deq.bits
 
   // Fetch -> Decode
   decoder.io.finst := fetch.io.deq.bits
@@ -229,7 +231,6 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   // do not update PC when an instruction(branch/execute) instruction didn't executed
   // update PC
   when(brReg.io.deq.valid) {
-    fake_PC := (vec_pregs(brReg.io.deq.bits.tag).PC.zext + brReg.io.deq.bits.offset.asSInt).asUInt()
     vec_pregs(brReg.io.deq.bits.tag).PC := (vec_pregs(brReg.io.deq.bits.tag).PC.zext + brReg.io.deq.bits.offset.asSInt).asUInt()
     last_thread := brReg.io.deq.bits.tag
   }.elsewhen(exeReg.io.deq.valid) {
@@ -240,13 +241,15 @@ class Proc(implicit val cfg: ProcConfig) extends Module
     last_thread := exeReg.io.deq.bits.tag
   }
 
-  // Start and stop
+  // Start and stop ---------------
   when(tpu.io.tpu2cpu.fire) {
-    fake_PC := vec_pregs(tpu.io.tpu2cpu.fireTag).PC
     fetch_en(tpu.io.tpu2cpu.fireTag) := true.B
   }
-  tpu.io.tpu2cpu.done := issuer.io.deq.valid && issued_dinst.itype === DECODE_CONTROL_SIGNALS.I_X
-  tpu.io.tpu2cpu.doneTag := issued_dinst.tag
+  // Cycle delay for commitement
+  undefINSN.bits := RegNext(issued_dinst.tag)
+  undefINSN.valid := RegNext(issuer.io.deq.valid && issued_dinst.itype === DECODE_CONTROL_SIGNALS.I_X)
+  tpu.io.tpu2cpu.done := undefINSN.valid
+  tpu.io.tpu2cpu.doneTag := undefINSN.bits
   when(issuer.io.deq.valid && issued_dinst.itype === DECODE_CONTROL_SIGNALS.I_X) {
     fetch_en(tpu.io.tpu2cpu.flushTag) := false.B
   }

@@ -16,11 +16,15 @@ class FInst(implicit val cfg: ProcConfig) extends Bundle
 class FetchUnitIO(implicit val cfg: ProcConfig) extends Bundle
 {
   val en = Input(Bool())
-  val PC = Input(DATA_T)
+  val vecPC = Input(Vec(cfg.NB_THREADS, DATA_T))
   val tagIn  = Input(cfg.TAG_T)
 
   val incr = Output(Bool())
   val flush = Input(Bool())
+
+  val fire = Input(Valid(cfg.TAG_T))
+
+  val branch = Input(Valid(new BInst))
 
   // Program Page
   val ppageBRAM = Flipped(new BRAMPort(1)(cfg.ppageBRAMc))
@@ -32,9 +36,10 @@ class FetchUnitIO(implicit val cfg: ProcConfig) extends Bundle
 class FetchUnit(implicit val cfg: ProcConfig) extends Module
 {
   val io = IO(new FetchUnitIO())
+  val fake_PC = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(DATA_X)))
 
   io.ppageBRAM.en := true.B
-  io.ppageBRAM.addr := io.PC >> 2.U // PC is byte addressed, BRAM is 32bit word addressed
+  io.ppageBRAM.addr := fake_PC(io.tagIn) >> 2.U // PC is byte addressed, BRAM is 32bit word addressed
   io.ppageBRAM.dataIn.get := 0.U
   io.ppageBRAM.writeEn.get := false.B
 
@@ -46,7 +51,7 @@ class FetchUnit(implicit val cfg: ProcConfig) extends Module
   when(readIns) {
     valid := io.en
     tag := io.tagIn
-    pc := io.PC
+    pc := fake_PC(io.tagIn)
   }.otherwise {
     valid := valid
     tag := tag
@@ -71,9 +76,22 @@ class FetchUnit(implicit val cfg: ProcConfig) extends Module
     instV.valid := false.B
   }
 
-  io.incr := io.deq.ready && io.en
-  io.deq.valid := valid && !io.flush
+  val deqValid = valid && !io.flush
+  io.incr := readIns && io.en
+  //io.incr := io.deq.ready && deqValid
+  io.deq.valid := deqValid
   io.deq.bits.tag := tag
   io.deq.bits.pc := pc
   io.deq.bits.inst := Mux(instV.valid, instV.bits, io.ppageBRAM.dataOut.get)
+
+  when(readIns && io.en) {
+    fake_PC(io.tagIn) := fake_PC(io.tagIn) + 4.U
+  }
+  when(io.branch.valid) {
+    fake_PC(io.branch.bits.tag) := (io.vecPC(io.branch.bits.tag).zext + io.branch.bits.offset.asSInt).asUInt()
+  }
+  when(io.fire.valid) {
+    fake_PC(io.fire.bits) := io.vecPC(io.fire.bits)
+  }
+ 
 }
