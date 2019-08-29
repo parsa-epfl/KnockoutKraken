@@ -8,13 +8,11 @@ import common.DECODE_CONTROL_SIGNALS._
 import common.PROCESSOR_TYPES._
 
 class EInst(implicit val cfg: ProcConfig) extends Bundle {
-  val res  = DATA_T
-  val rd   = REG_T
-  val rd_en = C_T
-  val tag  = cfg.TAG_T
+  val rd = Valid(REG_T)
+  val nzcv = Valid(NZCV_T)
 
-  val nzcv = NZCV_T
-  val nzcv_en = C_T
+  val tag = Output(cfg.TAG_T)
+  val res = Output(DATA_T)
 }
 
 class BasicALU(implicit val cfg: ProcConfig) extends Module {
@@ -109,16 +107,16 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   val io = IO(new ExecuteUnitIO)
 
   // Take immediate
-  val interVal2 = Mux(io.dinst.rs2_en, io.rVal2, io.dinst.imm)
+  val interVal2 = Mux(io.dinst.rs2.valid, io.rVal2, io.dinst.imm.bits)
 
   // Shift
   val shiftALU = Module(new ShiftALU())
   shiftALU.io.word := interVal2
-  shiftALU.io.amount := io.dinst.shift_val
+  shiftALU.io.amount := io.dinst.shift_val.bits
   shiftALU.io.opcode := io.dinst.shift_type
 
   // Choose shifted
-  val aluVal2 = Mux(io.dinst.shift_en, shiftALU.io.res, interVal2)
+  val aluVal2 = Mux(io.dinst.shift_val.valid, shiftALU.io.res, interVal2)
 
   // Execute in ALU now that we have both inputs ready
   val basicALU = Module(new BasicALU())
@@ -130,10 +128,9 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   val einst = Wire(new EInst)
   einst.res := basicALU.io.res
   einst.rd  := io.dinst.rd
-  einst.rd_en := io.dinst.rd_en
   einst.tag := io.dinst.tag
-  einst.nzcv := basicALU.io.nzcv
-  einst.nzcv_en := io.dinst.nzcv_en
+  einst.nzcv.bits := basicALU.io.nzcv
+  einst.nzcv.valid := io.dinst.nzcv_en
 
   // Output
   io.einst.bits := einst

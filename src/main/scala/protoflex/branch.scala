@@ -54,12 +54,12 @@ class BranchUnit(implicit val cfg: ProcConfig) extends Module
 
   // Offset
   val signExtended = Wire(SInt(DATA_W))
-  signExtended := io.dinst.imm.asSInt
+  signExtended := io.dinst.imm.bits.asSInt
   io.binst.bits.offset := signExtended.asUInt
 
   // Condition to branch
   val cond = Module(new CondUnit())
-  cond.io.cond := io.dinst.cond
+  cond.io.cond := io.dinst.cond.bits
   cond.io.nzcv := io.nzcv
   when (io.dinst.itype ===  I_BImm || io.dinst.itype === I_BCImm) {
     when(io.dinst.op === OP_BCOND) {

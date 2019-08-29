@@ -82,8 +82,7 @@ class IssueUnit(implicit val cfg: ProcConfig) extends Module
     * reg_pipe_v The valid bit indicates whenever the register contains a valid decoded instruction.
     * sig_pipe_r This signal indicates whenever the register is ready to recieve the next instruction.
     */
-  def emptyDInst = Wire(new DInst).empty()
-  val reg_pipe   = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(emptyDInst)))
+  val reg_pipe   = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(DInst())))
   val reg_pipe_v = RegInit(VecInit(cfg.TAG_VEC_X.toBools))
   val sig_pipe_r = WireInit(VecInit(cfg.TAG_VEC_X.toBools))
 
@@ -137,10 +136,10 @@ class IssueUnit(implicit val cfg: ProcConfig) extends Module
     sig_pipe_i(cpu) := reg_pipe_v(cpu)
   }
 
-  val rfile_wb_pending = io.exeReg.valid && io.exeReg.bits.rd_en
+  val rfile_wb_pending = io.exeReg.valid && io.exeReg.bits.rd.valid
   exe_stall := rfile_wb_pending &&
-    ((reg_pipe(io.exeReg.bits.tag).rs1 === io.exeReg.bits.rd) ||
-       (reg_pipe(io.exeReg.bits.tag).rs2 === io.exeReg.bits.rd))
+    ((reg_pipe(io.exeReg.bits.tag).rs1.bits === io.exeReg.bits.rd.bits) ||
+       (reg_pipe(io.exeReg.bits.tag).rs2.bits === io.exeReg.bits.rd.bits))
   sig_pipe_i(io.exeReg.bits.tag) := reg_pipe_v(io.exeReg.bits.tag) && !exe_stall
 
   // Issue -> Exec
@@ -162,7 +161,7 @@ class IssueUnit(implicit val cfg: ProcConfig) extends Module
 
   // Flushing ----------------------------------------------------------------
   when(io.flush) {
-    reg_pipe(io.flushTag) := emptyDInst
+    reg_pipe(io.flushTag) := DInst()
     reg_pipe_v(io.flushTag) := false.B
     sig_pipe_i(io.flushTag) := false.B
   }

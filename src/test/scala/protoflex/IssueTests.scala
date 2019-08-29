@@ -36,7 +36,7 @@ class IssueTestsReadyValid(c: IssueUnit) extends PeekPokeTester(c)
     } else {
       expect(c.io.deq.valid, 1)
       expect(c.io.deq.bits.tag, 2)
-      expect(c.io.deq.bits.rd, 0)
+      expect(c.io.deq.bits.rd.bits, 0)
     }
     step(1)
   }
@@ -59,7 +59,7 @@ class IssueTestsReadyValid(c: IssueUnit) extends PeekPokeTester(c)
     } else {
       expect(c.io.deq.valid, 1)
       expect(c.io.deq.bits.tag, 2)
-      expect(c.io.deq.bits.rd, i)
+      expect(c.io.deq.bits.rd.bits, i)
     }
 
     step(1)
@@ -111,7 +111,7 @@ class IssueTestsPriority(c: IssueUnit) extends PeekPokeTester(c)
     expect(c.io.deq.valid, deq_valid)
     if( deq_rdy ) {
       expect(c.io.deq.bits.tag, deq_tag)
-      expect(c.io.deq.bits.rd, deq_rd)
+      expect(c.io.deq.bits.rd.bits, deq_rd)
     }
     step(1)
   }

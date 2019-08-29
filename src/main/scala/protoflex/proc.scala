@@ -71,7 +71,7 @@ class Proc(implicit val cfg: ProcConfig) extends Module
 
   // Internal State -----------------------------------------
   // PState
-  val emptyPStateRegs = Wire(new PStateRegs()).empty
+  val emptyPStateRegs = WireInit(PStateRegs())
   val vec_rfile = VecInit(Seq.fill(cfg.NB_THREADS)(Module(new RFile).io))
   val vec_pregs = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(emptyPStateRegs)))
 
@@ -122,14 +122,16 @@ class Proc(implicit val cfg: ProcConfig) extends Module
       fetch_tag := i.U
     }
   }
-  fetch.io.fire.valid := tpu.io.tpu2cpu.fire
-  fetch.io.fire.bits := tpu.io.tpu2cpu.fireTag
+
+  fetch.io.ppageBRAM <> ppage.io.getPort(1)
+  fetch.io.vecPC zip vec_pregs foreach {case (fPC, pPC) => fPC := pPC.PC}
+
   fetch.io.tagIn := fetch_tag
   fetch.io.en := fetch_en(fetch_tag)
-  fetch.io.vecPC zip vec_pregs foreach {case (fPC, pPC) => fPC := pPC.PC}
-  fetch.io.ppageBRAM <> ppage.io.getPort(1)
   fetch.io.branch.valid := brReg.io.deq.valid
   fetch.io.branch.bits := brReg.io.deq.bits
+  fetch.io.fire.valid := tpu.io.tpu2cpu.fire
+  fetch.io.fire.bits := tpu.io.tpu2cpu.fireTag
 
   // Fetch -> Decode
   decoder.io.finst := fetch.io.deq.bits
@@ -152,8 +154,8 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   /** Execute */
   // connect rfile read(address) interface
   vec_rfile map { case rfile =>
-    rfile.rs1_addr := issued_dinst.rs1
-    rfile.rs2_addr := issued_dinst.rs2
+    rfile.rs1_addr := issued_dinst.rs1.bits
+    rfile.rs2_addr := issued_dinst.rs2.bits
   }
   // Read register data from rfile
   val rVal1 = vec_rfile(issued_dinst.tag).rs1_data
@@ -185,7 +187,6 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   ldstU.io.memRes.valid := false.B // TODO
   ldstU.io.memRes.bits.data := 0.U // TODO
 
-
   // testing only
   ldstU.io.write_tlb_vaddr := DontCare
   ldstU.io.write_tlb_entry := DontCare
@@ -204,26 +205,26 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   // connect RFile's write interface
   for(cpu <- 0 until cfg.NB_THREADS) {
     when(exeReg.io.deq.valid) {
-      vec_rfile(cpu).waddr := exeReg.io.deq.bits.rd
+      vec_rfile(cpu).waddr := exeReg.io.deq.bits.rd.bits
       vec_rfile(cpu).wdata := exeReg.io.deq.bits.res
     }.elsewhen(ldstUReg.io.deq.valid) {
-      vec_rfile(cpu).waddr := ldstUReg.io.deq.bits.rd
+      vec_rfile(cpu).waddr := ldstUReg.io.deq.bits.rd.bits
       vec_rfile(cpu).wdata := ldstUReg.io.deq.bits.res
     }.otherwise{
-      vec_rfile(cpu).waddr := exeReg.io.deq.bits.rd
+      vec_rfile(cpu).waddr := exeReg.io.deq.bits.rd.bits
       vec_rfile(cpu).wdata := exeReg.io.deq.bits.res
     }
     vec_rfile(cpu).wen := false.B
   }
   when(exeReg.io.deq.valid) {
-    vec_rfile(exeReg.io.deq.bits.tag).wen := exeReg.io.deq.bits.rd_en
+    vec_rfile(exeReg.io.deq.bits.tag).wen := exeReg.io.deq.bits.rd.valid
   }.elsewhen(ldstUReg.io.deq.valid) {
-    vec_rfile(ldstUReg.io.deq.bits.tag).wen := ldstUReg.io.deq.bits.rd_en
+    vec_rfile(ldstUReg.io.deq.bits.tag).wen := ldstUReg.io.deq.bits.rd.valid
   }
  
   // PState Regs
-  when (exeReg.io.deq.valid && exeReg.io.deq.bits.nzcv_en) {
-    vec_pregs(exeReg.io.deq.bits.tag).NZCV := exeReg.io.deq.bits.nzcv
+  when (exeReg.io.deq.valid && exeReg.io.deq.bits.nzcv.valid) {
+    vec_pregs(exeReg.io.deq.bits.tag).NZCV := exeReg.io.deq.bits.nzcv.bits
   }
 
   val last_thread = Reg(cfg.TAG_T)

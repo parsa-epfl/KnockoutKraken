@@ -63,13 +63,13 @@ class ExecuteLog_SRCond(c: ExecuteUnit) extends PeekPokeTester(c)
   val dinst_in = DInstExtractor(c)
   val andsInst = AssemblyInstruction(0, 0, 0)
   dinst_in zip andsInst.io map { case (io, value) => poke(io, value) }
-  expect(c.io.einst.bits.nzcv_en, 1)
+  expect(c.io.einst.bits.nzcv.valid, 1)
 
   def nzcv_check(rVal1: BigInt, rVal2: BigInt, nzcv: BigInt) = {
     poke(c.io.rVal1, rVal1)
     poke(c.io.rVal2, rVal2)
     step(1)
-    expect(c.io.einst.bits.nzcv, nzcv)
+    expect(c.io.einst.bits.nzcv.bits, nzcv)
     expect(c.io.einst.valid, 1)
   }
 

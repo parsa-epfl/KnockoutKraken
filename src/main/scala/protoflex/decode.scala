@@ -1,7 +1,7 @@
 package protoflex
 
 import chisel3._
-import chisel3.util.{BitPat, ListLookup, MuxLookup, EnqIO, DeqIO, Cat}
+import chisel3.util.{BitPat, ListLookup, MuxLookup, EnqIO, DeqIO, Cat, Valid}
 
 import common.PROCESSOR_TYPES._
 import common.DECODE_CONTROL_SIGNALS._
@@ -10,103 +10,96 @@ import common.DECODE_MATCHING_TABLES._
 class DInst(implicit val cfg: ProcConfig) extends Bundle
 {
   // Data
-  val rd    = REG_T
-  val rs1   = REG_T
-  val rs2   = REG_T
-  val imm   = IMM_T
-  val shift_val = SHIFT_VAL_T
-  val shift_type = SHIFT_TYPE_T
-  val cond  = COND_T
+  val rd = Valid(REG_T)
+  val rs1 = Valid(REG_T)
+  val rs2 = Valid(REG_T)
+  val imm = Valid(IMM_T)
+  val shift_val = Valid(SHIFT_VAL_T)
+  val shift_type = Output(SHIFT_TYPE_T)
+  val cond  = Valid(COND_T)
 
   // Control
-  val itype = I_T
-  val op = OP_T
+  val itype = Output(I_T)
+  val op = Output(OP_T)
 
   // Enables
-  val rd_en    = Bool()
-  val rs1_en   = Bool()
-  val rs2_en   = Bool()
-  val imm_en   = Bool()
-  val shift_en = Bool()
-  val cond_en  = Bool()
-  val nzcv_en  = Bool()
+  val nzcv_en  = Output(Bool())
 
-  // Instruction is Valid
-  val inst_en = Bool()
+  val tag = Output(cfg.TAG_T)
+  val inst32 = Valid(INST_T)
 
-  val tag = cfg.TAG_T
-  val inst = INST_T
+  val pc = Output(DATA_T)
 
-  val pc = DATA_T
-
-  def decode(inst : UInt, tag : UInt): DInst = {
+  def decode(inst : UInt, tag_ : UInt): DInst = {
     val decoder = ListLookup(inst, decode_default, decode_table)
 
     // Data
     val itype = decoder.head
-    rd    := MuxLookup(itype,   REG_X, Array( I_LogSR -> inst( 4, 0),
+    rd.bits := MuxLookup(itype,   REG_X, Array( I_LogSR -> inst( 4, 0),
                                               I_ASImm -> inst( 4, 0),
                                               I_LSImm -> inst(4,0)))
-    rs1   := MuxLookup(itype,   REG_X, Array( I_LogSR -> inst( 9, 5),
+    rs1.bits := MuxLookup(itype,   REG_X, Array( I_LogSR -> inst( 9, 5),
                                               I_ASImm -> inst( 9, 5)))
-    rs2   := MuxLookup(itype,   REG_X, Array( I_LogSR -> inst(20,16) ))
-    imm   := MuxLookup(itype,   IMM_X, Array( I_LogSR -> inst(15,10),
+    rs2.bits := MuxLookup(itype,   REG_X, Array( I_LogSR -> inst(20,16) ))
+    imm.bits := MuxLookup(itype,   IMM_X, Array( I_LogSR -> inst(15,10),
                                               I_BImm  -> inst(25, 0),
                                               I_BCImm -> inst(23, 5),
                                               I_ASImm -> inst(21,10),
                                               I_LSImm -> inst(23,5)))
-    shift_val := MuxLookup(itype, SHIFT_VAL_X, Array(I_ASImm -> Mux(inst(22), 12.U, 0.U),
-                                                      I_LogSR -> imm))
+    shift_val.bits := MuxLookup(itype, SHIFT_VAL_X, Array(
+                                  I_ASImm -> Mux(inst(22), 12.U, 0.U),
+                                  I_LogSR -> imm.bits))
     shift_type := MuxLookup(itype, SHIFT_TYPE_X, Array( I_LogSR -> inst(23,22),
                                               I_ASImm -> inst(23,22)))
-    cond  := MuxLookup(itype,  COND_X, Array( I_BCImm -> inst( 3, 0) ))
+    cond.bits := MuxLookup(itype,  COND_X, Array( I_BCImm -> inst( 3, 0) ))
 
     // Control
     val cdecoder = decoder.tail
-    val csignals = Seq(op, rd_en, rs1_en, rs2_en, imm_en, shift_en, cond_en, nzcv_en, inst_en)
+    val csignals = Seq(op, rd.valid, rs1.valid, rs2.valid, imm.valid, shift_val.valid, cond.valid, nzcv_en, inst32.valid)
     csignals zip cdecoder map { case (s, d) => s:= d }
 
     this.itype := itype
 
-    this.tag := tag
-    this.inst := inst
+    tag := tag_
+    inst32.bits := inst
 
     this
   }
 
-  def empty() = {
+}
+
+object DInst {
+  def apply()(implicit cfg: ProcConfig): DInst = {
+    val dinst = Wire(new DInst)
 
     // Data
-    rd    := REG_X
-    rs1   := REG_X
-    rs2   := REG_X
-    imm   := IMM_X
-    shift_val := SHIFT_VAL_X
-    shift_type := SHIFT_TYPE_X
-    cond  := COND_X
+    dinst.rd.bits  := REG_X
+    dinst.rs1.bits := REG_X
+    dinst.rs2.bits := REG_X
+    dinst.imm.bits := IMM_X
+    dinst.shift_val.bits := SHIFT_VAL_X
+    dinst.shift_type := SHIFT_TYPE_X
+    dinst.cond.bits := COND_X
 
     // Control
-    op := OP_X
-    itype := I_X
+    dinst.op := OP_X
+    dinst.itype := I_X
 
     // Enables
-    rd_en    := N
-    rs1_en   := N
-    rs2_en   := N
-    imm_en   := N
-    shift_en := N
-    cond_en  := N
-    nzcv_en  := N
+    dinst.rd.valid := N
+    dinst.rs1.valid := N
+    dinst.rs2.valid := N
+    dinst.imm.valid := N
+    dinst.shift_val.valid := N
+    dinst.cond.valid := N
+    dinst.nzcv_en := N
 
-    // Instruction is Valid
-    inst_en := N
-
-    tag := cfg.TAG_X
-    inst := INST_X
-
-    pc := DATA_X
-
-    this
+    // Instruction
+    dinst.inst32.bits := INST_X
+    dinst.inst32.valid := N
+    dinst.tag := cfg.TAG_X
+    dinst.pc := DATA_X
+    dinst
   }
 }
 
@@ -114,22 +107,19 @@ class DecodeUnitIO(implicit val cfg: ProcConfig) extends Bundle
 {
   // Fetch - Decode
   val finst = Input(new FInst)
-  val tp_req = Output(Bool())
-
   // Decode - Issue
   val dinst = Output(new DInst)
 }
 
 /** Decode unit
-  * Fowards the decoded instruction to the issue stage
   */
 class DecodeUnit(implicit val cfg: ProcConfig) extends Module
 {
   val io = IO(new DecodeUnitIO)
   val inst = io.finst.inst
   val instBE = WireInit(Cat(inst(7,0), inst(15,8), inst(23,16), inst(31,24))) // Little Endian processor
-  val dinst = Wire(new DInst).decode(instBE, io.finst.tag)
+  val dinst = WireInit(DInst())
+  dinst.decode(instBE, io.finst.tag)
   dinst.pc := io.finst.pc
   io.dinst := dinst
-  io.tp_req := dinst.inst_en
 }

@@ -8,10 +8,9 @@ import common.PROCESSOR_TYPES._
 
 // Minst is executed memory instruction
 class MInst(implicit val cfg: ProcConfig) extends Bundle {
-  val res  = DATA_T
-  val rd   = REG_T
-  val rd_en = C_T
-  val tag  = cfg.TAG_T
+  val rd = Valid(REG_T)
+  val res = Output(DATA_T)
+  val tag = Output(cfg.TAG_T)
 }
 
 // memory request from lsu to cache
@@ -60,7 +59,7 @@ class LoadStoreUnit(implicit val cfg: ProcConfig) extends Module
 
   // Offset
   val imm_sign_extened = Wire(SInt(DATA_W))
-  imm_sign_extened := io.dinst.bits.imm.asSInt
+  imm_sign_extened := io.dinst.bits.imm.bits.asSInt
   // val offset = Mux(io.dinst.imm_en , 0.S(DATA_W), imm_sign_extened)
   val offset = imm_sign_extened
 
@@ -131,7 +130,6 @@ class LoadStoreUnit(implicit val cfg: ProcConfig) extends Module
   val minst = Wire(new MInst)
   minst.res := io.memRes.bits.data
   minst.rd := dinst_reg.rd
-  minst.rd_en := dinst_reg.rd_en
   minst.tag := dinst_reg.tag
 
   io.minst.bits := minst

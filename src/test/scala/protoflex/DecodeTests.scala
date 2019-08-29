@@ -18,7 +18,7 @@ class DecodeInstructionTest(c: DecodeUnit) extends PeekPokeTester(c)
         val dinst_str = SoftwareStructs.dinst(peek(c.io.dinst))
         println(f"Input : 0x${inst.bitPat}%08X")
         println(s"Output : ${dinst_str}")
-        if (peek(c.io.dinst.inst_en) != 0) {
+        if (peek(c.io.dinst.inst32.valid) != 0) {
           dinst_out zip inst.io map { case (out, in) => expect(out, in)}
           expect(c.io.dinst.tag, 1)
         } else {

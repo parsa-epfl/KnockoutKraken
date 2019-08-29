@@ -12,21 +12,21 @@ object DInstExtractor {
     val out = Seq(
       input.itype,
       input.op,
-      input.rd,
-      input.rs1,
-      input.rs2,
-      input.imm,
-      input.shift_val,
+      input.rd.bits,
+      input.rs1.bits,
+      input.rs2.bits,
+      input.imm.bits,
+      input.shift_val.bits,
       input.shift_type,
-      input.cond,
-      input.rd_en,
-      input.rs1_en,
-      input.rs2_en,
-      input.imm_en,
-      input.shift_en,
-      input.cond_en,
+      input.cond.bits,
+      input.rd.valid,
+      input.rs1.valid,
+      input.rs2.valid,
+      input.imm.valid,
+      input.shift_val.valid,
+      input.cond.valid,
       input.nzcv_en,
-      input.inst_en
+      input.inst32.valid
     )
     out
   }

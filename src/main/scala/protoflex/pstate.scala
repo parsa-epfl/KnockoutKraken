@@ -43,12 +43,16 @@ class PStateRegs(implicit val cfg : ProcConfig) extends Bundle
    val IL = Bool()    // Illegal Execution
    val nRW = Bool()   // Current Execution
    // */
-  def empty() = {
-    PC := DATA_X
-    SP := DATA_X
-    EL := DATA_X
-    NZCV := NZCV_X
-    this
+}
+
+object PStateRegs {
+  def apply()(implicit cfg : ProcConfig): PStateRegs = {
+    val wire = Wire(new PStateRegs())
+    wire.PC := DATA_X
+    wire.SP := DATA_X
+    wire.EL := DATA_X
+    wire.NZCV := NZCV_X
+    wire
   }
 }
 
