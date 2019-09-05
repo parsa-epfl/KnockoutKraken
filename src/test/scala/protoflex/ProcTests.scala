@@ -10,14 +10,14 @@ import utils.{AssemblyParser, PrintingTools}
 import utils.SoftwareStructs._
 
 import common.PROCESSOR_TYPES.{DATA_SZ, REG_N}
-import common.{HighLevelAxiLiteTestInterface, BRAMPort, BRAMPortHelper}
+import common.{HighLevelAxiLiteTestInterface, BRAMPortAXIHelper, BRAMPortAXI, AxiLiteSignals}
 
-trait ProcTestsBase extends ArmflexBasePeekPokeTests with BRAMPortHelper {
+trait ProcTestsBase extends ArmflexBasePeekPokeTests with BRAMPortAXIHelper {
   val cfgProc: ProcConfig
 
   val INSN_SIZE = 4
-  val portPPage : BRAMPort
-  val portPState : BRAMPort
+  val portPPage : BRAMPortAXI
+  val portPState : BRAMPortAXI
   val procStateDBG_ : Option[ProcStateDBG]
 
   def fireThread(tag: Int): Unit
@@ -136,7 +136,7 @@ trait ProcTestsBase extends ArmflexBasePeekPokeTests with BRAMPortHelper {
 }
 
 // base class contain utils for proc testing
-trait ProcMainTestsBase extends ProcTestsBase with BRAMPortHelper {
+trait ProcMainTestsBase extends ProcTestsBase {
   val cProc: Proc
 
   val random = scala.util.Random

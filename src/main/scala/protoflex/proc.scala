@@ -54,8 +54,8 @@ class Proc(implicit val cfg: ProcConfig) extends Module
     // val mem_res = Input(Valid(new MemRes))
 
     // BRAM Host Ports
-    val ppageBRAM = new BRAMPort(0)(cfg.ppageBRAMc)
-    val stateBRAM = new BRAMPort(0)(cfg.stateBRAMc)
+    val ppageBRAM = new BRAMPortAXI(0)(cfg.ppageBRAMc)
+    val stateBRAM = new BRAMPortAXI(0)(cfg.stateBRAMc)
 
     // AXI Host Communication
     val host2tpu = new TransplantUnitHostIO

@@ -135,6 +135,24 @@ class BRAMPort(private val idx: Int)(implicit val c: BRAMConfig) extends Bundle 
   val dataOut = if(c.readPortVec(idx))  Some(Output(c.dataGen(idx))) else None
 }
 
+class BRAMPortAXI(private val idx: Int)(implicit val c: BRAMConfig) extends Bundle {
+  val CLK = Input(Bool())
+  val RST = Input(Bool())
+  val WE = Input(Bool())
+  val EN = Input(Bool())
+  val ADDR = Input(c.addrGen(idx))
+  val DI = Input( c.dataGen(idx))
+  val DO = Output(c.dataGen(idx))
+
+  def <>(port_ : BRAMPort) {
+    WE <> port_.writeEn.get
+    EN <> port_.en
+    DI <> port_.dataIn.get
+    DO <> port_.dataOut.get
+    ADDR <> port_.addr
+  }
+}
+
 class BRAMIO(implicit val c: BRAMConfig) extends Bundle {
   val portA = new BRAMPort(0)
   val portB = new BRAMPort(1)

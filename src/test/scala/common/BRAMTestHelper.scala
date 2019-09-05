@@ -18,6 +18,50 @@ import scala.collection.mutable._
 /** Note: This BRAM port is expected to be 32 bit wide for data
   *       And address of 1024 words
   */
+trait BRAMPortAXIHelper extends PeekPokeTests {
+  def wrBRAM32b(port: BRAMPortAXI, bits:Int, offst: Int) = {
+    poke(port.EN, 1)
+    poke(port.WE, 1)
+    poke(port.ADDR, offst)
+    poke(port.DI, bits)
+    step(1)
+    poke(port.EN, 0)
+    poke(port.WE, 0)
+    poke(port.ADDR, 0)
+    poke(port.DI, 0)
+  }
+
+  def wrBRAM64b(port: BRAMPortAXI, lw: Long, offst: Int) = {
+    val bytes = Array.fill(8)(0.toByte)
+    for( i <- 0 to 7 ) bytes(i) = ((lw >> ((7-i) * 8)) & 0xFF).toByte
+    val msb = ByteBuffer.wrap(bytes.slice(0, 4)).getInt
+    val lsb = ByteBuffer.wrap(bytes.slice(4, 8)).getInt
+    wrBRAM32b(port, msb, offst)
+    wrBRAM32b(port, lsb, offst+1)
+  }
+
+  def rdBRAM32b(port: BRAMPortAXI, offst:Int):Int = {
+    poke(port.EN, 1)
+    poke(port.ADDR, offst)
+    step(1)
+    poke(port.EN, 0)
+    poke(port.ADDR, 0)
+    val uint32 = peek(port.DO)
+    return uint32.toInt
+  }
+
+  def rdBRAM64b(port:BRAMPortAXI, offst:Int):Long = {
+    val msb = rdBRAM32b(port, offst)
+    val lsb = rdBRAM32b(port, offst+1)
+    val byte_msb = Array.fill(4)(0.toByte)
+    val byte_lsb = Array.fill(4)(0.toByte)
+    for (i <- 0 to 3) byte_msb(i) = ((msb >> ((3-i) * 8)) & 0xFF).toByte
+    for (i <- 0 to 3) byte_lsb(i) = ((lsb >> ((3-i) * 8)) & 0xFF).toByte
+    val uint64 = ByteBuffer.wrap((byte_msb ++ byte_lsb)).getLong
+    return uint64
+  }
+}
+
 trait BRAMPortHelper extends PeekPokeTests {
   def wrBRAM32b(port: BRAMPort, bits:Int, offst: Int) = {
     poke(port.en, 1)
@@ -61,7 +105,6 @@ trait BRAMPortHelper extends PeekPokeTests {
     return uint64
   }
 }
-
 
 trait BRAMTestHelper extends PeekPokeTests {
   def int(x: Int): BigInt = { BigInt(x) }
