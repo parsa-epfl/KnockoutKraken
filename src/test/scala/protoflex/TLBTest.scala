@@ -7,7 +7,7 @@ import org.scalacheck.Prop.True
 
 
 
-class TLBTest(c: TLBUnit) extends PeekPokeTester(c)
+class TLBTest(c: TLBUnitLegacy) extends PeekPokeTester(c)
 {
   /* write tlb entries for testing
     *  | tag|set| offset|
@@ -57,7 +57,7 @@ class TLBTester extends ChiselFlatSpec
 
   backends foreach {backend =>
     it should s"test TLB (with $backend)" in {
-      Driver(() => new TLBUnit, backend, verbose = false)((c) => new TLBTest(c)) should be (true)
+      Driver(() => new TLBUnitLegacy, backend, verbose = false)((c) => new TLBTest(c)) should be (true)
     }
   }
 }

@@ -37,9 +37,14 @@ class FetchUnit(implicit val cfg: ProcConfig) extends Module
 {
   val io = IO(new FetchUnitIO())
   val fake_PC = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(DATA_X)))
+  val pcTLB = Module(new TLBUnit())
+  pcTLB.io.vaddr.bits := fake_PC(io.tagIn)
+  pcTLB.io.vaddr.valid := io.en
+  pcTLB.io.fill := io.fire.valid
+  pcTLB.io.vaddrFill := io.vecPC(io.fire.bits)
 
   io.ppageBRAM.en := true.B
-  io.ppageBRAM.addr := fake_PC(io.tagIn) >> 2.U // PC is byte addressed, BRAM is 32bit word addressed
+  io.ppageBRAM.addr := pcTLB.io.paddr.bits // PC is byte addressed, BRAM is 32bit word addressed
   io.ppageBRAM.dataIn.get := 0.U
   io.ppageBRAM.writeEn.get := false.B
 
@@ -49,7 +54,7 @@ class FetchUnit(implicit val cfg: ProcConfig) extends Module
   val pc = RegInit(0.U)
   val readIns = io.deq.ready || io.flush
   when(readIns) {
-    valid := io.en
+    valid := io.en && pcTLB.io.paddr.valid && pcTLB.io.hit
     tag := io.tagIn
     pc := fake_PC(io.tagIn)
   }.otherwise {
@@ -93,5 +98,4 @@ class FetchUnit(implicit val cfg: ProcConfig) extends Module
   when(io.fire.valid) {
     fake_PC(io.fire.bits) := io.vecPC(io.fire.bits)
   }
- 
 }

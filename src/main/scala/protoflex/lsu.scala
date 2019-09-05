@@ -77,7 +77,7 @@ class LoadStoreUnit(implicit val cfg: ProcConfig) extends Module
   val rw = true.B //TODO make it depend on itype
 
   // tlb instance
-  val tlb = Module(new TLBUnit())
+  val tlb = Module(new TLBUnitLegacy())
   // test interface to write some entries
   tlb.io.write_tlb_valid := io.write_tlb_vaddr.valid
   tlb.io.write_tlb_entry := io.write_tlb_entry

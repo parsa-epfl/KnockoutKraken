@@ -7,17 +7,22 @@ import chisel3.util.{DeqIO, Queue, RegEnable, Valid, log2Ceil}
 
 import common.PROCESSOR_TYPES._
 import common.constBRAM.TDPBRAM36ParamDict
-import common.{BRAM, BRAMConfig, BRAMPort, DECODE_CONTROL_SIGNALS, FReg}
+import common.{BRAM, BRAMConfig, BRAMPortAXI, DECODE_CONTROL_SIGNALS, FReg}
 
-case class ProcConfig(val NB_THREADS : Int = 4, val DebugSignals : Boolean = false) {
+case class ProcConfig(val NB_THREADS : Int = 4, val DebugSignals : Boolean = false, EntriesTLB: Int = 32) {
   val ppageBRAMc = new BRAMConfig(Seq(TDPBRAM36ParamDict(36), TDPBRAM36ParamDict(36)))
   val stateBRAMc = new BRAMConfig(Seq(TDPBRAM36ParamDict(36), TDPBRAM36ParamDict(36)))
 
+  // Threads
   val NB_THREAD_W = log2Ceil(NB_THREADS) // 4 Threads
   def TAG_T = UInt(NB_THREAD_W.W)
   val TAG_X = 0.U(NB_THREAD_W.W)
   val TAG_VEC_X = 0.U(NB_THREADS.W)
   def TAG_VEC_T = UInt(NB_THREADS.W)
+
+  // Memory
+  val TLB_NB_ENTRY = EntriesTLB
+  val TLB_NB_ENTRY_W = log2Ceil(TLB_NB_ENTRY)
 }
 
 class ProcStateDBG(implicit val cfg : ProcConfig) extends Bundle
