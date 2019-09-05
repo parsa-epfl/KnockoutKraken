@@ -1,25 +1,25 @@
-module FReg_2( // @[:@2704.2]
-  input         clock, // @[:@2705.4]
-  input         reset, // @[:@2706.4]
-  input         io_enq_valid, // @[:@2707.4]
-  input  [63:0] io_enq_bits_offset, // @[:@2707.4]
-  input         io_enq_bits_tag, // @[:@2707.4]
-  output        io_deq_valid, // @[:@2707.4]
-  output [63:0] io_deq_bits_offset, // @[:@2707.4]
-  output        io_deq_bits_tag, // @[:@2707.4]
-  input         io_flush // @[:@2707.4]
+module FReg_2( // @[:@2706.2]
+  input         clock, // @[:@2707.4]
+  input         reset, // @[:@2708.4]
+  input         io_enq_valid, // @[:@2709.4]
+  input  [63:0] io_enq_bits_offset, // @[:@2709.4]
+  input         io_enq_bits_tag, // @[:@2709.4]
+  output        io_deq_valid, // @[:@2709.4]
+  output [63:0] io_deq_bits_offset, // @[:@2709.4]
+  output        io_deq_bits_tag, // @[:@2709.4]
+  input         io_flush // @[:@2709.4]
 );
-  reg [63:0] _T_34_offset; // @[FReg.scala 45:24:@2709.4]
+  reg [63:0] _T_34_offset; // @[FReg.scala 45:24:@2711.4]
   reg [63:0] _RAND_0;
-  reg  _T_34_tag; // @[FReg.scala 45:24:@2709.4]
+  reg  _T_34_tag; // @[FReg.scala 45:24:@2711.4]
   reg [31:0] _RAND_1;
-  reg  _T_37; // @[FReg.scala 46:30:@2710.4]
+  reg  _T_37; // @[FReg.scala 46:30:@2712.4]
   reg [31:0] _RAND_2;
-  wire  _T_45; // @[FReg.scala 57:28:@2724.4]
-  assign _T_45 = io_flush == 1'h0; // @[FReg.scala 57:28:@2724.4]
-  assign io_deq_valid = _T_37 & _T_45; // @[FReg.scala 57:16:@2726.4]
-  assign io_deq_bits_offset = _T_34_offset; // @[FReg.scala 56:15:@2723.4]
-  assign io_deq_bits_tag = _T_34_tag; // @[FReg.scala 56:15:@2722.4]
+  wire  _T_45; // @[FReg.scala 57:28:@2726.4]
+  assign _T_45 = io_flush == 1'h0; // @[FReg.scala 57:28:@2726.4]
+  assign io_deq_valid = _T_37 & _T_45; // @[FReg.scala 57:16:@2728.4]
+  assign io_deq_bits_offset = _T_34_offset; // @[FReg.scala 56:15:@2725.4]
+  assign io_deq_bits_tag = _T_34_tag; // @[FReg.scala 56:15:@2724.4]
 `ifdef RANDOMIZE_GARBAGE_ASSIGN
 `define RANDOMIZE
 `endif
