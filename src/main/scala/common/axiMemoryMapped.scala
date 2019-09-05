@@ -17,7 +17,7 @@ case class AxiMemoryMappedConfig(
   // TODO: add assert check on pulseMode and readOnly regs for conflicts
   val addrWidth = log2Up(nbrReg) + 2 // 2 extra bits for the byte level adressing
   val axiLiteConfig = new AxiLiteConfig(addrWidth)
-  val dataWidth = axiLiteConfig.dataWidth
+  val dataWidth = 32
   val Seq(rOKAY, rEXOKAY, rSLVERR, rDECERR) = 0 until 4
   val regMapConfig = new RegisterMapConfig(nbrReg, dataWidth, readOnly, pulseMode)
 }
@@ -33,11 +33,11 @@ class AxiMemoryMapped(implicit c: AxiMemoryMappedConfig) extends Module{
   val io = IO(new AxiMemoryMappedIO())
 
 
-  val writeAddressEnq  = io.axiLite.getAddressWriteEnq
-  val writeDataEnq     = io.axiLite.getWriteEnq
-  val writeResponseDeq = io.axiLite.getWriteResponseDeq
-  val readAddressEnq   = io.axiLite.getAddressReadEnq
-  val readDataDeq      = io.axiLite.getReadDataDeq
+  val writeDataEnq     = io.axiLite.getWrDataEnq
+  val writeAddressEnq  = io.axiLite.getWrAddrEnq
+  val writeResponseDeq = io.axiLite.getWrRespDeq
+  val readAddressEnq   = io.axiLite.getRdAddrEnq
+  val readDataDeq      = io.axiLite.getRdDataDeq
   // TODO: enq ready management
 
   /* Write Address Control */

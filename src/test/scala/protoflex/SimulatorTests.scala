@@ -202,9 +202,8 @@ class SimulatorAxiTests(c_ : ProcAxiWrap, val cfgSim_ : SimulatorConfig)(implici
 
   val cfgSim = cfgSim_
   val cfgProc = cfgProc_
-
   val cProcAxi = c_
-  val axiLiteList = List(cProcAxi.io.axiLite)
+  val axiLite = cProcAxi.io.axiLite
 
   val portPPage = cProcAxi.io.ppageBRAM
   val portPState = cProcAxi.io.stateBRAM

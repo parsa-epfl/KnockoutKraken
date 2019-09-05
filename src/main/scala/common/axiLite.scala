@@ -9,116 +9,125 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental._
 
-case class AxiLiteConfig(
-  val addrWidth: Int,
-  val dataWidth: Int = 32
-){
-  val strobeWidth: Int = dataWidth/8
-  val protWidth = AxiLiteConfig.protWidth
-  val respWidth = AxiLiteConfig.respWidth
+case class AxiLiteConfig(val addrWidth: Int)
+
+object AxiLite {
+
+  val respWidth = log2Ceil(4)
+  val Seq(rOKAY, rEXOKAY, rSLVERR, rDECERR) = Enum(4)
+  def RESP_T = rOKAY.cloneType
+
+  val dataWidth = 32
+  val protWidth = 3
+  val strobeWidth = dataWidth/8
+
+  object ports {
+    private val Seq(portWA, portWD, portWR, portRA, portRD) = (0 until 5)
+    val PortWrAddr = portWA
+    val PortWrData = portWD
+    val PortWrResp = portWR
+    val PortRdAddr = portRA
+    val PortRdData = portRD
+  }
+
+  def apply(cfg: AxiLiteConfig): AxiLiteSignals = new AxiLiteIO(cfg)
 }
 
-object AxiLiteConfig{
-  val protWidth:   Int = 3
-  val respWidth:   Int = 2
-  val PortWriteAddress  = 0
-  val PortWriteData     = 1
-  val PortWriteResponse = 2
-  val PortReadAddress   = 3
-  val PortReadData      = 4
-  def apply(addrWidth: Int, dataWidth: Int):AxiLiteConfig = AxiLiteConfig(addrWidth, dataWidth)
-}
+abstract class AxiLiteSignals(val cfg: AxiLiteConfig) extends Bundle{
+  import common.AxiLite._
 
-abstract class AxiLiteSignals(val c: AxiLiteConfig) extends Bundle{
-  /* write address */
-  val awaddr     = Input  (UInt(c.addrWidth.W))
-  val awprot     = Input  (UInt(c.protWidth.W))
-  val awvalid    = Input  (Bool ())
-  val awready    = Output (Bool ())
-  /* write data */
-  val wdata      = Input  (UInt(c.dataWidth.W))
-  val wstrb      = Input  (UInt(c.strobeWidth.W))
-  val wvalid     = Input  (Bool ())
-  val wready     = Output (Bool ())
-  /* write response */
-  val bresp      = Output (UInt(c.respWidth.W))
-  val bvalid     = Output (Bool ())
-  val bready     = Input  (Bool ())
-  /* read address */
-  val araddr     = Input  (UInt(c.addrWidth.W))
-  val arprot     = Input  (UInt(c.protWidth.W))
-  val arvalid    = Input  (Bool ())
-  val arready    = Output (Bool ())
-  /* read data */
-  val rdata      = Output (UInt(c.dataWidth.W))
-  val rresp      = Output (UInt(c.respWidth.W))
-  val rvalid     = Output (Bool ())
-  val rready     = Input  (Bool ())
+  // Write Address
+  val awaddr  =  Input(UInt(cfg.addrWidth.W))
+  val awprot  =  Input(UInt(protWidth.W))
+  val awvalid =  Input(Bool())
+  val awready = Output(Bool())
+  // Write Data
+  val wdata  =  Input(UInt(dataWidth.W))
+  val wstrb  =  Input(UInt(strobeWidth.W))
+  val wvalid =  Input(Bool())
+  val wready = Output(Bool())
+  // Write Response
+  val bresp  = Output(RESP_T)
+  val bvalid = Output(Bool())
+  val bready =  Input(Bool())
+  // Read Address
+  val araddr  =  Input(UInt(cfg.addrWidth.W))
+  val arprot  =  Input(UInt(protWidth.W))
+  val arvalid =  Input(Bool())
+  val arready = Output(Bool())
+  // Read Data
+  val rdata  = Output(UInt(dataWidth.W))
+  val rresp  = Output(RESP_T)
+  val rvalid = Output(Bool())
+  val rready =  Input(Bool())
 
   override def toPrintable: Printable = {
-  p"AxiLiteSignals"     +
-  p"\n  Write Address:  "  +
-  p"awaddr: "             + p"0x${Hexadecimal(awaddr)}"  +
-  p", awprot: "           + p"${Binary(awprot)}"  +
-  p", awvalid: "          + p"${Binary(awvalid)}" +
-  p", awready: "          + p"${Binary(awready)}" +
-  p"\n  Write Data:     "     +
-  p"wdata: "            + p"0x${Hexadecimal(wdata)}"   +
-  p", wstrb: "          + p"${Binary(wstrb)}"   +
-  p", wvalid: "         + p"${Binary(wvalid)}"  +
-  p", wready: "         + p"${Binary(wready)}"  +
-  p"\n  Write Response: " +
-  p"bresp: "            + p"${Binary(bresp)}"   +
-  p", bvalid: "         + p"${Binary(bvalid)}"  +
-  p", bready: "         + p"${Binary(bready)}"  +
-  p"\n  Read Address:   "   +
-  p"araddr: "           + p"0x${Hexadecimal(araddr)}"  +
-  p", arprot: "         + p"${Binary(arprot)}"  +
-  p", arvalid: "        + p"${Binary(arvalid)}" +
-  p", arready: "        + p"${Binary(arready)}" +
-  p"\n  Read Data:      "      +
-  p"rdata: "            + p"0x${Hexadecimal(rdata)}"   +
-  p", rresp: "          + p"${Binary(rresp)}"   +
-  p", rvalid: "         + p"${Binary(rvalid)}"  +
-  p", rready: "         + p"${Binary(rready)}"  +
-  p"\n"
+    s"""AxiLiteSignals
+  Write Address:
+    awaddr   0x${Hexadecimal(awaddr)}
+    awprot   ${Binary(awprot)}
+    awvalid  ${Binary(awvalid)}
+    awready  ${Binary(awready)}
+  Write Data
+    wdata    0x${Hexadecimal(wdata)}
+    wstrb    ${Binary(wstrb)}
+    wvalid   ${Binary(wvalid)}
+    wready   ${Binary(wready)}
+  Write Response
+    bresp    ${Binary(bresp)}
+    bvalid   ${Binary(bvalid)}
+    bready   ${Binary(bready)}
+  Read Address
+    araddr   0x${Hexadecimal(araddr)}
+    arprot   ${Binary(arprot)}
+    arvalid  ${Binary(arvalid)}
+    arready  ${Binary(arready)}
+  Read Data
+    rdata    0x${Hexadecimal(rdata)}
+    rresp    ${Binary(rresp)}
+    rvalid   ${Binary(rvalid)}
+    rready   ${Binary(rready)}
+  """
   }
 }
 
 object AxiLiteSignals {
+  import AxiLite.ports._
+
   implicit class AddMethodsToAxiLite(target: AxiLiteSignals){
-    private val c = target.c
+    private val cfg = target.cfg
 
     def getDecoupledPort(port: Int): DecoupledIO[UInt] = {
       val width = port match{
-        case AxiLiteConfig.PortWriteAddress  => c.addrWidth
-        case AxiLiteConfig.PortWriteData     => c.dataWidth
-        case AxiLiteConfig.PortWriteResponse => c.respWidth
-        case AxiLiteConfig.PortReadAddress   => c.addrWidth
-        case _                   => c.dataWidth //c.PortReadData
+        case PortWrAddr => cfg.addrWidth
+        case PortWrData => AxiLite.dataWidth
+        case PortWrResp => AxiLite.respWidth
+        case PortRdAddr => cfg.addrWidth
+        case PortRdData => AxiLite.dataWidth
+        case _ => println("Invalid Port"); 0
       }
 
       val bits  = Wire(UInt())
       val valid = Wire(Bool())
       val ready = Wire(Bool())
       port match{
-        case AxiLiteConfig.PortWriteAddress  =>
+        case PortWrAddr =>
           bits  <> target.awaddr
           valid <> target.awvalid
           ready <> target.awready
-        case AxiLiteConfig.PortWriteData     =>
+        case PortWrData =>
           bits  <> target.wdata
           valid <> target.wvalid
           ready <> target.wready
-        case AxiLiteConfig.PortWriteResponse =>
+        case PortWrResp =>
           bits  <> target.bresp
           valid <> target.bvalid
           ready <> target.bready
-        case AxiLiteConfig.PortReadAddress   =>
+        case PortRdAddr =>
           bits  <> target.araddr
           valid <> target.arvalid
           ready <> target.arready
-        case _                   => //AxiLiteConfig.PortReadData
+        case PortRdData =>
           bits  <> target.rdata
           valid <> target.rvalid
           ready <> target.rready
@@ -127,9 +136,9 @@ object AxiLiteSignals {
       val dec = Wire(DecoupledIO(UInt(width.W)))
 
       // Is an enq port
-      if (port == AxiLiteConfig.PortWriteAddress |
-          port == AxiLiteConfig.PortWriteData    |
-          port == AxiLiteConfig.PortReadAddress){
+      if (port == PortWrAddr |
+          port == PortWrData |
+          port == PortRdAddr ){
         ready     := dec.ready
         dec.valid := valid
         dec.bits  := bits
@@ -141,12 +150,11 @@ object AxiLiteSignals {
       dec
     }
 
-    def getAddressWriteEnq:  DecoupledIO[UInt] = getDecoupledPort(AxiLiteConfig.PortWriteAddress)
-    def getWriteEnq:         DecoupledIO[UInt] = getDecoupledPort(AxiLiteConfig.PortWriteData)
-    def getWriteResponseDeq: DecoupledIO[UInt] = getDecoupledPort(AxiLiteConfig.PortWriteResponse)
-    def getAddressReadEnq:   DecoupledIO[UInt] = getDecoupledPort(AxiLiteConfig.PortReadAddress)
-    def getReadDataDeq:      DecoupledIO[UInt] = getDecoupledPort(AxiLiteConfig.PortReadData)
-
+    def getWrDataEnq: DecoupledIO[UInt] = getDecoupledPort(PortWrData)
+    def getWrAddrEnq: DecoupledIO[UInt] = getDecoupledPort(PortWrAddr)
+    def getWrRespDeq: DecoupledIO[UInt] = getDecoupledPort(PortWrResp)
+    def getRdAddrEnq: DecoupledIO[UInt] = getDecoupledPort(PortRdAddr)
+    def getRdDataDeq: DecoupledIO[UInt] = getDecoupledPort(PortRdData)
   }
 }
 
@@ -154,14 +162,10 @@ class AxiLiteIO(c: AxiLiteConfig) extends AxiLiteSignals(c){
   override def cloneType: this.type = new AxiLiteIO(c).asInstanceOf[this.type]
 }
 
-object AxiLite {
-  def apply(c: AxiLiteConfig): AxiLiteSignals = new AxiLiteIO(c)
-}
-
-object AxiLiteSlave{
-  def apply(c: AxiLiteConfig): AxiLiteSignals = AxiLite(c)
+object AxiLiteSlave {
+  def apply(cfg: AxiLiteConfig): AxiLiteSignals = AxiLite(cfg)
 }
 
 object AxiLiteMaster{
-  def apply(c: AxiLiteConfig): AxiLiteSignals = Flipped(AxiLite(c))
+  def apply(cfg: AxiLiteConfig): AxiLiteSignals = Flipped(AxiLite(cfg))
 }

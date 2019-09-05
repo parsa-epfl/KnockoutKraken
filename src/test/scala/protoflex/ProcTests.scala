@@ -155,7 +155,7 @@ trait ProcMainTestsBase extends ProcTestsBase with BRAMPortHelper {
 trait ProcAxiWrapTestsBase extends ProcTestsBase with HighLevelAxiLiteTestInterface {
 
   val cProcAxi: ProcAxiWrap
-  dataWidth = 32
+  implicit val axiLite : AxiLiteSignals
 
   def readData32Bit(addr: BigInt) : BigInt = {
     setReadAddressAndGetData(addr << 2)._1
