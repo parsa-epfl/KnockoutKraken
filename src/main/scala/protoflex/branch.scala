@@ -9,7 +9,6 @@ import common.PROCESSOR_TYPES._
 
 class BInst(implicit val cfg: ProcConfig) extends Bundle {
   val offset = DATA_T
-  val tag = cfg.TAG_T
 }
 
 class CondUnit(implicit val cfg: ProcConfig) extends Module
@@ -50,7 +49,6 @@ class BranchUnit(implicit val cfg: ProcConfig) extends Module
 
   // Default IO
   io.binst.valid :=  false.B
-  io.binst.bits.tag := io.dinst.tag
 
   // Offset
   val signExtended = Wire(SInt(DATA_W))

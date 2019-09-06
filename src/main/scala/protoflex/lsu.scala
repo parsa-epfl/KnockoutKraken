@@ -10,7 +10,6 @@ import common.PROCESSOR_TYPES._
 class MInst(implicit val cfg: ProcConfig) extends Bundle {
   val rd = Valid(REG_T)
   val res = Output(DATA_T)
-  val tag = Output(cfg.TAG_T)
 }
 
 // memory request from lsu to cache
@@ -130,7 +129,6 @@ class LoadStoreUnit(implicit val cfg: ProcConfig) extends Module
   val minst = Wire(new MInst)
   minst.res := io.memRes.bits.data
   minst.rd := dinst_reg.rd
-  minst.tag := dinst_reg.tag
 
   io.minst.bits := minst
   io.minst.valid := state === s_MEM_REQ && io.memRes.valid.toBool

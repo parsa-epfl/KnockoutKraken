@@ -53,8 +53,8 @@ class IssueUnitIO(implicit val cfg: ProcConfig) extends Bundle {
   // Issue - Exec
   val deq = Flipped(DeqIO(new DInst))
 
-  //`Exec - Issue
-  val exeReg = Flipped(Valid(new EInst))
+  // Back Pressure
+  val commitReg = Flipped(Valid(new CommitInst))
 
   // Mem - Issue
 //  val mem_rd = Input(REG_T)
@@ -136,11 +136,11 @@ class IssueUnit(implicit val cfg: ProcConfig) extends Module
     sig_pipe_i(cpu) := reg_pipe_v(cpu)
   }
 
-  val rfile_wb_pending = io.exeReg.valid && io.exeReg.bits.rd.valid
+  val rfile_wb_pending = io.commitReg.valid && io.commitReg.bits.exe.bits.rd.valid
   exe_stall := rfile_wb_pending &&
-    ((reg_pipe(io.exeReg.bits.tag).rs1.bits === io.exeReg.bits.rd.bits) ||
-       (reg_pipe(io.exeReg.bits.tag).rs2.bits === io.exeReg.bits.rd.bits))
-  sig_pipe_i(io.exeReg.bits.tag) := reg_pipe_v(io.exeReg.bits.tag) && !exe_stall
+    ((reg_pipe(io.commitReg.bits.tag).rs1.bits === io.commitReg.bits.exe.bits.rd.bits) ||
+       (reg_pipe(io.commitReg.bits.tag).rs2.bits === io.commitReg.bits.exe.bits.rd.bits))
+  sig_pipe_i(io.commitReg.bits.tag) := reg_pipe_v(io.commitReg.bits.tag) && !exe_stall
 
   // Issue -> Exec
   // Get idx to issue

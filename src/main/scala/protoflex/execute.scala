@@ -11,7 +11,6 @@ class EInst(implicit val cfg: ProcConfig) extends Bundle {
   val rd = Valid(REG_T)
   val nzcv = Valid(NZCV_T)
 
-  val tag = Output(cfg.TAG_T)
   val res = Output(DATA_T)
 }
 
@@ -128,7 +127,6 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   val einst = Wire(new EInst)
   einst.res := basicALU.io.res
   einst.rd  := io.dinst.rd
-  einst.tag := io.dinst.tag
   einst.nzcv.bits := basicALU.io.nzcv
   einst.nzcv.valid := io.dinst.nzcv_en
 

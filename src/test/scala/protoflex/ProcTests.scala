@@ -82,11 +82,13 @@ trait ProcTestsBase extends ArmflexBasePeekPokeTests with BRAMPortAXIHelper {
       return
     }
     val procStateDBG = procStateDBG_.get
+    val exeReg = procStateDBG.commitReg.bits.exe
+    val brReg = procStateDBG.commitReg.bits.br
     val sFet = if(peek(procStateDBG.fetchReg.valid)) finst(peek(procStateDBG.fetchReg.bits)) else "XXX"
     val sDec = if(peek(procStateDBG.decReg.valid))   dinst(peek(procStateDBG.decReg.bits))   else "XXX"
     val sIss = if(peek(procStateDBG.issueReg.valid)) dinst(peek(procStateDBG.issueReg.bits)) else "XXX"
-    val sExe = if(peek(procStateDBG.exeReg.valid))   einst(peek(procStateDBG.exeReg.bits))   else "XXX"
-    val sBr  = if(peek(procStateDBG.brReg.valid))    binst(peek(procStateDBG.brReg.bits))    else "XXX"
+    val sExe = if(peek(exeReg.valid)) einst(peek(exeReg.bits)) else "XXX"
+    val sBr  = if(peek(brReg.valid))  binst(peek(brReg.bits))  else "XXX"
     val state = Seq(
       "+----------------------------------------------------------------------------------+",
       "|                                   STATE                                          |",

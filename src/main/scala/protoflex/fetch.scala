@@ -24,7 +24,7 @@ class FetchUnitIO(implicit val cfg: ProcConfig) extends Bundle
 
   val fire = Input(Valid(cfg.TAG_T))
 
-  val branch = Input(Valid(new BInst))
+  val commitReg = Flipped(Valid(new CommitInst))
 
   // Program Page
   val ppageBRAM = Flipped(new BRAMPort(1)(cfg.ppageBRAMc))
@@ -92,8 +92,8 @@ class FetchUnit(implicit val cfg: ProcConfig) extends Module
   when(readIns && io.en) {
     fake_PC(io.tagIn) := fake_PC(io.tagIn) + 4.U
   }
-  when(io.branch.valid) {
-    fake_PC(io.branch.bits.tag) := (io.vecPC(io.branch.bits.tag).zext + io.branch.bits.offset.asSInt).asUInt()
+  when(io.commitReg.valid && io.commitReg.bits.br.valid) {
+    fake_PC(io.commitReg.bits.tag) := (io.vecPC(io.commitReg.bits.tag).zext + io.commitReg.bits.br.bits.offset.asSInt).asUInt()
   }
   when(io.fire.valid) {
     fake_PC(io.fire.bits) := io.vecPC(io.fire.bits)
