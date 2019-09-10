@@ -144,13 +144,13 @@ trait ProcMainTestsBase extends ProcTestsBase {
   val random = scala.util.Random
 
   def fireThread(tag: Int) = {
-    poke(cProc.io.host2tpu.fire, 1)
-    poke(cProc.io.host2tpu.fireTag, tag)
+    poke(cProc.io.host2tpu.fire.valid, 1)
+    poke(cProc.io.host2tpu.fire.tag, tag)
     step(1)
-    poke(cProc.io.host2tpu.fire, 0)
+    poke(cProc.io.host2tpu.fire.valid, 0)
   }
   def procIsDone() : (Boolean, Int) = {
-    (peek(cProc.io.host2tpu.done), peek(cProc.io.host2tpu.doneTag).toInt)
+    (peek(cProc.io.host2tpu.done.valid), peek(cProc.io.host2tpu.done.tag).toInt)
   }
 }
 

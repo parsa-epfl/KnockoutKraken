@@ -85,8 +85,8 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends Module {
     */
   val fireReg    = regOut(0, 31, 1).toBool
   val fireTagReg = regOut(0, 0, cfg.NB_THREADS)
-  proc.io.host2tpu.fire    := fireReg
-  proc.io.host2tpu.fireTag := fireTagReg
+  proc.io.host2tpu.fire.valid := fireReg
+  proc.io.host2tpu.fire.tag := fireTagReg
 
   /** Register 1 (Read-Only)
     * +----------------------------------------+
@@ -101,8 +101,8 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends Module {
   val doneVec = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(false.B)))
   regIn(1):= Cat(0.U, doneVec.asUInt)
 
-  when(proc.io.host2tpu.done) {
-    doneVec(proc.io.host2tpu.doneTag) := true.B
+  when(proc.io.host2tpu.done.valid) {
+    doneVec(proc.io.host2tpu.done.tag) := true.B
   }
   when(fireReg) {
     doneVec(fireTagReg) := false.B

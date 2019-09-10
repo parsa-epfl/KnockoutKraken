@@ -3,12 +3,12 @@ package protoflex
 
 import chisel3._
 import chisel3.core.withReset
-import chisel3.util.{DeqIO, Queue, RegEnable, Valid, log2Ceil}
+import chisel3.util.{Decoupled, Queue, RegEnable, Valid, log2Ceil}
 
 import common.DECODE_CONTROL_SIGNALS.I_X
 import common.PROCESSOR_TYPES._
 import common.constBRAM.TDPBRAM36ParamDict
-import common.{BRAM, BRAMConfig, BRAMPortAXI, DECODE_CONTROL_SIGNALS, FReg}
+import common.{BRAM, BRAMConfig, BRAMPortAXI, DECODE_CONTROL_SIGNALS, FlushReg}
 
 case class ProcConfig(val NB_THREADS : Int = 4, val DebugSignals : Boolean = false, EntriesTLB: Int = 32) {
   val ppageBRAMc = new BRAMConfig(Seq(TDPBRAM36ParamDict(36), TDPBRAM36ParamDict(36)))
@@ -26,18 +26,31 @@ case class ProcConfig(val NB_THREADS : Int = 4, val DebugSignals : Boolean = fal
   val TLB_NB_ENTRY_W = log2Ceil(TLB_NB_ENTRY)
 }
 
+class ValidTagged[T1 <: Data, T2 <: Data](genTag: T1, genData: Option[T2]) extends Bundle
+{
+  val valid = Bool()
+  val data = genData
+  val tag = genTag
+  override def cloneType: this.type = ValidTagged(genTag, genData).asInstanceOf[this.type]
+}
+
+object ValidTagged {
+  def apply[T1 <: Data, T2 <: Data](genTag: T1, genData : Option[T2]): ValidTagged[T1,T2] = new ValidTagged(genTag, genData)
+  def apply[T1 <: Data, T2 <: Data](genTag: T1, genData : T2): ValidTagged[T1,T2] = new ValidTagged(genTag, Some(genData))
+  def apply[T <: Data](genTag: T): ValidTagged[T,T] = new ValidTagged(genTag, None)
+}
+
 class ProcStateDBG(implicit val cfg : ProcConfig) extends Bundle
 {
-  val fetchReg = Output(DeqIO(new FInst))
-  val decReg   = Output(DeqIO(new DInst))
-  val issueReg = Output(DeqIO(new DInst))
-  val commitReg = Output(DeqIO(new CommitInst))
+  val fetchReg = Output(Decoupled(new FInst))
+  val decReg   = Output(Decoupled(new DInst))
+  val issueReg = Output(Decoupled(new DInst))
+  val commitReg = Output(Decoupled(new CommitInst))
 
-  val vecPRegs = Output(Vec(cfg.NB_THREADS, new PStateRegs))
-  val vecRFiles = Output(Vec(cfg.NB_THREADS, Vec(REG_N, DATA_T)))
+  val pregsVec = Output(Vec(cfg.NB_THREADS, new PStateRegs))
+  val rfileVec = Output(Vec(cfg.NB_THREADS, Vec(REG_N, DATA_T)))
 
-  val tuWorking = Output(Bool())
-  val tuWorkingTag = Output(cfg.TAG_T)
+  val tuWorking = Output(ValidTagged(cfg.TAG_T))
 
   val comited = Output(Bool())
 }
@@ -63,7 +76,7 @@ class Proc(implicit val cfg: ProcConfig) extends Module
     val procStateDBG = if(cfg.DebugSignals) Some(new ProcStateDBG) else None
   })
 
-  // System modules -bits----------------------------------------
+  // System modules -----------------------------------------
 
   // Host modules
   // BRAM Program page
@@ -75,18 +88,19 @@ class Proc(implicit val cfg: ProcConfig) extends Module
 
   // Internal State -----------------------------------------
   // PState
-  val emptyPStateRegs = WireInit(PStateRegs())
-  val vec_rfile = VecInit(Seq.fill(cfg.NB_THREADS)(Module(new RFile).io))
-  val vec_pregs = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(emptyPStateRegs)))
+  val rfileVec = VecInit(Seq.fill(cfg.NB_THREADS)(Module(new RFile).io))
+  val pregsVec = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(PStateRegs())))
+
+  // Performance --------------------------------------------
+  val insnTLB = Module(new TLBUnit())
 
   // Pipeline -----------------------------------------------
-  val specPCReg = RegInit(false.B)
   // Fetch
   val fetch = Module(new FetchUnit())
   // fetchReg in Fetch Unit
   // Decodeqde
   val decoder = Module(new DecodeUnit())
-  val decReg = Module(new FReg(new DInst))
+  val decReg = Module(new FlushReg(new DInst))
   // Issue
   val issuer = Module(new IssueUnit())
   // issueReg in Issue Unit
@@ -99,14 +113,22 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   val executer = Module(new ExecuteUnit())
   val brancher = Module(new BranchUnit())
   val ldstU = Module(new LoadStoreUnit())
-  val commitReg = Module(new FReg(new CommitInst))
+  val commitReg = Module(new FlushReg(new CommitInst))
 
   // Extra Regs and wires
-  val fetch_en = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(false.B)))
+  val fetchEn = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(false.B)))
+
+  val commitExec = commitReg.io.deq.bits.exe
+  val commitMem = commitReg.io.deq.bits.mem
+  val commitBr = commitReg.io.deq.bits.br
+  val commitTag = commitReg.io.deq.bits.tag
+  val commitValid = commitReg.io.deq.valid
+
+  val nextPC = Wire(DATA_T)
 
   // Interconnect -------------------------------------------
 
-  //io HOST <> TP
+  // HOST <> TP
   io.ppageBRAM <> ppage.io.getPort(0)
   io.stateBRAM <> state.io.getPort(0)
 
@@ -114,26 +136,28 @@ class Proc(implicit val cfg: ProcConfig) extends Module
 
   // Transplant Unit TP <> CPU
   tpu.io.stateBRAM <> state.io.getPort(1)
-  tpu.io.tpu2cpu.done := false.B
-  tpu.io.tpu2cpu.doneTag := 0.U
+  tpu.io.tpu2cpu.done.valid := false.B
+  tpu.io.tpu2cpu.done.tag := 0.U
+  tpu.io.tpu2cpu.fillTLB <> insnTLB.io.fillTLB
 
   // PState + Branching -> Fetch
-  val fetch_tag = WireInit(0.U) // TODO, better arbiter for the tag to fetch
-  for (i <- 0 until cfg.NB_THREADS) {
-    when(fetch_en(i)) {
-      fetch_tag := i.U
-    }
-  }
+  tpu.io.tpu2cpu.missTLB.tag := fetch.io.pc.tag
+  tpu.io.tpu2cpu.missTLB.valid := insnTLB.io.miss.valid
+  tpu.io.tpu2cpu.missTLB.data.get := insnTLB.io.miss.bits
 
-  fetch.io.ppageBRAM <> ppage.io.getPort(1)
-  fetch.io.vecPC zip vec_pregs foreach {case (fPC, pPC) => fPC := pPC.PC}
+  ppage.io.getPort(1).en := true.B
+  ppage.io.getPort(1).dataIn.get := 0.U
+  ppage.io.getPort(1).writeEn.get := false.B
+  ppage.io.getPort(1).addr := insnTLB.io.paddr // PC is byte addressed, BRAM is 32bit word addressed
 
-  fetch.io.tagIn := fetch_tag
-  fetch.io.en := fetch_en(fetch_tag)
+  fetch.io.fire := tpu.io.tpu2cpu.fire
+  fetch.io.fetchEn := fetchEn
+  fetch.io.pcVec zip pregsVec foreach {case (pcFetch, pcState) => pcFetch := pcState.PC}
   fetch.io.commitReg.bits := commitReg.io.deq.bits
-  fetch.io.commitReg.valid := commitReg.io.deq.valid
-  fetch.io.fire.valid := tpu.io.tpu2cpu.fire
-  fetch.io.fire.bits := tpu.io.tpu2cpu.fireTag
+  fetch.io.commitReg.valid := commitValid
+  insnTLB.io.vaddr := fetch.io.pc
+  fetch.io.hit := !insnTLB.io.miss.valid
+  fetch.io.insn := ppage.io.getPort(1).dataOut.get
 
   // Fetch -> Decode
   decoder.io.finst := fetch.io.deq.bits
@@ -150,17 +174,17 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   val issued_tag = issued_dinst.tag
   issuer.io.deq.ready := commitReg.io.enq.ready
   issuer.io.commitReg.bits := commitReg.io.deq.bits
-  issuer.io.commitReg.valid := commitReg.io.deq.valid
+  issuer.io.commitReg.valid := commitValid
  
   /** Execute */
   // connect rfile read(address) interface
-  vec_rfile map { case rfile =>
+  rfileVec map { case rfile =>
     rfile.rs1_addr := issued_dinst.rs1.bits
     rfile.rs2_addr := issued_dinst.rs2.bits
   }
   // Read register data from rfile
-  val rVal1 = vec_rfile(issued_dinst.tag).rs1_data
-  val rVal2 = vec_rfile(issued_dinst.tag).rs2_data
+  val rVal1 = rfileVec(issued_dinst.tag).rs1_data
+  val rVal2 = rfileVec(issued_dinst.tag).rs2_data
 
   // connect executeUnit interface
   executer.io.dinst := issued_dinst
@@ -169,7 +193,7 @@ class Proc(implicit val cfg: ProcConfig) extends Module
 
   // connect BranchUnit interface
   brancher.io.dinst := issued_dinst
-  brancher.io.nzcv := vec_pregs(issued_dinst.tag).NZCV
+  brancher.io.nzcv := pregsVec(issued_dinst.tag).NZCV
 
   // connect LDSTUnit interface
   ldstU.io.dinst.bits := issuer.io.deq.bits
@@ -198,84 +222,89 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   // Writeback : Execute -> PState
 
   // connect RFile's write interface
-  val commitExec = commitReg.io.deq.bits.exe
-  val commitMem = commitReg.io.deq.bits.mem
-  val commitBr = commitReg.io.deq.bits.br
-  val commitTag = commitReg.io.deq.bits.tag
-  for(cpu <- 0 until cfg.NB_THREADS) {
+ for(cpu <- 0 until cfg.NB_THREADS) {
     when(commitExec.valid) {
-      vec_rfile(cpu).waddr := commitExec.bits.rd.bits
-      vec_rfile(cpu).wdata := commitExec.bits.res
+      rfileVec(cpu).waddr := commitExec.bits.rd.bits
+      rfileVec(cpu).wdata := commitExec.bits.res
     }.elsewhen(commitMem.valid) {
-      vec_rfile(cpu).waddr := commitMem.bits.rd.bits
-      vec_rfile(cpu).wdata := commitMem.bits.res
+      rfileVec(cpu).waddr := commitMem.bits.rd.bits
+      rfileVec(cpu).wdata := commitMem.bits.res
     }.otherwise {
-      vec_rfile(cpu).waddr := commitExec.bits.rd.bits
-      vec_rfile(cpu).wdata := commitExec.bits.res
+      rfileVec(cpu).waddr := commitExec.bits.rd.bits
+      rfileVec(cpu).wdata := commitExec.bits.res
     }
-    vec_rfile(cpu).wen := false.B
+    rfileVec(cpu).wen := false.B
   }
 
-  when (commitReg.io.deq.valid) {
-    vec_rfile(commitTag).wen :=
+  when (commitValid) {
+    rfileVec(commitTag).wen :=
       (commitExec.valid && commitExec.bits.rd.valid) ||
       (commitMem.valid && commitMem.bits.rd.valid)
 
     when(commitExec.valid && commitExec.bits.nzcv.valid) {
-      vec_pregs(commitTag).NZCV := commitExec.bits.nzcv.bits
+      pregsVec(commitTag).NZCV := commitExec.bits.nzcv.bits
     }
 
     when(commitBr.valid) {
-      vec_pregs(commitTag).PC := (vec_pregs(commitTag).PC.zext + commitBr.bits.offset.asSInt).asUInt()
+      pregsVec(commitTag).PC := (pregsVec(commitTag).PC.zext + commitBr.bits.offset.asSInt).asUInt()
     }.otherwise {
-      vec_pregs(commitTag).PC := (vec_pregs(commitTag).PC.zext + 4.S).asUInt()
+      pregsVec(commitTag).PC := pregsVec(commitTag).PC + 4.U
     }
   }
 
-  // Start and stop ---------------
-  when(tpu.io.tpu2cpu.fire) {
-    fetch_en(tpu.io.tpu2cpu.fireTag) := true.B
+ // Start and stop ---------------
+  when(tpu.io.tpu2cpu.fire.valid) {
+    fetchEn(tpu.io.tpu2cpu.fire.tag) := true.B
   }
-  // Cycle delay for commitement
-  tpu.io.tpu2cpu.done := commitReg.io.deq.valid && commitReg.io.deq.bits.undef
-  tpu.io.tpu2cpu.doneTag := commitReg.io.deq.bits.tag
-  when(issuer.io.deq.valid && issued_dinst.itype === I_X) {
-    fetch_en(tpu.io.tpu2cpu.flushTag) := false.B
+  when(fetch.io.missTLB.valid) {
+    fetchEn(fetch.io.missTLB.tag) := false.B
   }
-
+  when(fetch.io.fillTLB.valid) {
+    fetchEn(fetch.io.fillTLB.tag) := true.B
+  }
+  when((issuer.io.deq.valid && issued_dinst.itype === I_X)) {
+    fetchEn(tpu.io.tpu2cpu.flush.tag) := false.B
+  }
+ 
+  // Hit unknown case -> Pass state to CPU
+  tpu.io.tpu2cpu.done.valid := commitValid && commitReg.io.deq.bits.undef
+  tpu.io.tpu2cpu.done.tag := commitReg.io.deq.bits.tag
 
   // Flushing ----------------------------------------------------------------
-  issuer.io.flushTag := tpu.io.tpu2cpu.flushTag
-  when(tpu.io.tpu2cpu.flush) {
-    fetch.io.flush := fetch.io.deq.bits.tag === tpu.io.tpu2cpu.flushTag
-    issuer.io.flush := tpu.io.tpu2cpu.flush
-    decReg.io.flush := decReg.io.deq.bits.tag === tpu.io.tpu2cpu.flushTag
-    commitReg.io.flush := commitReg.io.deq.bits.tag === tpu.io.tpu2cpu.flushTag
+  issuer.io.flush := tpu.io.tpu2cpu.flush
+  fetch.io.flush := tpu.io.tpu2cpu.flush
+  commitReg.io.flush := false.B
+  when(tpu.io.tpu2cpu.flush.valid) {
+    decReg.io.flush := decReg.io.deq.bits.tag === tpu.io.tpu2cpu.flush.tag
+  }.elsewhen(commitValid && commitBr.valid ) {
+    fetch.io.flush.valid := fetch.io.deq.bits.tag === commitTag
+    fetch.io.flush.tag := commitTag
+    issuer.io.flush.valid := true.B
+    issuer.io.flush.tag := commitTag
+    decReg.io.flush := decReg.io.deq.bits.tag === commitTag
   }.otherwise {
-    fetch.io.flush := false.B
-    issuer.io.flush := false.B
+    issuer.io.flush.valid := false.B
     decReg.io.flush := false.B
-    commitReg.io.flush := false.B
   }
 
   // Transplant Activated ----------------------------------------------------
   // Default Inputs
-  tpu.io.cpu2tpuState := vec_pregs(tpu.io.tpu2cpu.freezeTag)
-  tpu.io.rfile.rs1_data := vec_rfile(0).rs1_data
-  tpu.io.rfile.rs2_data := vec_rfile(0).rs2_data
+  tpu.io.cpu2tpuState := pregsVec(tpu.io.tpu2cpu.freeze.tag)
+  tpu.io.rfile.rs1_data := rfileVec(0).rs1_data
+  tpu.io.rfile.rs2_data := rfileVec(0).rs2_data
   // When working
-  when(tpu.io.tpu2cpu.freeze) {
+  when(tpu.io.tpu2cpu.freeze.valid) {
     // Redirect freezed cpu to tpu
-    vec_rfile(tpu.io.tpu2cpu.freezeTag) <> tpu.io.rfile
+    rfileVec(tpu.io.tpu2cpu.freeze.tag) <> tpu.io.rfile
     // Freeze PSTATE, When not written by TPU
-    vec_pregs(tpu.io.tpu2cpu.freezeTag) := vec_pregs(tpu.io.tpu2cpu.freezeTag)
+    pregsVec(tpu.io.tpu2cpu.freeze.tag) := pregsVec(tpu.io.tpu2cpu.freeze.tag)
     when(tpu.io.tpu2cpuStateReg.valid) {
       when(tpu.io.tpu2cpuStateReg.bits === TPU2STATE.r_PC) {
-        vec_pregs(tpu.io.tpu2cpu.freezeTag).PC := tpu.io.tpu2cpuState.PC
+        pregsVec(tpu.io.tpu2cpu.freeze.tag).PC := tpu.io.tpu2cpuState.PC
       }.elsewhen(tpu.io.tpu2cpuStateReg.bits === TPU2STATE.r_SP_EL_NZCV){
-        vec_pregs(tpu.io.tpu2cpu.freezeTag).SP := tpu.io.tpu2cpuState.SP
-        vec_pregs(tpu.io.tpu2cpu.freezeTag).EL := tpu.io.tpu2cpuState.EL
-        vec_pregs(tpu.io.tpu2cpu.freezeTag).NZCV := tpu.io.tpu2cpuState.NZCV
+        pregsVec(tpu.io.tpu2cpu.freeze.tag).SP := tpu.io.tpu2cpuState.SP
+        pregsVec(tpu.io.tpu2cpu.freeze.tag).EL := tpu.io.tpu2cpuState.EL
+        pregsVec(tpu.io.tpu2cpu.freeze.tag).NZCV := tpu.io.tpu2cpuState.NZCV
       }
     }
   }
@@ -293,21 +322,20 @@ class Proc(implicit val cfg: ProcConfig) extends Module
     procStateDBG.issueReg.valid := issuer.io.deq.valid
     procStateDBG.issueReg.bits  := issuer.io.deq.bits
     procStateDBG.commitReg.ready   := true.B
-    procStateDBG.commitReg.valid   := commitReg.io.deq.valid
+    procStateDBG.commitReg.valid   := commitValid
     procStateDBG.commitReg.bits    := commitReg.io.deq.bits
 
     // Processor State (XREGS + PSTATE)
-    val vecRFiles = Wire(Vec(cfg.NB_THREADS, Vec(REG_N, DATA_T)))
+    val rfileVecWire = Wire(Vec(cfg.NB_THREADS, Vec(REG_N, DATA_T)))
     for(cpu <- 0 until cfg.NB_THREADS) {
-      vecRFiles(cpu) := vec_rfile(cpu).vecRFile.get
+      rfileVecWire(cpu) := rfileVec(cpu).rfileVec.get
     }
-    tpu.io.rfile.vecRFile.get := vecRFiles(0) // Give a default assignement
-    procStateDBG.vecRFiles := vecRFiles
-    procStateDBG.vecPRegs := vec_pregs
+    tpu.io.rfile.rfileVec.get := rfileVecWire(0) // Give a default assignement
+    procStateDBG.rfileVec := rfileVecWire
+    procStateDBG.pregsVec := pregsVec
     procStateDBG.tuWorking := tpu.io.tpu2cpu.freeze
-    procStateDBG.tuWorkingTag := tpu.io.tpu2cpu.freezeTag
 
-    val comited = RegNext(commitReg.io.deq.valid)
+    val comited = RegNext(commitValid)
     procStateDBG.comited := comited
   }
 

@@ -3,7 +3,7 @@ package protoflex
 
 import chisel3._
 import chisel3.core.withReset
-import chisel3.util.{DeqIO, EnqIO, PriorityEncoder, PriorityMux, Queue, Reverse, Valid, log2Ceil}
+import chisel3.util.{Decoupled, PriorityEncoder, PriorityMux, Queue, Reverse, Valid, log2Ceil}
 import common.PROCESSOR_TYPES._
 
 class RRArbiter(arbN: Int)
@@ -13,7 +13,7 @@ class RRArbiter(arbN: Int)
            // Ready threads
            val ready = Input(UInt(arbN.W))
            // Next thread to issue
-           val next  = EnqIO(UInt(log2Ceil(arbN).W))
+           val next  = Decoupled(UInt(log2Ceil(arbN).W))
          })
 
   def rotateRight[T <: Data](norm: UInt, rot : UInt) : UInt = {
@@ -45,21 +45,15 @@ class RRArbiter(arbN: Int)
 
 class IssueUnitIO(implicit val cfg: ProcConfig) extends Bundle {
   // flush
-  val flush = Input(Bool())
-  val flushTag = Input(cfg.TAG_T)
+  val flush = Input(ValidTagged(cfg.TAG_T))
   // Decode - Issue
-  val enq = Flipped(EnqIO(new DInst))
+  val enq = Decoupled(new DInst)
 
   // Issue - Exec
-  val deq = Flipped(DeqIO(new DInst))
+  val deq = Flipped(Decoupled(new DInst))
 
   // Back Pressure
   val commitReg = Flipped(Valid(new CommitInst))
-
-  // Mem - Issue
-//  val mem_rd = Input(REG_T)
-//  val mem_tag = Input(cfg.TAG_T)
-//  val mem_rd_v =Input(Bool())
 }
 
 /** IssueUnit
@@ -97,7 +91,7 @@ class IssueUnit(implicit val cfg: ProcConfig) extends Module
   def FIFO_i   = new Queue(new DInst, 2, pipe = true, flow = true)
   // Instanciates queue modules, expresses their IO through the vector
   val fifo_vec = VecInit(Seq.tabulate(cfg.NB_THREADS)(
-                           cpu => withReset(reset.toBool || (cpu.U === io.flushTag && io.flush)) { Module(FIFO_i).io }))
+                           cpu => withReset(reset.toBool || (cpu.U === io.flush.tag && io.flush.valid)) { Module(FIFO_i).io }))
 
   /** Issue stage arbiter
     * arbiter        Round Robin Arbiter
@@ -160,10 +154,10 @@ class IssueUnit(implicit val cfg: ProcConfig) extends Module
   }
 
   // Flushing ----------------------------------------------------------------
-  when(io.flush) {
-    reg_pipe(io.flushTag) := DInst()
-    reg_pipe_v(io.flushTag) := false.B
-    sig_pipe_i(io.flushTag) := false.B
+  when(io.flush.valid) {
+    reg_pipe(io.flush.tag) := DInst()
+    reg_pipe_v(io.flush.tag) := false.B
+    sig_pipe_i(io.flush.tag) := false.B
   }
 }
 

@@ -9,21 +9,21 @@ class TransplantTest(c: TransplantUnit) extends PeekPokeTester(c) {
   poke(c.io.stateBRAM.dataOut.get, 0)
 
   // start/initialize proc
-  poke(c.io.host2tpu.fireTag, 0)
-  poke(c.io.host2tpu.fire, 0)
+  poke(c.io.host2tpu.fire.tag, 0)
+  poke(c.io.host2tpu.fire.valid, 0)
   step(2)
   println("Maigc->TP: start signal")
-  poke(c.io.host2tpu.fire, 1)
+  poke(c.io.host2tpu.fire.valid, 1)
   step(1)
-  poke(c.io.host2tpu.fire, 0)
+  poke(c.io.host2tpu.fire.valid, 0)
   step(100) // proc is running simulation
 
   // proc is requesting transplant
   println("Proc->TP: transplant request")
-  poke(c.io.tpu2cpu.done, 1)
+  poke(c.io.tpu2cpu.done.valid, 1)
   step(1)
-  poke(c.io.tpu2cpu.done, 0)
-  while(peek(c.io.host2tpu.done(0))==0){
+  poke(c.io.tpu2cpu.done.valid, 0)
+  while(peek(c.io.host2tpu.done.valid)==0){
     step(1)
   }
   println("TP->Magic: done ")

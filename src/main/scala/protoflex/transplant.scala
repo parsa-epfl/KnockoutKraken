@@ -1,6 +1,6 @@
 package protoflex
 
-import chisel3.{core, _}
+import chisel3._
 import chisel3.util._
 import common.{BRAMConfig, BRAMPort}
 import common.PROCESSOR_TYPES._
@@ -49,10 +49,11 @@ class TransplantUnitIO(implicit val cfg: ProcConfig) extends Bundle
  */
 class TransplantUnitHostIO(implicit val cfg: ProcConfig) extends Bundle
 {
-  val fire    = Input(Bool())
-  val fireTag = Input(cfg.TAG_T)
-  val done    = Output(Bool())
-  val doneTag = Output(cfg.TAG_T)
+  val fire = Input(ValidTagged(cfg.TAG_T))
+  val done = Output(ValidTagged(cfg.TAG_T))
+  val missTLB = Output(ValidTagged(cfg.TAG_T, DATA_T))
+  val fillTLB = Input(ValidTagged(cfg.TAG_T, new TLBEntry))
+  val getState = Input(ValidTagged(cfg.TAG_T))
 }
 
 /*
@@ -65,14 +66,13 @@ class TransplantUnitHostIO(implicit val cfg: ProcConfig) extends Bundle
  */
 class TransplantUnitCPUIO(implicit val cfg: ProcConfig) extends Bundle
 {
-  val flush = Output(Bool())
-  val freeze = Output(Bool())
-  val fire = Output(Bool())
-  val done = Input(Bool())
-  val flushTag = Output(cfg.TAG_T)
-  val fireTag = Output(cfg.TAG_T)
-  val freezeTag = Output(cfg.TAG_T)
-  val doneTag = Input(cfg.TAG_T)
+  val flush = Output(ValidTagged(cfg.TAG_T))
+  val fire = Output(ValidTagged(cfg.TAG_T))
+  val freeze = Output(ValidTagged(cfg.TAG_T))
+  val done = Input(ValidTagged(cfg.TAG_T))
+
+  val missTLB = Input(ValidTagged(cfg.TAG_T, DATA_T))
+  val fillTLB = Output(ValidTagged(cfg.TAG_T, new TLBEntry))
 }
 
 class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
@@ -123,17 +123,26 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
 
   switch(state) {
     is(s_IDLE) {
-      when(io.host2tpu.fire) {
+      when(io.host2tpu.fire.valid) {
         freeze := true.B
-        freezeTag := io.host2tpu.fireTag
+        freezeTag := io.host2tpu.fire.tag
         stateDir := s_BRAM2CPU
         stateRegType := r_XREGS
         bramOFFST := ARCH_XREGS_OFFST.U
 
         state := s_TRANS
-      }.elsewhen(io.tpu2cpu.done) {
+      }.elsewhen(io.tpu2cpu.done.valid) {
         freeze := true.B
-        freezeTag := io.tpu2cpu.doneTag
+        freezeTag := io.tpu2cpu.done.tag
+        stateDir := s_CPU2BRAM
+        stateRegType := r_XREGS
+        bramOFFST := ARCH_XREGS_OFFST.U
+        flushSig := true.B
+
+        state := s_TRANS
+      }.elsewhen(io.host2tpu.getState.valid) {
+        freeze := true.B
+        freezeTag := io.host2tpu.getState.tag
         stateDir := s_CPU2BRAM
         stateRegType := r_XREGS
         bramOFFST := ARCH_XREGS_OFFST.U
@@ -190,14 +199,18 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
 
   // Signals come with 1 cycle delay as cmd signals start when State machine is back to IDLE
   val freezeTag1D = RegNext(freezeTag)
-  io.tpu2cpu.fire := RegNext(fireSig)
-  io.tpu2cpu.fireTag := freezeTag1D 
-  io.tpu2cpu.freeze := freeze
-  io.tpu2cpu.freezeTag := freezeTag
-  io.tpu2cpu.flush := RegNext(flushSig)
-  io.tpu2cpu.flushTag := freezeTag1D
-  io.host2tpu.done := RegNext(doneSig)
-  io.host2tpu.doneTag := freezeTag1D
+  io.tpu2cpu.fire.valid := RegNext(fireSig)
+  io.tpu2cpu.fire.tag := freezeTag1D
+  io.tpu2cpu.freeze.valid := freeze
+  io.tpu2cpu.freeze.tag := freezeTag
+  io.tpu2cpu.flush.valid := RegNext(flushSig)
+  io.tpu2cpu.flush.tag := freezeTag1D
+  io.host2tpu.done.valid := RegNext(doneSig)
+  io.host2tpu.done.tag := freezeTag1D
+
+  // CPU <-> HOST direct communcation
+  io.host2tpu.missTLB <> io.tpu2cpu.missTLB
+  io.host2tpu.fillTLB <> io.tpu2cpu.fillTLB
 }
 
 // In parsa-epfl/qemu/fa-qflex
