@@ -120,7 +120,7 @@ object DECODE_MATCHING_TABLES
       // Unconditional branch (immediate)
       B      -> List(I_BImm , OP_B,     N, N, N, Y, N, N, N, Y),
       BL     -> List(I_BImm , OP_B,     N, N, N, Y, N, N, N, Y),
-      // Compare & branch (immediate)
+      // Conditional branch (immediate)
       BCond  -> List(I_BCImm, OP_BCOND, N, N, N, Y, N, Y, N, Y),
       // Add/subtract (immediate)
       ADD_I  -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, N, Y),

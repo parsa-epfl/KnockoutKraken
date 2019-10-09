@@ -136,6 +136,12 @@
 /*  1  0 |  0  1  1 |  0 |  0  0 |                           imm19                          |       Rt       | LDRSW            |         */
 /*  1  1 |  0  1  1 |  0 |  0  0 |                           imm19                          |       Rt       | PRFM             |         */
 
+/* Load/store no-allocate pair (offset) */
+/* V = 1 bit is for SIMD, we take non SIMD instructons */
+/* 31 30 | 29 28 27 | 26 | 25 24 23 | 22 | 21 20 19 18 17 16 15 | 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant    */
+/*  opc  |  1  0  1 |  V |  0  1  0 |  L |         imm7         |      Rt2       |       Rn       |       Rt       |                  |            */
+
+/* Load/store register pair (post-indexed) */
 /* V = 1 bit is for SIMD, we take non SIMD instructons */
 /* 31 30 | 29 28 27 | 26 | 25 24 23 | 22 | 21 20 19 18 17 16 15 | 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant    */
 /*  opc  |  1  0  1 |  V |  0  0  1 |  L |         imm7         |      Rt2       |       Rn       |       Rt       |                  |            */
