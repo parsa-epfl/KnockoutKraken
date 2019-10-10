@@ -33,6 +33,7 @@ object PROCESSOR_TYPES
   val NZCV_X = 0.U(NZCV_W)
 
   // Virtual memory
+  val PAGE_SZ = 12 // 4096
   val VADDR = 48
   val PADDR = 32
 

@@ -47,10 +47,10 @@ class IssueUnitIO(implicit val cfg: ProcConfig) extends Bundle {
   // flush
   val flush = Input(ValidTagged(cfg.TAG_T))
   // Decode - Issue
-  val enq = Decoupled(new DInst)
+  val enq = Flipped(Decoupled(new DInst))
 
   // Issue - Exec
-  val deq = Flipped(Decoupled(new DInst))
+  val deq = Decoupled(new DInst)
 
   // Back Pressure
   val commitReg = Flipped(Valid(new CommitInst))

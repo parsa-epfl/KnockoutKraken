@@ -3,7 +3,7 @@ package protoflex
 
 import chisel3._
 import chisel3.util._
-import common.{BRAMConfig, BRAMPort}
+import common.{FlushReg}
 import common.PROCESSOR_TYPES._
 
 class FInst(implicit val cfg: ProcConfig) extends Bundle
@@ -15,87 +15,67 @@ class FInst(implicit val cfg: ProcConfig) extends Bundle
 
 class FetchUnitIO(implicit val cfg: ProcConfig) extends Bundle
 {
-  val en = Input(Bool())
-  val vecPC = Input(Vec(cfg.NB_THREADS, DATA_T))
-  val tagIn  = Input(cfg.TAG_T)
-
-  val incr = Output(Bool())
-  val flush = Input(Bool())
-
-  val fire = Input(Valid(cfg.TAG_T))
-
+  val flush = Input(ValidTagged(cfg.TAG_T))
+  val fire = Input(ValidTagged(cfg.TAG_T))
   val commitReg = Flipped(Valid(new CommitInst))
+  val nextPC = Input(DATA_T)
 
-  // Program Page
-  val ppageBRAM = Flipped(new BRAMPort(1)(cfg.ppageBRAMc))
-  // Fetch -> decode
-  val deq = Flipped(DeqIO(new FInst))
+  val fetchEn = Input(Vec(cfg.NB_THREADS, Bool()))
+  val pcVec = Input(Vec(cfg.NB_THREADS, DATA_T))
+
+  val pc = Output(ValidTagged(cfg.TAG_T, DATA_T))
+
+  val hit = Input(Bool())
+  val insn = Input(INST_T)
+  val deq = Decoupled(new FInst)
 }
-
 
 class FetchUnit(implicit val cfg: ProcConfig) extends Module
 {
   val io = IO(new FetchUnitIO())
-  val fake_PC = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(DATA_X)))
-  val pcTLB = Module(new TLBUnit())
-  pcTLB.io.vaddr.bits := fake_PC(io.tagIn)
-  pcTLB.io.vaddr.valid := io.en
-  pcTLB.io.fill := io.fire.valid
-  pcTLB.io.vaddrFill := io.vecPC(io.fire.bits)
 
-  io.ppageBRAM.en := true.B
-  io.ppageBRAM.addr := pcTLB.io.paddr.bits // PC is byte addressed, BRAM is 32bit word addressed
-  io.ppageBRAM.dataIn.get := 0.U
-  io.ppageBRAM.writeEn.get := false.B
+  val prefetchPC = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(DATA_X)))
+  val arbiter = Module(new RRArbiter(cfg.NB_THREADS))
 
-  // One cycle delay for BRAM
-  val valid = RegInit(false.B)
-  val tag = RegInit(0.U)
-  val pc = RegInit(0.U)
-  val readIns = io.deq.ready || io.flush
-  when(readIns) {
-    valid := io.en && pcTLB.io.paddr.valid && pcTLB.io.hit
-    tag := io.tagIn
-    pc := fake_PC(io.tagIn)
-  }.otherwise {
-    valid := valid
-    tag := tag
-    pc := pc
+  val insnReq = Wire(Valid(new FInst))
+  val fetchReg = Module(new FlushReg(new FInst))
+  fetchReg.io.flush := io.flush.valid && fetchReg.io.deq.bits.tag === io.flush.tag
+
+  val insnHit = WireInit(io.pc.valid && io.hit && fetchReg.io.enq.ready)
+  when(insnReq.valid && !io.deq.ready) {
+    insnHit := false.B
+  }
+  val currPC = WireInit(prefetchPC(0))
+
+  arbiter.io.ready := io.fetchEn.asUInt
+  arbiter.io.next.ready := fetchReg.io.enq.ready
+  when(arbiter.io.next.valid && fetchReg.io.enq.ready) {
+    currPC := prefetchPC(arbiter.io.next.bits)
+    prefetchPC(arbiter.io.next.bits) := prefetchPC(arbiter.io.next.bits) + 4.U
   }
 
-  // Save last valid inst
-  def vinstInit = {
-    val wire = Wire(Valid(INST_T))
-    wire.valid := false.B
-    wire.bits := 0.U
-    wire
-  }
+  io.pc.data.get := currPC
+  io.pc.tag := arbiter.io.next.bits
+  io.pc.valid := arbiter.io.next.valid
 
-  val instV = RegInit(vinstInit)
-  when(!io.deq.ready && RegNext(io.deq.ready)) {
-    instV.valid := true.B
-    instV.bits := io.ppageBRAM.dataOut.get
-  }
+  insnReq.valid := RegNext(insnHit)
+  insnReq.bits.inst := io.insn
+  insnReq.bits.tag := RegNext(arbiter.io.next.bits)
+  insnReq.bits.pc := RegNext(currPC)
 
-  when(io.deq.ready) {
-    instV.valid := false.B
-  }
+  fetchReg.io.enq.bits := insnReq.bits
+  fetchReg.io.enq.valid := insnReq.valid
 
-  val deqValid = valid && !io.flush
-  io.incr := readIns && io.en
-  //io.incr := io.deq.ready && deqValid
-  io.deq.valid := deqValid
-  io.deq.bits.tag := tag
-  io.deq.bits.pc := pc
-  io.deq.bits.inst := Mux(instV.valid, instV.bits, io.ppageBRAM.dataOut.get)
-
-  when(readIns && io.en) {
-    fake_PC(io.tagIn) := fake_PC(io.tagIn) + 4.U
-  }
   when(io.commitReg.valid && io.commitReg.bits.br.valid) {
-    fake_PC(io.commitReg.bits.tag) := (io.vecPC(io.commitReg.bits.tag).zext + io.commitReg.bits.br.bits.offset.asSInt).asUInt()
+    prefetchPC(io.commitReg.bits.tag) := io.nextPC
   }
+
   when(io.fire.valid) {
-    fake_PC(io.fire.bits) := io.vecPC(io.fire.bits)
+    prefetchPC(io.fire.tag) := io.pcVec(io.fire.tag)
   }
+  when(io.flush.valid) {
+    prefetchPC(io.flush.tag) := io.pcVec(io.flush.tag)
+  }
+
+  io.deq <> fetchReg.io.deq
 }

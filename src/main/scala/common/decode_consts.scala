@@ -33,6 +33,7 @@ object DECODE_CONTROL_SIGNALS
 
   // Branches Signals
   val OP_B = DEC_LITS.OP_B.U(OP_W)
+  val OP_BL = DEC_LITS.OP_BL.U(OP_W)
   val OP_BCOND = DEC_LITS.OP_BCOND.U(OP_W)
 
   // Shiift Operation Signals
@@ -109,26 +110,26 @@ object DECODE_MATCHING_TABLES
   def decode_table: Array[(BitPat, List[UInt])]  =
     Array(
       // Logical (shifted register)
-      AND    -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, N, Y),
-      BIC    -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, N, Y),
-      ORR    -> List(I_LogSR, OP_ORR,   Y, Y, Y, N, Y, N, N, Y),
-      ORN    -> List(I_LogSR, OP_ORN,   Y, Y, Y, N, Y, N, N, Y),
-      EOR    -> List(I_LogSR, OP_EOR,   Y, Y, Y, N, Y, N, N, Y),
-      EON    -> List(I_LogSR, OP_EON,   Y, Y, Y, N, Y, N, N, Y),
-      ANDS   -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, Y, Y),
-      BICS   -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, Y, Y),
+      LogSR_AND    -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, N, Y),
+      LogSR_BIC    -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, N, Y),
+      LogSR_ORR    -> List(I_LogSR, OP_ORR,   Y, Y, Y, N, Y, N, N, Y),
+      LogSR_ORN    -> List(I_LogSR, OP_ORN,   Y, Y, Y, N, Y, N, N, Y),
+      LogSR_EOR    -> List(I_LogSR, OP_EOR,   Y, Y, Y, N, Y, N, N, Y),
+      LogSR_EON    -> List(I_LogSR, OP_EON,   Y, Y, Y, N, Y, N, N, Y),
+      LogSR_ANDS   -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, Y, Y),
+      LogSR_BICS   -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, Y, Y),
       // Unconditional branch (immediate)
-      B      -> List(I_BImm , OP_B,     N, N, N, Y, N, N, N, Y),
-      BL     -> List(I_BImm , OP_B,     N, N, N, Y, N, N, N, Y),
+      BImm_B       -> List(I_BImm , OP_B,     N, N, N, Y, N, N, N, Y),
+      BImm_BL      -> List(I_BImm , OP_BL,    N, N, N, Y, N, N, N, Y),
       // Conditional branch (immediate)
-      BCond  -> List(I_BCImm, OP_BCOND, N, N, N, Y, N, Y, N, Y),
+      BCond        -> List(I_BCImm, OP_BCOND, N, N, N, Y, N, Y, N, Y),
       // Add/subtract (immediate)
-      ADD_I  -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, N, Y),
-      ADDS_I -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, Y, Y),
-      SUB_I  -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, Y, N, N, Y),
-      SUBS_I -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, Y, N, Y, Y),
+      ASImm_ADD_I  -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, N, Y),
+      ASImm_ADDS_I -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, Y, Y),
+      ASImm_SUB_I  -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, Y, N, N, Y),
+      ASImm_SUBS_I -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, Y, N, Y, Y),
       // load/store (immediate)
-      LDR_I  -> List(I_LSImm, OP_LDR,   Y, N, N, Y, N, N, N, Y),
+      LDR_I        -> List(I_LSImm, OP_LDR,   Y, N, N, Y, N, N, N, Y),
     )
 }
 
@@ -159,7 +160,8 @@ object DEC_LITS
 
   // Branches singals
   val OP_B = 0
-  val OP_BCOND = 1
+  val OP_BL = 1
+  val OP_BCOND = 2
 
   // Shiift Operation Signals
   val SHIFT_VAL_W = 6 // maximum shift for 64 bit

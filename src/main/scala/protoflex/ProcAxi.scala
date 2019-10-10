@@ -74,19 +74,26 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends Module {
   regFile.io.regsInput := regValues
 
   /** Register 0 (Pulse-Only)
-    * +----------------------------------------------------+
-    * |                 to Transplant Cmds                 |
-    * |-----------+--------------------+-------------------+
-    * |   fire    |      RESERVED      |        Tag        |
-    * +-----------+--------------------+-------------------+
-    * |31       31|30        NB_THREADS|NB_THREADS-1      0|
-    * +-----------+--------------------+-------------------+
+    * +-----------------------+----------------------------------------+
+    * |                             to Transplant Cmds                 |
+    * |-----------+-----------+--------------------+-------------------+
+    * |   fire    | getState  |      RESERVED      |        Tag        |
+    * +-----------+-----------+--------------------+-------------------+
+    * |31       31|30       30|30        NB_THREADS|NB_THREADS-1      0|
+    * +-----------+-----------+--------------------+-------------------+
     *
     */
+  val tagReg = regOut(0, 0, cfg.NB_THREADS)
+
   val fireReg    = regOut(0, 31, 1).toBool
-  val fireTagReg = regOut(0, 0, cfg.NB_THREADS)
   proc.io.host2tpu.fire.valid := fireReg
-  proc.io.host2tpu.fire.tag := fireTagReg
+  proc.io.host2tpu.fire.tag := tagReg
+
+  val getState = regOut(0, 30, 1).toBool()
+  proc.io.host2tpu.getState.valid := getState
+  proc.io.host2tpu.getState.tag := tagReg
+
+
 
   /** Register 1 (Read-Only)
     * +----------------------------------------+
@@ -101,14 +108,14 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends Module {
   val doneVec = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(false.B)))
   regIn(1):= Cat(0.U, doneVec.asUInt)
 
+  when(fireReg) {
+    doneVec(tagReg) := false.B
+  }
   when(proc.io.host2tpu.done.valid) {
     doneVec(proc.io.host2tpu.done.tag) := true.B
   }
-  when(fireReg) {
-    doneVec(fireTagReg) := false.B
-  }
 
-  /** Register 2
+ /** Register 2 TODO, CMD get TLB paddr
     * +----------------------------------------+
     * |                                        |
     * +----------------------------------------+
@@ -118,6 +125,9 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends Module {
     * +----------------------------------------+
     *
     */
+  proc.io.host2tpu.fillTLB.valid    := false.B
+  proc.io.host2tpu.fillTLB.tag      := tagReg
+  proc.io.host2tpu.fillTLB.data.get := TLBEntry()
   // reg(2, 0, 1)
 
   /** Register 3

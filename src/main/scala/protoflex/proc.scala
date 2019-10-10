@@ -125,6 +125,11 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   val commitValid = commitReg.io.deq.valid
 
   val nextPC = Wire(DATA_T)
+  when(commitBr.valid) {
+    nextPC := (pregsVec(commitTag).PC.zext + commitBr.bits.offset.asSInt).asUInt()
+  }.otherwise {
+    nextPC := pregsVec(commitTag).PC + 4.U
+  }
 
   // Interconnect -------------------------------------------
 
@@ -138,7 +143,8 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   tpu.io.stateBRAM <> state.io.getPort(1)
   tpu.io.tpu2cpu.done.valid := false.B
   tpu.io.tpu2cpu.done.tag := 0.U
-  tpu.io.tpu2cpu.fillTLB <> insnTLB.io.fillTLB
+  insnTLB.io.fillTLB.valid := tpu.io.tpu2cpu.fillTLB.valid
+  insnTLB.io.fillTLB.bits := tpu.io.tpu2cpu.fillTLB.data.get
 
   // PState + Branching -> Fetch
   tpu.io.tpu2cpu.missTLB.tag := fetch.io.pc.tag
@@ -153,9 +159,10 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   fetch.io.fire := tpu.io.tpu2cpu.fire
   fetch.io.fetchEn := fetchEn
   fetch.io.pcVec zip pregsVec foreach {case (pcFetch, pcState) => pcFetch := pcState.PC}
+  fetch.io.nextPC := nextPC
   fetch.io.commitReg.bits := commitReg.io.deq.bits
   fetch.io.commitReg.valid := commitValid
-  insnTLB.io.vaddr := fetch.io.pc
+  insnTLB.io.vaddr := fetch.io.pc.data.get
   fetch.io.hit := !insnTLB.io.miss.valid
   fetch.io.insn := ppage.io.getPort(1).dataOut.get
 
@@ -253,18 +260,10 @@ class Proc(implicit val cfg: ProcConfig) extends Module
   }
 
  // Start and stop ---------------
-  when(tpu.io.tpu2cpu.fire.valid) {
-    fetchEn(tpu.io.tpu2cpu.fire.tag) := true.B
-  }
-  when(fetch.io.missTLB.valid) {
-    fetchEn(fetch.io.missTLB.tag) := false.B
-  }
-  when(fetch.io.fillTLB.valid) {
-    fetchEn(fetch.io.fillTLB.tag) := true.B
-  }
-  when((issuer.io.deq.valid && issued_dinst.itype === I_X)) {
-    fetchEn(tpu.io.tpu2cpu.flush.tag) := false.B
-  }
+  when(insnTLB.io.miss.valid)        { fetchEn(fetch.io.pc.tag) := false.B }
+  when(tpu.io.tpu2cpu.fire.valid)    { fetchEn(tpu.io.tpu2cpu.fire.tag) := true.B }
+  when(tpu.io.tpu2cpu.fillTLB.valid) { fetchEn(tpu.io.tpu2cpu.fillTLB.tag) := true.B }
+  when((issuer.io.deq.valid && issued_dinst.itype === I_X)) { fetchEn(tpu.io.tpu2cpu.flush.tag) := false.B }
  
   // Hit unknown case -> Pass state to CPU
   tpu.io.tpu2cpu.done.valid := commitValid && commitReg.io.deq.bits.undef

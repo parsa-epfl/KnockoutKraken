@@ -68,8 +68,8 @@ trait ProcTestsBase extends ArmflexBasePeekPokeTests with BRAMPortAXIHelper {
       return PState(List(404), 404, 404)
     }
     val procStateDBG = procStateDBG_.get
-    val pstate = procStateDBG.vecPRegs(cpu)
-    val rfile = procStateDBG.vecRFiles(cpu)
+    val pstate = procStateDBG.pregsVec(cpu)
+    val rfile = procStateDBG.rfileVec(cpu)
     val xregs = for(reg <- 0 until 32) yield peek(rfile(reg)).toLong
     val pc = peek(pstate.PC).toLong
     val nzcv = peek(pstate.NZCV).toInt
@@ -119,7 +119,7 @@ trait ProcTestsBase extends ArmflexBasePeekPokeTests with BRAMPortAXIHelper {
       "                    |      ",
       "------------------------------- WB STAGE -------------------------------------------",
       "                                                                               ",
-      " PC : " + peek(procStateDBG.vecPRegs(0).PC),
+      " PC : " + peek(procStateDBG.pregsVec(0).PC),
       "+----------------------------------------------------------------------------------+",
       "|                                   DONE                                           |",
       "+-----------------------------------------------------------------------------------\n",
