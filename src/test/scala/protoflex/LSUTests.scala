@@ -1,3 +1,4 @@
+/* LEGACY TESTS
 package protoflex
 
 import chisel3._
@@ -72,3 +73,5 @@ class LSUTester extends ChiselFlatSpec with ArmflexBaseFlatSpec
   }
 
 }
+
+ */

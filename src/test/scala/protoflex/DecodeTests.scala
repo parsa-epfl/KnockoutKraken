@@ -1,3 +1,4 @@
+/* LEGACY TESTS
 package protoflex
 
 import chisel3._
@@ -68,3 +69,5 @@ class DecodeTester extends ChiselFlatSpec with ArmflexBaseFlatSpec
     }
   }
 }
+
+ */

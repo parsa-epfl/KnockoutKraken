@@ -1,3 +1,4 @@
+/* LEGACY TESTS
 package trial
 
 import chisel3.iotesters
@@ -53,9 +54,6 @@ class TrialUnitPriority(c: TrialPriority) extends PeekPokeTester(c)
   }
 }
 
-
-
-/*
 class TrialTester extends ChiselFlatSpec {
   private val backendNames = if(firrtl.FileUtils.isCommandAvailable("verilator")) {
     Array("firrtl", "verilator")

@@ -1,3 +1,4 @@
+/* LEGACY TESTS
 package protoflex
 
 import chisel3._
@@ -171,3 +172,5 @@ object IssueRepl extends App with ArmflexBaseFlatSpec {
 object IssueMain extends App with ArmflexBaseFlatSpec {
   chisel3.Driver.execute(args, () => new IssueUnit)
 }
+
+ */

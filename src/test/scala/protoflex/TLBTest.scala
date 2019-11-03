@@ -1,3 +1,4 @@
+/* LEGACY TESTS
 // See LICENSE.txt for license details.
 package protoflex
 
@@ -9,10 +10,10 @@ import org.scalacheck.Prop.True
 
 class TLBTest(c: TLBUnitLegacy) extends PeekPokeTester(c)
 {
-  /* write tlb entries for testing
-    *  | tag|set| offset|
-    *  | 28 | 8 | 12    |
-    */
+  // write tlb entries for testing
+  //  | tag|set| offset|
+  //  | 28 | 8 | 12    |
+  ///
   def write_entry(tag:Int, set:Int, offset:Int, d:Int){
     poke(c.io.vaddr.bits.tag, tag)
     poke(c.io.vaddr.bits.set, set)
@@ -61,3 +62,5 @@ class TLBTester extends ChiselFlatSpec
     }
   }
 }
+
+ */

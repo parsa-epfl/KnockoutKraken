@@ -1,3 +1,4 @@
+/* LEGACY TESTS
 package protoflex
 
 import chisel3._
@@ -85,3 +86,5 @@ object BranchRepl extends App with ArmflexBaseFlatSpec {
 object BranchReplCondUnit extends App with ArmflexBaseFlatSpec {
   iotesters.Driver.executeFirrtlRepl(args, () => new CondUnit)
 }
+
+ */
