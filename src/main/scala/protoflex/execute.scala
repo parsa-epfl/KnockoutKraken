@@ -39,7 +39,7 @@ class BasicALU(implicit val cfg: ProcConfig) extends Module {
   /*
    * NZCV flags
    */
-  val nzcv = VecInit(NZCV_X.toBools)
+  val nzcv = VecInit(NZCV_X.asBools)
   nzcv(0) := res.asSInt < 0.S
   nzcv(1) := res === 0.U
   // Unsigned carry
@@ -85,10 +85,10 @@ class ShiftALU(implicit val cfg: ProcConfig) extends Module {
                 LSL -> (io.word << io.amount),
                 LSR -> (io.word >> io.amount),
                 ASR -> (io.word.asSInt() >> io.amount).asUInt(),
-                ROR -> rotateRight(VecInit(io.word.toBools), io.amount).asUInt
+                ROR -> rotateRight(VecInit(io.word.asBools), io.amount).asUInt
               ))
 
-  io.carry := res(DATA_W.get).toBool()
+  io.carry := res(DATA_W.get).asBool()
   io.res := res
 }
 
