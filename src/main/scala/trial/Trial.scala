@@ -42,7 +42,7 @@ class TrialRotate extends Module {
     }
   }
 
-  val vec = VecInit(io.in.toBools)
+  val vec = VecInit(io.in.asBools)
   io.out := rotateRight(vec, io.rot).asUInt
 }
 

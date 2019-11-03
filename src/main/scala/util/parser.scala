@@ -8,23 +8,23 @@ import common.DEC_LITS._
 case class AssemblyInstruction
   (
     val line        : String,
-    val itype       : BigInt,
-    val op          : BigInt,
-    val rd          : BigInt,
-    val rs1         : BigInt,
-    val rs2         : BigInt,
-    val imm         : BigInt,
-    val shift_type  : BigInt,
-    val cond        : BigInt,
-    val rd_en       : BigInt,
-    val rs1_en      : BigInt,
-    val rs2_en      : BigInt,
-    val imm_en      : BigInt,
-    val shift_en    : BigInt,
-    val cond_en     : BigInt,
-    val nzcv_en     : BigInt,
-    val inst_en     : BigInt,
-    val bitPat      : BigInt
+    val itype       : Int,
+    val op          : Int,
+    val rd          : Int,
+    val rs1         : Int,
+    val rs2         : Int,
+    val imm         : Int,
+    val shift_type  : Int,
+    val cond        : Int,
+    val rd_en       : Int,
+    val rs1_en      : Int,
+    val rs2_en      : Int,
+    val imm_en      : Int,
+    val shift_en    : Int,
+    val cond_en     : Int,
+    val nzcv_en     : Int,
+    val inst_en     : Int,
+    val bitPat      : Int
   )
 {
   val io = Seq(
@@ -139,7 +139,7 @@ object AssemblyInstruction
 
     val line = i_line
     val i_bitPad_l = i_bitPat.grouped(2).toList.reverse.mkString // little endien
-    val bitPat = BigInt(i_bitPad_l, 16)
+    val bitPat = Integer.parseInt(i_bitPad_l, 16)
 
     var itype = I_X
     var op    = OP_ALU_X
@@ -218,7 +218,7 @@ object AssemblyInstruction
     val imm_en   = ctrl(3)
     val shift_en = ctrl(4)
     val cond_en  = ctrl(5)
-    val nzcv_en  = if(setCond.contains(i_op.toUpperCase)) BigInt(Y) else ctrl(6)
+    val nzcv_en  = if(setCond.contains(i_op.toUpperCase)) Y else ctrl(6)
     val inst_en  = ctrl(7)
 
     new AssemblyInstruction(

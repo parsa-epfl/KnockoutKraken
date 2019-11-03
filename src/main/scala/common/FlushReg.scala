@@ -2,7 +2,7 @@ package common
 
 import chisel3._
 import chisel3.util.{log2Ceil, Counter, Decoupled, ReadyValidIO, IrrevocableIO, Valid}
-import chisel3.experimental.{DataMirror, Direction, MultiIOModule, requireIsChiselType}
+import chisel3.experimental.{DataMirror, Direction, requireIsChiselType}
 
 /** An I/O Bundle for FlushReg (FlushRegister)
   * @param gen The type of data of the Reg

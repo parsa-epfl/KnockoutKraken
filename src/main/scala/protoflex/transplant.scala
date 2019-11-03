@@ -112,7 +112,7 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   val fireSig = WireInit(false.B)
   // Done pulses for a cycle when doneSig is set true.
   val doneSig = WireInit(false.B)
- 
+
   def resetState = {
     bramOFFST := 0.U
     stateRegType := r_DONE

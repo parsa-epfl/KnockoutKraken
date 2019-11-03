@@ -101,7 +101,7 @@ class TLBUnitLegacy  extends Module {
         state := s_IDLE
         io.paddr.valid := true.B
 
-        when(!rw_reg.toBool()){
+        when(!rw_reg.asBool()){
           dirty := dirty.bitSet(set_reg, true.B)
         }
       }.otherwise{

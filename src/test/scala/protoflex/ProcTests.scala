@@ -4,55 +4,60 @@ import java.io.{FileInputStream, FileOutputStream, IOException}
 import java.nio.ByteBuffer
 import java.math.BigInteger
 
+import scala.language.implicitConversions
+
+import org.scalatest._
+
 import chisel3._
-import chisel3.iotesters.{ChiselFlatSpec, Driver, PeekPokeTester, PeekPokeTests}
+import chisel3.tester._
+
 import utils.{AssemblyParser, PrintingTools}
 import utils.SoftwareStructs._
 
 import common.PROCESSOR_TYPES.{DATA_SZ, REG_N}
-import common.{HighLevelAxiLiteTestInterface, BRAMPortAXIHelper, BRAMPortAXI, AxiLiteSignals}
+import common._
+import common.AxiLite._
+import common.BRAMPort.BRAMPortDriver
 
-trait ProcTestsBase extends ArmflexBasePeekPokeTests with BRAMPortAXIHelper {
+trait ProcTestsBase {
+  implicit val clock : Clock
+  implicit def bool2boolean(x: Bool): Boolean = x.litToBoolean
   val cfgProc: ProcConfig
 
   val INSN_SIZE = 4
+
   val portPPage : BRAMPortAXI
   val portPState : BRAMPortAXI
   val procStateDBG_ : Option[ProcStateDBG]
 
+  // Operations that depend if wrapped in AxiLite or Proc is exposed
   def fireThread(tag: Int): Unit
   def procIsDone(): (Boolean, Int)
 
-  def writeFullPPage(ppage: Array[Int], page_size: Int) = {
-    for(i <- 0 to page_size) {
-      wrBRAM32b(portPPage, ppage(i), i)
-    }
-  }
+  def writePPageInst(inst: BigInt, offst: BigInt) = { portPPage.wrBRAM32b(inst, offst) }
 
   def wrPSTATE2BRAM(tag: Int, pstate: PState): Unit ={
-    println("WRITE PSTATE")
     //println(pstate.toString())
     var offst = 0
     for(i <- 0 until 32 ) {
-      wrBRAM64b(portPState, pstate.xregs(i), offst); offst += 2
+       portPState.wrBRAM64b(pstate.xregs(i), offst); offst += 2
     }
-    wrBRAM64b(portPState, pstate.pc, offst: Int); offst+=2
+    portPState.wrBRAM64b(pstate.pc, offst: Int); offst+=2
     // TODO Write SP, EL and NZCV as Cat(EL, SP, NZCV)
-    wrBRAM32b(portPState, pstate.nzcv, offst); offst+=1
+    portPState.wrBRAM32b(pstate.nzcv, offst); offst+=1
   }
 
   def rdBRAM2PSTATE(tag: Int): PState ={
-    println("READ PSTATE")
     var offst = 0
     val xregs = for(i <- 0 until 32 ) yield  {
-      val reg = rdBRAM64b(portPState, offst); offst+=2
+      val reg = portPState.rdBRAM64b(offst).toLong; offst+=2
       reg
     }
 
-    val pc = rdBRAM64b(portPState, offst: Int); offst+=2
-    val sp_el_nzcv = rdBRAM32b(portPState,offst); offst+=1
+    val pc = portPState.rdBRAM64b(offst: Int); offst+=2
+    val sp_el_nzcv = portPState.rdBRAM32b(offst); offst+=1
 
-    val s_sp_el_nzcv = sp_el_nzcv.toBinaryString
+    val s_sp_el_nzcv = sp_el_nzcv.toInt.toBinaryString
     val sp = s_sp_el_nzcv.slice(5, 6)
     val el = s_sp_el_nzcv.slice(4, 5)
     val nzcv = Integer.parseInt(s_sp_el_nzcv.slice(0, 4), 2)
@@ -70,9 +75,10 @@ trait ProcTestsBase extends ArmflexBasePeekPokeTests with BRAMPortAXIHelper {
     val procStateDBG = procStateDBG_.get
     val pstate = procStateDBG.pregsVec(cpu)
     val rfile = procStateDBG.rfileVec(cpu)
-    val xregs = for(reg <- 0 until 32) yield peek(rfile(reg)).toLong
-    val pc = peek(pstate.PC).toLong
-    val nzcv = peek(pstate.NZCV).toInt
+
+    val xregs = for(reg <- 0 until 32) yield rfile(reg).peek.litValue.toLong
+    val pc = pstate.PC.peek.litValue.toLong
+    val nzcv = pstate.NZCV.peek.litValue.toInt
     new PState(xregs.toList: List[Long], pc: Long, nzcv: Int)
   }
 
@@ -82,13 +88,17 @@ trait ProcTestsBase extends ArmflexBasePeekPokeTests with BRAMPortAXIHelper {
       return
     }
     val procStateDBG = procStateDBG_.get
-    val exeReg = procStateDBG.commitReg.bits.exe
-    val brReg = procStateDBG.commitReg.bits.br
-    val sFet = if(peek(procStateDBG.fetchReg.valid)) finst(peek(procStateDBG.fetchReg.bits)) else "XXX"
-    val sDec = if(peek(procStateDBG.decReg.valid))   dinst(peek(procStateDBG.decReg.bits))   else "XXX"
-    val sIss = if(peek(procStateDBG.issueReg.valid)) dinst(peek(procStateDBG.issueReg.bits)) else "XXX"
-    val sExe = if(peek(exeReg.valid)) einst(peek(exeReg.bits)) else "XXX"
-    val sBr  = if(peek(brReg.valid))  binst(peek(brReg.bits))  else "XXX"
+    val fetchReg = procStateDBG.fetchReg
+    val decReg   = procStateDBG.decReg
+    val issueReg = procStateDBG.issueReg
+    val exeReg   = procStateDBG.commitReg.bits.exe
+    val brReg    = procStateDBG.commitReg.bits.br
+    val sFet = if(fetchReg.valid.peek) finst(procStateDBG.fetchReg.bits.peek) else "XXX"
+    val sDec = if(decReg.valid.peek)   dinst(procStateDBG.decReg.bits.peek)   else "XXX"
+    val sIss = if(issueReg.valid.peek) dinst(procStateDBG.issueReg.bits.peek) else "XXX"
+    val sExe = if(exeReg.valid.peek) einst(exeReg.bits.peek) else "XXX"
+    val sBr  = if(brReg.valid.peek)  binst(brReg.bits.peek)  else "XXX"
+    val PC = procStateDBG.pregsVec(0).PC.peek
     val state = Seq(
       "+----------------------------------------------------------------------------------+",
       "|                                   STATE                                          |",
@@ -119,7 +129,7 @@ trait ProcTestsBase extends ArmflexBasePeekPokeTests with BRAMPortAXIHelper {
       "                    |      ",
       "------------------------------- WB STAGE -------------------------------------------",
       "                                                                               ",
-      " PC : " + peek(procStateDBG.pregsVec(0).PC),
+      " PC : " + PC,
       "+----------------------------------------------------------------------------------+",
       "|                                   DONE                                           |",
       "+-----------------------------------------------------------------------------------\n",
@@ -130,7 +140,7 @@ trait ProcTestsBase extends ArmflexBasePeekPokeTests with BRAMPortAXIHelper {
   def printCycle(cycle: Int) = {
     val cycle_str = Seq(
       "+----------------------------------------------------------------------------------+",
-      "|                                Cycle : "+cycle.toString.padTo(2,' ')
+      "|                                Cycle : "+ cycle.toString.padTo(2,' ')
         + "                                        |",
       "+-----------------------------------------------------------------------------------\n").mkString("\n")
     print(cycle_str)
@@ -144,24 +154,23 @@ trait ProcMainTestsBase extends ProcTestsBase {
   val random = scala.util.Random
 
   def fireThread(tag: Int) = {
-    poke(cProc.io.host2tpu.fire.valid, 1)
-    poke(cProc.io.host2tpu.fire.tag, tag)
-    step(1)
-    poke(cProc.io.host2tpu.fire.valid, 0)
+      cProc.io.host2tpu.fire.valid.poke(true.B)
+      cProc.io.host2tpu.fire.tag.poke(tag.U)
+      clock.step(1)
+      cProc.io.host2tpu.fire.valid.poke(false.B)
   }
   def procIsDone() : (Boolean, Int) = {
-    (peek(cProc.io.host2tpu.done.valid), peek(cProc.io.host2tpu.done.tag).toInt)
+      (cProc.io.host2tpu.done.valid.peek.litToBoolean,
+       cProc.io.host2tpu.done.tag.peek.litValue.toInt)
   }
 }
 
-trait ProcAxiWrapTestsBase extends ProcTestsBase with HighLevelAxiLiteTestInterface {
+trait ProcAxiWrapTestsBase extends ProcTestsBase {
 
   val cProcAxi: ProcAxiWrap
-  implicit val axiLite : AxiLiteSignals
+  val axiLite : AxiLiteSignals
 
-  def readData32Bit(addr: BigInt) : BigInt = {
-    setReadAddressAndGetData(addr << 2)._1
-  }
+  def readData32Bit(addr: BigInt) : BigInt = { axiLite.rd32B(addr << 2) }
 
   // Note: FireReg = 0; DoneReg = 1, see ProcAxi.scala
   /** Register 0 (Pulse-Only)
@@ -175,8 +184,8 @@ trait ProcAxiWrapTestsBase extends ProcTestsBase with HighLevelAxiLiteTestInterf
     *
     */
   def fireThread(tag: Int): Unit = {
-    val data = (1 << 31) | tag
-    writeData32Bit(0: BigInt, data: BigInt)
+    val data = (1.toLong << 31) | tag
+    axiLite.wr32B(0.U, data.U)
   }
 
   /** Register 1 (Read-Only)
@@ -190,7 +199,7 @@ trait ProcAxiWrapTestsBase extends ProcTestsBase with HighLevelAxiLiteTestInterf
     *
     */
   def procIsDone(): (Boolean, Int) = {
-    val doneVec = readData32Bit(1).toInt
+    val doneVec = axiLite.rd32B(1.U)
     if(doneVec != 0) {
       return (true, doneVec)
     } else {

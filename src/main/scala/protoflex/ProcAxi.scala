@@ -2,15 +2,17 @@ package protoflex
 
 import chisel3._
 import chisel3.util.{Cat}
-import common.{AxiLite, AxiLiteSlave, AxiMemoryMappedRegFile, AxiMemoryMappedRegFileConfig}
+import common.{AxiMemoryMappedRegFile, AxiMemoryMappedRegFileConfig}
+import common.AxiLite._
 import common.{BRAM, BRAMConfig, BRAMPort, BRAMPortAXI}
 import common.PROCESSOR_TYPES._
+import common.AxiLiteConsts
 
 object AxiDriver extends App {
   chisel3.Driver.execute(Array("-tn", "ProcAxi", "-td", "Verilog", "-fsm"), () => new ProcAxiWrap()(new ProcConfig(2, false)))
 }
 
-class ProcAxiWrap(implicit val cfg: ProcConfig) extends Module {
+class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
   def str2bool(c:Char):Boolean = c match {
     case '0' => false
     case '1' => true
@@ -20,7 +22,6 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends Module {
   val pulseOnly = "1000".map(str2bool)
   val cfgAxiMM = new AxiMemoryMappedRegFileConfig(4, readOnly, pulseOnly)
   val regFile  = Module(new AxiMemoryMappedRegFile()(cfgAxiMM))
-  val proc = Module(new Proc())
 
   val io = IO(new Bundle {
                 val axiLite = AxiLiteSlave(cfgAxiMM.axiLiteConfig)
@@ -62,13 +63,14 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends Module {
                 // Debug
                 val procStateDBG = if(cfg.DebugSignals) Some(new ProcStateDBG) else None
               })
+  val proc = Module(new Proc())
 
   io.ppageBRAM <> proc.io.ppageBRAM
   io.stateBRAM <> proc.io.stateBRAM
   io.axiLite <> regFile.io.axiLite
 
   // 0 -> RDONLY, 1 -> Pulse, 2 -> CTRL, 3 -> CTRL
-  val regValues = WireInit(VecInit(Seq.fill(cfgAxiMM.nbrReg)(0.U(AxiLite.dataWidth.W))))
+  val regValues = WireInit(VecInit(Seq.fill(cfgAxiMM.nbrReg)(0.U(AxiLiteConsts.dataWidth.W))))
   def regOut(reg:Int, offst:Int, size:Int) = regFile.io.regsOutput(reg)(offst+(size-1),offst)
   def regIn(reg:Int) = regValues(reg)
   regFile.io.regsInput := regValues
@@ -85,11 +87,11 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends Module {
     */
   val tagReg = regOut(0, 0, cfg.NB_THREADS)
 
-  val fireReg    = regOut(0, 31, 1).toBool
+  val fireReg    = regOut(0, 31, 1).asBool
   proc.io.host2tpu.fire.valid := fireReg
   proc.io.host2tpu.fire.tag := tagReg
 
-  val getState = regOut(0, 30, 1).toBool()
+  val getState = regOut(0, 30, 1).asBool()
   proc.io.host2tpu.getState.valid := getState
   proc.io.host2tpu.getState.tag := tagReg
 

@@ -5,10 +5,10 @@ import chisel3._
 import chisel3.core.withReset
 import chisel3.util.{Decoupled, Queue, RegEnable, Valid, log2Ceil}
 
+import common.constBRAM.TDPBRAM36ParamDict
 import common.DECODE_CONTROL_SIGNALS.I_X
 import common.PROCESSOR_TYPES._
-import common.constBRAM.TDPBRAM36ParamDict
-import common.{BRAM, BRAMConfig, BRAMPortAXI, DECODE_CONTROL_SIGNALS, FlushReg}
+import common._
 
 case class ProcConfig(val NB_THREADS : Int = 4, val DebugSignals : Boolean = false, EntriesTLB: Int = 32) {
   val ppageBRAMc = new BRAMConfig(Seq(TDPBRAM36ParamDict(36), TDPBRAM36ParamDict(36)))
@@ -51,14 +51,12 @@ class ProcStateDBG(implicit val cfg : ProcConfig) extends Bundle
   val rfileVec = Output(Vec(cfg.NB_THREADS, Vec(REG_N, DATA_T)))
 
   val tuWorking = Output(ValidTagged(cfg.TAG_T))
-
-  val comited = Output(Bool())
 }
 
 /** Processor
   *
   */
-class Proc(implicit val cfg: ProcConfig) extends Module
+class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
 {
   val io = IO(new Bundle {
     // memory interface TODO
@@ -237,13 +235,14 @@ class Proc(implicit val cfg: ProcConfig) extends Module
       rfileVec(cpu).waddr := commitMem.bits.rd.bits
       rfileVec(cpu).wdata := commitMem.bits.res
     }.otherwise {
+      // Default
       rfileVec(cpu).waddr := commitExec.bits.rd.bits
       rfileVec(cpu).wdata := commitExec.bits.res
     }
     rfileVec(cpu).wen := false.B
   }
 
-  when (commitValid) {
+  when(commitValid) {
     rfileVec(commitTag).wen :=
       (commitExec.valid && commitExec.bits.rd.valid) ||
       (commitMem.valid && commitMem.bits.rd.valid)
@@ -259,12 +258,12 @@ class Proc(implicit val cfg: ProcConfig) extends Module
     }
   }
 
- // Start and stop ---------------
+  // Start and stop ---------------
   when(insnTLB.io.miss.valid)        { fetchEn(fetch.io.pc.tag) := false.B }
   when(tpu.io.tpu2cpu.fire.valid)    { fetchEn(tpu.io.tpu2cpu.fire.tag) := true.B }
   when(tpu.io.tpu2cpu.fillTLB.valid) { fetchEn(tpu.io.tpu2cpu.fillTLB.tag) := true.B }
   when((issuer.io.deq.valid && issued_dinst.itype === I_X)) { fetchEn(tpu.io.tpu2cpu.flush.tag) := false.B }
- 
+
   // Hit unknown case -> Pass state to CPU
   tpu.io.tpu2cpu.done.valid := commitValid && commitReg.io.deq.bits.undef
   tpu.io.tpu2cpu.done.tag := commitReg.io.deq.bits.tag
@@ -321,7 +320,7 @@ class Proc(implicit val cfg: ProcConfig) extends Module
     procStateDBG.issueReg.valid := issuer.io.deq.valid
     procStateDBG.issueReg.bits  := issuer.io.deq.bits
     procStateDBG.commitReg.ready   := true.B
-    procStateDBG.commitReg.valid   := commitValid
+    procStateDBG.commitReg.valid   := commitReg.io.deq.valid
     procStateDBG.commitReg.bits    := commitReg.io.deq.bits
 
     // Processor State (XREGS + PSTATE)
@@ -333,9 +332,6 @@ class Proc(implicit val cfg: ProcConfig) extends Module
     procStateDBG.rfileVec := rfileVecWire
     procStateDBG.pregsVec := pregsVec
     procStateDBG.tuWorking := tpu.io.tpu2cpu.freeze
-
-    val comited = RegNext(commitValid)
-    procStateDBG.comited := comited
   }
 
 

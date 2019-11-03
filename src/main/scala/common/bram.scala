@@ -6,9 +6,14 @@ package common
 
 import scala.language.reflectiveCalls
 
+import java.nio.ByteBuffer
+
+import scala.language.reflectiveCalls
+
 import chisel3._
+import chisel3.tester._
 import chisel3.util._
-import chisel3.experimental._
+//import chisel3.experimental._
 
 object constBRAM {
   /** From table 1-7,1-8,1-9,1-10 in UG573
@@ -153,6 +158,55 @@ class BRAMPortAXI(private val idx: Int)(implicit val c: BRAMConfig) extends Bund
   }
 }
 
+/** Note: This BRAM port is expected to be 32 bit wide for data
+  *       And address of 1024 words
+  */
+object BRAMPort {
+  implicit class BRAMPortDriver(target: BRAMPortAXI)(implicit clock: Clock) {
+    def wrBRAM32b(bits:BigInt, offst: BigInt) = {
+      target.EN.poke(true.B)
+      target.WE.poke(true.B)
+      target.ADDR.poke(offst.U)
+      target.DI.poke(bits.U)
+      clock.step()
+      target.EN.poke(false.B)
+      target.WE.poke(false.B)
+      target.ADDR.poke(0.U)
+      target.DI.poke(0.U)
+    }
+
+    def rdBRAM32b(offst:BigInt): BigInt = {
+      target.EN.poke(true.B)
+      target.ADDR.poke(offst.U)
+      clock.step()
+      target.EN.poke(false.B)
+      target.ADDR.poke(0.U)
+      val uint32 = target.DO.peek
+      return uint32.litValue()
+    }
+
+    def wrBRAM64b(lw: BigInt, offst: BigInt) = {
+      val bytes = Array.fill(8)(0.toByte)
+      for( i <- 0 to 7 ) bytes(i) = ((lw >> ((7-i) * 8)) & 0xFF).toByte
+      val msb = BigInt(Array(0.toByte) ++ bytes.slice(0, 4))
+      val lsb = BigInt(Array(0.toByte) ++ bytes.slice(4, 8))
+      wrBRAM32b(msb, offst)
+      wrBRAM32b(lsb, offst+1)
+    }
+
+    def rdBRAM64b(offst:BigInt): BigInt = {
+      val msb = rdBRAM32b(offst)
+      val lsb = rdBRAM32b(offst+1)
+      val byte_msb = Array.fill(4)(0.toByte)
+      val byte_lsb = Array.fill(4)(0.toByte)
+      for (i <- 0 to 3) byte_msb(i) = ((msb >> ((3-i) * 8)) & 0xFF).toByte
+      for (i <- 0 to 3) byte_lsb(i) = ((lsb >> ((3-i) * 8)) & 0xFF).toByte
+      val uint64 = ByteBuffer.wrap((byte_msb ++ byte_lsb)).getLong
+      return uint64
+    }
+  }
+}
+
 class BRAMIO(implicit val c: BRAMConfig) extends Bundle {
   val portA = new BRAMPort(0)
   val portB = new BRAMPort(1)
@@ -163,21 +217,21 @@ class BRAMIO(implicit val c: BRAMConfig) extends Bundle {
   }
 }
 
-class BRAM(implicit val c: BRAMConfig) extends Module {
+class BRAM(implicit val c: BRAMConfig) extends MultiIOModule {
   val io = IO(new BRAMIO)
 
   val bram = Module(
-    if(c.isTrueDualPort) {
+    //if(c.isTrueDualPort) {
       new BRAMTDP
-    } else {
-      new BRAMSDP}
+    //} else {
+    //  new BRAMSDP}
   )
 
   io <> bram.io
 }
 
 /* TRUE DUAL PORT */
-class BRAMTDP(implicit val c: BRAMConfig) extends Module {
+class BRAMTDP(implicit val c: BRAMConfig) extends MultiIOModule {
   val io = IO(new BRAMIO)
 
   assert((c.dataWidthVec(0) >= c.dataWidthVec(1)),
@@ -317,7 +371,7 @@ class BlackBoxBRAMTDP(implicit val c: BRAMConfig) extends BlackBox(
 }
 
 /* SIMPLE DUAL PORT */
-class BRAMSDP(implicit val c: BRAMConfig) extends Module {
+class BRAMSDP(implicit val c: BRAMConfig) extends MultiIOModule {
   val io = IO(new BRAMIO)
 
   assert((c.dataWidthVec(0) >= c.dataWidthVec(1)),

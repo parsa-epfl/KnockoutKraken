@@ -2,6 +2,8 @@ package utils
 
 import scala.collection.mutable.LinkedHashMap
 
+import chisel3._
+
 import common.DEC_LITS._
 import utils.PrintingTools._
 
@@ -142,6 +144,23 @@ object PrintingTools {
 
 
 object SoftwareStructs {
+  import scala.language.implicitConversions
+
+  implicit def uint2bigint(bits: UInt): BigInt = { bits.litValue }
+  implicit def bool2bigint(bits: Bool): BigInt = { bits.litValue }
+  implicit def bool2boolean(bits: Bool): Boolean = {bits.litToBoolean }
+
+  implicit def bigint2short(bigint: BigInt): Short = { bigint.toShort }
+  implicit def bigint2int(bigint: BigInt):   Int   = { bigint.toInt }
+  implicit def bigint2long(bigint: BigInt):  Long  = { bigint.toLong }
+
+  implicit def uint2short(bits: UInt): Short = { bigint2short(uint2bigint(bits)) }
+  implicit def uint2int(bits: UInt):   Int   = { bigint2int(uint2bigint(bits)) }
+  implicit def uint2long(bits: UInt):  Long  = { bigint2long(uint2bigint(bits)) }
+
+  implicit def bool2short(bits: Bool): Short = { bigint2short(bool2bigint(bits)) }
+  implicit def bool2int(bits: Bool):   Int   = { bigint2int(bool2bigint(bits)) }
+  implicit def bool2long(bits: Bool):  Long  = { bigint2long(bool2bigint(bits)) }
 
   case class PState (
     val xregs : List[Long],
@@ -242,7 +261,6 @@ object SoftwareStructs {
     val res     : BigInt,
     val rd      : BigInt,
     val rd_en   : BigInt,
-    val tag     : BigInt,
     val nzcv    : BigInt,
     val nzcv_en : BigInt
   ) {
@@ -250,7 +268,6 @@ object SoftwareStructs {
       val str = Seq(
         "DInst",
         Seq(
-          "tag: " + tag.toString,
           get_rd_res(rd: BigInt, res : BigInt, rd_en : BigInt),
           get_nzcv(nzcv: BigInt, nzcv_en: BigInt)
         ).map(s => " |-- " + s).mkString("\n")
@@ -260,14 +277,12 @@ object SoftwareStructs {
   }
 
   case class BInst (
-    val tag    : BigInt,
     val offset : BigInt
   ) {
     override def toString() = {
       val str = Seq(
         "DInst",
         Seq(
-          "tag    : " + tag.toString,
           "offset : "+ offset.toString()
         ).map(s => " |-- " + s).mkString("\n")
       ).mkString("\n")
@@ -275,82 +290,50 @@ object SoftwareStructs {
     }
   }
 
-  def finst(map : LinkedHashMap[String, BigInt]) : FInst = {
-    val pc   = map("pc")
-    val tag  = map("tag")
-    val inst = map("inst")
+  def finst(bundle : protoflex.FInst) : FInst = {
     new FInst (
-      pc.toLong  : Long,
-      tag.toInt  : Int,
-      inst.toInt : Int
+      bundle.pc : Long,
+      bundle.tag : Int,
+      bundle.inst : Int
       )
   }
 
-  def dinst(map : LinkedHashMap[String, BigInt]) : DInst = {
-    val rd          = map("rd")
-    val rs1         = map("rs1")
-    val rs2         = map("rs2")
-    val imm         = map("imm")
-    val shift_val   = map("shift_val")
-    val shift_type  = map("shift_type")
-    val cond        = map("cond")
-    val itype       = map("itype")
-    val op          = map("op")
-    val rd_en       = map("rd_en")
-    val rs1_en      = map("rs1_en")
-    val rs2_en      = map("rs2_en")
-    val imm_en      = map("imm_en")
-    val shift_en    = map("shift_en")
-    val cond_en     = map("cond_en")
-    val nzcv_en     = map("nzcv_en")
-    val inst_en     = map("inst_en")
-    val tag         = map("tag")
-    val pc          = map("pc")
+  def dinst(bundle: protoflex.DInst) : DInst = {
     new DInst(
-      tag : BigInt,
-      itype: BigInt,
-      op: BigInt,
-      rd: BigInt,
-      rs1: BigInt,
-      rs2: BigInt,
-      imm: BigInt,
-      shift_val: BigInt,
-      shift_type: BigInt,
-      cond: BigInt,
-      rd_en: BigInt,
-      rs1_en: BigInt,
-      rs2_en: BigInt,
-      imm_en: BigInt,
-      shift_en: BigInt,
-      cond_en: BigInt,
-      nzcv_en: BigInt,
-      inst_en: BigInt,
-      pc : BigInt)
+      bundle.tag : BigInt,
+      bundle.itype : BigInt,
+      bundle.op : BigInt,
+      bundle.rd.bits : BigInt,
+      bundle.rs1.bits : BigInt,
+      bundle.rs2.bits : BigInt,
+      bundle.imm.bits : BigInt,
+      bundle.shift_val.bits : BigInt,
+      bundle.shift_type : BigInt,
+      bundle.cond.bits : BigInt,
+      bundle.rd.valid : BigInt,
+      bundle.rs1.valid : BigInt,
+      bundle.rs2.valid : BigInt,
+      bundle.imm.valid : BigInt,
+      bundle.shift_val.valid : BigInt,
+      bundle.cond.valid : BigInt,
+      bundle.nzcv_en : BigInt,
+      bundle.inst32.bits : BigInt,
+      bundle.pc : BigInt)
   }
 
-  def einst(map : LinkedHashMap[String, BigInt]) : EInst = {
-    val res       = map("res")
-    val rd        = map("rd")
-    val rd_en     = map("rd_en")
-    val tag       = map("tag")
-    val nzcv      = map("nzcv")
-    val nzcv_en   = map("nzcv_en")
+  def einst(bundle: protoflex.EInst) : EInst = {
     new EInst (
-      res     : BigInt,
-      rd      : BigInt,
-      rd_en   : BigInt,
-      tag     : BigInt,
-      nzcv    : BigInt,
-      nzcv_en : BigInt
+      bundle.res     : BigInt,
+      bundle.rd.bits : BigInt,
+      bundle.rd.valid : BigInt,
+      bundle.nzcv.bits : BigInt,
+      bundle.nzcv.valid : BigInt
     )
   }
 
-  def binst(map : LinkedHashMap[String, BigInt]) : BInst = {
-    val tag       = map("tag")
-    val offset    = map("offset")
+  def binst(bundle : protoflex.BInst) : BInst = {
     new BInst (
-      tag     : BigInt,
-      offset  : BigInt,
+      bundle.offset.litValue  : BigInt,
       )
   }
 }

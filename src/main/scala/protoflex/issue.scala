@@ -77,8 +77,8 @@ class IssueUnit(implicit val cfg: ProcConfig) extends Module
     * sig_pipe_r This signal indicates whenever the register is ready to recieve the next instruction.
     */
   val reg_pipe   = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(DInst())))
-  val reg_pipe_v = RegInit(VecInit(cfg.TAG_VEC_X.toBools))
-  val sig_pipe_r = WireInit(VecInit(cfg.TAG_VEC_X.toBools))
+  val reg_pipe_v = RegInit(VecInit(cfg.TAG_VEC_X.asBools))
+  val sig_pipe_r = WireInit(VecInit(cfg.TAG_VEC_X.asBools))
 
   /** Issue stage buffer
     * FIFO_i To buffer instructions we have a FIFO queue with flow and pipe modes enabled per thread.
@@ -91,7 +91,7 @@ class IssueUnit(implicit val cfg: ProcConfig) extends Module
   def FIFO_i   = new Queue(new DInst, 2, pipe = true, flow = true)
   // Instanciates queue modules, expresses their IO through the vector
   val fifo_vec = VecInit(Seq.tabulate(cfg.NB_THREADS)(
-                           cpu => withReset(reset.toBool || (cpu.U === io.flush.tag && io.flush.valid)) { Module(FIFO_i).io }))
+                           cpu => withReset(reset.asBool || (cpu.U === io.flush.tag && io.flush.valid)) { Module(FIFO_i).io }))
 
   /** Issue stage arbiter
     * arbiter        Round Robin Arbiter
@@ -99,7 +99,7 @@ class IssueUnit(implicit val cfg: ProcConfig) extends Module
     * sig_next_idx   This signal indicates the next instruction to issue
     */
   val arbiter       = Module(new RRArbiter(cfg.NB_THREADS))
-  val sig_pipe_i    = VecInit(cfg.TAG_VEC_X.toBools)
+  val sig_pipe_i    = VecInit(cfg.TAG_VEC_X.asBools)
   val sig_next_idx  = WireInit(cfg.TAG_X)
 
   /** Managing backpressure

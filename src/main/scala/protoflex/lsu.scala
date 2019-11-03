@@ -109,7 +109,7 @@ class LoadStoreUnit(implicit val cfg: ProcConfig) extends Module
     }
     is(s_TLB_CHK){
       when(tlb.io.hit.valid) {
-        when(tlb.io.hit.bits.toBool()){
+        when(tlb.io.hit.bits.asBool()){
           io.memReq.valid := true.B // mem request
           state := s_MEM_REQ
         }.otherwise{
@@ -119,7 +119,7 @@ class LoadStoreUnit(implicit val cfg: ProcConfig) extends Module
       }
     }
     is(s_MEM_REQ){
-      when(io.memRes.valid.toBool()){
+      when(io.memRes.valid.asBool()){
         state := s_IDLE
       }
     }
@@ -131,5 +131,5 @@ class LoadStoreUnit(implicit val cfg: ProcConfig) extends Module
   minst.rd := dinst_reg.rd
 
   io.minst.bits := minst
-  io.minst.valid := state === s_MEM_REQ && io.memRes.valid.toBool
+  io.minst.valid := state === s_MEM_REQ && io.memRes.valid.asBool
 }

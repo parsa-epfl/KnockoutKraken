@@ -7,6 +7,7 @@ package common
 import scala.language.reflectiveCalls
 import chisel3._
 import chisel3.util.{log2Up}
+import common.AxiLite._
 
 case class AxiMemoryMappedRegFileConfig(
   val nbrReg: Int,
@@ -21,14 +22,14 @@ case class AxiMemoryMappedRegFileConfig(
 }
 
 class AxiMemoryMappedRegFile(implicit val cfg: AxiMemoryMappedRegFileConfig) extends Module {
-  import common.AxiLite.{rOKAY, rEXOKAY, rSLVERR, rDECERR}
+  import common.AxiLiteConsts._
   val io = IO(new Bundle {
                 val axiLite = AxiLiteSlave(cfg.axiLiteConfig)
-                val regsInput = Input(Vec(cfg.nbrReg, UInt(AxiLite.dataWidth.W)))
-                val regsOutput = Output(Vec(cfg.nbrReg, UInt(AxiLite.dataWidth.W)))
+                val regsInput = Input(Vec(cfg.nbrReg, UInt(dataWidth.W)))
+                val regsOutput = Output(Vec(cfg.nbrReg, UInt(dataWidth.W)))
               })
-  val regFile = RegInit(VecInit(Seq.fill(cfg.nbrReg)(0.U(AxiLite.dataWidth.W))))
-  val regsOutput = VecInit(Seq.fill(cfg.nbrReg)(0.U(AxiLite.dataWidth.W)))
+  val regFile = RegInit(VecInit(Seq.fill(cfg.nbrReg)(0.U(dataWidth.W))))
+  val regsOutput = VecInit(Seq.fill(cfg.nbrReg)(0.U(dataWidth.W)))
   val regsInput = io.regsInput
   val axiLite_awaddr = io.axiLite.awaddr >> 2.U // 32Bit words addressed
   val axiLite_araddr = io.axiLite.araddr >> 2.U
