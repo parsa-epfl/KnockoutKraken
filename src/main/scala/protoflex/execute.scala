@@ -137,6 +137,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
     MuxLookup(io.dinst.itype, false.B,
               Array(
                 I_LogSR -> true.B,
+                I_ASSR  -> true.B,
                 I_ASImm -> true.B
               ))
 

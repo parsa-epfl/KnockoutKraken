@@ -82,6 +82,7 @@ object DECODE_CONTROL_SIGNALS
   val I_LogSR = DEC_LITS.I_LogSR.U(TYPE_W)
   val I_BImm  = DEC_LITS.I_BImm.U(TYPE_W)
   val I_BCImm = DEC_LITS.I_BCImm.U(TYPE_W)
+  val I_ASSR  = DEC_LITS.I_ASSR.U(TYPE_W)
   val I_ASImm = DEC_LITS.I_ASImm.U(TYPE_W)
   val I_LSImm = DEC_LITS.I_LSImm.U(TYPE_W)
 }
@@ -92,44 +93,63 @@ object DECODE_MATCHING_TABLES
 
   def decode_default: List[UInt] =
     //
-    //              RD               INSTRUCTION
-    //  IN TR       EN                 VALID
-    //  TYPE        | RS1                |
-    //    |         |  EN        COND    |
-    //    |         |  |           EN    |
-    //    |         |  |           | NZCV|
-    //    |    INST |  | RS2  SHIFT|  EN |
-    //    |     OP  |  |  EN    EN |  |  |
-    //    |     |   |  |  | IMM |  |  |  |
-    //    |     |   |  |  |  EN |  |  |  |
-    //    |     |   |  |  |  |  |  |  |  |
-    //    |     |   |  |  |  |  |  |  |  |
-    //    |     |   |  |  |  |  |  |  |  |
-    List(I_X, OP_X, N, N, N, N, N, N, N, N)
+    //              RD
+    //  IN TR       EN
+    //  TYPE        | RS1
+    //    |         |  EN        COND
+    //    |         |  |           EN
+    //    |         |  |           | NZCV
+    //    |    INST |  | RS2  SHIFT|  EN
+    //    |     OP  |  |  EN    EN |  |
+    //    |     |   |  |  | IMM |  |  |
+    //    |     |   |  |  |  EN |  |  |
+    //    |     |   |  |  |  |  |  |  |
+    //    |     |   |  |  |  |  |  |  |
+    //    |     |   |  |  |  |  |  |  |
+    List(I_X, OP_X, N, N, N, N, N, N, N)
 
   def decode_table: Array[(BitPat, List[UInt])]  =
+      //
+      //                                      RD
+      //                    IN TR             EN
+      //                    TYPE              | RS1
+      //                      |               |  EN        COND
+      //                      |               |  |           EN
+      //                      |               |  |           | NZCV
+      //                      |      INST     |  | RS2  SHIFT|  EN
+      //                      |       OP      |  |  EN    EN |  |
+      //                      |       |       |  |  | IMM |  |  |
+      //                      |       |       |  |  |  EN |  |  |
+      //                      |       |       |  |  |  |  |  |  |
+      //                      |       |       |  |  |  |  |  |  |
+      //                      |       |       |  |  |  |  |  |  |
     Array(
       // Logical (shifted register)
-      LogSR_AND    -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, N, Y),
-      LogSR_BIC    -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, N, Y),
-      LogSR_ORR    -> List(I_LogSR, OP_ORR,   Y, Y, Y, N, Y, N, N, Y),
-      LogSR_ORN    -> List(I_LogSR, OP_ORN,   Y, Y, Y, N, Y, N, N, Y),
-      LogSR_EOR    -> List(I_LogSR, OP_EOR,   Y, Y, Y, N, Y, N, N, Y),
-      LogSR_EON    -> List(I_LogSR, OP_EON,   Y, Y, Y, N, Y, N, N, Y),
-      LogSR_ANDS   -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, Y, Y),
-      LogSR_BICS   -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, Y, Y),
+      LogSR_AND    -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, N),
+      LogSR_BIC    -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, N),
+      LogSR_ORR    -> List(I_LogSR, OP_ORR,   Y, Y, Y, N, Y, N, N),
+      LogSR_ORN    -> List(I_LogSR, OP_ORN,   Y, Y, Y, N, Y, N, N),
+      LogSR_EOR    -> List(I_LogSR, OP_EOR,   Y, Y, Y, N, Y, N, N),
+      LogSR_EON    -> List(I_LogSR, OP_EON,   Y, Y, Y, N, Y, N, N),
+      LogSR_ANDS   -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, Y),
+      LogSR_BICS   -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, Y),
       // Unconditional branch (immediate)
-      BImm_B       -> List(I_BImm , OP_B,     N, N, N, Y, N, N, N, Y),
-      BImm_BL      -> List(I_BImm , OP_BL,    N, N, N, Y, N, N, N, Y),
+      BImm_B       -> List(I_BImm , OP_B,     N, N, N, Y, N, N, N),
+      BImm_BL      -> List(I_BImm , OP_BL,    N, N, N, Y, N, N, N),
       // Conditional branch (immediate)
-      BCond        -> List(I_BCImm, OP_BCOND, N, N, N, Y, N, Y, N, Y),
+      BCond        -> List(I_BCImm, OP_BCOND, N, N, N, Y, N, Y, N),
+      // Add/subtract (shifted register)
+      ASSR_ADD     -> List(I_ASSR, OP_ADD,    Y, Y, Y, N, Y, N, N),
+      ASSR_ADDS    -> List(I_ASSR, OP_ADD,    Y, Y, Y, N, Y, N, Y),
+      ASSR_SUB     -> List(I_ASSR, OP_SUB,    Y, Y, Y, N, Y, N, N),
+      ASSR_SUBS    -> List(I_ASSR, OP_SUB,    Y, Y, Y, N, Y, N, Y),
       // Add/subtract (immediate)
-      ASImm_ADD_I  -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, N, Y),
-      ASImm_ADDS_I -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, Y, Y),
-      ASImm_SUB_I  -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, Y, N, N, Y),
-      ASImm_SUBS_I -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, Y, N, Y, Y),
+      ASImm_ADD_I  -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, N),
+      ASImm_ADDS_I -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, Y),
+      ASImm_SUB_I  -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, Y, N, N),
+      ASImm_SUBS_I -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, Y, N, Y),
       // load/store (immediate)
-      LDR_I        -> List(I_LSImm, OP_LDR,   Y, N, N, Y, N, N, N, Y),
+      LDR_I        -> List(I_LSImm, OP_LDR,   Y, N, N, Y, N, N, N),
     )
 }
 
@@ -202,31 +222,41 @@ object DEC_LITS
   // Instruction Types for scala
   val TYPE_W = 3
   val I_X = 0
-  val I_LogSR = 1
-  val I_BImm  = 2 //branch
-  val I_BCImm = 3 // conditional branch
-  val I_ASImm = 4 // ADD/Subdract with Immediate
-  val I_LSImm = 5 // Load/Store Immediate
+  val I_LogSR = 1 // Logical (shifted register)
+  val I_BImm  = 2 // Unconditional branch (immediate)
+  val I_BCImm = 3 // Conditional branch (immediate)
+  val I_ASSR  = 4 // Add/subtract (shifted register)
+  val I_ASImm = 5 // ADD/Subdract with Immediate
+  val I_LSImm = 6 // Load/Store Immediate
 
-  def decode_table(inst_type : Int): List[BigInt] =
+  //                  RD
+  //                  EN
+  //                  | RS1
+  //                  |  EN        COND
+  //                  |  |           EN
+  //                  |  | RS2  SHIFT| NZCV
+  //                  |  |  EN    EN |  EN
+  //                  |  |  | IMM |  |  |
+  //                  |  |  |  EN |  |  |
+  //                  |  |  |  |  |  |  |
+  //                  |  |  |  |  |  |  |
+  //                  |  |  |  |  |  |  |
+  val LI_X     = List(N, N, N, N, N, N, N)
+  val LI_LogSR = List(Y, Y, Y, N, Y, N, N)
+  val LI_BImm  = List(N, N, N, Y, N, N, N)
+  val LI_BCImm = List(N, N, N, Y, N, Y, N)
+  val LI_ASSR  = List(Y, Y, Y, N, Y, N, N)
+  val LI_ASImm = List(Y, Y, N, Y, Y, N, N)
+  val LI_LSImm = List(Y, N, N, Y, N, N, N)
+
+  def decode_table(inst_type : Int): List[Int] =
     inst_type match {
-      //                   RD               INSTRUCTION
-      //                   EN                 VALID
-      //                   | RS1                |
-      //                   |  EN        COND    |
-      //                   |  |           EN    |
-      //                   |  | RS2  SHIFT| NZCV|
-      //                   |  |  EN    EN |  EN |
-      //                   |  |  | IMM |  |  |  |
-      //                   |  |  |  EN |  |  |  |
-      //                   |  |  |  |  |  |  |  |
-      //                   |  |  |  |  |  |  |  |
-      //                   |  |  |  |  |  |  |  |
-      case I_X     => List(N, N, N, N, N, N, N, N)
-      case I_LogSR => List(Y, Y, Y, N, Y, N, N, Y)
-      case I_BImm  => List(N, N, N, Y, N, N, N, Y)
-      case I_BCImm => List(N, N, N, Y, N, Y, N, Y)
-      case I_ASImm => List(Y, Y, N, Y, Y, N, N, Y)
-      case I_LSImm => List(Y, N, N, Y, N, N, N, Y)
+      case I_X     => LI_X
+      case I_LogSR => LI_LogSR
+      case I_BImm  => LI_BImm
+      case I_BCImm => LI_BCImm
+      case I_ASSR  => LI_ASSR
+      case I_ASImm => LI_ASImm
+      case I_LSImm => LI_LSImm
     }
 }

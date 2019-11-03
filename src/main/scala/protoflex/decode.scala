@@ -35,36 +35,55 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
 
     // Data
     val itype = decoder.head
-    rd.bits := MuxLookup(itype,   REG_X, Array(
+    rd.bits := MuxLookup(itype,  REG_X, Array(
                            I_LogSR -> inst( 4, 0),
                            I_ASImm -> inst( 4, 0),
-                           I_LSImm -> inst(4,0)))
-    rs1.bits := MuxLookup(itype,   REG_X, Array(
+                           I_ASSR  -> inst( 4, 0),
+                           I_LSImm -> inst( 4, 0),
+                           I_ASSR  -> inst( 4, 0)))
+
+    rs1.bits := MuxLookup(itype, REG_X, Array(
                             I_LogSR -> inst( 9, 5),
-                            I_ASImm -> inst( 9, 5)))
-    rs2.bits := MuxLookup(itype,   REG_X, Array( I_LogSR -> inst(20,16) ))
-    imm.bits := MuxLookup(itype,   IMM_X, Array(
+                            I_ASSR  -> inst( 9, 5),
+                            I_ASImm -> inst( 9, 5)
+                          ))
+
+    rs2.bits := MuxLookup(itype, REG_X, Array(
+                            I_LogSR -> inst(20,16),
+                            I_ASSR  -> inst(20,16)))
+
+    imm.bits := MuxLookup(itype, IMM_X, Array(
                             I_LogSR -> inst(15,10),
                             I_BImm  -> inst(25, 0),
                             I_BCImm -> inst(23, 5),
+                            I_ASSR  -> inst(15,10),
                             I_ASImm -> inst(21,10),
-                            I_LSImm -> inst(23,5)))
+                            I_LSImm -> inst(23,5 )))
+
     shift_val.bits := MuxLookup(itype, SHIFT_VAL_X, Array(
+                                  I_ASSR  -> imm.bits,
                                   I_ASImm -> Mux(inst(22), 12.U, 0.U),
                                   I_LogSR -> imm.bits))
-    shift_type := MuxLookup(itype, SHIFT_TYPE_X, Array( I_LogSR -> inst(23,22),
-                                              I_ASImm -> inst(23,22)))
-    cond.bits := MuxLookup(itype,  COND_X, Array( I_BCImm -> inst( 3, 0) ))
+
+    shift_type := MuxLookup(itype, SHIFT_TYPE_X, Array(
+                              I_LogSR -> inst(23,22),
+                              I_ASSR  -> inst(23,22),
+                              I_ASImm -> inst(23,22)))
+
+    cond.bits := MuxLookup(itype,  COND_X, Array(
+                             I_BCImm -> inst( 3, 0) ))
 
     // Control
     val cdecoder = decoder.tail
-    val csignals = Seq(op, rd.valid, rs1.valid, rs2.valid, imm.valid, shift_val.valid, cond.valid, nzcv_en, inst32.valid)
-    csignals zip cdecoder map { case (s, d) => s:= d }
+    val csignals = Seq(op, rd.valid, rs1.valid, rs2.valid, imm.valid, shift_val.valid, cond.valid, nzcv_en)
+    csignals zip cdecoder map { case (s, d) => s := d }
 
-    this.itype := itype
 
     tag := tag_
+    inst32.valid := (itype =/= I_X)
     inst32.bits := inst
+
+    this.itype := itype
 
     this
   }
