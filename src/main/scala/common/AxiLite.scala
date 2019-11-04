@@ -108,9 +108,9 @@ object AxiLite {
       target.arprot.poke(0xF.U)
       target.awvalid.poke(false.B)
       target.wvalid.poke(false.B)
-      target.wrResp.ready.poke(false.B)
-      target.rdAddr.valid.poke(false.B)
-      target.rdData.ready.poke(false.B)
+      target.bready.poke(false.B)
+      target.arvalid.poke(false.B)
+      target.rready.poke(false.B)
       this
     }
 

@@ -218,6 +218,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   commitReg.io.enq.bits.br := brancher.io.binst
   commitReg.io.enq.bits.mem := ldstU.io.minst
   commitReg.io.enq.bits.undef := issued_dinst.itype === I_X
+  commitReg.io.enq.bits.inst32 := issued_dinst.inst32.bits
   commitReg.io.enq.bits.tag := issued_tag
   commitReg.io.enq.valid := issuer.io.deq.valid
 
@@ -242,7 +243,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
     rfileVec(cpu).wen := false.B
   }
 
-  when(commitValid) {
+  when(commitValid && !commitReg.io.deq.bits.undef) {
     rfileVec(commitTag).wen :=
       (commitExec.valid && commitExec.bits.rd.valid) ||
       (commitMem.valid && commitMem.bits.rd.valid)
@@ -274,6 +275,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   commitReg.io.flush := false.B
   when(tpu.io.tpu2cpu.flush.valid) {
     decReg.io.flush := decReg.io.deq.bits.tag === tpu.io.tpu2cpu.flush.tag
+    commitReg.io.flush := commitReg.io.deq.bits.tag === tpu.io.tpu2cpu.flush.tag
   }.elsewhen(commitValid && commitBr.valid ) {
     fetch.io.flush.valid := fetch.io.deq.bits.tag === commitTag
     fetch.io.flush.tag := commitTag
@@ -342,6 +344,7 @@ class CommitInst(implicit val cfg : ProcConfig) extends Bundle {
   val br = Valid(new BInst)
   val mem = Valid(new MInst)
   val undef = Output(Bool())
+  val inst32 = Output(INST_T)
   val tag = Output(cfg.TAG_T)
 }
 

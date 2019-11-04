@@ -180,7 +180,8 @@ object SoftwareStructs {
       ).mkString("\n")
       str + "\n"
     }
-    def compare(other: PState): Unit = {
+
+    def matches(other: PState): Boolean = {
       val diffXRegs = (this.xregs zip other.xregs).zipWithIndex.filter {
         case ((t,o), i) => t != o
       }
@@ -194,8 +195,11 @@ object SoftwareStructs {
           println(s"PC:${"%016x".format(this.pc)} != ${"%016x".format(other.pc)}")
         if(this.nzcv != other.nzcv)
           println(s"NZCV:${"%016x".format(this.nzcv.toBinaryString)} != ${other.nzcv.toBinaryString}")
+
+        return false
       } else {
         println("PState matched.")
+        return true
       }
     }
   }

@@ -21,7 +21,9 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
   val readOnly  = "0100".map(str2bool)
   val pulseOnly = "1000".map(str2bool)
   val cfgAxiMM = new AxiMemoryMappedRegFileConfig(4, readOnly, pulseOnly)
+
   val regFile  = Module(new AxiMemoryMappedRegFile()(cfgAxiMM))
+  val proc = Module(new Proc())
 
   val io = IO(new Bundle {
                 val axiLite = AxiLiteSlave(cfgAxiMM.axiLiteConfig)
@@ -63,7 +65,6 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
                 // Debug
                 val procStateDBG = if(cfg.DebugSignals) Some(new ProcStateDBG) else None
               })
-  val proc = Module(new Proc())
 
   io.ppageBRAM <> proc.io.ppageBRAM
   io.stateBRAM <> proc.io.stateBRAM
