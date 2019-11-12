@@ -37,6 +37,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
     val itype = decoder.head
     rd.bits := MuxLookup(itype,  REG_X, Array(
                            I_LogSR -> inst( 4, 0),
+                           I_LogI  -> inst( 4, 0),
                            I_ASImm -> inst( 4, 0),
                            I_ASSR  -> inst( 4, 0),
                            I_LSImm -> inst( 4, 0),
@@ -44,6 +45,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
 
     rs1.bits := MuxLookup(itype, REG_X, Array(
                             I_LogSR -> inst( 9, 5),
+                            I_LogI  -> inst( 9, 5),
                             I_ASSR  -> inst( 9, 5),
                             I_ASImm -> inst( 9, 5)
                           ))
@@ -53,22 +55,21 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
                             I_ASSR  -> inst(20,16)))
 
     imm.bits := MuxLookup(itype, IMM_X, Array(
-                            I_LogSR -> inst(15,10),
+                            I_LogI  -> inst(21,10), // NOTE: immr(21:16), imms(15:10)
                             I_BImm  -> inst(25, 0),
                             I_BCImm -> inst(23, 5),
-                            I_ASSR  -> inst(15,10),
                             I_ASImm -> inst(21,10),
-                            I_LSImm -> inst(23,5 )))
+                            I_LSImm -> inst(23, 5)))
 
     shift_val.bits := MuxLookup(itype, SHIFT_VAL_X, Array(
-                                  I_ASSR  -> imm.bits,
-                                  I_ASImm -> Mux(inst(22), 12.U, 0.U),
-                                  I_LogSR -> imm.bits))
+                                  I_LogSR -> inst(15,10),
+                                  I_ASSR  -> inst(15,10),
+                                  I_ASImm -> Mux(inst(22), 12.U, 0.U)))
 
     shift_type := MuxLookup(itype, SHIFT_TYPE_X, Array(
                               I_LogSR -> inst(23,22),
                               I_ASSR  -> inst(23,22),
-                              I_ASImm -> inst(23,22)))
+                              I_ASImm -> LSL))
 
     cond.bits := MuxLookup(itype,  COND_X, Array(
                              I_BCImm -> inst( 3, 0) ))

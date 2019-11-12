@@ -2,7 +2,7 @@
 package protoflex
 
 import chisel3._
-import chisel3.util.{Valid, MuxLookup, log2Ceil}
+import chisel3.util._
 
 import common.DECODE_CONTROL_SIGNALS._
 import common.PROCESSOR_TYPES._
@@ -61,15 +61,7 @@ class BasicALU(implicit val cfg: ProcConfig) extends Module {
   io.res := res
 }
 
-class ShiftALU(implicit val cfg: ProcConfig) extends Module {
-  val io = IO(new Bundle {
-                val word = Input(DATA_T)
-                val amount = Input(SHIFT_VAL_T)
-                val opcode = Input(SHIFT_TYPE_T)
-                val res = Output(DATA_T)
-                val carry = Output(C_T)
-              })
-
+object ALU {
   /** Taken from Rocket chip arbiter
     */
   def rotateRight[T <: Data](norm: Vec[T], rot: UInt): Vec[T] = {
@@ -79,17 +71,95 @@ class ShiftALU(implicit val cfg: ProcConfig) extends Module {
     }
   }
 
+}
+
+class ShiftALU(implicit val cfg: ProcConfig) extends Module {
+  val io = IO(new Bundle {
+                val word = Input(DATA_T)
+                val amount = Input(SHIFT_VAL_T)
+                val opcode = Input(SHIFT_TYPE_T)
+                val res = Output(DATA_T)
+                val carry = Output(C_T)
+              })
+
   val res =
     MuxLookup(io.opcode, io.word,
               Array(
                 LSL -> (io.word << io.amount),
                 LSR -> (io.word >> io.amount),
                 ASR -> (io.word.asSInt() >> io.amount).asUInt(),
-                ROR -> rotateRight(VecInit(io.word.asBools), io.amount).asUInt
+                ROR -> ALU.rotateRight(VecInit(io.word.asBools), io.amount).asUInt
               ))
 
   io.carry := res(DATA_W.get).asBool()
   io.res := res
+}
+
+// aarch64/instrs/integer/bitmasks/DecodeBitMasks
+// NOTE Only supports 64 bits operations
+// (bits(M), bits(M)) DecodeBitMasks(bit immN, bits(6) imms, bits(6) immr, boolean immediate)
+// M = 64, immN = 1, immediate = true
+class DecodeBitMasks(implicit val cfg: ProcConfig) extends Module
+{
+  // 64 bits -> immn = 1
+  val io = IO(new Bundle {
+                val imms = Input(UInt(6.W))
+                val immr = Input(UInt(6.W))
+                val wmask = Output(DATA_T)
+                val tmask = Output(DATA_T) // NOTE: Not needed for Logical (immediate)
+                val undef = Output(Bool())
+              })
+
+  // The bit patterns we create here are 64 bit patterns which
+  // are vectors of identical elements of size e = 2, 4, 8, 16, 32 or
+  // 64 bits each. Each element contains the same value: a run
+  // of between 1 and e-1 non-zero bits, rotated within the
+  // element by between 0 and e-1 bits.
+  //
+  // The element size and run length are encoded into immn (1 bit)
+  // and imms (6 bits) as follows:
+  // 64 bit elements: immn = 1, imms = <length of run - 1>
+  // 32 bit elements: immn = 0, imms = 0 : <length of run - 1>
+  // 16 bit elements: immn = 0, imms = 10 : <length of run - 1>
+  //  8 bit elements: immn = 0, imms = 110 : <length of run - 1>
+  //  4 bit elements: immn = 0, imms = 1110 : <length of run - 1>
+  //  2 bit elements: immn = 0, imms = 11110 : <length of run - 1>
+  // Notice that immn = 0, imms = 11111x is the only combination
+  // not covered by one of the above options; this is reserved.
+  // Further, <length of run - 1> all-ones is a reserved pattern.
+  //
+  // In all cases the rotation is by immr % e (and immr is 6 bits).
+
+  def BitMask(bits: UInt): UInt = {
+    val ones = WireInit(DATA_X)
+    for ( i <- 0 until DATA_SZ) {
+      when(i.U === bits) {
+        val value = WireInit(VecInit(DATA_X.asBools))
+        for ( j <- 0 until i) value(j) := 1.U
+        ones := value.asUInt
+      }
+    }
+    ones
+  }
+
+  val len = 6
+  val esize = 1 << len; // 64, because 64 bit instructions
+  val levels = (esize - 1).U; // Mask for 64 bit: 0b111111
+
+  val s = io.imms & levels;
+  val r = io.immr & levels;
+  val diff = s - r;
+
+  val d = diff & levels;
+  val welem = BitMask(s + 1.U)
+  val wmask = ALU.rotateRight(VecInit(welem.asBools), r).asUInt // ROR(welem, R) and truncate esize
+  io.wmask := wmask
+
+  io.tmask := 0.U
+  // Undefined cases
+  // if immediate && (imms AND levels) == levels then UNDEFINED;
+  val immsIsOnes = io.imms === levels
+  io.undef := immsIsOnes
 }
 
 class ExecuteUnitIO(implicit val cfg: ProcConfig) extends Bundle
@@ -99,23 +169,39 @@ class ExecuteUnitIO(implicit val cfg: ProcConfig) extends Bundle
   val rVal2 = Input(DATA_T)
 
   val einst = Output(Valid(new EInst))
+  val undef = Output(Bool())
 }
 
 class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
 {
   val io = IO(new ExecuteUnitIO)
 
-  // Take immediate
-  val interVal2 = Mux(io.dinst.rs2.valid, io.rVal2, io.dinst.imm.bits)
 
+  // Operations
   // Shift
   val shiftALU = Module(new ShiftALU())
-  shiftALU.io.word := interVal2
+  shiftALU.io.word := MuxLookup(io.dinst.itype, io.rVal2,
+                                Array(
+                                  I_ASSR  -> io.rVal2,
+                                  I_LogSR -> io.rVal2,
+                                  I_ASImm -> io.dinst.imm.bits,
+                                ))
   shiftALU.io.amount := io.dinst.shift_val.bits
   shiftALU.io.opcode := io.dinst.shift_type
 
-  // Choose shifted
-  val aluVal2 = Mux(io.dinst.shift_val.valid, shiftALU.io.res, interVal2)
+  // DecodeBitMasks
+  // NOTE Logical (immediate): immr(21:16), imms(15:10)
+  val decodeBitMask = Module(new DecodeBitMasks)
+  decodeBitMask.io.imms := io.dinst.imm.bits(21,16)
+  decodeBitMask.io.immr := io.dinst.imm.bits(15,10)
+
+  val aluVal2 = MuxLookup(io.dinst.itype, shiftALU.io.res,
+                          Array(
+                            I_ASSR  -> shiftALU.io.res,
+                            I_LogSR -> shiftALU.io.res,
+                            I_ASImm -> shiftALU.io.res,
+                            I_LogI -> decodeBitMask.io.wmask
+                          ))
 
   // Execute in ALU now that we have both inputs ready
   val basicALU = Module(new BasicALU())
@@ -123,7 +209,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   basicALU.io.b := aluVal2
   basicALU.io.opcode := io.dinst.op
 
-  // Build executed instrcution
+  // Build executed instruction
   val einst = Wire(new EInst)
   einst.res := basicALU.io.res
   einst.rd  := io.dinst.rd
@@ -132,13 +218,16 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
 
   // Output
   io.einst.bits := einst
+
   // invalid for non-data processing instructions
   io.einst.valid :=
     MuxLookup(io.dinst.itype, false.B,
               Array(
                 I_LogSR -> true.B,
+                I_LogI  -> true.B,
                 I_ASSR  -> true.B,
                 I_ASImm -> true.B
               ))
 
+  io.undef := decodeBitMask.io.undef
 }

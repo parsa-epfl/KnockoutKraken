@@ -80,6 +80,7 @@ object DECODE_CONTROL_SIGNALS
   def I_T = UInt(TYPE_W)
   val I_X = DEC_LITS.I_X.U(TYPE_W)
   val I_LogSR = DEC_LITS.I_LogSR.U(TYPE_W)
+  val I_LogI  = DEC_LITS.I_LogI.U(TYPE_W)
   val I_BImm  = DEC_LITS.I_BImm.U(TYPE_W)
   val I_BCImm = DEC_LITS.I_BCImm.U(TYPE_W)
   val I_ASSR  = DEC_LITS.I_ASSR.U(TYPE_W)
@@ -133,6 +134,11 @@ object DECODE_MATCHING_TABLES
       LogSR_EON    -> List(I_LogSR, OP_EON,   Y, Y, Y, N, Y, N, N),
       LogSR_ANDS   -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, Y),
       LogSR_BICS   -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, Y),
+      // Logical (immediate)
+      LogI_AND     -> List(I_LogI,  OP_AND,   Y, Y, N, Y, N, N, N),
+      LogI_ORR     -> List(I_LogI,  OP_ORR,   Y, Y, N, Y, N, N, N),
+      LogI_EOR     -> List(I_LogI,  OP_EOR,   Y, Y, N, Y, N, N, N),
+      LogI_ANDS    -> List(I_LogI,  OP_AND,   Y, Y, N, Y, N, N, Y),
       // Unconditional branch (immediate)
       BImm_B       -> List(I_BImm , OP_B,     N, N, N, Y, N, N, N),
       BImm_BL      -> List(I_BImm , OP_BL,    N, N, N, Y, N, N, N),
@@ -223,11 +229,12 @@ object DEC_LITS
   val TYPE_W = 3
   val I_X = 0
   val I_LogSR = 1 // Logical (shifted register)
-  val I_BImm  = 2 // Unconditional branch (immediate)
-  val I_BCImm = 3 // Conditional branch (immediate)
-  val I_ASSR  = 4 // Add/subtract (shifted register)
-  val I_ASImm = 5 // ADD/Subdract with Immediate
-  val I_LSImm = 6 // Load/Store Immediate
+  val I_LogI  = 2 // Logical (shifted register)
+  val I_BImm  = 3 // Unconditional branch (immediate)
+  val I_BCImm = 4 // Conditional branch (immediate)
+  val I_ASSR  = 5 // Add/subtract (shifted register)
+  val I_ASImm = 6 // ADD/Subdract with Immediate
+  val I_LSImm = 7 // Load/Store Immediate
 
   //                  RD
   //                  EN
@@ -243,6 +250,7 @@ object DEC_LITS
   //                  |  |  |  |  |  |  |
   val LI_X     = List(N, N, N, N, N, N, N)
   val LI_LogSR = List(Y, Y, Y, N, Y, N, N)
+  val LI_LogI  = List(Y, Y, N, Y, N, N, N)
   val LI_BImm  = List(N, N, N, Y, N, N, N)
   val LI_BCImm = List(N, N, N, Y, N, Y, N)
   val LI_ASSR  = List(Y, Y, Y, N, Y, N, N)
@@ -253,6 +261,7 @@ object DEC_LITS
     inst_type match {
       case I_X     => LI_X
       case I_LogSR => LI_LogSR
+      case I_LogI  => LI_LogI
       case I_BImm  => LI_BImm
       case I_BCImm => LI_BCImm
       case I_ASSR  => LI_ASSR

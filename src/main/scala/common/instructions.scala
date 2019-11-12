@@ -52,6 +52,19 @@ object INSTRUCTIONS
   def LogSR_ANDS = BitPat("b11101010??0?????????????????????")
   def LogSR_BICS = BitPat("b11101010??1?????????????????????")
 
+  // Logical (immediate)
+  // 31 | 30 29 | 28 27 26 25 24 23 | 22 | 21 20 19 18 17 16 | 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
+  // sf |  opc  |  1  0  0  1  0  0 |  N |       immr        |      imms         |      Rn        |        Rd      |                  |
+  //  1 |  0  0 |  1  0  0  1  0  0 |  - |       immr        |      imms         |      Rn        |        Rd      | AND              | 64-bit
+  //  1 |  0  1 |  1  0  0  1  0  0 |  - |       immr        |      imms         |      Rn        |        Rd      | ORR              | 64-bit
+  //  1 |  1  0 |  1  0  0  1  0  0 |  - |       immr        |      imms         |      Rn        |        Rd      | EOR              | 64-bit
+  //  1 |  1  1 |  1  0  0  1  0  0 |  - |       immr        |      imms         |      Rn        |        Rd      | ANDS             | 64-bit
+  def LogI = BitPat("b1??100100???????????????????????")
+  def LogI_AND  = BitPat("b100100100???????????????????????")
+  def LogI_ORR  = BitPat("b101100100???????????????????????")
+  def LogI_EOR  = BitPat("b110100100???????????????????????")
+  def LogI_ANDS = BitPat("b111100100???????????????????????")
+
   // Add/subtract (shifted register) */
   // 31 | 30 | 29 | 28 27 26 25 24 | 23 22 | 21 | 20 19 18 17 16 | 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00| Instruction Page | Variant
   // sf | op |  S |  0  1  0  1  0 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd      |                  |
