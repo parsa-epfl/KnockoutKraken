@@ -36,6 +36,12 @@ object DECODE_CONTROL_SIGNALS
   val OP_BL = DEC_LITS.OP_BL.U(OP_W)
   val OP_BCOND = DEC_LITS.OP_BCOND.U(OP_W)
 
+  // Bitfield
+  val OP_SBFM = DEC_LITS.OP_SBFM.U(OP_W)
+  val OP_BFM  = DEC_LITS.OP_BFM.U(OP_W)
+  val OP_UBFM = DEC_LITS.OP_UBFM.U(OP_W)
+
+
   // Shiift Operation Signals
   val SHIFT_VAL_W = DEC_LITS.SHIFT_VAL_W.W
   def SHIFT_VAL_T = UInt(SHIFT_VAL_W)
@@ -43,10 +49,10 @@ object DECODE_CONTROL_SIGNALS
   val SHIFT_TYPE_W = DEC_LITS.SHIFT_TYPE_W.W
   def SHIFT_TYPE_T = UInt(SHIFT_TYPE_W)
   val SHIFT_TYPE_X = DEC_LITS.SHIFT_TYPE_X.U(SHIFT_TYPE_W)
-  val LSL  = DEC_LITS.LSL.U(SHIFT_TYPE_W)
-  val LSR  = DEC_LITS.LSR.U(SHIFT_TYPE_W)
-  val ASR  = DEC_LITS.ASR.U(SHIFT_TYPE_W)
-  val ROR  = DEC_LITS.ROR.U(SHIFT_TYPE_W)
+  val LSL = DEC_LITS.LSL.U(SHIFT_TYPE_W)
+  val LSR = DEC_LITS.LSR.U(SHIFT_TYPE_W)
+  val ASR = DEC_LITS.ASR.U(SHIFT_TYPE_W)
+  val ROR = DEC_LITS.ROR.U(SHIFT_TYPE_W)
 
   // Cond Operations Signals
   val COND_W = DEC_LITS.COND_W.W
@@ -76,11 +82,12 @@ object DECODE_CONTROL_SIGNALS
   val OP_LDR = DEC_LITS.OP_LDR.U(OP_W)
 
   // Instruction Types for chisel
-  val TYPE_W = 3.W
+  val TYPE_W = DEC_LITS.TYPE_W.W
   def I_T = UInt(TYPE_W)
   val I_X = DEC_LITS.I_X.U(TYPE_W)
   val I_LogSR = DEC_LITS.I_LogSR.U(TYPE_W)
   val I_LogI  = DEC_LITS.I_LogI.U(TYPE_W)
+  val I_BitF  = DEC_LITS.I_BitF.U(TYPE_W)
   val I_BImm  = DEC_LITS.I_BImm.U(TYPE_W)
   val I_BCImm = DEC_LITS.I_BCImm.U(TYPE_W)
   val I_ASSR  = DEC_LITS.I_ASSR.U(TYPE_W)
@@ -125,6 +132,10 @@ object DECODE_MATCHING_TABLES
       //                      |       |       |  |  |  |  |  |  |
       //                      |       |       |  |  |  |  |  |  |
     Array(
+      // Undef cases
+      LogI_undef -> decode_default,
+      BitF_undef -> decode_default,
+      DecBitMask_LogI_undef -> decode_default,
       // Logical (shifted register)
       LogSR_AND    -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, N),
       LogSR_BIC    -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, N),
@@ -139,6 +150,10 @@ object DECODE_MATCHING_TABLES
       LogI_ORR     -> List(I_LogI,  OP_ORR,   Y, Y, N, Y, N, N, N),
       LogI_EOR     -> List(I_LogI,  OP_EOR,   Y, Y, N, Y, N, N, N),
       LogI_ANDS    -> List(I_LogI,  OP_AND,   Y, Y, N, Y, N, N, Y),
+      // Bitfield
+      BitF_SBFM    -> List(I_BitF,  OP_SBFM,  Y, Y, N, Y, N, N, N),
+      BitF_BFM     -> List(I_BitF,  OP_BFM,   Y, Y, N, Y, N, N, N),
+      BitF_UBFM    -> List(I_BitF,  OP_UBFM,  Y, Y, N, Y, N, N, Y),
       // Unconditional branch (immediate)
       BImm_B       -> List(I_BImm , OP_B,     N, N, N, Y, N, N, N),
       BImm_BL      -> List(I_BImm , OP_BL,    N, N, N, Y, N, N, N),
@@ -189,6 +204,11 @@ object DEC_LITS
   val OP_BL = 1
   val OP_BCOND = 2
 
+  // Bitfield
+  val OP_SBFM = 0
+  val OP_BFM  = 1
+  val OP_UBFM = 2
+
   // Shiift Operation Signals
   val SHIFT_VAL_W = 6 // maximum shift for 64 bit
   val SHIFT_VAL_X = 0
@@ -224,17 +244,17 @@ object DEC_LITS
   // load/store operation signals
   val OP_LDR = 0
 
-
   // Instruction Types for scala
-  val TYPE_W = 3
+  val TYPE_W = 4
   val I_X = 0
   val I_LogSR = 1 // Logical (shifted register)
-  val I_LogI  = 2 // Logical (shifted register)
+  val I_LogI  = 2 // Logical (immediate)
   val I_BImm  = 3 // Unconditional branch (immediate)
   val I_BCImm = 4 // Conditional branch (immediate)
   val I_ASSR  = 5 // Add/subtract (shifted register)
   val I_ASImm = 6 // ADD/Subdract with Immediate
   val I_LSImm = 7 // Load/Store Immediate
+  val I_BitF  = 8 // Logical (shifted register)
 
   //                  RD
   //                  EN
@@ -256,7 +276,8 @@ object DEC_LITS
   val LI_ASSR  = List(Y, Y, Y, N, Y, N, N)
   val LI_ASImm = List(Y, Y, N, Y, Y, N, N)
   val LI_LSImm = List(Y, N, N, Y, N, N, N)
-
+  val LI_BitF  = List(Y, Y, N, Y, N, N, N)
+ 
   def decode_table(inst_type : Int): List[Int] =
     inst_type match {
       case I_X     => LI_X
@@ -267,5 +288,6 @@ object DEC_LITS
       case I_ASSR  => LI_ASSR
       case I_ASImm => LI_ASImm
       case I_LSImm => LI_LSImm
+      case I_BitF  => LI_BitF
     }
 }
