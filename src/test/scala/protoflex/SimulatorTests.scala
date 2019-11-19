@@ -162,14 +162,13 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
       cmd = ArmflexJson.json2cmd(readFile(filepath))._1
       tf = System.nanoTime
     } while(cmd == FA_QflexCmds.LOCK_WAIT && !timedOut);
-    simLog(s"CMD IN  ${FA_QflexCmds.cmd_toString(cmd)} in ${filepath}")
+    //simLog(s"CMD is ${FA_QflexCmds.cmd_toString(cmd)} in ${filepath}")
     writeCmd((FA_QflexCmds.LOCK_WAIT, 0), filepath) // Consume Command
     cmd
   }
 
   def writeCmd(cmd: (Int, Long), path: String) = {
     val json = ArmflexJson.cmd2json(cmd._1, cmd._2)
-    simLog(s"CMD OUT ${FA_QflexCmds.cmd_toString(cmd._1)} in ${path}")
     writeFile(path, json)
   }
 
@@ -179,7 +178,7 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
       exit
     }
 
-    simLog(s"START PC:" + "%016x".format(pstate.pc))
+    //simLog(s"START PC:" + "%016x".format(pstate.pc))
     cProcAxi.fireThread(0)
 
     // Wait for state to be transplanted
@@ -187,18 +186,16 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
     do { clock.step(1) } while(cProcAxi.tpuIsWorking);
     // RTL state after transplant must match initial QEMU state
     currState = cProcAxi.getPStateInternal(0)
-    println("QEMU State: " + pstate)
-    println("RTL State:" + currState)
-    val matched = currState.matches(pstate)
-    println("mached : " + matched)
-
-    assert(currState.matches(pstate))
+    assert(currState.matches(pstate)._1)
 
     ti = System.nanoTime
     do {
       if(cProcAxi.hasCommitedInst()) {
+        val inst = cProcAxi.getCommitedInst
         clock.step(1)
         currState = cProcAxi.getPStateInternal(0)
+
+        simLog(s"OUT:0x${"%016x".format(currState.pc)}:  ${"%08x".format(inst)}")
 
         // Ask QEMU to step and write state back to compare
         writePState2File(cfgSim.simStatePath, currState)
@@ -206,24 +203,22 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
         waitForCmd(cfgSim.simCmdPath)
         val qemuPState = ArmflexJson.json2state(readFile(cfgSim.qemuStatePath))
 
-        if (qemuPState.matches(currState)) {
-          simLog(s"Comparing States: QEMU(${"%016x".format(qemuPState.pc)})"
-                 + s" <-> RTL(${"%016x".format(currState.pc)})")
-        } else {
-          simLog(s"State matched")
+        val matched = qemuPState.matches(currState)
+        if (!matched._1) {
+          simLog(matched._2)
         }
-
       } else {
         clock.step(1)
       }
 
       tf = System.nanoTime
     } while(!cProcAxi.tpuIsWorking && !timedOut);
+    simLog(s"OUT:UNDEF_INST")
 
     do { clock.step(0) } while(cProcAxi.getDone._1)
 
     clock.step(1)
-    simLog(s"DONE  PC:" + "%016x".format(cProcAxi.rdBRAM2PSTATE(0).pc))
+    //simLog(s"DONE  PC:" + "%016x".format(cProcAxi.rdBRAM2PSTATE(0).pc))
   }
 
   def runSimulator(timeoutms_i: Int): Unit = {

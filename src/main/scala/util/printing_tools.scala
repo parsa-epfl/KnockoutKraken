@@ -181,25 +181,27 @@ object SoftwareStructs {
       str + "\n"
     }
 
-    def matches(other: PState): Boolean = {
+    def matches(other: PState): (Boolean, String) = {
+      var str: String = ""
       val diffXRegs = (this.xregs zip other.xregs).zipWithIndex.filter {
         case ((t,o), i) => t != o
       }
       if(!diffXRegs.isEmpty || this.pc != other.pc || this.nzcv != other.nzcv) {
-        println("PState didn't match, differences:")
+        str = str ++ "PState didn't match, differences:\n"
         diffXRegs foreach {
           case ((t, o), i) =>
-            println(s"${PrintingTools.getReg(i)}:${t} != ${o}")
+            str = str ++ s"${PrintingTools.getReg(i)}:${t} != ${o}\n"
         }
         if(this.pc != other.pc)
-          println(s"PC:${"%016x".format(this.pc)} != ${"%016x".format(other.pc)}")
+          str = str ++ s"PC:${"%016x".format(this.pc)} != ${"%016x".format(other.pc)}\n"
         if(this.nzcv != other.nzcv)
-          println(s"NZCV:${"%016x".format(this.nzcv.toBinaryString)} != ${other.nzcv.toBinaryString}")
+          str = str ++ s"NZCV:${this.nzcv.toBinaryString} != ${other.nzcv.toBinaryString}\n"
 
-        return false
+        return (false, str)
       } else {
-        println("PState matched.")
-        return true
+
+        str = str ++ "PState matched.\n"
+        return (true, str)
       }
     }
   }
