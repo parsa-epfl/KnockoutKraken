@@ -42,21 +42,19 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
                            I_ASImm -> inst( 4, 0),
                            I_ASSR  -> inst( 4, 0),
                            I_LSImm -> inst( 4, 0),
-                           I_ASSR  -> inst( 4, 0)))
+                           I_ASSR  -> inst( 4, 0) ))
 
     rs1.bits := MuxLookup(itype, REG_X, Array(
                             I_BitF  -> inst( 9, 5),
                             I_LogSR -> inst( 9, 5),
                             I_LogI  -> inst( 9, 5),
                             I_ASSR  -> inst( 9, 5),
-                            I_ASImm -> inst( 9, 5)
-                          ))
+                            I_ASImm -> inst( 9, 5) ))
 
     rs2.bits := MuxLookup(itype, REG_X, Array(
                             I_LogSR -> inst(20,16),
                             I_ASSR  -> inst(20,16),
-                            I_BitF  -> inst( 4, 0)
-                            ))
+                            I_BitF  -> inst( 4, 0) )) // Rd to rs2
 
     imm.bits := MuxLookup(itype, IMM_X, Array(
                             I_BitF  -> inst(21,10), // NOTE: immr(21:16), imms(15:10)
@@ -64,14 +62,13 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
                             I_BImm  -> inst(25, 0),
                             I_BCImm -> inst(23, 5),
                             I_ASImm -> inst(21,10),
-                            I_LSImm -> inst(23, 5)))
+                            I_LSImm -> inst(23, 5) ))
 
     shift_val.bits := MuxLookup(itype, SHIFT_VAL_X, Array(
                                   I_LogSR -> inst(15,10),
                                   I_ASSR  -> inst(15,10),
                                   I_ASImm -> Mux(inst(22), 12.U, 0.U),
-                                  I_BitF  -> inst(15,10)
-                                ))
+                                  I_BitF  -> inst(21,16) ))
 
     shift_type := MuxLookup(itype, SHIFT_TYPE_X, Array(
                               I_LogSR -> inst(23,22),
@@ -86,7 +83,6 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
     val cdecoder = decoder.tail
     val csignals = Seq(op, rd.valid, rs1.valid, rs2.valid, imm.valid, shift_val.valid, cond.valid, nzcv_en)
     csignals zip cdecoder map { case (s, d) => s := d }
-
 
     tag := tag_
     inst32.valid := (itype =/= I_X)

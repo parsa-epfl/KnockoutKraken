@@ -180,7 +180,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   issuer.io.deq.ready := commitReg.io.enq.ready
   issuer.io.commitReg.bits := commitReg.io.deq.bits
   issuer.io.commitReg.valid := commitValid
- 
+
   /** Execute */
   // connect rfile read(address) interface
   rfileVec map { case rfile =>
@@ -315,15 +315,15 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
     procStateDBG.fetchReg.ready := decReg.io.enq.ready
     procStateDBG.fetchReg.valid := fetch.io.deq.valid
     procStateDBG.fetchReg.bits  := fetch.io.deq.bits
-    procStateDBG.decReg.ready   := issuer.io.enq.ready
-    procStateDBG.decReg.valid   := decReg.io.deq.valid
-    procStateDBG.decReg.bits    := decReg.io.deq.bits
+    procStateDBG.decReg.ready := issuer.io.enq.ready
+    procStateDBG.decReg.valid := decReg.io.deq.valid
+    procStateDBG.decReg.bits  := decReg.io.deq.bits
     procStateDBG.issueReg.ready := commitReg.io.enq.ready
     procStateDBG.issueReg.valid := issuer.io.deq.valid
     procStateDBG.issueReg.bits  := issuer.io.deq.bits
-    procStateDBG.commitReg.ready   := true.B
-    procStateDBG.commitReg.valid   := commitReg.io.deq.valid
-    procStateDBG.commitReg.bits    := commitReg.io.deq.bits
+    procStateDBG.commitReg.ready := true.B
+    procStateDBG.commitReg.valid := commitReg.io.deq.valid
+    procStateDBG.commitReg.bits  := commitReg.io.deq.bits
 
     // Processor State (XREGS + PSTATE)
     val rfileVecWire = Wire(Vec(cfg.NB_THREADS, Vec(REG_N, DATA_T)))

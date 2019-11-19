@@ -153,7 +153,7 @@ object DECODE_MATCHING_TABLES
       // Bitfield
       BitF_SBFM    -> List(I_BitF,  OP_SBFM,  Y, Y, N, Y, N, N, N),
       BitF_BFM     -> List(I_BitF,  OP_BFM,   Y, Y, N, Y, N, N, N),
-      BitF_UBFM    -> List(I_BitF,  OP_UBFM,  Y, Y, N, Y, N, N, Y),
+      BitF_UBFM    -> List(I_BitF,  OP_UBFM,  Y, Y, N, Y, N, N, N),
       // Unconditional branch (immediate)
       BImm_B       -> List(I_BImm , OP_B,     N, N, N, Y, N, N, N),
       BImm_BL      -> List(I_BImm , OP_BL,    N, N, N, Y, N, N, N),

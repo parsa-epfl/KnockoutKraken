@@ -71,7 +71,6 @@ object ALU {
       Mux(rot < (n - i).U, norm(rot - (n - i).U), norm(i.U + rot))
     }
   }
-
 }
 
 class BitfieldALU(implicit val cfg: ProcConfig) extends Module {
@@ -176,18 +175,16 @@ class DecodeBitMasks(implicit val cfg: ProcConfig) extends Module
   //
   // In all cases the rotation is by immr % e (and immr is 6 bits).
 
-  // TODO Optimize/Check whenever this function synthesis correctly
-  def BitMask(bits: UInt): UInt = {
-    val ones = WireInit(DATA_X)
-    for ( i <- 0 until DATA_SZ) {
-      when(i.U === bits) {
-        val value = WireInit(VecInit(DATA_X.asBools))
-        for ( j <- 0 until i) value(j) := 1.U
-        ones := value.asUInt
-      }
-    }
-    ones
+  def Ones(bits: UInt): UInt = {
+    val table  = VecInit.tabulate(DATA_SZ + 1) { i => BigInt("0"*(DATA_SZ-i) ++ "1"*i, 2).U }
+    val res = Wire(DATA_T)
+    res := table(bits)
+    res
   }
+  val welem = Wire(DATA_T)
+  val wmask = Wire(DATA_T)
+  val telem = Wire(DATA_T)
+  val tmask = Wire(DATA_T)
 
   val len = 6
   val esize = 1 << len // 64, because 64 bit instructions
@@ -195,15 +192,16 @@ class DecodeBitMasks(implicit val cfg: ProcConfig) extends Module
 
   val s = io.imms & levels
   val r = io.immr & levels
-  val diff = s - r
+  val diff = Wire(UInt(7.W))
+  diff := s - r
 
   val d = diff & levels
 
-  val welem = BitMask(s + 1.U)
-  val wmask = ALU.rotateRight(VecInit(welem.asBools), r).asUInt // ROR(welem, R) and truncate esize
+  welem := WireInit(Ones(s + 1.U))
+  wmask := ALU.rotateRight(VecInit(welem.asBools), r).asUInt // ROR(welem, R) and truncate esize
 
-  val telem = BitMask(d + 1.U)
-  val tmask = telem
+  telem := WireInit(Ones(d + 1.U))
+  tmask := telem
 
   io.wmask := wmask
   io.tmask := telem
@@ -226,21 +224,30 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   // Operations
   // Shift
   val shiftALU = Module(new ShiftALU())
-  shiftALU.io.word := io.rVal2
+  shiftALU.io.word :=
+    MuxLookup(io.dinst.itype, io.rVal2, Array(
+                I_ASSR  -> io.rVal2,
+                I_LogSR -> io.rVal2,
+                I_ASImm -> io.dinst.imm.bits,
+                I_LogI  -> io.rVal2,
+                I_BitF  -> io.rVal1 // ROR(X(Rn), immr)
+              ))
+
   shiftALU.io.amount := io.dinst.shift_val.bits
   shiftALU.io.opcode := io.dinst.shift_type
 
   // DecodeBitMasks
   // NOTE Logical (immediate): immr(21:16), imms(15:10)
   val decodeBitMask = Module(new DecodeBitMasks)
-  decodeBitMask.io.imms := io.dinst.imm.bits(21-10,16-10)
-  decodeBitMask.io.immr := io.dinst.imm.bits(15-10,10-10)
+  decodeBitMask.io.immr := io.dinst.imm.bits(21-10,16-10)
+  decodeBitMask.io.imms := io.dinst.imm.bits(15-10,10-10)
   decodeBitMask.io.immediate := MuxLookup(io.dinst.itype, false.B, Array(
                                             I_LogI -> true.B,
                                             I_BitF -> false.B
                                           ))
 
   // Bitfield
+  // NOTE Logical (immediate): immr(21:16), imms(15:10)
   val bitfield = Module(new BitfieldALU)
   bitfield.io.op := io.dinst.op
   bitfield.io.immr := io.dinst.imm.bits(21-10,16-10)
@@ -251,24 +258,21 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   bitfield.io.tmask := decodeBitMask.io.tmask
   bitfield.io.rorSrcR := shiftALU.io.res
 
-  val aluVal1 = MuxLookup(io.dinst.itype, io.rVal1,
-                          Array(
+  val aluVal1 = MuxLookup(io.dinst.itype, io.rVal1, Array(
                             I_ASSR  -> io.rVal1,
                             I_LogSR -> io.rVal1,
                             I_ASImm -> io.rVal1,
                             I_LogI  -> io.rVal1,
                             I_BitF  -> bitfield.io.aluVal1
                           ))
-  val aluVal2 = MuxLookup(io.dinst.itype, shiftALU.io.res,
-                          Array(
+  val aluVal2 = MuxLookup(io.dinst.itype, shiftALU.io.res, Array(
                             I_ASSR  -> shiftALU.io.res,
                             I_LogSR -> shiftALU.io.res,
                             I_ASImm -> shiftALU.io.res,
                             I_LogI  -> decodeBitMask.io.wmask,
                             I_BitF  -> bitfield.io.aluVal2
                           ))
-  val aluOp = MuxLookup(io.dinst.itype, io.dinst.op,
-                        Array(
+  val aluOp = MuxLookup(io.dinst.itype, io.dinst.op, Array(
                           I_ASSR  -> io.dinst.op,
                           I_LogSR -> io.dinst.op,
                           I_ASImm -> io.dinst.op,
@@ -294,8 +298,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
 
   // invalid for non-data processing instructions
   io.einst.valid :=
-    MuxLookup(io.dinst.itype, false.B,
-              Array(
+    MuxLookup(io.dinst.itype, false.B, Array(
                 I_LogSR -> true.B,
                 I_LogI  -> true.B,
                 I_ASSR  -> true.B,
