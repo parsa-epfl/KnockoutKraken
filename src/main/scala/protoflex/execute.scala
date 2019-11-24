@@ -118,6 +118,39 @@ class BitfieldALU(implicit val cfg: ProcConfig) extends Module {
   io.aluOp := OP_ORR
 }
 
+// Move (wide immediate)
+class Move(implicit val cfg: ProcConfig) extends Module {
+  val io = IO(new Bundle {
+                val op = Input(UInt(OP_W))
+                val hw = Input(UInt(2.W))
+                val imm = Input(UInt(16.W))
+                val rd = Input(DATA_T)
+                val res = Output(DATA_T)
+              })
+
+  val pos = Cat(io.hw, 0.U(4.W))
+  val result = WireInit(DATA_X)
+
+  when(io.op === OP_MOVZ) {
+    result := io.rd
+  }
+  //result(pos+15.U, pos) := io.imm
+
+  val vecResult = VecInit(result.asBools)
+  val vecBools = VecInit(io.imm.asBools)
+
+  for(i <- 0 until DATA_SZ-16) {
+    when(i.U === pos) {
+      for(j <- 0 until 16) {
+        vecResult(i + j) := vecBools(j)
+      }
+    }
+  }
+
+  val res = WireInit(vecResult.asUInt)
+  io.res := Mux(io.op === OP_MOVN, ~res, res)
+}
+
 class ShiftALU(implicit val cfg: ProcConfig) extends Module {
   val io = IO(new Bundle {
                 val word = Input(DATA_T)
@@ -221,7 +254,6 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
 {
   val io = IO(new ExecuteUnitIO)
 
-
   // Operations
   // Shift
   val shiftALU = Module(new ShiftALU())
@@ -259,6 +291,14 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   bitfield.io.tmask := decodeBitMask.io.tmask
   bitfield.io.rorSrcR := shiftALU.io.res
 
+
+  // Move wide (immediate)
+  val move = Module(new Move)
+  move.io.op := io.dinst.op
+  move.io.hw := io.dinst.imm.bits(17,16)
+  move.io.imm := io.dinst.imm.bits(15,0)
+  move.io.rd := io.rVal2
+
   val aluVal1 = MuxLookup(io.dinst.itype, io.rVal1, Array(
                             I_ASSR  -> io.rVal1,
                             I_LogSR -> io.rVal1,
@@ -289,7 +329,9 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
 
   // Build executed instruction
   val einst = Wire(new EInst)
-  einst.res := basicALU.io.res
+  einst.res := MuxLookup(io.dinst.itype, basicALU.io.res, Array(
+                           I_MovI -> move.io.res
+                         ))
   einst.rd  := io.dinst.rd
   einst.nzcv.bits := basicALU.io.nzcv
   einst.nzcv.valid := io.dinst.nzcv_en
@@ -300,6 +342,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   // invalid for non-data processing instructions
   io.einst.valid :=
     MuxLookup(io.dinst.itype, false.B, Array(
+                I_MovI  -> true.B,
                 I_LogSR -> true.B,
                 I_LogI  -> true.B,
                 I_ASSR  -> true.B,

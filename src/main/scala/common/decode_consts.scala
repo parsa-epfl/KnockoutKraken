@@ -36,11 +36,15 @@ object DECODE_CONTROL_SIGNALS
   val OP_BL = DEC_LITS.OP_BL.U(OP_W)
   val OP_BCOND = DEC_LITS.OP_BCOND.U(OP_W)
 
+  // Move wide (immediate)
+  val OP_MOVN = DEC_LITS.OP_MOVN.U(OP_W)
+  val OP_MOVZ = DEC_LITS.OP_MOVZ.U(OP_W)
+  val OP_MOVK = DEC_LITS.OP_MOVK.U(OP_W)
+
   // Bitfield
   val OP_SBFM = DEC_LITS.OP_SBFM.U(OP_W)
   val OP_BFM  = DEC_LITS.OP_BFM.U(OP_W)
   val OP_UBFM = DEC_LITS.OP_UBFM.U(OP_W)
-
 
   // Shiift Operation Signals
   val SHIFT_VAL_W = DEC_LITS.SHIFT_VAL_W.W
@@ -87,6 +91,7 @@ object DECODE_CONTROL_SIGNALS
   val I_X = DEC_LITS.I_X.U(TYPE_W)
   val I_LogSR = DEC_LITS.I_LogSR.U(TYPE_W)
   val I_LogI  = DEC_LITS.I_LogI.U(TYPE_W)
+  val I_MovI  = DEC_LITS.I_MovI.U(TYPE_W)
   val I_BitF  = DEC_LITS.I_BitF.U(TYPE_W)
   val I_BImm  = DEC_LITS.I_BImm.U(TYPE_W)
   val I_BCImm = DEC_LITS.I_BCImm.U(TYPE_W)
@@ -117,6 +122,7 @@ object DECODE_MATCHING_TABLES
     List(I_X, OP_X, N, N, N, N, N, N, N)
 
   def decode_table: Array[(BitPat, List[UInt])]  =
+    Array(
       //
       //                                      RD
       //                    IN TR             EN
@@ -131,7 +137,6 @@ object DECODE_MATCHING_TABLES
       //                      |       |       |  |  |  |  |  |  |
       //                      |       |       |  |  |  |  |  |  |
       //                      |       |       |  |  |  |  |  |  |
-    Array(
       // Undef cases
       LogI_undef -> decode_default,
       BitF_undef -> decode_default,
@@ -150,6 +155,10 @@ object DECODE_MATCHING_TABLES
       LogI_ORR     -> List(I_LogI,  OP_ORR,   Y, Y, N, Y, N, N, N),
       LogI_EOR     -> List(I_LogI,  OP_EOR,   Y, Y, N, Y, N, N, N),
       LogI_ANDS    -> List(I_LogI,  OP_AND,   Y, Y, N, Y, N, N, Y),
+      // Move wide (immediate)
+      MovI_MOVN     -> List(I_MovI, OP_MOVN,  Y, N, N, Y, N, N, N),
+      MovI_MOVZ     -> List(I_MovI, OP_MOVZ,  Y, N, N, Y, N, N, N),
+      MovI_MOVK     -> List(I_MovI, OP_MOVK,  Y, N, N, Y, N, N, N),
       // Bitfield
       BitF_SBFM    -> List(I_BitF,  OP_SBFM,  Y, Y, N, Y, N, N, N),
       BitF_BFM     -> List(I_BitF,  OP_BFM,   Y, Y, N, Y, N, N, N),
@@ -204,6 +213,11 @@ object DEC_LITS
   val OP_BL = 1
   val OP_BCOND = 2
 
+  // Move wide (immediate)
+  val OP_MOVN = 0
+  val OP_MOVZ = 1
+  val OP_MOVK = 2
+
   // Bitfield
   val OP_SBFM = 0
   val OP_BFM  = 1
@@ -249,12 +263,13 @@ object DEC_LITS
   val I_X = 0
   val I_LogSR = 1 // Logical (shifted register)
   val I_LogI  = 2 // Logical (immediate)
-  val I_BImm  = 3 // Unconditional branch (immediate)
-  val I_BCImm = 4 // Conditional branch (immediate)
-  val I_ASSR  = 5 // Add/subtract (shifted register)
-  val I_ASImm = 6 // ADD/Subdract with Immediate
-  val I_LSImm = 7 // Load/Store Immediate
-  val I_BitF  = 8 // Logical (shifted register)
+  val I_MovI  = 3 // Move wide (immediate)
+  val I_BImm  = 4 // Unconditional branch (immediate)
+  val I_BCImm = 5 // Conditional branch (immediate)
+  val I_ASSR  = 6 // Add/subtract (shifted register)
+  val I_ASImm = 7 // ADD/Subdract with Immediate
+  val I_LSImm = 8 // Load/Store Immediate
+  val I_BitF  = 9 // Logical (shifted register)
 
   //                  RD
   //                  EN
@@ -271,6 +286,7 @@ object DEC_LITS
   val LI_X     = List(N, N, N, N, N, N, N)
   val LI_LogSR = List(Y, Y, Y, N, Y, N, N)
   val LI_LogI  = List(Y, Y, N, Y, N, N, N)
+  val LI_MovI  = List(Y, N, N, Y, N, N, N)
   val LI_BImm  = List(N, N, N, Y, N, N, N)
   val LI_BCImm = List(N, N, N, Y, N, Y, N)
   val LI_ASSR  = List(Y, Y, Y, N, Y, N, N)
@@ -283,6 +299,7 @@ object DEC_LITS
       case I_X     => LI_X
       case I_LogSR => LI_LogSR
       case I_LogI  => LI_LogI
+      case I_MovI  => LI_MovI
       case I_BImm  => LI_BImm
       case I_BCImm => LI_BCImm
       case I_ASSR  => LI_ASSR

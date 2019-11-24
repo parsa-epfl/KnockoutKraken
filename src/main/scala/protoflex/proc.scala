@@ -219,9 +219,9 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   commitReg.io.enq.bits.mem := ldstU.io.minst
   commitReg.io.enq.bits.undef := issued_dinst.itype === I_X
   commitReg.io.enq.bits.inst32 := issued_dinst.inst32.bits
+  commitReg.io.enq.bits.pc := issued_dinst.pc
   commitReg.io.enq.bits.tag := issued_tag
   commitReg.io.enq.valid := issuer.io.deq.valid
-
   commitReg.io.deq.ready := true.B
 
   // ---- Commit STATE ----
@@ -344,6 +344,7 @@ class CommitInst(implicit val cfg : ProcConfig) extends Bundle {
   val br = Valid(new BInst)
   val mem = Valid(new MInst)
   val undef = Output(Bool())
+  val pc = Output(DATA_T)
   val inst32 = Output(INST_T)
   val tag = Output(cfg.TAG_T)
 }
