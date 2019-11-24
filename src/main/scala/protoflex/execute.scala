@@ -190,21 +190,22 @@ class DecodeBitMasks(implicit val cfg: ProcConfig) extends Module
   val esize = 1 << len // 64, because 64 bit instructions
   val levels = (esize - 1).U // Mask for 64 bit: 0b111111
 
-  val s = io.imms & levels
-  val r = io.immr & levels
-  val diff = Wire(UInt(7.W))
-  diff := s - r
+  val s = WireInit(io.imms & levels)
+  val r = WireInit(io.immr & levels)
+  val diff = WireInit(UInt(6.W), s - r)
 
-  val d = diff & levels
+  val d = WireInit(UInt(7.W), diff & levels)
+  val onesS = WireInit(UInt(7.W), s + 1.U) // Add a bit for the 0b1000000 = 64 bit case
+  val onesD = WireInit(UInt(7.W), d + 1.U) // Add a bit for the 0b1000000 = 64 bit case
 
-  welem := WireInit(Ones(s + 1.U))
+  welem := WireInit(Ones(onesS))
   wmask := ALU.rotateRight(VecInit(welem.asBools), r).asUInt // ROR(welem, R) and truncate esize
 
-  telem := WireInit(Ones(d + 1.U))
+  telem := WireInit(Ones(onesD))
   tmask := telem
 
   io.wmask := wmask
-  io.tmask := telem
+  io.tmask := tmask
 }
 
 class ExecuteUnitIO(implicit val cfg: ProcConfig) extends Bundle
