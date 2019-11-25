@@ -104,6 +104,19 @@ object INSTRUCTIONS
   def ASSR_SUB  = BitPat("b11001011??0?????????????????????")
   def ASSR_SUBS = BitPat("b11101011??0?????????????????????")
 
+  // Conditional select
+  // 31 | 30 | 29 | 28 27 26 25 24 23 22 21 | 20 19 18 17 16 | 15 14 13 12 | 11 10 | 09 08 07 06 05 | 04 03 02 01 00| Instruction Page | Variant
+  // sf | op |  S |  1  1  0  1  0  1  0  0 |       Rm       |      cond   |  op2  |       Rn       |       Rd      |                  |
+  //  1 |  0 |  0 |  1  1  0  1  0  1  0  0 |       Rm       |      cond   |  0  0 |       Rn       |       Rd      | CSEL             | 64-bit
+  //  1 |  0 |  0 |  1  1  0  1  0  1  0  0 |       Rm       |      cond   |  0  1 |       Rn       |       Rd      | CSINC            | 64-bit
+  //  1 |  1 |  0 |  1  1  0  1  0  1  0  0 |       Rm       |      cond   |  0  0 |       Rn       |       Rd      | CSINV            | 64-bit
+  //  1 |  1 |  0 |  1  1  0  1  0  1  0  0 |       Rm       |      cond   |  0  1 |       Rn       |       Rd      | CSNEG            | 64-bit
+  def CSel = BitPat("b1?011010100?????????0???????????")
+  def CSel_CSEL  = BitPat("b10011010100?????????00??????????")
+  def CSel_CSINC = BitPat("b10011010100?????????01??????????")
+  def CSel_CSINV = BitPat("b11011010100?????????00??????????")
+  def CSel_CSNEG = BitPat("b11011010100?????????01??????????")
+
   // Add/subtract (immediate)
   // I_ASImm
   // 31 | 30 | 29 | 28 27 26 25 24 | 23 22 | 21 20 19 18 17 16 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant

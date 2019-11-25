@@ -43,18 +43,23 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
                            I_ASImm -> inst( 4, 0),
                            I_ASSR  -> inst( 4, 0),
                            I_LSImm -> inst( 4, 0),
-                           I_ASSR  -> inst( 4, 0) ))
+                           I_ASSR  -> inst( 4, 0),
+                           I_CSel  -> inst( 4, 0)
+                           ))
 
     rs1.bits := MuxLookup(itype, REG_X, Array(
                             I_BitF  -> inst( 9, 5),
                             I_LogSR -> inst( 9, 5),
                             I_LogI  -> inst( 9, 5),
                             I_ASSR  -> inst( 9, 5),
-                            I_ASImm -> inst( 9, 5) ))
+                            I_ASImm -> inst( 9, 5),
+                            I_CSel  -> inst( 9, 5)
+                            ))
 
     rs2.bits := MuxLookup(itype, REG_X, Array(
                             I_LogSR -> inst(20,16),
                             I_ASSR  -> inst(20,16),
+                            I_CSel  -> inst(20,16),
                             I_BitF  -> inst( 4, 0), // Rd to rs2
                             I_MovI  -> inst( 4, 0)  // Rd to rs2
                           ))
@@ -81,7 +86,9 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
                               I_BitF  -> ROR))
 
     cond.bits := MuxLookup(itype,  COND_X, Array(
-                             I_BCImm -> inst( 3, 0) ))
+                             I_CSel  -> inst(15,12),
+                             I_BCImm -> inst( 3, 0)
+                           ))
 
     // Control
     val cdecoder = decoder.tail

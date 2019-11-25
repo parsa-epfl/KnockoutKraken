@@ -474,17 +474,17 @@
 /*  1 |  0 |  1 |  1  1  0  1  0  0  1  0 |     imm5       |      cond   |  1 |  0 |       Rn       |  0 |   nzcv     | CCMN             | 64-bit  */
 /*  1 |  1 |  1 |  1  1  0  1  0  0  1  0 |     imm5       |      cond   |  1 |  0 |       Rn       |  0 |   nzcv     | CCMP             | 64-bit  */
 
-/* Conditional compare (select) */
+/* Conditional select */
 /* 31 | 30 | 29 | 28 27 26 25 24 23 22 21 | 20 19 18 17 16 | 15 14 13 12 | 11 10 | 09 08 07 06 05 | 04 03 02 01 00| Instruction Page | Variant */
-/* sf | op |  S |  1  1  0  1  0  1  0  0 |     imm5       |      cond   |  op2  |       Rn       |       Rd      |                  |         */
-/*  0 |  0 |  0 |  1  1  0  1  0  1  0  0 |     imm5       |      cond   |  0  0 |       Rn       |       Rd      | CSEL             | 32-bit  */
-/*  0 |  0 |  0 |  1  1  0  1  0  1  0  0 |     imm5       |      cond   |  0  1 |       Rn       |       Rd      | CSINC            | 32-bit  */
-/*  0 |  1 |  0 |  1  1  0  1  0  1  0  0 |     imm5       |      cond   |  0  0 |       Rn       |       Rd      | CSINV            | 32-bit  */
-/*  0 |  1 |  0 |  1  1  0  1  0  1  0  0 |     imm5       |      cond   |  0  1 |       Rn       |       Rd      | CSNEG            | 32-bit  */
-/*  1 |  0 |  0 |  1  1  0  1  0  1  0  0 |     imm5       |      cond   |  0  0 |       Rn       |       Rd      | CSEL             | 64-bit  */
-/*  1 |  0 |  0 |  1  1  0  1  0  1  0  0 |     imm5       |      cond   |  0  1 |       Rn       |       Rd      | CSINC            | 64-bit  */
-/*  1 |  1 |  0 |  1  1  0  1  0  1  0  0 |     imm5       |      cond   |  0  0 |       Rn       |       Rd      | CSINV            | 64-bit  */
-/*  1 |  1 |  0 |  1  1  0  1  0  1  0  0 |     imm5       |      cond   |  0  1 |       Rn       |       Rd      | CSNEG            | 64-bit  */
+/* sf | op |  S |  1  1  0  1  0  1  0  0 |       Rm       |      cond   |  op2  |       Rn       |       Rd      |                  |         */
+/*  0 |  0 |  0 |  1  1  0  1  0  1  0  0 |       Rm       |      cond   |  0  0 |       Rn       |       Rd      | CSEL             | 32-bit  */
+/*  0 |  0 |  0 |  1  1  0  1  0  1  0  0 |       Rm       |      cond   |  0  1 |       Rn       |       Rd      | CSINC            | 32-bit  */
+/*  0 |  1 |  0 |  1  1  0  1  0  1  0  0 |       Rm       |      cond   |  0  0 |       Rn       |       Rd      | CSINV            | 32-bit  */
+/*  0 |  1 |  0 |  1  1  0  1  0  1  0  0 |       Rm       |      cond   |  0  1 |       Rn       |       Rd      | CSNEG            | 32-bit  */
+/*  1 |  0 |  0 |  1  1  0  1  0  1  0  0 |       Rm       |      cond   |  0  0 |       Rn       |       Rd      | CSEL             | 64-bit  */
+/*  1 |  0 |  0 |  1  1  0  1  0  1  0  0 |       Rm       |      cond   |  0  1 |       Rn       |       Rd      | CSINC            | 64-bit  */
+/*  1 |  1 |  0 |  1  1  0  1  0  1  0  0 |       Rm       |      cond   |  0  0 |       Rn       |       Rd      | CSINV            | 64-bit  */
+/*  1 |  1 |  0 |  1  1  0  1  0  1  0  0 |       Rm       |      cond   |  0  1 |       Rn       |       Rd      | CSNEG            | 64-bit  */
 
 /* Data-Processing (3 source) */
 /* 31 | 30 29 | 28 27 26 25 24 | 23 22 21 | 20 19 18 17 16 | 15 | 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00| Instruction Page | Variant */

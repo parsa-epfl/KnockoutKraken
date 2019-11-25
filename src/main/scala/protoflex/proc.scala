@@ -108,6 +108,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   // |         | Branch |            |
   // |         |        | Load Store |
   // |         |        |            |
+  val cond = Module(new CondUnit)
   val executer = Module(new ExecuteUnit())
   val brancher = Module(new BranchUnit())
   val ldstU = Module(new LoadStoreUnit())
@@ -119,6 +120,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   val commitExec = commitReg.io.deq.bits.exe
   val commitMem = commitReg.io.deq.bits.mem
   val commitBr = commitReg.io.deq.bits.br
+  val commitCond = commitReg.io.deq.bits.cond
   val commitTag = commitReg.io.deq.bits.tag
   val commitValid = commitReg.io.deq.valid
 
@@ -191,6 +193,12 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   val rVal1 = rfileVec(issued_dinst.tag).rs1_data
   val rVal2 = rfileVec(issued_dinst.tag).rs2_data
 
+  // connect CondUnit (ConditionHolds(bit(4) cond))
+  cond.io.dinst := issued_dinst
+  cond.io.rVal1 := rVal1
+  cond.io.rVal2 := rVal2
+  cond.io.nzcv := pregsVec(issued_dinst.tag).NZCV
+
   // connect executeUnit interface
   executer.io.dinst := issued_dinst
   executer.io.rVal1 := rVal1
@@ -198,7 +206,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
 
   // connect BranchUnit interface
   brancher.io.dinst := issued_dinst
-  brancher.io.nzcv := pregsVec(issued_dinst.tag).NZCV
+  brancher.io.cond := cond.io.condRes
 
   // connect LDSTUnit interface
   ldstU.io.dinst.bits := issuer.io.deq.bits
@@ -217,6 +225,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   commitReg.io.enq.bits.exe := executer.io.einst
   commitReg.io.enq.bits.br := brancher.io.binst
   commitReg.io.enq.bits.mem := ldstU.io.minst
+  commitReg.io.enq.bits.cond := cond.io.cinst
   commitReg.io.enq.bits.undef := issued_dinst.itype === I_X
   commitReg.io.enq.bits.inst32 := issued_dinst.inst32.bits
   commitReg.io.enq.bits.pc := issued_dinst.pc
@@ -235,6 +244,9 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
     }.elsewhen(commitMem.valid) {
       rfileVec(cpu).waddr := commitMem.bits.rd.bits
       rfileVec(cpu).wdata := commitMem.bits.res
+    }.elsewhen(commitCond.valid) {
+      rfileVec(cpu).waddr := commitCond.bits.rd.bits
+      rfileVec(cpu).wdata := commitCond.bits.res
     }.otherwise {
       // Default
       rfileVec(cpu).waddr := commitExec.bits.rd.bits
@@ -246,7 +258,8 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   when(commitValid && !commitReg.io.deq.bits.undef) {
     rfileVec(commitTag).wen :=
       (commitExec.valid && commitExec.bits.rd.valid) ||
-      (commitMem.valid && commitMem.bits.rd.valid)
+      (commitMem.valid && commitMem.bits.rd.valid) ||
+      (commitCond.valid && commitCond.bits.rd.valid)
 
     when(commitExec.valid && commitExec.bits.nzcv.valid) {
       pregsVec(commitTag).NZCV := commitExec.bits.nzcv.bits
@@ -343,6 +356,7 @@ class CommitInst(implicit val cfg : ProcConfig) extends Bundle {
   val exe = Valid(new EInst)
   val br = Valid(new BInst)
   val mem = Valid(new MInst)
+  val cond = Valid(new CInst)
   val undef = Output(Bool())
   val pc = Output(DATA_T)
   val inst32 = Output(INST_T)
