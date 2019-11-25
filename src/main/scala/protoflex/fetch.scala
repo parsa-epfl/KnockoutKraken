@@ -38,6 +38,7 @@ class FetchUnit(implicit val cfg: ProcConfig) extends Module
   val arbiter = Module(new RRArbiter(cfg.NB_THREADS))
 
   val insnReq = Wire(Valid(new FInst))
+  val insnReg = Reg(Valid(new FInst))
   val fetchReg = Module(new FlushReg(new FInst))
   fetchReg.io.flush := io.flush.valid && fetchReg.io.deq.bits.tag === io.flush.tag
 
@@ -49,7 +50,8 @@ class FetchUnit(implicit val cfg: ProcConfig) extends Module
 
   arbiter.io.ready := io.fetchEn.asUInt
   arbiter.io.next.ready := fetchReg.io.enq.ready
-  when(arbiter.io.next.valid && fetchReg.io.enq.ready) {
+  when((arbiter.io.next.valid && fetchReg.io.enq.ready && !insnReg.valid) ||
+         (insnReg.valid && fetchReg.io.enq.ready)) {
     currPC := prefetchPC(arbiter.io.next.bits)
     prefetchPC(arbiter.io.next.bits) := prefetchPC(arbiter.io.next.bits) + 4.U
   }
@@ -63,8 +65,14 @@ class FetchUnit(implicit val cfg: ProcConfig) extends Module
   insnReq.bits.tag := RegNext(arbiter.io.next.bits)
   insnReq.bits.pc := RegNext(currPC)
 
-  fetchReg.io.enq.bits := insnReq.bits
-  fetchReg.io.enq.valid := insnReq.valid
+  when(!fetchReg.io.enq.ready) {
+    insnReg := insnReq
+  }.elsewhen(fetchReg.io.enq.ready) {
+    insnReg.valid := false.B
+  }
+
+  fetchReg.io.enq.bits  := Mux(insnReg.valid, insnReg.bits, insnReq.bits)
+  fetchReg.io.enq.valid := Mux(insnReg.valid, insnReg.valid, insnReq.valid)
 
   when(io.commitReg.valid && io.commitReg.bits.br.valid) {
     prefetchPC(io.commitReg.bits.tag) := io.nextPC
