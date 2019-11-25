@@ -21,10 +21,12 @@ object DEC_LITS {
   val OP_ORN = 3
   val OP_EOR = 4
   val OP_EON = 5
-  val OP_ADD = 6
-  val OP_SUB = 7
 
-  // Branches singals
+  // Add/Subtract
+  val OP_ADD = 0
+  val OP_SUB = 1
+
+  // Branches signals
   val OP_B = 0
   val OP_BL = 1
   val OP_BCOND = 2

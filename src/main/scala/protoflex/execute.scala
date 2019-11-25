@@ -15,13 +15,12 @@ class EInst(implicit val cfg: ProcConfig) extends Bundle {
   val res = Output(DATA_T)
 }
 
-class BasicALU(implicit val cfg: ProcConfig) extends Module {
+class LogicALU(implicit val cfg: ProcConfig) extends Module {
   val io = IO(new Bundle {
                 val a = Input(DATA_T)
                 val b = Input(DATA_T)
                 val opcode = Input(OP_T)
                 val res = Output(UInt(DATA_W))
-                val nzcv = Output(NZCV_T)
               })
 
   val res =
@@ -32,33 +31,40 @@ class BasicALU(implicit val cfg: ProcConfig) extends Module {
                 OP_ORR -> (io.a  |  io.b),
                 OP_ORN -> (io.a  | ~io.b),
                 OP_EOR -> (io.a  ^  io.b),
-                OP_EON -> (io.a  ^ ~io.b),
-                OP_ADD -> (io.a  +  io.b),
-                OP_SUB -> (io.a  -  io.b)
+                OP_EON -> (io.a  ^ ~io.b)
               ))
 
-  /*
-   * NZCV flags
-   */
+  io.res := res
+}
+
+class AddWithCarry(implicit val cfg: ProcConfig) extends Module
+{
+  val io = IO(new Bundle {
+                val a = Input(DATA_T)
+                val b = Input(DATA_T)
+                val carry = Input(UInt(1.W))
+                val res = Output(DATA_T)
+                val nzcv = Output(NZCV_T)
+              })
+
+  val res = Wire(DATA_T)
+  val carry = Wire(UInt(1.W))
+  val unsigned_sum = WireInit(UInt((DATA_SZ + 1).W), io.a + io.b + io.carry)
+  val signed_sum   = WireInit(UInt((DATA_SZ + 1).W), (io.a.asSInt + io.b.asSInt).asUInt + io.carry)
+
+  res := unsigned_sum(DATA_SZ-1, 0)
+  carry := unsigned_sum(DATA_SZ)
+
+  // NZCV flags
   val nzcv = VecInit(NZCV_X.asBools)
-  nzcv(0) := res.asSInt < 0.S
+  nzcv(0) := res(DATA_SZ-1).asBool
   nzcv(1) := res === 0.U
   // Unsigned carry
-  nzcv(2) := (io.a +& io.b)(DATA_W.get) === 1.U
+  nzcv(2) := res =/= unsigned_sum
+  nzcv(3) := res =/= signed_sum
   // Sign carry (overflow)
-  val sign_sum = io.a.asSInt + io.b.asSInt
-  val isPos = io.a.asSInt > 0.S & io.b.asSInt > 0.S
-  val isNeg = io.a.asSInt < 0.S & io.b.asSInt < 0.S
-  when(isPos) {
-    nzcv(3) := !(sign_sum > 0.S)
-  }.elsewhen(isNeg) {
-    nzcv(3) := !(sign_sum < 0.S)
-  }.otherwise {
-    nzcv(3) := false.B
-  }
 
   io.nzcv := nzcv.asUInt
-
   io.res := res
 }
 
@@ -321,19 +327,30 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
                           I_BitF  -> bitfield.io.aluOp
                         ))
 
+  //
+  val addWithCarry = Module(new AddWithCarry)
+  addWithCarry.io.a := aluVal1
+  addWithCarry.io.b := Mux(io.dinst.op === OP_SUB, ~aluVal2, aluVal2)
+  addWithCarry.io.carry := Mux(io.dinst.op === OP_SUB, 1.U, 0.U)
+
   // Execute in ALU now that we have both inputs ready
-  val basicALU = Module(new BasicALU())
-  basicALU.io.a := aluVal1
-  basicALU.io.b := aluVal2
-  basicALU.io.opcode := aluOp
+  val logicALU = Module(new LogicALU())
+  logicALU.io.a := aluVal1
+  logicALU.io.b := aluVal2
+  logicALU.io.opcode := aluOp
 
   // Build executed instruction
   val einst = Wire(new EInst)
-  einst.res := MuxLookup(io.dinst.itype, basicALU.io.res, Array(
-                           I_MovI -> move.io.res
+  einst.res := MuxLookup(io.dinst.itype, logicALU.io.res, Array(
+                           I_BitF  -> logicALU.io.res,
+                           I_LogSR -> logicALU.io.res,
+                           I_LogI  -> logicALU.io.res,
+                           I_ASSR  -> addWithCarry.io.res,
+                           I_ASImm -> addWithCarry.io.res,
+                           I_MovI  -> move.io.res
                          ))
   einst.rd  := io.dinst.rd
-  einst.nzcv.bits := basicALU.io.nzcv
+  einst.nzcv.bits := addWithCarry.io.nzcv
   einst.nzcv.valid := io.dinst.nzcv_en
 
   // Output

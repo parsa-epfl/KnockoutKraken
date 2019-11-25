@@ -28,6 +28,8 @@ object DECODE_CONTROL_SIGNALS
   val OP_ORN = DEC_LITS.OP_ORN.U(OP_W)
   val OP_EOR = DEC_LITS.OP_EOR.U(OP_W)
   val OP_EON = DEC_LITS.OP_EON.U(OP_W)
+
+  // Add/Substract
   val OP_ADD = DEC_LITS.OP_ADD.U(OP_W)
   val OP_SUB = DEC_LITS.OP_SUB.U(OP_W)
 
@@ -144,10 +146,6 @@ object DECODE_MATCHING_TABLES
       //                      |       |       |  |  |  |  |  |  |
       //                      |       |       |  |  |  |  |  |  |
       //                      |       |       |  |  |  |  |  |  |
-      // Undef cases
-      LogI_undef -> decode_default,
-      BitF_undef -> decode_default,
-      DecBitMask_LogI_undef -> decode_default,
       // Logical (shifted register)
       LogSR_AND    -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, N),
       LogSR_BIC    -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, N),
@@ -181,10 +179,10 @@ object DECODE_MATCHING_TABLES
       // Conditional branch (immediate)
       BCond        -> List(I_BCImm, OP_BCOND, N, N, N, Y, N, Y, N),
       // Add/subtract (shifted register)
-      ASSR_ADD     -> List(I_ASSR, OP_ADD,    Y, Y, Y, N, Y, N, N),
-      ASSR_ADDS    -> List(I_ASSR, OP_ADD,    Y, Y, Y, N, Y, N, Y),
-      ASSR_SUB     -> List(I_ASSR, OP_SUB,    Y, Y, Y, N, Y, N, N),
-      ASSR_SUBS    -> List(I_ASSR, OP_SUB,    Y, Y, Y, N, Y, N, Y),
+      ASSR_ADD     -> List(I_ASSR,  OP_ADD,    Y, Y, Y, N, Y, N, N),
+      ASSR_ADDS    -> List(I_ASSR,  OP_ADD,    Y, Y, Y, N, Y, N, Y),
+      ASSR_SUB     -> List(I_ASSR,  OP_SUB,    Y, Y, Y, N, Y, N, N),
+      ASSR_SUBS    -> List(I_ASSR,  OP_SUB,    Y, Y, Y, N, Y, N, Y),
       // Add/subtract (immediate)
       ASImm_ADD_I  -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, N),
       ASImm_ADDS_I -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, Y),

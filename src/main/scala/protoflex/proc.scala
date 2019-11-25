@@ -96,7 +96,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   // Fetch
   val fetch = Module(new FetchUnit())
   // fetchReg in Fetch Unit
-  // Decodeqde
+  // Decode
   val decoder = Module(new DecodeUnit())
   val decReg = Module(new FlushReg(new DInst))
   // Issue
