@@ -54,6 +54,10 @@ object DECODE_CONTROL_SIGNALS
   val OP_CSINV = DEC_LITS.OP_CSINV.U(OP_W)
   val OP_CSNEG = DEC_LITS.OP_CSNEG.U(OP_W)
 
+  // Conditional Compare
+  val OP_CCMN = DEC_LITS.OP_CCMN.U(OP_W)
+  val OP_CCMP = DEC_LITS.OP_CCMP.U(OP_W)
+
   // Shiift Operation Signals
   val SHIFT_VAL_W = DEC_LITS.SHIFT_VAL_W.W
   def SHIFT_VAL_T = UInt(SHIFT_VAL_W)
@@ -106,7 +110,8 @@ object DECODE_CONTROL_SIGNALS
   val I_ASSR  = DEC_LITS.I_ASSR.U(TYPE_W)
   val I_ASImm = DEC_LITS.I_ASImm.U(TYPE_W)
   val I_LSImm = DEC_LITS.I_LSImm.U(TYPE_W)
-  val I_CSel = DEC_LITS.I_CSel.U(TYPE_W)
+  val I_CSel  = DEC_LITS.I_CSel.U(TYPE_W)
+  val I_CCImm = DEC_LITS.I_CCImm.U(TYPE_W)
 }
 
 object DECODE_MATCHING_TABLES
@@ -173,6 +178,9 @@ object DECODE_MATCHING_TABLES
       CSel_CSINC   -> List(I_CSel,  OP_CSINC, Y, Y, Y, N, N, Y, N),
       CSel_CSINV   -> List(I_CSel,  OP_CSINV, Y, Y, Y, N, N, Y, N),
       CSel_CSNEG   -> List(I_CSel,  OP_CSNEG, Y, Y, Y, N, N, Y, N),
+      // Conditional compare (immediate)
+      CCImm_CCMN   -> List(I_CCImm, OP_CCMN,  N, Y, N, Y, N, Y, Y),
+      CCImm_CCMP   -> List(I_CCImm, OP_CCMP,  N, Y, N, Y, N, Y, Y),
       // Unconditional branch (immediate)
       BImm_B       -> List(I_BImm , OP_B,     N, N, N, Y, N, N, N),
       BImm_BL      -> List(I_BImm , OP_BL,    N, N, N, Y, N, N, N),

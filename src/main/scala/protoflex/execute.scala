@@ -293,6 +293,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
     MuxLookup(io.dinst.itype, io.rVal2, Array(
                 I_ASSR  -> io.rVal2,
                 I_ASImm -> io.dinst.imm.bits,
+                I_CCImm -> io.dinst.imm.bits, // PASSTHROUGH
                 I_CSel  -> io.rVal2, // PASSTHROUGH
                 I_LogSR -> io.rVal2,
                 I_LogI  -> io.rVal1, // PASSTHROUGH
@@ -339,6 +340,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   val aluVal1 = MuxLookup(io.dinst.itype, io.rVal1, Array(
                             I_ASSR  -> io.rVal1,
                             I_ASImm -> io.rVal1,
+                            I_CCImm -> io.rVal1,
                             I_CSel  -> io.rVal1,
                             I_LogI  -> io.rVal1,
                             I_LogSR -> io.rVal1,
@@ -347,6 +349,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   val aluVal2 = MuxLookup(io.dinst.itype, shiftALU.io.res, Array(
                             I_ASSR  -> shiftALU.io.res,
                             I_ASImm -> shiftALU.io.res,
+                            I_CCImm -> shiftALU.io.res, // PASSTHROUGH imm
                             I_CSel  -> shiftALU.io.res, // PASSTHROUGH rs2
                             I_LogSR -> shiftALU.io.res,
                             I_LogI  -> decodeBitMask.io.wmask,
@@ -377,6 +380,10 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
       Mux(io.dinst.op === OP_CSINV || io.dinst.op === OP_CSNEG, ~io.rVal2, io.rVal1)
     addWithCarry.io.carry :=
       Mux(io.dinst.op === OP_CSINC || io.dinst.op === OP_CSNEG, 1.U, 0.U)
+  }.elsewhen(io.dinst.itype === I_CCImm) {
+    addWithCarry.io.a := aluVal1
+    addWithCarry.io.b := Mux(io.dinst.op === OP_CCMP, ~aluVal2, aluVal2)
+    addWithCarry.io.carry := Mux(io.dinst.op === OP_CCMP, 1.U, 0.U)
   }.elsewhen(io.dinst.itype === I_LogSR) { // Get nzcv flags from addWithCarry
     addWithCarry.io.a := 0.U
     addWithCarry.io.b := logicALU.io.res
@@ -397,6 +404,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   einst.rd := io.dinst.rd
   einst.nzcv.bits := MuxLookup(io.dinst.itype, addWithCarry.nzcv, Array(
                            I_LogSR -> addWithCarry.io.nzcv,
+                           I_CCImm -> Mux(condHolds.io.res, addWithCarry.io.nzcv, io.dinst.nzcv.bits)
                          ))
   einst.nzcv.valid := io.dinst.nzcv.valid
 
@@ -412,6 +420,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
                 I_ASSR  -> true.B,
                 I_ASImm -> true.B,
                 I_BitF  -> true.B,
+                I_CCImm -> true.B,
                 I_CSel  -> true.B
               ))
 }
