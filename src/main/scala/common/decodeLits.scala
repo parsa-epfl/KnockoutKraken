@@ -100,6 +100,7 @@ object DEC_LITS {
   val I_BitF  = 9 // Logical (shifted register)
   val I_CSel  = 10 // Conditional select
   val I_CCImm = 11 // Conditional compare (immediate)
+  val I_CCReg = 12 // Conditional compare (register)
 
 
   //                  RD
@@ -126,7 +127,7 @@ object DEC_LITS {
   val LI_BitF  = List(Y, Y, N, Y, N, N, N)
   val LI_CSel  = List(Y, Y, Y, N, N, Y, N)
   val LI_CCImm = List(N, Y, N, Y, N, Y, Y)
-
+  val LI_CCReg = List(N, Y, Y, N, N, Y, Y)
 
   def decode_table(inst_type : Int): List[Int] =
     inst_type match {
@@ -142,5 +143,6 @@ object DEC_LITS {
       case I_BitF  => LI_BitF
       case I_CSel  => LI_CSel
       case I_CCImm => LI_CCImm
+      case I_CCReg => LI_CCReg
     }
 }

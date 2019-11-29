@@ -112,6 +112,7 @@ object DECODE_CONTROL_SIGNALS
   val I_LSImm = DEC_LITS.I_LSImm.U(TYPE_W)
   val I_CSel  = DEC_LITS.I_CSel.U(TYPE_W)
   val I_CCImm = DEC_LITS.I_CCImm.U(TYPE_W)
+  val I_CCReg = DEC_LITS.I_CCReg.U(TYPE_W)
 }
 
 object DECODE_MATCHING_TABLES
@@ -181,16 +182,19 @@ object DECODE_MATCHING_TABLES
       // Conditional compare (immediate)
       CCImm_CCMN   -> List(I_CCImm, OP_CCMN,  N, Y, N, Y, N, Y, Y),
       CCImm_CCMP   -> List(I_CCImm, OP_CCMP,  N, Y, N, Y, N, Y, Y),
+      // Conditional compare (register)
+      CCReg_CCMN   -> List(I_CCReg, OP_CCMN,  N, Y, Y, N, N, Y, Y),
+      CCReg_CCMP   -> List(I_CCReg, OP_CCMP,  N, Y, Y, N, N, Y, Y),
       // Unconditional branch (immediate)
       BImm_B       -> List(I_BImm , OP_B,     N, N, N, Y, N, N, N),
       BImm_BL      -> List(I_BImm , OP_BL,    N, N, N, Y, N, N, N),
       // Conditional branch (immediate)
       BCond        -> List(I_BCImm, OP_BCOND, N, N, N, Y, N, Y, N),
       // Add/subtract (shifted register)
-      ASSR_ADD     -> List(I_ASSR,  OP_ADD,    Y, Y, Y, N, Y, N, N),
-      ASSR_ADDS    -> List(I_ASSR,  OP_ADD,    Y, Y, Y, N, Y, N, Y),
-      ASSR_SUB     -> List(I_ASSR,  OP_SUB,    Y, Y, Y, N, Y, N, N),
-      ASSR_SUBS    -> List(I_ASSR,  OP_SUB,    Y, Y, Y, N, Y, N, Y),
+      ASSR_ADD     -> List(I_ASSR,  OP_ADD,   Y, Y, Y, N, Y, N, N),
+      ASSR_ADDS    -> List(I_ASSR,  OP_ADD,   Y, Y, Y, N, Y, N, Y),
+      ASSR_SUB     -> List(I_ASSR,  OP_SUB,   Y, Y, Y, N, Y, N, N),
+      ASSR_SUBS    -> List(I_ASSR,  OP_SUB,   Y, Y, Y, N, Y, N, Y),
       // Add/subtract (immediate)
       ASImm_ADD_I  -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, N),
       ASImm_ADDS_I -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, Y),

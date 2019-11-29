@@ -122,6 +122,15 @@ object INSTRUCTIONS
   def CCImm_CCMN = BitPat("b10111010010?????????10?????0????")
   def CCImm_CCMP = BitPat("b11111010010?????????10?????0????")
 
+  // Conditional compare (register)
+  // 31 | 30 | 29 | 28 27 26 25 24 23 22 21 | 20 19 18 17 16 | 15 14 13 12 | 11 | 10 | 09 08 07 06 05 | 04 | 03 02 01 00| Instruction Page | Variant
+  // sf | op |  S |  1  1  0  1  0  0  1  0 |      Rm        |      cond   |  0 | o2 |       Rn       | o3 |   nzcv     |                  |
+  //  1 |  0 |  1 |  1  1  0  1  0  0  1  0 |      Rm        |      cond   |  0 |  0 |       Rn       |  0 |   nzcv     | CCMN             | 64-bit
+  //  1 |  1 |  1 |  1  1  0  1  0  0  1  0 |      Rm        |      cond   |  0 |  0 |       Rn       |  0 |   nzcv     | CCMP             | 64-bit
+  def CCReg = BitPat("b1?111010010?????????00?????0????")
+  def CCReg_CCMN = BitPat("b10111010010?????????00?????0????")
+  def CCReg_CCMP = BitPat("b11111010010?????????00?????0????")
+
   // Add/subtract (immediate)
   // I_ASImm
   // 31 | 30 | 29 | 28 27 26 25 24 | 23 22 | 21 20 19 18 17 16 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
