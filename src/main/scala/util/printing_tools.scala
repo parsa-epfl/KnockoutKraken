@@ -322,7 +322,7 @@ object SoftwareStructs {
       bundle.imm.valid : BigInt,
       bundle.shift_val.valid : BigInt,
       bundle.cond.valid : BigInt,
-      bundle.nzcv_en : BigInt,
+      bundle.nzcv.valid : BigInt,
       bundle.inst32.bits : BigInt,
       bundle.pc : BigInt)
   }

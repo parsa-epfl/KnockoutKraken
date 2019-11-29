@@ -23,7 +23,7 @@ object DInstExtractor {
       input.imm.valid,
       input.shift_val.valid,
       input.cond.valid,
-      input.nzcv_en,
+      input.nzcv.valid,
       input.inst32.valid
     )
     out

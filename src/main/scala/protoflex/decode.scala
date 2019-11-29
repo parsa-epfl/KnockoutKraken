@@ -23,7 +23,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
   val op = Output(OP_T)
 
   // Enables
-  val nzcv_en  = Output(Bool())
+  val nzcv  = Valid(NZCV_T)
 
   val tag = Output(cfg.TAG_T)
   val inst32 = Valid(INST_T)
@@ -89,10 +89,12 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
                              I_CSel  -> inst(15,12),
                              I_BCImm -> inst( 3, 0)
                            ))
+    nzcv.bits := MuxLookup(itype, NZCV_X, Array (
+                           ))
 
     // Control
     val cdecoder = decoder.tail
-    val csignals = Seq(op, rd.valid, rs1.valid, rs2.valid, imm.valid, shift_val.valid, cond.valid, nzcv_en)
+    val csignals = Seq(op, rd.valid, rs1.valid, rs2.valid, imm.valid, shift_val.valid, cond.valid, nzcv.valid)
     csignals zip cdecoder map { case (s, d) => s := d }
 
     tag := tag_
@@ -118,6 +120,7 @@ object DInst {
     dinst.shift_val.bits := SHIFT_VAL_X
     dinst.shift_type := SHIFT_TYPE_X
     dinst.cond.bits := COND_X
+    dinst.nzcv.bits := NZCV_X
 
     // Control
     dinst.op := OP_X
@@ -130,7 +133,7 @@ object DInst {
     dinst.imm.valid := N
     dinst.shift_val.valid := N
     dinst.cond.valid := N
-    dinst.nzcv_en := N
+    dinst.nzcv.valid := N
 
     // Instruction
     dinst.inst32.bits := INST_X
