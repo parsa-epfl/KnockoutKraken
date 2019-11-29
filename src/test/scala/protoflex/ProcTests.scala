@@ -106,9 +106,8 @@ object ProcDriver {
         !procStateDBG_.get.commitReg.bits.undef.peek.litToBoolean
     }
 
-    def getCommitedInst(): BigInt = {
-      procStateDBG_.get.commitReg.bits.inst32.peek.litValue
-    }
+    def getCommitedInst(): BigInt = { procStateDBG_.get.commitReg.bits.inst32.peek.litValue }
+    def getCommitedPC(): BigInt = { procStateDBG_.get.commitReg.bits.pc.peek.litValue }
 
 
     def printState():Unit = {

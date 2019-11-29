@@ -187,15 +187,17 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
     // RTL state after transplant must match initial QEMU state
     currState = cProcAxi.getPStateInternal(0)
     assert(currState.matches(pstate)._1)
-
     ti = System.nanoTime
+
     do {
-      if(cProcAxi.hasCommitedInst()) {
+      if(cProcAxi.hasCommitedInst) {
+        ti = System.nanoTime
         val inst = cProcAxi.getCommitedInst
+        val pc = cProcAxi.getCommitedPC
         clock.step(1)
         currState = cProcAxi.getPStateInternal(0)
 
-        simLog(s"OUT:0x${"%016x".format(currState.pc)}:  ${"%08x".format(inst)}")
+        simLog(s"OUT:0x${"%016x".format(pc)}:  ${"%08x".format(inst)}")
 
         // Ask QEMU to step and write state back to compare
         writePState2File(cfgSim.simStatePath, currState)
@@ -215,7 +217,7 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
     } while(!cProcAxi.tpuIsWorking && !timedOut);
     simLog(s"OUT:UNDEF_INST")
 
-    do { clock.step(0) } while(cProcAxi.getDone._1)
+    do {  } while(cProcAxi.getDone._1)
 
     clock.step(1)
     //simLog(s"DONE  PC:" + "%016x".format(cProcAxi.rdBRAM2PSTATE(0).pc))
