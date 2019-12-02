@@ -339,7 +339,7 @@ object SoftwareStructs {
 
   def binst(bundle : protoflex.BInst) : BInst = {
     new BInst (
-      bundle.offset.litValue  : BigInt,
+      bundle.pc.litValue  : BigInt,
       )
   }
 }

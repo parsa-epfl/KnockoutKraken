@@ -412,10 +412,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
                          ))
   einst.nzcv.valid := io.dinst.nzcv.valid
 
-  // Output
   io.einst.bits := einst
-
-  // invalid for non-data processing instructions
   io.einst.valid :=
     MuxLookup(io.dinst.itype, false.B, Array(
                 I_MovI  -> true.B,

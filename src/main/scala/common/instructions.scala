@@ -23,12 +23,20 @@ object INSTRUCTIONS
   def BImm_BL = BitPat("b100101??????????????????????????")
 
   // Conditional branch (immediate)
-  // I_BCImm
   // 31 30 29 28 27 26 25 | 24 | 23 22 21 20 19 18 17 16 15 14 13 12 11 10 09 08 07 06 05 | 04 | 03 02 01 00 | Instruction Page | Variant
   //  0  1  0  1  0  1  0 | o1 |                             imm19                        | o0 |    cond     |                  |
   //  0  1  0  1  0  1  0 |  0 |                             imm19                        |  0 |    cond     | B.cond           |    -
   def BCImm = BitPat("b01010100???????????????????0????")
   def BCond = BitPat("b01010100???????????????????0????")
+
+  // Compare and branch (immediate)          Bits[31:24]
+  // 31 | 30 29 28 27 26 25 | 24 | 23 22 21 20 19 18 17 16 15 14 13 12 11 10 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
+  // sf |  0  1  1  0  1  0 | op |                             imm19                        |      Rt        |                  |
+  //  1 |  0  1  1  0  1  0 |  0 |                             imm19                        |      Rt        | CBZ              | 64-bit
+  //  1 |  0  1  1  0  1  0 |  1 |                             imm19                        |      Rt        | CBNZ             | 64-bit
+  def CBImm = BitPat("b?011010?????????????????????????")
+  def CBImm_CBZ  = BitPat("b10110100????????????????????????")
+  def CBImm_CBNZ = BitPat("b10110101????????????????????????")
 
   // Logical (shifted register)
   // I_LogSR

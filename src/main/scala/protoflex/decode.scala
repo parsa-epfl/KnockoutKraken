@@ -63,8 +63,9 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
                             I_ASSR  -> inst(20,16),
                             I_CSel  -> inst(20,16),
                             I_CCReg -> inst(20,16),
-                            I_BitF  -> inst( 4, 0), // Rd to rs2
-                            I_MovI  -> inst( 4, 0)  // Rd to rs2
+                            I_BitF  -> inst( 4, 0),
+                            I_MovI  -> inst( 4, 0),
+                            I_CBImm -> inst( 4, 0)
                           ))
 
     imm.bits := MuxLookup(itype, IMM_X, Array(

@@ -123,12 +123,6 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   val commitValid = commitReg.io.deq.valid
 
   val nextPC = Wire(DATA_T)
-  when(commitBr.valid) {
-    nextPC := (pregsVec(commitTag).PC.zext + commitBr.bits.offset.asSInt).asUInt()
-  }.otherwise {
-    nextPC := pregsVec(commitTag).PC + 4.U
-  }
-
   // Interconnect -------------------------------------------
 
   // HOST <> TP
@@ -199,7 +193,10 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
 
   // connect BranchUnit interface
   brancher.io.dinst := issued_dinst
+  brancher.io.rVal1 := rVal1
+  brancher.io.rVal2 := rVal2
   brancher.io.cond := executer.io.condRes
+  brancher.io.pc := pregsVec(issued_tag).PC
 
   // connect LDSTUnit interface
   ldstU.io.dinst.bits := issuer.io.deq.bits
@@ -236,6 +233,9 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
     }.elsewhen(commitMem.valid) {
       rfileVec(cpu).waddr := commitMem.bits.rd.bits
       rfileVec(cpu).wdata := commitMem.bits.res
+    }.elsewhen(commitBr.valid) {
+      rfileVec(cpu).waddr := commitBr.bits.rd.bits
+      rfileVec(cpu).wdata := commitBr.bits.res
     }.otherwise {
       // Default
       rfileVec(cpu).waddr := commitExec.bits.rd.bits
@@ -244,20 +244,23 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
     rfileVec(cpu).wen := false.B
   }
 
+
+  when(commitBr.valid) {
+    nextPC := commitBr.bits.pc
+  }.otherwise {
+    nextPC := pregsVec(commitTag).PC + 4.U
+  }
   when(commitValid && !commitReg.io.deq.bits.undef) {
     rfileVec(commitTag).wen :=
       (commitExec.valid && commitExec.bits.rd.valid) ||
-      (commitMem.valid && commitMem.bits.rd.valid)
+      (commitMem.valid && commitMem.bits.rd.valid) ||
+      (commitBr.valid && commitBr.bits.rd.valid)
 
     when(commitExec.valid && commitExec.bits.nzcv.valid) {
       pregsVec(commitTag).NZCV := commitExec.bits.nzcv.bits
     }
 
-    when(commitBr.valid) {
-      pregsVec(commitTag).PC := (pregsVec(commitTag).PC.zext + commitBr.bits.offset.asSInt).asUInt()
-    }.otherwise {
-      pregsVec(commitTag).PC := pregsVec(commitTag).PC + 4.U
-    }
+   pregsVec(commitTag).PC := nextPC
   }
 
   // Start and stop ---------------

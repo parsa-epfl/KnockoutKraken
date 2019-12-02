@@ -51,6 +51,10 @@ object DEC_LITS {
   val OP_CCMN = 0
   val OP_CCMP = 1
 
+  // Conditional Branch
+  val OP_CBZ  = 0
+  val OP_CBNZ = 1
+
   // Shiift Operation Signals
   val SHIFT_VAL_W = 6 // maximum shift for 64 bit
   val SHIFT_VAL_X = 0
@@ -101,7 +105,7 @@ object DEC_LITS {
   val I_CSel  = 10 // Conditional select
   val I_CCImm = 11 // Conditional compare (immediate)
   val I_CCReg = 12 // Conditional compare (register)
-
+  val I_CBImm = 13 // Branch and Compare (immediate)
 
   //                  RD
   //                  EN
@@ -128,6 +132,7 @@ object DEC_LITS {
   val LI_CSel  = List(Y, Y, Y, N, N, Y, N)
   val LI_CCImm = List(N, Y, N, Y, N, Y, Y)
   val LI_CCReg = List(N, Y, Y, N, N, Y, Y)
+  val LI_CBImm = List(N, Y, N, Y, N, N, N)
 
   def decode_table(inst_type : Int): List[Int] =
     inst_type match {
@@ -144,5 +149,6 @@ object DEC_LITS {
       case I_CSel  => LI_CSel
       case I_CCImm => LI_CCImm
       case I_CCReg => LI_CCReg
+      case I_CBImm => LI_BCImm
     }
 }

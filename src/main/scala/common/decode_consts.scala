@@ -38,6 +38,9 @@ object DECODE_CONTROL_SIGNALS
   val OP_BL = DEC_LITS.OP_BL.U(OP_W)
   val OP_BCOND = DEC_LITS.OP_BCOND.U(OP_W)
 
+  val OP_CBZ = DEC_LITS.OP_CBZ.U(OP_W)
+  val OP_CBNZ = DEC_LITS.OP_CBZ.U(OP_W)
+
   // Move wide (immediate)
   val OP_MOVN = DEC_LITS.OP_MOVN.U(OP_W)
   val OP_MOVZ = DEC_LITS.OP_MOVZ.U(OP_W)
@@ -113,6 +116,7 @@ object DECODE_CONTROL_SIGNALS
   val I_CSel  = DEC_LITS.I_CSel.U(TYPE_W)
   val I_CCImm = DEC_LITS.I_CCImm.U(TYPE_W)
   val I_CCReg = DEC_LITS.I_CCReg.U(TYPE_W)
+  val I_CBImm = DEC_LITS.I_CBImm.U(TYPE_W)
 }
 
 object DECODE_MATCHING_TABLES
@@ -185,12 +189,7 @@ object DECODE_MATCHING_TABLES
       // Conditional compare (register)
       CCReg_CCMN   -> List(I_CCReg, OP_CCMN,  N, Y, Y, N, N, Y, Y),
       CCReg_CCMP   -> List(I_CCReg, OP_CCMP,  N, Y, Y, N, N, Y, Y),
-      // Unconditional branch (immediate)
-      BImm_B       -> List(I_BImm , OP_B,     N, N, N, Y, N, N, N),
-      BImm_BL      -> List(I_BImm , OP_BL,    N, N, N, Y, N, N, N),
-      // Conditional branch (immediate)
-      BCond        -> List(I_BCImm, OP_BCOND, N, N, N, Y, N, Y, N),
-      // Add/subtract (shifted register)
+     // Add/subtract (shifted register)
       ASSR_ADD     -> List(I_ASSR,  OP_ADD,   Y, Y, Y, N, Y, N, N),
       ASSR_ADDS    -> List(I_ASSR,  OP_ADD,   Y, Y, Y, N, Y, N, Y),
       ASSR_SUB     -> List(I_ASSR,  OP_SUB,   Y, Y, Y, N, Y, N, N),
@@ -200,6 +199,14 @@ object DECODE_MATCHING_TABLES
       ASImm_ADDS_I -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, Y),
       ASImm_SUB_I  -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, Y, N, N),
       ASImm_SUBS_I -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, Y, N, Y),
+      // Unconditional branch (immediate)
+      BImm_B       -> List(I_BImm,  OP_B,     N, N, N, Y, N, N, N),
+      BImm_BL      -> List(I_BImm,  OP_BL,    N, N, N, Y, N, N, N),
+      // Conditional branch (immediate)
+      BCond        -> List(I_BCImm, OP_BCOND, N, N, N, Y, N, Y, N),
+      // Compare and branch (immediate)
+      CBImm_CBZ    -> List(I_CBImm, OP_CBZ,   N, N, Y, Y, N, N, N),
+      CBImm_CBNZ   -> List(I_CBImm, OP_CBNZ,  N, N, Y, Y, N, N, N),
       // load/store (immediate)
       LDR_I        -> List(I_LSImm, OP_LDR,   Y, N, N, Y, N, N, N),
     )
