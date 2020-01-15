@@ -103,6 +103,15 @@ object DECODE_CONTROL_SIGNALS
 
   // load/store signal
   val OP_LDR = DEC_LITS.OP_LDR.U(OP_W)
+  // Load/store operation
+  val OP_STRB  = DEC_LITS.OP_STRB.U(OP_W)
+  val OP_STRH  = DEC_LITS.OP_STRH.U(OP_W)
+  val OP_STR32 = DEC_LITS.OP_STR32.U(OP_W)
+  val OP_STR64 = DEC_LITS.OP_STR64.U(OP_W)
+  val OP_LDRB  = DEC_LITS.OP_LDRB.U(OP_W)
+  val OP_LDRH  = DEC_LITS.OP_LDRH.U(OP_W)
+  val OP_LDR32 = DEC_LITS.OP_LDR32.U(OP_W)
+  val OP_LDR64 = DEC_LITS.OP_LDR64.U(OP_W)
 
   // Instruction Types for chisel
   val TYPE_W = DEC_LITS.TYPE_W.W
@@ -122,6 +131,7 @@ object DECODE_CONTROL_SIGNALS
   val I_CCReg = DEC_LITS.I_CCReg.U(TYPE_W)
   val I_CBImm = DEC_LITS.I_CBImm.U(TYPE_W)
   val I_PCRel = DEC_LITS.I_PCRel.U(TYPE_W)
+  val I_LSUImm = DEC_LITS.I_LSUImm.U(TYPE_W)
 }
 
 object DECODE_MATCHING_TABLES
@@ -215,8 +225,17 @@ object DECODE_MATCHING_TABLES
       // Compare and branch (immediate)
       CBImm_CBZ    -> List(I_CBImm, OP_CBZ,   N, N, Y, Y, N, N, N),
       CBImm_CBNZ   -> List(I_CBImm, OP_CBNZ,  N, N, Y, Y, N, N, N),
+      // Load/store register (unsigned immediate):
+      LSUImm_S8     -> List(I_LSUImm, OP_STRB, Y, Y, Y, Y, N, N, N),
+      LSUImm_S16    -> List(I_LSUImm, OP_STRH, Y, Y, Y, Y, N, N, N),
+      LSUImm_S32    -> List(I_LSUImm, OP_STR32,Y, Y, Y, Y, N, N, N),
+      LSUImm_S64    -> List(I_LSUImm, OP_STR64,Y, Y, Y, Y, N, N, N),
+      LSUImm_L8     -> List(I_LSUImm, OP_LDRB, Y, Y, Y, Y, N, N, N),
+      LSUImm_L16    -> List(I_LSUImm, OP_LDRH, Y, Y, Y, Y, N, N, N),
+      LSUImm_L32    -> List(I_LSUImm, OP_LDR32,Y, Y, Y, Y, N, N, N),
+      LSUImm_L64    -> List(I_LSUImm, OP_LDR64,Y, Y, Y, Y, N, N, N),
       // load/store (immediate)
-      LDR_I        -> List(I_LSImm, OP_LDR,   Y, N, N, Y, N, N, N),
+      LDR_I        -> List(I_LSImm, OP_LDR,   Y, N, N, Y, N, N, N)
     )
 }
 

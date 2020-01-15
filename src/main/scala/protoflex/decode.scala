@@ -43,9 +43,10 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
                            I_MovI  -> inst( 4, 0),
                            I_ASImm -> inst( 4, 0),
                            I_ASSR  -> inst( 4, 0),
-                           I_LSImm -> inst( 4, 0),
                            I_ASSR  -> inst( 4, 0),
-                           I_CSel  -> inst( 4, 0)
+                           I_CSel  -> inst( 4, 0),
+                           I_LSImm -> inst( 4, 0),
+                           I_LSUImm-> inst( 4, 0)
                            ))
 
     rs1.bits := MuxLookup(itype, REG_X, Array(
@@ -56,7 +57,8 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
                             I_ASImm -> inst( 9, 5),
                             I_CCImm -> inst( 9, 5),
                             I_CCReg -> inst( 9, 5),
-                            I_CSel  -> inst( 9, 5)
+                            I_CSel  -> inst( 9, 5),
+                            I_LSUImm-> inst( 9, 5)
                             ))
 
     rs2.bits := MuxLookup(itype, REG_X, Array(
@@ -66,7 +68,8 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
                             I_CCReg -> inst(20,16),
                             I_BitF  -> inst( 4, 0),
                             I_MovI  -> inst( 4, 0),
-                            I_CBImm -> inst( 4, 0)
+                            I_CBImm -> inst( 4, 0),
+                            I_LSUImm-> inst( 4, 0)
                           ))
 
     imm.bits := MuxLookup(itype, IMM_X, Array(
@@ -78,7 +81,9 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
                             I_BImm  -> inst(25, 0),
                             I_BCImm -> inst(23, 5),
                             I_ASImm -> inst(21,10),
-                            I_LSImm -> inst(23, 5) ))
+                            I_LSImm -> inst(23, 5),
+                            I_LSUImm-> inst(20,12)
+                          ))
 
     shift_val.bits := MuxLookup(itype, SHIFT_VAL_X, Array(
                                   I_LogSR -> inst(15,10),

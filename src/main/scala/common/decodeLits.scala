@@ -94,6 +94,16 @@ object DEC_LITS {
   // load/store operation signals
   val OP_LDR = 0
 
+  // Load/store operation
+  val OP_STRB  = 0
+  val OP_STRH  = 1
+  val OP_STR32 = 2
+  val OP_STR64 = 3
+  val OP_LDRB  = 4
+  val OP_LDRH  = 5
+  val OP_LDR32 = 6
+  val OP_LDR64 = 7
+
   // Instruction Types for scala
   val TYPE_W = 4
   val I_X = 0
@@ -111,6 +121,7 @@ object DEC_LITS {
   val I_CCReg = 12 // Conditional compare (register)
   val I_CBImm = 13 // Branch and Compare (immediate)
   val I_PCRel = 14 // PC-Relative
+  val I_LSUImm = 15 // Load Store (unsigned immediate)
 
   //                  RD
   //                  EN
@@ -139,6 +150,7 @@ object DEC_LITS {
   val LI_CCReg = List(N, Y, Y, N, N, Y, Y)
   val LI_CBImm = List(N, Y, N, Y, N, N, N)
   val LI_PCRel = List(Y, N, N, Y, N, N, N)
+  val LI_LSUImm = List(Y, Y, Y, Y, N, N, N)
 
   def decode_table(inst_type : Int): List[Int] =
     inst_type match {
@@ -157,5 +169,6 @@ object DEC_LITS {
       case I_CCReg => LI_CCReg
       case I_CBImm => LI_BCImm
       case I_PCRel => LI_PCRel
+      case I_LSUImm => LI_LSUImm
     }
 }

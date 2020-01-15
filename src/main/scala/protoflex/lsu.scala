@@ -7,34 +7,34 @@ import common.DECODE_CONTROL_SIGNALS._
 import common.PROCESSOR_TYPES._
 
 // Minst is executed memory instruction
-class MInst(implicit val cfg: ProcConfig) extends Bundle {
+class LegacyMInst(implicit val cfg: ProcConfig) extends Bundle {
   val rd = Valid(REG_T)
   val res = Output(DATA_T)
 }
 
 // memory request from lsu to cache
-class MemReq(implicit val cfg: ProcConfig) extends Bundle{
+class LegacyMemReq(implicit val cfg: ProcConfig) extends Bundle{
   val addr = UInt(PADDR.W)
   val rw = C_T
   val data = DATA_T
 }
 
 // memory response from cache to lsu
-class MemRes(implicit val cfg: ProcConfig) extends Bundle{
+class LegacyMemRes(implicit val cfg: ProcConfig) extends Bundle{
   val data = DATA_T
 }
 
-class LoadStoreUnitIO(implicit val cfg: ProcConfig) extends Bundle
+class LegacyLoadStoreUnitIO(implicit val cfg: ProcConfig) extends Bundle
 {
   val dinst = Input(Valid(new DInst))
   val rVal1 = Input(DATA_T)
   val rVal2 = Input(DATA_T)
 
-  val minst = Output(Valid(new MInst))
+  val minst = Output(Valid(new LegacyMInst))
 
   // memory interface
-  val memReq = Output(Valid(new MemReq))
-  val memRes = Input(Valid(new MemRes))
+  val memReq = Output(Valid(new LegacyMemReq))
+  val memRes = Input(Valid(new LegacyMemRes))
 
   // write tlb entriles for initial testing
   val write_tlb_entry  = Input(UInt(TLB_SZ.W))
@@ -46,9 +46,9 @@ class LoadStoreUnitIO(implicit val cfg: ProcConfig) extends Bundle
   * rVal1 & rVal2 - input register values
   * pc - program counter (for pc relative addressing)
   * */
-class LoadStoreUnit(implicit val cfg: ProcConfig) extends Module
+class LegacyLoadStoreUnit(implicit val cfg: ProcConfig) extends Module
 {
-  val io = IO(new LoadStoreUnitIO)
+  val io = IO(new LegacyLoadStoreUnitIO)
 
   // register l/s instruction
   val dinst_reg = Reg(io.dinst.bits.cloneType)
@@ -126,7 +126,7 @@ class LoadStoreUnit(implicit val cfg: ProcConfig) extends Module
   }
 
   // create Minst output
-  val minst = Wire(new MInst)
+  val minst = Wire(new LegacyMInst)
   minst.res := io.memRes.bits.data
   minst.rd := dinst_reg.rd
 
