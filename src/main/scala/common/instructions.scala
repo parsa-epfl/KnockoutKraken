@@ -11,9 +11,17 @@ object INSTRUCTIONS
 {
   def INST_X  = BitPat.dontCare(32)
 
-  // Branches immediate
+
+  // PC-rel. addressing
+  // 31 | 30 29 | 28 27 26 25 24 | 23 22 21 20 19 18 17 16 15 14 13 12 11 10 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
+  // op | immlo |  1  0  0  0  0 |                                 immhi                    |        Rd      |                  |
+  //  0 | immlo |  1  0  0  0  0 |                                 immhi                    |        Rd      | ADR              |    -
+  //  1 | immlo |  1  0  0  0  0 |                                 immhi                    |        Rd      | ADRP             |    -
+  def PCRel = BitPat("b???10000????????????????????????")
+  def PCRel_ADR  = BitPat("b0??10000????????????????????????")
+  def PCRel_ADRP = BitPat("b1??10000????????????????????????")
+
   // Unconditional branch (immediate)
-  // I_BImm
   // 31 | 30 29 28 27 26 | 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10 09 08 07 06 05 04 03 02 01 00 | Instruction Page | Variant
   // op |  0  0  1  0  1 |                                   imm26                                       |                  |    -
   //  0 |  0  0  1  0  1 |                                   imm26                                       | B                |    -
@@ -39,7 +47,6 @@ object INSTRUCTIONS
   def CBImm_CBNZ = BitPat("b10110101????????????????????????")
 
   // Logical (shifted register)
-  // I_LogSR
   // 31 | 30 29 | 28 27 26 25 24 | 23 22 | 21 | 20 19 18 17 16 | 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00| Instruction Page | Variant
   // sf |  opc  |  0  1  0  1  0 | shift |  N |      Rm        |       imm6        |       Rn       |       Rd      |                  |
   //  1 |  0  0 |  0  1  0  1  0 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd      | AND              | 64-bit
@@ -140,7 +147,6 @@ object INSTRUCTIONS
   def CCReg_CCMP = BitPat("b11111010010?????????00?????0????")
 
   // Add/subtract (immediate)
-  // I_ASImm
   // 31 | 30 | 29 | 28 27 26 25 24 | 23 22 | 21 20 19 18 17 16 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
   // sf | op |  S |  1  0  0  0  1 | 0  sh |               imm12                 |      Rn        |        Rd      | ADD              | 64-bit
   //  1 |  0 |  0 |  1  0  0  0  1 | 0  sh |               imm12                 |      Rn        |        Rd      | ADD              | 64-bit

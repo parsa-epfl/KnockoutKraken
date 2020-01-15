@@ -279,6 +279,7 @@ class ExecuteUnitIO(implicit val cfg: ProcConfig) extends Bundle
   val nzcv = Input(NZCV_T)
 
   val condRes = Output(Bool())
+
   val einst = Output(Valid(new EInst))
 }
 
@@ -292,6 +293,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   shiftALU.io.word :=
     MuxLookup(io.dinst.itype, io.rVal2, Array(
                 I_ASSR  -> io.rVal2,
+                I_PCRel -> io.dinst.imm.bits, // LSL 12
                 I_ASImm -> io.dinst.imm.bits,
                 I_CCImm -> io.dinst.imm.bits, // PASSTHROUGH
                 I_CCReg -> io.rVal2, // PASSTHROUGH

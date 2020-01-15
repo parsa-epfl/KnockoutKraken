@@ -21,6 +21,10 @@ object DECODE_CONTROL_SIGNALS
   def OP_T = UInt(OP_W)
   val OP_X = DEC_LITS.OP_X.U(OP_W)
 
+  // PC-rel
+  val OP_ADR  = DEC_LITS.OP_ADR.U(OP_W)
+  val OP_ADRP = DEC_LITS.OP_ADRP.U(OP_W)
+
   // ALU Operation Signals
   val OP_AND = DEC_LITS.OP_AND.U(OP_W)
   val OP_BIC = DEC_LITS.OP_BIC.U(OP_W)
@@ -117,6 +121,7 @@ object DECODE_CONTROL_SIGNALS
   val I_CCImm = DEC_LITS.I_CCImm.U(TYPE_W)
   val I_CCReg = DEC_LITS.I_CCReg.U(TYPE_W)
   val I_CBImm = DEC_LITS.I_CBImm.U(TYPE_W)
+  val I_PCRel = DEC_LITS.I_PCRel.U(TYPE_W)
 }
 
 object DECODE_MATCHING_TABLES
@@ -156,6 +161,9 @@ object DECODE_MATCHING_TABLES
       //                      |       |       |  |  |  |  |  |  |
       //                      |       |       |  |  |  |  |  |  |
       //                      |       |       |  |  |  |  |  |  |
+      // PC-Rel
+      PCRel_ADR    -> List(I_PCRel, OP_ADR,   Y, N, N, Y, N, N, N),
+      PCRel_ADRP   -> List(I_PCRel, OP_ADRP,  Y, N, N, Y, N, N, N),
       // Logical (shifted register)
       LogSR_AND    -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, N),
       LogSR_BIC    -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, N),
@@ -171,25 +179,25 @@ object DECODE_MATCHING_TABLES
       LogI_EOR     -> List(I_LogI,  OP_EOR,   Y, Y, N, Y, N, N, N),
       LogI_ANDS    -> List(I_LogI,  OP_AND,   Y, Y, N, Y, N, N, Y),
       // Move wide (immediate)
-      MovI_MOVN     -> List(I_MovI, OP_MOVN,  Y, N, N, Y, N, N, N),
-      MovI_MOVZ     -> List(I_MovI, OP_MOVZ,  Y, N, N, Y, N, N, N),
-      MovI_MOVK     -> List(I_MovI, OP_MOVK,  Y, N, N, Y, N, N, N),
+      MovI_MOVN     -> List(I_MovI, OP_MOVN,  Y, N, Y, Y, N, N, N),
+      MovI_MOVZ     -> List(I_MovI, OP_MOVZ,  Y, N, Y, Y, N, N, N),
+      MovI_MOVK     -> List(I_MovI, OP_MOVK,  Y, N, Y, Y, N, N, N),
       // Bitfield
-      BitF_SBFM    -> List(I_BitF,  OP_SBFM,  Y, Y, N, Y, N, N, N),
-      BitF_BFM     -> List(I_BitF,  OP_BFM,   Y, Y, N, Y, N, N, N),
-      BitF_UBFM    -> List(I_BitF,  OP_UBFM,  Y, Y, N, Y, N, N, N),
+      BitF_SBFM    -> List(I_BitF,  OP_SBFM,  Y, N, Y, Y, N, N, N),
+      BitF_BFM     -> List(I_BitF,  OP_BFM,   Y, N, Y, Y, N, N, N),
+      BitF_UBFM    -> List(I_BitF,  OP_UBFM,  Y, N, Y, Y, N, N, N),
       // Conditional select
       CSel_CSEL    -> List(I_CSel,  OP_CSEL,  Y, Y, Y, N, N, Y, N),
       CSel_CSINC   -> List(I_CSel,  OP_CSINC, Y, Y, Y, N, N, Y, N),
       CSel_CSINV   -> List(I_CSel,  OP_CSINV, Y, Y, Y, N, N, Y, N),
       CSel_CSNEG   -> List(I_CSel,  OP_CSNEG, Y, Y, Y, N, N, Y, N),
       // Conditional compare (immediate)
-      CCImm_CCMN   -> List(I_CCImm, OP_CCMN,  N, Y, N, Y, N, Y, Y),
-      CCImm_CCMP   -> List(I_CCImm, OP_CCMP,  N, Y, N, Y, N, Y, Y),
+      CCImm_CCMN   -> List(I_CCImm, OP_CCMN,  N, N, Y, Y, N, Y, Y),
+      CCImm_CCMP   -> List(I_CCImm, OP_CCMP,  N, N, Y, Y, N, Y, Y),
       // Conditional compare (register)
       CCReg_CCMN   -> List(I_CCReg, OP_CCMN,  N, Y, Y, N, N, Y, Y),
       CCReg_CCMP   -> List(I_CCReg, OP_CCMP,  N, Y, Y, N, N, Y, Y),
-     // Add/subtract (shifted register)
+      // Add/subtract (shifted register)
       ASSR_ADD     -> List(I_ASSR,  OP_ADD,   Y, Y, Y, N, Y, N, N),
       ASSR_ADDS    -> List(I_ASSR,  OP_ADD,   Y, Y, Y, N, Y, N, Y),
       ASSR_SUB     -> List(I_ASSR,  OP_SUB,   Y, Y, Y, N, Y, N, N),

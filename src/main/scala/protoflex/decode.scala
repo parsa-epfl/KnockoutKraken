@@ -36,6 +36,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
     // Data
     val itype = decoder.head
     rd.bits := MuxLookup(itype,  REG_X, Array(
+                           I_PCRel -> inst( 4, 0),
                            I_BitF  -> inst( 4, 0),
                            I_LogSR -> inst( 4, 0),
                            I_LogI  -> inst( 4, 0),
@@ -69,9 +70,10 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
                           ))
 
     imm.bits := MuxLookup(itype, IMM_X, Array(
+                            I_PCRel -> Cat(inst(23,5), inst(30,29)), // immlo(30,29), immhi(23,25)
                             I_BitF  -> inst(21,10), // immr(21:16), imms(15:10)
                             I_LogI  -> inst(21,10), // immr(21:16), imms(15:10)
-                            I_MovI  -> inst(20+2, 5), // hw(22,21), imm16(20:5)
+                            I_MovI  -> inst(20+2,5), // hw(22,21), imm16(20:5)
                             I_CCImm -> inst(20,16),
                             I_BImm  -> inst(25, 0),
                             I_BCImm -> inst(23, 5),

@@ -119,6 +119,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   val commitExec = commitReg.io.deq.bits.exe
   val commitMem = commitReg.io.deq.bits.mem
   val commitBr = commitReg.io.deq.bits.br
+  val commitPcRel = commitReg.io.deq.bits.pcrel
   val commitTag = commitReg.io.deq.bits.tag
   val commitValid = commitReg.io.deq.valid
 
@@ -153,7 +154,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   fetch.io.pcVec zip pregsVec foreach {case (pcFetch, pcState) => pcFetch := pcState.PC}
   fetch.io.nextPC := nextPC
   fetch.io.commitReg.bits := commitReg.io.deq.bits
-  fetch.io.commitReg.valid := commitValid
+  fetch.io.commitReg.valid := commitReg.io.deq.valid
   insnTLB.io.vaddr := fetch.io.pc.data.get
   fetch.io.hit := !insnTLB.io.miss.valid
   fetch.io.insn := ppage.io.getPort(1).dataOut.get
@@ -173,7 +174,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   val issued_tag = issued_dinst.tag
   issuer.io.deq.ready := commitReg.io.enq.ready
   issuer.io.commitReg.bits := commitReg.io.deq.bits
-  issuer.io.commitReg.valid := commitValid
+  issuer.io.commitReg.valid := commitReg.io.deq.valid
 
   /** Execute */
   // connect rfile read(address) interface
@@ -214,6 +215,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   // CommitReg
   commitReg.io.enq.bits.exe := executer.io.einst
   commitReg.io.enq.bits.br := brancher.io.binst
+  commitReg.io.enq.bits.pcrel := brancher.io.pcrel
   commitReg.io.enq.bits.mem := ldstU.io.minst
   commitReg.io.enq.bits.undef := issued_dinst.itype === I_X
   commitReg.io.enq.bits.inst32 := issued_dinst.inst32.bits
@@ -232,11 +234,11 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
       rfileVec(cpu).wdata := commitExec.bits.res
     }.elsewhen(commitMem.valid) {
       rfileVec(cpu).waddr := commitMem.bits.rd.bits
-      rfileVec(cpu).wdata := commitMem.bits.res
-    }.elsewhen(commitBr.valid) {
-      rfileVec(cpu).waddr := commitBr.bits.rd.bits
-      rfileVec(cpu).wdata := commitBr.bits.res
-    }.otherwise {
+      rfileVec(cpu).wdata := commitMem.bits.rd.res
+    }.elsewhen(commitPcRel.valid) {
+      rfileVec(cpu).waddr := commitPcRel.bits.rd
+      rfileVec(cpu).wdata := commitPcRel.bits.res
+   }.otherwise {
       // Default
       rfileVec(cpu).waddr := commitExec.bits.rd.bits
       rfileVec(cpu).wdata := commitExec.bits.res
@@ -244,23 +246,24 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
     rfileVec(cpu).wen := false.B
   }
 
-
-  when(commitBr.valid) {
-    nextPC := commitBr.bits.pc
-  }.otherwise {
-    nextPC := pregsVec(commitTag).PC + 4.U
-  }
+  nextPC := pregsVec(commitTag).PC
   when(commitValid && !commitReg.io.deq.bits.undef) {
     rfileVec(commitTag).wen :=
       (commitExec.valid && commitExec.bits.rd.valid) ||
       (commitMem.valid && commitMem.bits.rd.valid) ||
-      (commitBr.valid && commitBr.bits.rd.valid)
+      (commitPcRel.valid)
 
     when(commitExec.valid && commitExec.bits.nzcv.valid) {
       pregsVec(commitTag).NZCV := commitExec.bits.nzcv.bits
     }
 
-   pregsVec(commitTag).PC := nextPC
+    when(commitBr.valid) {
+      nextPC := commitBr.bits.pc
+    }.otherwise {
+      nextPC := pregsVec(commitTag).PC + 4.U
+    }
+
+    pregsVec(commitTag).PC := nextPC
   }
 
   // Start and stop ---------------
@@ -346,6 +349,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
 class CommitInst(implicit val cfg : ProcConfig) extends Bundle {
   val exe = Valid(new EInst)
   val br = Valid(new BInst)
+  val pcrel = Valid(new PCRel)
   val mem = Valid(new MInst)
   val undef = Output(Bool())
   val pc = Output(DATA_T)

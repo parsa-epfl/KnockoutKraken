@@ -22,6 +22,10 @@ object DEC_LITS {
   val OP_EOR = 4
   val OP_EON = 5
 
+  // PC-rel
+  val OP_ADR  = 0
+  val OP_ADRP = 1
+
   // Add/Subtract
   val OP_ADD = 0
   val OP_SUB = 1
@@ -106,6 +110,7 @@ object DEC_LITS {
   val I_CCImm = 11 // Conditional compare (immediate)
   val I_CCReg = 12 // Conditional compare (register)
   val I_CBImm = 13 // Branch and Compare (immediate)
+  val I_PCRel = 14 // PC-Relative
 
   //                  RD
   //                  EN
@@ -133,6 +138,7 @@ object DEC_LITS {
   val LI_CCImm = List(N, Y, N, Y, N, Y, Y)
   val LI_CCReg = List(N, Y, Y, N, N, Y, Y)
   val LI_CBImm = List(N, Y, N, Y, N, N, N)
+  val LI_PCRel = List(Y, N, N, Y, N, N, N)
 
   def decode_table(inst_type : Int): List[Int] =
     inst_type match {
@@ -150,5 +156,6 @@ object DEC_LITS {
       case I_CCImm => LI_CCImm
       case I_CCReg => LI_CCReg
       case I_CBImm => LI_BCImm
+      case I_PCRel => LI_PCRel
     }
 }
