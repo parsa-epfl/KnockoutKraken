@@ -45,13 +45,17 @@ class ConditionHolds(implicit val cfg: ProcConfig) extends Module
                 val res  = Output(Bool())
               })
   val result = WireInit(false.B)
-  /* */when (io.cond(3,1) === "b000".U) {result := (io.nzcv(2) === 1.U);}
-  .elsewhen (io.cond(3,1) === "b001".U) {result := (io.nzcv(1) === 1.U);}
-  .elsewhen (io.cond(3,1) === "b010".U) {result := (io.nzcv(3) === 1.U);}
-  .elsewhen (io.cond(3,1) === "b011".U) {result := (io.nzcv(0) === 1.U);}
-  .elsewhen (io.cond(3,1) === "b100".U) {result := (io.nzcv(1) === 1.U);}
-  .elsewhen (io.cond(3,1) === "b101".U) {result := (io.nzcv(3) === 1.U);}
-  .elsewhen (io.cond(3,1) === "b110".U) {result := (io.nzcv(3) === 1.U);}
+  val PSTATE_N = io.nzcv(3)
+  val PSTATE_Z = io.nzcv(2)
+  val PSTATE_C = io.nzcv(1)
+  val PSTATE_V = io.nzcv(0)
+  /* */when (io.cond(3,1) === "b000".U) {result := (PSTATE_N === 1.U);}
+  .elsewhen (io.cond(3,1) === "b001".U) {result := (PSTATE_C === 1.U);}
+  .elsewhen (io.cond(3,1) === "b010".U) {result := (PSTATE_N === 1.U);}
+  .elsewhen (io.cond(3,1) === "b011".U) {result := (PSTATE_V === 1.U);}
+  .elsewhen (io.cond(3,1) === "b100".U) {result := (PSTATE_C === 1.U && PSTATE_Z === 0.U);}
+  .elsewhen (io.cond(3,1) === "b101".U) {result := (PSTATE_N === PSTATE_V);}
+  .elsewhen (io.cond(3,1) === "b110".U) {result := (PSTATE_N === PSTATE_V && PSTATE_Z === 0.U);}
   .elsewhen (io.cond(3,1) === "b111".U) {result := true.B}
 
   when(io.cond(0) === 1.U && io.cond =/= "b1111".U) {

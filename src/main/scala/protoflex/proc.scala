@@ -2,7 +2,6 @@
 package protoflex
 
 import chisel3._
-import chisel3.core.withReset
 import chisel3.util.{Decoupled, Queue, RegEnable, Valid, log2Ceil}
 
 import common.constBRAM.TDPBRAM36ParamDict
@@ -59,16 +58,18 @@ class ProcStateDBG(implicit val cfg : ProcConfig) extends Bundle
 class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
 {
   val io = IO(new Bundle {
-    // memory interface TODO
-    // val mem_req = Output(Valid(new MemRes))
-    // val mem_res = Input(Valid(new MemRes))
-
     // BRAM Host Ports
     val ppageBRAM = new BRAMPortAXI(0)(cfg.ppageBRAMc)
     val stateBRAM = new BRAMPortAXI(0)(cfg.stateBRAMc)
 
     // AXI Host Communication
     val host2tpu = new TransplantUnitHostIO
+
+    // Memory Interface
+    // TODO: For the moment the simulator fakes
+    //       response in single cycle by requesting to QEMU
+    // val memReq = Output(Valid(new MemReq))
+    // val memResp = Input(Valid(DATA_T))
 
     // Debug
     val procStateDBG = if(cfg.DebugSignals) Some(new ProcStateDBG) else None
@@ -116,12 +117,12 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   // Extra Regs and wires
   val fetchEn = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(false.B)))
 
-  val commitExec = commitReg.io.deq.bits.exe
-  val commitMem = commitReg.io.deq.bits.mem
-  val commitBr = commitReg.io.deq.bits.br
-  val commitPcRel = commitReg.io.deq.bits.pcrel
-  val commitTag = commitReg.io.deq.bits.tag
-  val commitValid = commitReg.io.deq.valid
+  val commitExec  = WireInit(commitReg.io.deq.bits.exe)
+  val commitMem   = WireInit(commitReg.io.deq.bits.mem)
+  val commitBr    = WireInit(commitReg.io.deq.bits.br)
+  val commitPcRel = WireInit(commitReg.io.deq.bits.pcrel)
+  val commitTag   = WireInit(commitReg.io.deq.bits.tag)
+  val commitValid = WireInit(commitReg.io.deq.valid)
 
   val nextPC = Wire(DATA_T)
   val nextSP = Wire(DATA_T)
@@ -205,14 +206,6 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   ldstU.io.rVal1 := rVal1
   ldstU.io.rVal2 := rVal2
   ldstU.io.pstate := pregsVec(issued_tag)
-
-  // io.mem_req := ldstU.io.memReq
-  // ldstU.io.memRes.valid := false.B // TODO
-  // ldstU.io.memRes.bits.data := 0.U // TODO
-
-  // testing only
-  // ldstU.io.write_tlb_vaddr := DontCare
-  // ldstU.io.write_tlb_entry := DontCare
 
   // CommitReg
   commitReg.io.enq.bits.exe := executer.io.einst

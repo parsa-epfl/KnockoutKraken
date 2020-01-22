@@ -130,11 +130,8 @@ class IssueUnit(implicit val cfg: ProcConfig) extends Module
     sig_pipe_i(cpu) := reg_pipe_v(cpu)
   }
 
-  val rfile_wb_pending = io.commitReg.valid && io.commitReg.bits.exe.bits.rd.valid
-  exe_stall := rfile_wb_pending &&
-    ((reg_pipe(io.commitReg.bits.tag).rs1.bits === io.commitReg.bits.exe.bits.rd.bits) ||
-       (reg_pipe(io.commitReg.bits.tag).rs2.bits === io.commitReg.bits.exe.bits.rd.bits))
-  sig_pipe_i(io.commitReg.bits.tag) := reg_pipe_v(io.commitReg.bits.tag) && !exe_stall
+  // Backpressure: thread committing doesn't issue
+  sig_pipe_i(io.commitReg.bits.tag) := reg_pipe_v(io.commitReg.bits.tag) && !io.commitReg.valid
 
   // Issue -> Exec
   // Get idx to issue

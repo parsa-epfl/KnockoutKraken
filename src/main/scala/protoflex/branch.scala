@@ -34,18 +34,22 @@ class BranchUnit(implicit val cfg: ProcConfig) extends Module
   val io = IO(new BranchUnitIO)
 
 
-  val imm = io.dinst.imm.bits.asSInt.pad(64)
-  val immS2  = Cat(io.dinst.imm.bits, 0.U(2.W)).asSInt.pad(64)
-  val immS12 = Cat(io.dinst.imm.bits, 0.U(12.W)).asSInt.pad(64)
-  val immSExt = MuxLookup(io.dinst.itype, imm, Array(
-                        I_BCImm -> immS2,
-                        I_BImm  -> immS2,
-                        I_CBImm -> immS2,
-                        I_PCRel -> Mux(io.dinst.op === OP_ADRP,
-                                       immS12, imm)
+  val imm26S2 = WireInit(Cat(io.dinst.imm.bits(25,0), 0.U(2.W)).asSInt.pad(64))
+  val imm19S2 = WireInit(Cat(io.dinst.imm.bits(18,0), 0.U(2.W)).asSInt.pad(64))
+  val imm21S0 = WireInit(io.dinst.imm.bits(20,0).asSInt.pad(64))
+  val imm21S12 = WireInit(Cat(io.dinst.imm.bits(20,0), 0.U(12.W)).asSInt.pad(64))
+  val immSExt = MuxLookup(io.dinst.itype, imm21S0, Array(
+                        I_BImm  -> imm26S2,
+                        I_BCImm -> imm19S2,
+                        I_CBImm -> imm19S2,
+                        I_PCRel -> Mux(io.dinst.op === OP_ADRP, imm21S12, imm21S0)
                 ))
 
-  val pcadd = WireInit((io.pc.zext + immSExt).asUInt)
+  val pc = WireInit(io.pc)
+  when(io.dinst.itype === I_PCRel && io.dinst.op === OP_ADRP) {
+    pc := Cat(io.pc(63,12), 0.U(12.W))
+  }
+  val pcadd = WireInit((pc.zext + immSExt).asUInt)
 
   val pcrel = Wire(new PCRel)
   pcrel.rd := io.dinst.rd.bits

@@ -201,7 +201,7 @@ object BRAMPort {
       val byte_lsb = Array.fill(4)(0.toByte)
       for (i <- 0 to 3) byte_msb(i) = ((msb >> ((3-i) * 8)) & 0xFF).toByte
       for (i <- 0 to 3) byte_lsb(i) = ((lsb >> ((3-i) * 8)) & 0xFF).toByte
-      val uint64 = ByteBuffer.wrap((byte_msb ++ byte_lsb)).getLong
+      val uint64 = BigInt(Array(0.toByte) ++ byte_msb ++ byte_lsb) // Unsigned long
       return uint64
     }
   }
