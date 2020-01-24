@@ -49,14 +49,14 @@ class ConditionHolds(implicit val cfg: ProcConfig) extends Module
   val PSTATE_Z = io.nzcv(2)
   val PSTATE_C = io.nzcv(1)
   val PSTATE_V = io.nzcv(0)
-  /* */when (io.cond(3,1) === "b000".U) {result := (PSTATE_N === 1.U);}
-  .elsewhen (io.cond(3,1) === "b001".U) {result := (PSTATE_C === 1.U);}
-  .elsewhen (io.cond(3,1) === "b010".U) {result := (PSTATE_N === 1.U);}
-  .elsewhen (io.cond(3,1) === "b011".U) {result := (PSTATE_V === 1.U);}
-  .elsewhen (io.cond(3,1) === "b100".U) {result := (PSTATE_C === 1.U && PSTATE_Z === 0.U);}
-  .elsewhen (io.cond(3,1) === "b101".U) {result := (PSTATE_N === PSTATE_V);}
-  .elsewhen (io.cond(3,1) === "b110".U) {result := (PSTATE_N === PSTATE_V && PSTATE_Z === 0.U);}
-  .elsewhen (io.cond(3,1) === "b111".U) {result := true.B}
+  /* */when (io.cond(3,1) === "b000".U) {result := (PSTATE_N === 1.U);}                          // EQ or NE
+  .elsewhen (io.cond(3,1) === "b001".U) {result := (PSTATE_C === 1.U);}                          // CS or CC
+  .elsewhen (io.cond(3,1) === "b010".U) {result := (PSTATE_N === 1.U);}                          // MI or PL
+  .elsewhen (io.cond(3,1) === "b011".U) {result := (PSTATE_V === 1.U);}                          // VS or VC
+  .elsewhen (io.cond(3,1) === "b100".U) {result := (PSTATE_C === 1.U && PSTATE_Z === 0.U);}      // HI or LS
+  .elsewhen (io.cond(3,1) === "b101".U) {result := (PSTATE_N === PSTATE_V);}                     // GE or LT
+  .elsewhen (io.cond(3,1) === "b110".U) {result := (PSTATE_N === PSTATE_V && PSTATE_Z === 0.U);} // GT or LE
+  .elsewhen (io.cond(3,1) === "b111".U) {result := true.B}                                       // AL
 
   when(io.cond(0) === 1.U && io.cond =/= "b1111".U) {
     io.res := !result
@@ -75,25 +75,23 @@ class AddWithCarry(implicit val cfg: ProcConfig) extends Module
                 val nzcv = Output(NZCV_T)
               })
 
-  val res = Wire(DATA_T)
-  val carry = Wire(UInt(1.W))
-  val unsigned_sum = WireInit(UInt((DATA_SZ + 1).W), io.a + io.b + io.carry)
-  val signed_sum   = WireInit(UInt((DATA_SZ + 1).W), (io.a.asSInt + io.b.asSInt).asUInt + io.carry)
-
-  res := unsigned_sum(DATA_SZ-1, 0)
-  carry := unsigned_sum(DATA_SZ)
+  val unsigned_sum = WireInit((io.a +& io.b) + io.carry)
+  val signed_sum   = WireInit((io.a.asSInt +& io.b.asSInt).asUInt + io.carry)
+  val res = WireInit(unsigned_sum(DATA_SZ-1, 0))
 
   // NZCV flags
   val nzcv = VecInit(NZCV_X.asBools)
-  nzcv(0) := res(DATA_SZ-1).asBool
-  nzcv(1) := res === 0.U
-  // Unsigned carry
-  nzcv(2) := res =/= unsigned_sum
-  nzcv(3) := res =/= signed_sum
-  // Sign carry (overflow)
+  val n = WireInit(res(DATA_SZ-1).asBool)
+  val z = WireInit(res === 0.U)
+  val c = WireInit(res =/= unsigned_sum)
+  val v = WireInit(res.asSInt =/= signed_sum.asSInt)
+  nzcv(3) := n
+  nzcv(2) := z
+  nzcv(1) := c
+  nzcv(0) := v
 
-  io.nzcv := nzcv.asUInt
   io.res := res
+  io.nzcv := nzcv.asUInt
 }
 
 object ALU {
@@ -281,6 +279,7 @@ class ExecuteUnitIO(implicit val cfg: ProcConfig) extends Bundle
   val rVal1 = Input(DATA_T)
   val rVal2 = Input(DATA_T)
   val nzcv = Input(NZCV_T)
+  val SP   = Input(DATA_T)
 
   val condRes = Output(Bool())
 
@@ -291,20 +290,23 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
 {
   val io = IO(new ExecuteUnitIO)
 
+  val rVal1 = WireInit(Mux(io.dinst.rs1.bits === 31.U, io.SP, io.rVal1))
+  val rVal2 = WireInit(Mux(io.dinst.rs2.bits === 31.U, 0.U, io.rVal2))
+
   // Operations
   // Shift
   val shiftALU = Module(new ShiftALU())
   shiftALU.io.word :=
-    MuxLookup(io.dinst.itype, io.rVal2, Array(
-                I_ASSR  -> io.rVal2,
+    MuxLookup(io.dinst.itype, rVal2, Array(
+                I_ASSR  -> rVal2,
                 I_PCRel -> io.dinst.imm.bits, // LSL 12
                 I_ASImm -> io.dinst.imm.bits,
                 I_CCImm -> io.dinst.imm.bits, // PASSTHROUGH
-                I_CCReg -> io.rVal2, // PASSTHROUGH
-                I_CSel  -> io.rVal2, // PASSTHROUGH
-                I_LogSR -> io.rVal2,
-                I_LogI  -> io.rVal1, // PASSTHROUGH
-                I_BitF  -> io.rVal1 // ROR(X(Rn), immr)
+                I_CCReg -> rVal2, // PASSTHROUGH
+                I_CSel  -> rVal2, // PASSTHROUGH
+                I_LogSR -> rVal2,
+                I_LogI  -> rVal1, // PASSTHROUGH
+                I_BitF  -> rVal1 // ROR(X(Rn), immr)
               ))
   shiftALU.io.amount := io.dinst.shift_val.bits // when 0 => PASSTHROUGH
   shiftALU.io.opcode := io.dinst.shift_type
@@ -331,8 +333,8 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   bitfield.io.op := io.dinst.op
   bitfield.io.immr := io.dinst.imm.bits(21-10,16-10)
   bitfield.io.imms := io.dinst.imm.bits(15-10,10-10)
-  bitfield.io.src := io.rVal1
-  bitfield.io.dst := io.rVal2 // See decoder, binds Rd to rs2
+  bitfield.io.src := rVal1
+  bitfield.io.dst := rVal2 // See decoder, binds Rd to rs2
   bitfield.io.wmask := decodeBitMask.io.wmask
   bitfield.io.tmask := decodeBitMask.io.tmask
   bitfield.io.rorSrcR := shiftALU.io.res
@@ -342,19 +344,19 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   move.io.op := io.dinst.op
   move.io.hw := io.dinst.imm.bits(17,16)
   move.io.imm := io.dinst.imm.bits(15,0)
-  move.io.rd := io.rVal2
+  move.io.rd := rVal2
 
-  val aluVal1 = MuxLookup(io.dinst.itype, io.rVal1, Array(
-                            I_ASSR  -> io.rVal1,
-                            I_ASImm -> io.rVal1,
-                            I_CCImm -> io.rVal1,
-                            I_CCReg -> io.rVal1,
-                            I_CSel  -> io.rVal1,
-                            I_LogI  -> io.rVal1,
-                            I_LogSR -> io.rVal1,
+  val aluVal1 = WireInit(MuxLookup(io.dinst.itype, rVal1, Array(
+                            I_ASSR  -> rVal1,
+                            I_ASImm -> rVal1,
+                            I_CCImm -> rVal1,
+                            I_CCReg -> rVal1,
+                            I_CSel  -> rVal1,
+                            I_LogI  -> rVal1,
+                            I_LogSR -> rVal1,
                             I_BitF  -> bitfield.io.aluVal1
-                          ))
-  val aluVal2 = MuxLookup(io.dinst.itype, shiftALU.io.res, Array(
+                          )))
+  val aluVal2 = WireInit(MuxLookup(io.dinst.itype, shiftALU.io.res, Array(
                             I_ASSR  -> shiftALU.io.res,
                             I_ASImm -> shiftALU.io.res,
                             I_CCImm -> shiftALU.io.res, // PASSTHROUGH imm
@@ -363,12 +365,12 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
                             I_LogSR -> shiftALU.io.res,
                             I_LogI  -> decodeBitMask.io.wmask,
                             I_BitF  -> bitfield.io.aluVal2
-                          ))
-  val aluOp = MuxLookup(io.dinst.itype, io.dinst.op, Array(
+                          )))
+  val aluOp = WireInit(MuxLookup(io.dinst.itype, io.dinst.op, Array(
                           I_LogSR -> io.dinst.op,
                           I_LogI  -> io.dinst.op,
                           I_BitF  -> bitfield.io.aluOp
-                        ))
+                        )))
 
   // Execute in ALU now that we have both inputs ready
   val logicALU = Module(new LogicALU())
@@ -386,7 +388,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   when(io.dinst.itype === I_CSel) {
     addWithCarry.io.a := 0.U
     addWithCarry.io.b :=
-      Mux(io.dinst.op === OP_CSINV || io.dinst.op === OP_CSNEG, ~io.rVal2, io.rVal1)
+      Mux(io.dinst.op === OP_CSINV || io.dinst.op === OP_CSNEG, ~rVal2, rVal1)
     addWithCarry.io.carry :=
       Mux(io.dinst.op === OP_CSINC || io.dinst.op === OP_CSNEG, 1.U, 0.U)
   }.elsewhen(io.dinst.itype === I_CCImm || io.dinst.itype === I_CCReg) {
@@ -408,7 +410,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
                  I_ASSR  -> addWithCarry.io.res,
                  I_ASImm -> addWithCarry.io.res,
                  I_MovI  -> move.io.res,
-                 I_CSel  -> Mux(condHolds.io.res, io.rVal1, addWithCarry.io.res)
+                 I_CSel  -> Mux(condHolds.io.res, rVal1, addWithCarry.io.res)
                  ))
   einst.rd := io.dinst.rd
   einst.nzcv.bits := MuxLookup(io.dinst.itype, addWithCarry.io.nzcv, Array(

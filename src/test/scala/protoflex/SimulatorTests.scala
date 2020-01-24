@@ -154,14 +154,14 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
     cProcAxi.wrPSTATE2BRAM(tag, pstate)
   }
 
-  def waitForCmd(filepath:String): Int = {
+  def waitForCmd(filepath:String): (Int, Long) = {
     ti = System.nanoTime
-    var cmd: Int = FA_QflexCmds.LOCK_WAIT
+    var cmd: (Int, Long) = (FA_QflexCmds.LOCK_WAIT, 0)
     do {
       Thread.sleep(500)
-      cmd = ArmflexJson.json2cmd(readFile(filepath))._1
+      cmd = ArmflexJson.json2cmd(readFile(filepath))
       tf = System.nanoTime
-    } while(cmd == FA_QflexCmds.LOCK_WAIT && !timedOut);
+    } while(cmd._1 == FA_QflexCmds.LOCK_WAIT && !timedOut);
     //simLog(s"CMD is ${FA_QflexCmds.cmd_toString(cmd)} in ${filepath}")
     writeCmd((FA_QflexCmds.LOCK_WAIT, 0), filepath) // Consume Command
     cmd
@@ -229,7 +229,7 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
     tf = System.nanoTime
     timeoutms = timeoutms_i
     while(!timedOut) {
-      val cmd = waitForCmd(cfgSim.simCmdPath)
+      val cmd = waitForCmd(cfgSim.simCmdPath)._1
       ti = System.nanoTime
       cmd match {
         case FA_QflexCmds.SIM_START =>

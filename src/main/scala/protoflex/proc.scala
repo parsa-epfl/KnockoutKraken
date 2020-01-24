@@ -172,8 +172,8 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   issuer.io.enq <> decReg.io.deq
 
   // Execute : Issue -> Execute
-  val issued_dinst = issuer.io.deq.bits
-  val issued_tag = issued_dinst.tag
+  val issued_dinst = WireInit(issuer.io.deq.bits)
+  val issued_tag = WireInit(issued_dinst.tag)
   issuer.io.deq.ready := commitReg.io.enq.ready
   issuer.io.commitReg.bits := commitReg.io.deq.bits
   issuer.io.commitReg.valid := commitReg.io.deq.valid
@@ -193,6 +193,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   executer.io.rVal1 := rVal1
   executer.io.rVal2 := rVal2
   executer.io.nzcv := pregsVec(issued_tag).NZCV
+  executer.io.SP   := pregsVec(issued_tag).SP
 
   // connect BranchUnit interface
   brancher.io.dinst := issued_dinst
@@ -286,7 +287,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   when(tpu.io.tpu2cpu.flush.valid) {
     decReg.io.flush := decReg.io.deq.bits.tag === tpu.io.tpu2cpu.flush.tag
     commitReg.io.flush := commitReg.io.deq.bits.tag === tpu.io.tpu2cpu.flush.tag
-  }.elsewhen(commitValid && commitBr.valid ) {
+  }.elsewhen(commitValid && commitBr.valid ) { // Branching, clean pipeline
     fetch.io.flush.valid := fetch.io.deq.bits.tag === commitTag
     fetch.io.flush.tag := commitTag
     issuer.io.flush.valid := true.B

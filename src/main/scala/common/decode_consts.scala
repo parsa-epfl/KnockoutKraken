@@ -208,11 +208,13 @@ object DECODE_MATCHING_TABLES
       CCReg_CCMN   -> List(I_CCReg, OP_CCMN,  N, Y, Y, N, N, Y, Y),
       CCReg_CCMP   -> List(I_CCReg, OP_CCMP,  N, Y, Y, N, N, Y, Y),
       // Add/subtract (shifted register)
+      ASSR_CMP     -> List(I_ASSR,  OP_SUB,   N, Y, Y, N, Y, N, Y),
       ASSR_ADD     -> List(I_ASSR,  OP_ADD,   Y, Y, Y, N, Y, N, N),
       ASSR_ADDS    -> List(I_ASSR,  OP_ADD,   Y, Y, Y, N, Y, N, Y),
       ASSR_SUB     -> List(I_ASSR,  OP_SUB,   Y, Y, Y, N, Y, N, N),
       ASSR_SUBS    -> List(I_ASSR,  OP_SUB,   Y, Y, Y, N, Y, N, Y),
       // Add/subtract (immediate)
+      ASImm_CMP_I  -> List(I_ASImm, OP_SUB,   N, Y, N, Y, Y, N, Y),
       ASImm_ADD_I  -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, N),
       ASImm_ADDS_I -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, Y),
       ASImm_SUB_I  -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, Y, N, N),
