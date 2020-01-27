@@ -27,7 +27,7 @@ class PStateRegs(implicit val cfg : ProcConfig) extends Bundle
 {
   val PC = DATA_T
   val SP = DATA_T // Normaly 4 levels 32 bits
-  val EL = INST_T // Normaly 4 levels 32 bits
+  //val EL = INST_T // Normaly 4 levels 32 bits
 
   // PSTATE
   // Condition flags
@@ -50,7 +50,7 @@ object PStateRegs {
     val wire = Wire(new PStateRegs())
     wire.PC := DATA_X
     wire.SP := DATA_X
-    wire.EL := DATA_X
+    //wire.EL := DATA_X
     wire.NZCV := NZCV_X
     wire
   }

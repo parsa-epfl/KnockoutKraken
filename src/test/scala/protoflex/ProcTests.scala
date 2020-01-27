@@ -62,6 +62,7 @@ object ProcDriver {
         portPState.wrBRAM64b(pstate.xregs(i), offst); offst += 2
       }
       portPState.wrBRAM64b(pstate.pc, offst: Int); offst+=2
+      portPState.wrBRAM64b(pstate.sp, offst: Int); offst+=2
       // TODO Write SP, EL and NZCV as Cat(EL, SP, NZCV)
       portPState.wrBRAM32b(pstate.nzcv, offst); offst+=1
     }
@@ -74,13 +75,10 @@ object ProcDriver {
       }
 
       val pc = portPState.rdBRAM64b(offst: Int); offst+=2
-      val sp_el_nzcv = portPState.rdBRAM32b(offst); offst+=1
+      val sp = portPState.rdBRAM64b(offst: Int); offst+=2
+      val nzcv = portPState.rdBRAM32b(offst); offst+=1
 
-      val s_sp_el_nzcv = sp_el_nzcv.toInt.toBinaryString
-      val sp = s_sp_el_nzcv.slice(5, 6)
-      val el = s_sp_el_nzcv.slice(4, 5)
-      val nzcv = Integer.parseInt(s_sp_el_nzcv.slice(0, 4), 2)
-      val pstate = new PState(xregs.toList: List[Long], pc: Long, nzcv: Int)
+      val pstate = new PState(xregs.toList: List[Long], pc: Long, sp: Long, nzcv: Int)
       //println(pstate.toString())
       pstate
     }
@@ -89,7 +87,7 @@ object ProcDriver {
     def getPStateInternal(cpu: Int): PState = {
       if(!cfgProc.DebugSignals) {
         println("ProportPStateDBG signals are not available: Enable DebugSignals in ProcConfig")
-        return PState(List(404), 404, 404)
+        return PState(List(404), 404, 404, 404)
       }
       val procStateDBG = procStateDBG_.get
       val pstate = procStateDBG.pregsVec(cpu)
@@ -97,8 +95,9 @@ object ProcDriver {
 
       val xregs = for(reg <- 0 until 32) yield rfile(reg).peek.litValue.toLong
       val pc = pstate.PC.peek.litValue.toLong
+      val sp = pstate.SP.peek.litValue.toLong
       val nzcv = pstate.NZCV.peek.litValue.toInt
-      new PState(xregs.toList: List[Long], pc: Long, nzcv: Int)
+      new PState(xregs.toList: List[Long], pc: Long, sp:Long, nzcv: Int)
     }
 
     def hasCommitedInst(): Boolean = {

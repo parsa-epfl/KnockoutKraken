@@ -156,8 +156,10 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
       bramOFFST := bramOFFST + 1.U
       when(bramOFFST === (ARCH_PC_OFFST - 1).U) {
         stateRegType := r_PC
+      }.elsewhen(bramOFFST === (ARCH_SP_OFFST - 1).U) {
+        stateRegType := r_SP
       }.elsewhen( bramOFFST === (ARCH_PSTATE_OFFST - 1).U) {
-        stateRegType := r_SP_EL_NZCV
+        stateRegType := r_NZCV
       }.elsewhen( bramOFFST === (ARCH_MAX_OFFST - 1).U ) {
         stateRegType := r_DONE
       }.elsewhen( stateRegType === r_DONE ){
@@ -177,9 +179,11 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   when(stateRegType === r_XREGS) {
     io.stateBRAM.dataIn.get := Mux(bramOFFST(0), regDataInLSB, regDataInMSB)
   }.elsewhen(stateRegType === r_PC) {
-    io.stateBRAM.dataIn.get := Mux(bramOFFST(0), io.cpu2tpuState.PC(31,0) ,io.cpu2tpuState.PC(63,32))
-  }.elsewhen(stateRegType === r_SP_EL_NZCV) {
-    io.stateBRAM.dataIn.get := Cat(0.U, io.cpu2tpuState.SP(0), io.cpu2tpuState.EL(0), io.cpu2tpuState.NZCV(3,0))
+    io.stateBRAM.dataIn.get := Mux(bramOFFST(0), io.cpu2tpuState.PC(31,0), io.cpu2tpuState.PC(63,32))
+  }.elsewhen(stateRegType === r_SP) {
+    io.stateBRAM.dataIn.get := Mux(bramOFFST(0), io.cpu2tpuState.SP(31,0), io.cpu2tpuState.SP(63,32))
+  }.elsewhen(stateRegType === r_NZCV) {
+    io.stateBRAM.dataIn.get := Cat(0.U, io.cpu2tpuState.NZCV(3,0))
   }.otherwise {
     io.stateBRAM.dataIn.get := 0.U
   }
@@ -190,8 +194,7 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   io.rfile.wdata := bramOut64b
 
   io.tpu2cpuState.PC := bramOut64b
-  io.tpu2cpuState.SP := TPU2STATE.PStateGet_SP(bramOut)
-  io.tpu2cpuState.EL := TPU2STATE.PStateGet_EL(bramOut)
+  io.tpu2cpuState.SP := bramOut64b
   io.tpu2cpuState.NZCV := TPU2STATE.PStateGet_NZCV(bramOut)
   // One cycle delay from BRAM read
   io.tpu2cpuStateReg.bits := RegNext(stateRegType)
@@ -216,12 +219,11 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
 // In parsa-epfl/qemu/fa-qflex
 // Read fa-qflex-helper.c to get indexes of values
 object TPU2STATE {
-  val r_DONE :: r_XREGS :: r_PC :: r_SP_EL_NZCV :: Nil = Enum(4)
+  val r_DONE :: r_XREGS :: r_PC :: r_SP :: r_NZCV :: Nil = Enum(5)
   def PStateGet_NZCV(word: UInt): UInt = word(3,0)
-  def PStateGet_EL(word: UInt): UInt = word(4,4)
-  def PStateGet_SP(word: UInt): UInt = word(5,5)
   val ARCH_XREGS_OFFST = 0
   val ARCH_PC_OFFST    = 64
-  val ARCH_PSTATE_OFFST = 66
+  val ARCH_SP_OFFST    = 66
+  val ARCH_PSTATE_OFFST = 68
   val ARCH_MAX_OFFST = ARCH_PSTATE_OFFST + 1
 }

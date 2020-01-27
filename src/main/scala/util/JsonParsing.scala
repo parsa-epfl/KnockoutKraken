@@ -12,12 +12,13 @@ object ArmflexJson {
   implicit val formats = DefaultFormats
 
   private case class JSONCmd(val cmd: String, val addr: String)
-  private case class JSONPState(val xregs : List[String], val pc : String, val nzcv : String)
+  private case class JSONPState(val xregs : List[String], val pc : String, val sp : String, val nzcv : String)
 
   private def jp2sp(jp: JSONPState): PState = {
     PState(
       jp.xregs.map(BigInt(_,16).toLong),
       BigInt(jp.pc, 16).toLong,
+      BigInt(jp.sp, 16).toLong,
       BigInt(jp.nzcv, 16).toInt
     )
   }
@@ -26,6 +27,7 @@ object ArmflexJson {
     JSONPState(
       sp.xregs.map(r => f"${r}%016x"),
       f"${sp.pc}%016x",
+      f"${sp.sp}%016x",
       f"${sp.nzcv}%08x"
     )
   }

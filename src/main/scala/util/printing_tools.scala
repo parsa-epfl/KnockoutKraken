@@ -165,6 +165,7 @@ object SoftwareStructs {
   case class PState (
     val xregs : List[Long],
     val pc : Long,
+    val sp : Long,
     val nzcv : Int
   ) {
     override def toString() = {
@@ -174,7 +175,7 @@ object SoftwareStructs {
         name,
         regs,
         "PC :" + "%016x".format(pc),
-        "SP :" + 0,
+        "SP :" + "%016x".format(sp),
         "EL :" + 0,
         "NZCV" + ":" + nzcv.toBinaryString
       ).mkString("\n")
@@ -194,6 +195,8 @@ object SoftwareStructs {
         }
         if(this.pc != other.pc)
           str = str ++ s"PC:${"%016x".format(this.pc)} != ${"%016x".format(other.pc)}\n"
+        if(this.sp != other.sp)
+          str = str ++ s"SP:${"%016x".format(this.sp)} != ${"%016x".format(other.sp)}\n"
         if(this.nzcv != other.nzcv)
           str = str ++ s"NZCV:${this.nzcv.toBinaryString} != ${other.nzcv.toBinaryString}\n"
 

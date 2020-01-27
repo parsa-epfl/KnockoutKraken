@@ -312,9 +312,9 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
     when(tpu.io.tpu2cpuStateReg.valid) {
       when(tpu.io.tpu2cpuStateReg.bits === TPU2STATE.r_PC) {
         pregsVec(tpu.io.tpu2cpu.freeze.tag).PC := tpu.io.tpu2cpuState.PC
-      }.elsewhen(tpu.io.tpu2cpuStateReg.bits === TPU2STATE.r_SP_EL_NZCV){
+      }.elsewhen(tpu.io.tpu2cpuStateReg.bits === TPU2STATE.r_SP) {
         pregsVec(tpu.io.tpu2cpu.freeze.tag).SP := tpu.io.tpu2cpuState.SP
-        pregsVec(tpu.io.tpu2cpu.freeze.tag).EL := tpu.io.tpu2cpuState.EL
+      }.elsewhen(tpu.io.tpu2cpuStateReg.bits === TPU2STATE.r_NZCV){
         pregsVec(tpu.io.tpu2cpu.freeze.tag).NZCV := tpu.io.tpu2cpuState.NZCV
       }
     }
