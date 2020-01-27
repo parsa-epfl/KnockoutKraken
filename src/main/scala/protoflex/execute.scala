@@ -49,7 +49,7 @@ class ConditionHolds(implicit val cfg: ProcConfig) extends Module
   val PSTATE_Z = io.nzcv(2)
   val PSTATE_C = io.nzcv(1)
   val PSTATE_V = io.nzcv(0)
-  /* */when (io.cond(3,1) === "b000".U) {result := (PSTATE_N === 1.U);}                          // EQ or NE
+  /* */when (io.cond(3,1) === "b000".U) {result := (PSTATE_Z === 1.U);}                          // EQ or NE
   .elsewhen (io.cond(3,1) === "b001".U) {result := (PSTATE_C === 1.U);}                          // CS or CC
   .elsewhen (io.cond(3,1) === "b010".U) {result := (PSTATE_N === 1.U);}                          // MI or PL
   .elsewhen (io.cond(3,1) === "b011".U) {result := (PSTATE_V === 1.U);}                          // VS or VC
@@ -163,11 +163,13 @@ class Move(implicit val cfg: ProcConfig) extends Module {
   val pos = Cat(io.hw, 0.U(4.W))
   val result = WireInit(DATA_X)
 
-  when(io.op === OP_MOVZ) {
-    result := io.rd
-  }
-  //result(pos+15.U, pos) := io.imm
+  result := MuxLookup(io.op, 0.U, Array(
+                        OP_MOVN -> 0.U,
+                        OP_MOVZ -> 0.U,
+                        OP_MOVK -> io.rd
+                      ))
 
+  //result(pos+15.U, pos) := io.imm
   val vecResult = VecInit(result.asBools)
   val vecBools = VecInit(io.imm.asBools)
 
@@ -257,11 +259,11 @@ class DecodeBitMasks(implicit val cfg: ProcConfig) extends Module
 
   val s = WireInit(io.imms & levels)
   val r = WireInit(io.immr & levels)
-  val diff = WireInit(UInt(6.W), s - r)
+  val diff = WireInit(s - r)
 
-  val d = WireInit(UInt(7.W), diff & levels)
-  val onesS = WireInit(UInt(7.W), s + 1.U) // Add a bit for the 0b1000000 = 64 bit case
-  val onesD = WireInit(UInt(7.W), d + 1.U) // Add a bit for the 0b1000000 = 64 bit case
+  val d = WireInit(diff & levels)
+  val onesS = WireInit(s +& 1.U) // Add a bit for the 0b1000000 = 64 bit case
+  val onesD = WireInit(d +& 1.U) // Add a bit for the 0b1000000 = 64 bit case
 
   welem := WireInit(Ones(onesS))
   wmask := ALU.rotateRight(VecInit(welem.asBools), r).asUInt // ROR(welem, R) and truncate esize
@@ -294,7 +296,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   val rVal1 = WireInit(Mux(io.dinst.rs1.bits === 31.U, 0.U, io.rVal1))
   val rVal2 = WireInit(Mux(io.dinst.rs2.bits === 31.U, 0.U, io.rVal2))
   when(io.dinst.itype === I_ASImm && io.dinst.op === OP_ADD && io.dinst.rs1.bits === 31.U) {
-    rVal1 := io.SP
+    rVal1 := io.rVal1
   }
 
   // Operations
@@ -343,11 +345,11 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   bitfield.io.tmask := decodeBitMask.io.tmask
   bitfield.io.rorSrcR := shiftALU.io.res
 
-  // Move wide (immediate)
+  // Move wide (immediate): hw(22,21), imm16(20,5)
   val move = Module(new Move)
   move.io.op := io.dinst.op
-  move.io.hw := io.dinst.imm.bits(17,16)
-  move.io.imm := io.dinst.imm.bits(15,0)
+  move.io.hw := io.dinst.imm.bits(22-5,21-5)
+  move.io.imm := io.dinst.imm.bits(20-5,5-5)
   move.io.rd := rVal2
 
   val aluVal1 = WireInit(MuxLookup(io.dinst.itype, rVal1, Array(
