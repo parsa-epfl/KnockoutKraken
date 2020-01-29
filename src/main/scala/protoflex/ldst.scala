@@ -26,7 +26,7 @@ class MInst(implicit val cfg: ProcConfig) extends Bundle
 class LDSTUnitIO(implicit val cfg: ProcConfig) extends Bundle
 {
   val dinst = Input(new DInst)
-  val rVal1 = Input(DATA_T)
+  val rVal1 = Input(DATA_T) // Rn
   val rVal2 = Input(DATA_T) // Rt in some cases
   val pstate = Input(new PStateRegs)
 
@@ -53,40 +53,53 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
                       OP_LDR64 -> 3.U
                     ))
 
+
+  when(io.dinst.itype === I_LSUImm) {
+    wback := false.B
+    postindex := false.B
+    offst := (io.dinst.imm.bits << size)
+  }.otherwise {
+    wback := false.B
+    postindex := false.B
+    offst := io.dinst.imm.bits
+  }
+
   val datasize = WireInit(size << 8.U)
 
-  wback := MuxLookup(io.dinst.op, false.B, Array(
-                          OP_STRB  -> true.B,
-                          OP_STRH  -> true.B,
-                          OP_STR32 -> true.B,
-                          OP_STR64 -> true.B
-                        ))
-  postindex := MuxLookup(io.dinst.itype, false.B, Array(
-                           I_LSUImm -> false.B
-                         ))
 
-  offst := MuxLookup(io.dinst.itype, io.dinst.imm.bits, Array(
-                       I_LSUImm -> (io.dinst.imm.bits << size),
-                       ))
-
-
-
+  //  if n == 31 then
+  //     address = SP[];
+  //  else
+  //     address = X[n];
+  //
+  //  if !postindex then
+  //     address = address + offset
   val base_address = WireInit(DATA_X)
   when(io.dinst.rs1.bits === 31.U) {
-    // CheckSPAAligment();
+    // CheckSPAAligment(); TODO
     base_address := io.pstate.SP
   }.otherwise {
     base_address := io.rVal1
   }
 
-  val address = WireInit(base_address + offst)
+  val post_address = WireInit(base_address + offst)
   val ldst_address = WireInit(base_address)
   when(!postindex) {
-    ldst_address := address
+    ldst_address := post_address
   }
 
-  val data = WireInit(io.rVal2) // data = Rt
-
+  // For WRITES
+  // if rt_unknown
+  //   data = bits(datasize) UNKNOWN
+  // else
+  //   data = X[t]
+  // Mem[address, datasize DIV 8, AccType_NORMAL] = data
+  //
+  // For READS
+  // data = Mem[address, datasize DIV 8, AccType_NORMAL]
+  // X[t] = ZeroExtend(data, regsize)
+  //
+  val data = WireInit(io.rVal2) // data = Rt = rVal2
   val is_store = WireInit(OP_STRB  === io.dinst.op ||
                            OP_STRH  === io.dinst.op ||
                            OP_STR32 === io.dinst.op ||
@@ -100,13 +113,10 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   // Output
   io.minst.bits.mem.addr := ldst_address
   io.minst.bits.mem.data := data
-  io.minst.bits.mem.reg := io.dinst.rs1.bits
+  io.minst.bits.mem.reg := io.dinst.rd.bits
   io.minst.bits.mem.size := size
   io.minst.bits.mem.is_store := is_store
 
-  io.minst.valid := MuxLookup(io.dinst.itype, false.B, Array(
-                              I_LSUImm -> true.B
-                            ))
   // Writeback address to reg
   // if wback then
   //   if n == 31 then
@@ -116,34 +126,35 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   // NOTE:
   // - address = base_address + offst
   // - Check for n == 31 on proc.scala
-  io.minst.bits.rd_res := address
+  io.minst.bits.rd_res := ldst_address
   io.minst.bits.rd.bits := io.dinst.rs2.bits
   io.minst.bits.rd.valid := wback
 
+  io.minst.valid := MuxLookup(io.dinst.itype, false.B, Array(
+                              I_LSUImm -> true.B
+                            ))
+
   // Tag management
   val tag_checked = RegInit(false.B)
-  when(io.dinst.itype === I_LSUImm){
-    when(is_store) {
-      tag_checked := true.B
-    }.otherwise{ // TODO
-      // if HaveMTEExt() then
-      //     SetNotTagCheckedInstruction(!tag_checked);
-    }
+  when(io.dinst.itype === I_LSUImm) {
+    tag_checked := wback || !(io.dinst.rs1.bits === 31.U)
   }
 
-  // Checking for Transplant corner cases
+  // TODO
+  // if HaveMTEExt() then
+  //   SetNotTagCheckedInstruction(!tag_checked); 
+
+  // TODO
+  // Checking for Transplant corner cases 
   // if wback && n == t && n != 31 then
   //     c = ConstrainUnpredictable();
   //     assert c IN {Constraint_NONE, Constraint_UNKNOWN, Constraint_UNDEF, Constraint_NOP};
   //     case c of
   //         when Constraint_NONE rt_unknown = FALSE; // value stored is original value
-  //         when Constraint_UNKNOWN rt_unknown = TRUE; // value stored is UNKNOWN
+  //         when Constraint_UNKNOWN rt_unknown = TRUE; // value stored is UNKNOWN => Transplant (?)
   //         when Constraint_UNDEF UNDEFINED;        => Transplant
   //         when Constraint_NOP EndOfInstruction(); => NOP
   // NOTE:
   val rt_unkown = WireInit(false.B)
-  when(rt_unkown) {
-
-  }
 
 }

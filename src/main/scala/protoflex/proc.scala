@@ -5,7 +5,6 @@ import chisel3._
 import chisel3.util.{Decoupled, Queue, RegEnable, Valid, log2Ceil}
 
 import common.constBRAM.TDPBRAM36ParamDict
-import common.DECODE_CONTROL_SIGNALS.I_X
 import common.PROCESSOR_TYPES._
 import common._
 
@@ -50,6 +49,7 @@ class ProcStateDBG(implicit val cfg : ProcConfig) extends Bundle
   val rfileVec = Output(Vec(cfg.NB_THREADS, Vec(REG_N, DATA_T)))
 
   val tuWorking = Output(ValidTagged(cfg.TAG_T))
+  val memResp = Input(DATA_T)
 }
 
 /** Processor
@@ -213,7 +213,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   commitReg.io.enq.bits.br := brancher.io.binst
   commitReg.io.enq.bits.pcrel := brancher.io.pcrel
   commitReg.io.enq.bits.mem := ldstU.io.minst
-  commitReg.io.enq.bits.undef := issued_dinst.itype === I_X
+  commitReg.io.enq.bits.undef := !issued_dinst.inst32.valid
   commitReg.io.enq.bits.inst32 := issued_dinst.inst32.bits
   commitReg.io.enq.bits.pc := issued_dinst.pc
   commitReg.io.enq.bits.tag := issued_tag
@@ -228,13 +228,18 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
     when(commitExec.valid) {
       rfileVec(cpu).waddr := commitExec.bits.rd.bits
       rfileVec(cpu).wdata := commitExec.bits.res
-    }.elsewhen(commitMem.valid) { // wback
-      rfileVec(cpu).waddr := commitMem.bits.rd.bits
-      rfileVec(cpu).wdata := commitMem.bits.rd_res
     }.elsewhen(commitPcRel.valid) {
       rfileVec(cpu).waddr := commitPcRel.bits.rd
       rfileVec(cpu).wdata := commitPcRel.bits.res
-   }.otherwise {
+// TODO NOT SUPPORTED wback LD/ST
+// If LD triggers transplant, CPU went to inconsistent state
+//    }.elsewhen(commitMem.valid) { // wback 
+//      rfileVec(cpu).waddr := commitMem.bits.rd.bits
+//      rfileVec(cpu).wdata := commitMem.bits.rd_res
+    }.elsewhen(commitMem.valid) { // Load TODO : Real, here QEMU Loads in single cycle
+      rfileVec(cpu).waddr := commitMem.bits.mem.reg
+      rfileVec(cpu).wdata := io.procStateDBG.get.memResp
+    }.otherwise {
       // Default
       rfileVec(cpu).waddr := commitExec.bits.rd.bits
       rfileVec(cpu).wdata := commitExec.bits.res
@@ -247,7 +252,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   when(commitValid && !commitReg.io.deq.bits.undef) {
     rfileVec(commitTag).wen :=
       (commitExec.valid && commitExec.bits.rd.valid) ||
-      (commitMem.valid && commitMem.bits.rd.valid) ||
+      (commitMem.valid && !commitMem.bits.mem.is_store) ||
       (commitPcRel.valid)
 
     when(commitExec.valid && commitExec.bits.nzcv.valid) {
@@ -274,7 +279,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   when(insnTLB.io.miss.valid)        { fetchEn(fetch.io.pc.tag) := false.B }
   when(tpu.io.tpu2cpu.fire.valid)    { fetchEn(tpu.io.tpu2cpu.fire.tag) := true.B }
   when(tpu.io.tpu2cpu.fillTLB.valid) { fetchEn(tpu.io.tpu2cpu.fillTLB.tag) := true.B }
-  when((issuer.io.deq.valid && issued_dinst.itype === I_X)) { fetchEn(tpu.io.tpu2cpu.flush.tag) := false.B }
+  when((issuer.io.deq.valid && !issued_dinst.inst32.valid)) { fetchEn(tpu.io.tpu2cpu.flush.tag) := false.B }
 
   // Hit unknown case -> Pass state to CPU
   tpu.io.tpu2cpu.done.valid := commitValid && commitReg.io.deq.bits.undef

@@ -16,9 +16,9 @@ object ArmflexJson {
 
   private def jp2sp(jp: JSONPState): PState = {
     PState(
-      jp.xregs.map(BigInt(_,16).toLong),
-      BigInt(jp.pc, 16).toLong,
-      BigInt(jp.sp, 16).toLong,
+      jp.xregs.map(BigInt(_,16)),
+      BigInt(jp.pc, 16),
+      BigInt(jp.sp, 16),
       BigInt(jp.nzcv, 16).toInt
     )
   }
@@ -43,16 +43,16 @@ object ArmflexJson {
     write(sp2jp(pstate))
   }
 
-  def cmd2json(cmd : (Int, Long)): String = {
-    val json = new JSONCmd(cmd._1.toString, f"${cmd._2}%016x")
+  def cmd2json(cmd : (Int, BigInt)): String = {
+    val json = new JSONCmd(cmd._1.toString, f"${cmd._2.toString(16)}")
     write(json)
   }
 
-  def json2cmd(sjson: String): (Int, Long) = {
+  def json2cmd(sjson: String): (Int, BigInt) = {
     val json: JValue = parse(sjson)
     val jsonp = json.extract[JSONCmd]
     val cmd = jsonp.cmd.toInt
-    val addr = BigInt(jsonp.addr, 16).toLong
+    val addr = BigInt(jsonp.addr, 16)
     (cmd, addr)
   }
 }

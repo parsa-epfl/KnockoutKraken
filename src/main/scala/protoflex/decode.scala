@@ -85,7 +85,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
 
                             I_ASImm -> inst(21,10),
                             I_LSImm -> inst(23, 5),
-                            I_LSUImm-> inst(20,12)
+                            I_LSUImm-> inst(21,10)
                           ))
 
     shift_val.bits := MuxLookup(itype, SHIFT_VAL_X, Array(

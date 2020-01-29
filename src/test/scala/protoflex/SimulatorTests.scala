@@ -154,9 +154,9 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
     cProcAxi.wrPSTATE2BRAM(tag, pstate)
   }
 
-  def waitForCmd(filepath:String): (Int, Long) = {
+  def waitForCmd(filepath:String): (Int, BigInt) = {
     ti = System.nanoTime
-    var cmd: (Int, Long) = (FA_QflexCmds.LOCK_WAIT, 0)
+    var cmd: (Int, BigInt) = (FA_QflexCmds.LOCK_WAIT, 0)
     do {
       Thread.sleep(500)
       cmd = ArmflexJson.json2cmd(readFile(filepath))
@@ -167,7 +167,7 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
     cmd
   }
 
-  def writeCmd(cmd: (Int, Long), path: String) = {
+  def writeCmd(cmd: (Int, BigInt), path: String) = {
     val json = ArmflexJson.cmd2json(cmd._1, cmd._2)
     writeFile(path, json)
   }
@@ -194,6 +194,21 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
         ti = System.nanoTime
         val inst = cProcAxi.getCommitedInst
         val pc = cProcAxi.getCommitedPC
+
+        // If Memory, request QEMU for DATA
+        if(cProcAxi.isCommitedMem) {
+          val addr: BigInt = cProcAxi.getCommitedMemAddr
+          if(cProcAxi.isCommitedLoad) {
+            writeCmd((FA_QflexCmds.DATA_LOAD, addr), cfgSim.qemuCmdPath)
+          } else {
+            writeCmd((FA_QflexCmds.DATA_STORE, addr), cfgSim.qemuCmdPath)
+          }
+          val resp = waitForCmd(cfgSim.simCmdPath)
+          val addrResp: BigInt = resp._2
+          simLog(s"RESP:0x${"%016x".format(addr)}:0x${"%016x".format(addrResp)}")
+          if(cProcAxi.isCommitedLoad) cProcAxi.writeLD(addrResp)
+        }
+
         clock.step(1)
         currState = cProcAxi.getPStateInternal(0)
 

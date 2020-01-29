@@ -63,14 +63,14 @@ object ProcDriver {
       }
       portPState.wrBRAM64b(pstate.pc, offst: Int); offst+=2
       portPState.wrBRAM64b(pstate.sp, offst: Int); offst+=2
-      // TODO Write SP, EL and NZCV as Cat(EL, SP, NZCV)
       portPState.wrBRAM32b(pstate.nzcv, offst); offst+=1
     }
 
     def rdBRAM2PSTATE(tag: Int): PState = {
       var offst = 0
+
       val xregs = for(i <- 0 until 32 ) yield  {
-        val reg = portPState.rdBRAM64b(offst).toLong; offst+=2
+        val reg = portPState.rdBRAM64b(offst); offst+=2
         reg
       }
 
@@ -78,7 +78,7 @@ object ProcDriver {
       val sp = portPState.rdBRAM64b(offst: Int); offst+=2
       val nzcv = portPState.rdBRAM32b(offst); offst+=1
 
-      val pstate = new PState(xregs.toList: List[Long], pc: Long, sp: Long, nzcv: Int)
+      val pstate = new PState(xregs.toList: List[BigInt], pc: BigInt, sp: BigInt, nzcv: Int)
       //println(pstate.toString())
       pstate
     }
@@ -93,11 +93,11 @@ object ProcDriver {
       val pstate = procStateDBG.pregsVec(cpu)
       val rfile = procStateDBG.rfileVec(cpu)
 
-      val xregs = for(reg <- 0 until 32) yield rfile(reg).peek.litValue.toLong
-      val pc = pstate.PC.peek.litValue.toLong
-      val sp = pstate.SP.peek.litValue.toLong
+      val xregs = for(reg <- 0 until 32) yield rfile(reg).peek.litValue
+      val pc = pstate.PC.peek.litValue
+      val sp = pstate.SP.peek.litValue
       val nzcv = pstate.NZCV.peek.litValue.toInt
-      new PState(xregs.toList: List[Long], pc: Long, sp:Long, nzcv: Int)
+      new PState(xregs.toList: List[BigInt], pc: BigInt, sp:BigInt, nzcv: Int)
     }
 
     def hasCommitedInst(): Boolean = {
@@ -108,6 +108,11 @@ object ProcDriver {
     def getCommitedInst(): BigInt = { procStateDBG_.get.commitReg.bits.inst32.peek.litValue }
     def getCommitedPC(): BigInt = { procStateDBG_.get.commitReg.bits.pc.peek.litValue }
 
+    def isCommitedMem(): Boolean = { procStateDBG_.get.commitReg.bits.mem.valid.peek.litToBoolean }
+    def isCommitedLoad(): Boolean = { !procStateDBG_.get.commitReg.bits.mem.bits.mem.is_store.peek.litToBoolean }
+    def isCommitedStore(): Boolean = { procStateDBG_.get.commitReg.bits.mem.bits.mem.is_store.peek.litToBoolean }
+    def getCommitedMemAddr(): BigInt = { procStateDBG_.get.commitReg.bits.mem.bits.mem.addr.peek.litValue }
+    def writeLD(data: BigInt): Unit = { procStateDBG_.get.memResp.poke(data.U) }
 
     def printState():Unit = {
       if(!cfgProc.DebugSignals) {

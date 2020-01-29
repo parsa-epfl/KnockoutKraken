@@ -163,14 +163,17 @@ object SoftwareStructs {
   implicit def bool2long(bits: Bool):  Long  = { bigint2long(bool2bigint(bits)) }
 
   case class PState (
-    val xregs : List[Long],
-    val pc : Long,
-    val sp : Long,
+    val xregs : List[BigInt],
+    val pc : BigInt,
+    val sp : BigInt,
     val nzcv : Int
   ) {
     override def toString() = {
       val name = s"PROC STATE:"
-      val regs = xregs.zipWithIndex.map {case (reg, i) => s"${PrintingTools.getReg(i)}:${"%016x".format(reg)}"}.mkString("\n")
+      val regs = xregs.zipWithIndex.map {
+        case (reg, i) =>
+          s"${PrintingTools.getReg(i)}:0x${"%016x".format(reg)}"
+      }.mkString("\n")
       val str = Seq(
         name,
         regs,
@@ -191,12 +194,12 @@ object SoftwareStructs {
         str = str ++ "PState didn't match, differences:\n"
         diffXRegs foreach {
           case ((t, o), i) =>
-            str = str ++ s"${PrintingTools.getReg(i)}:${t} != ${o}\n"
+            str = str ++ s"${PrintingTools.getReg(i)}:0x${"%016x".format(t)} != 0x${"%016x".format(o)}\n"
         }
         if(this.pc != other.pc)
-          str = str ++ s"PC:${"%016x".format(this.pc)} != ${"%016x".format(other.pc)}\n"
+          str = str ++ s"PC:0x${"%016x".format(this.pc)} != 0x${"%016x".format(other.pc)}\n"
         if(this.sp != other.sp)
-          str = str ++ s"SP:${"%016x".format(this.sp)} != ${"%016x".format(other.sp)}\n"
+          str = str ++ s"SP:0x${"%016x".format(this.sp)} != 0x${"%016x".format(other.sp)}\n"
         if(this.nzcv != other.nzcv)
           str = str ++ s"NZCV:${this.nzcv.toBinaryString} != ${other.nzcv.toBinaryString}\n"
 

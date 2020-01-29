@@ -228,16 +228,16 @@ object DECODE_MATCHING_TABLES
       CBImm_CBZ    -> List(I_CBImm, OP_CBZ,   N, N, Y, Y, N, N, N),
       CBImm_CBNZ   -> List(I_CBImm, OP_CBNZ,  N, N, Y, Y, N, N, N),
       // Load/store register (unsigned immediate):
-      LSUImm_S8     -> List(I_LSUImm, OP_STRB, Y, Y, Y, Y, N, N, N),
-      LSUImm_S16    -> List(I_LSUImm, OP_STRH, Y, Y, Y, Y, N, N, N),
-      LSUImm_S32    -> List(I_LSUImm, OP_STR32,Y, Y, Y, Y, N, N, N),
-      LSUImm_S64    -> List(I_LSUImm, OP_STR64,Y, Y, Y, Y, N, N, N),
-      LSUImm_L8     -> List(I_LSUImm, OP_LDRB, Y, Y, Y, Y, N, N, N),
-      LSUImm_L16    -> List(I_LSUImm, OP_LDRH, Y, Y, Y, Y, N, N, N),
-      LSUImm_L32    -> List(I_LSUImm, OP_LDR32,Y, Y, Y, Y, N, N, N),
-      LSUImm_L64    -> List(I_LSUImm, OP_LDR64,Y, Y, Y, Y, N, N, N),
+      LSUImm_S8    -> List(I_LSUImm, OP_STRB, Y, Y, Y, Y, N, N, N),
+      LSUImm_S16   -> List(I_LSUImm, OP_STRH, Y, Y, Y, Y, N, N, N),
+      LSUImm_S32   -> List(I_LSUImm, OP_STR32,Y, Y, Y, Y, N, N, N),
+      LSUImm_S64   -> List(I_LSUImm, OP_STR64,Y, Y, Y, Y, N, N, N),
+      LSUImm_L8    -> List(I_LSUImm, OP_LDRB, Y, Y, Y, Y, N, N, N),
+      LSUImm_L16   -> List(I_LSUImm, OP_LDRH, Y, Y, Y, Y, N, N, N),
+      LSUImm_L32   -> List(I_LSUImm, OP_LDR32,Y, Y, Y, Y, N, N, N),
+      LSUImm_L64   -> List(I_LSUImm, OP_LDR64,Y, Y, Y, Y, N, N, N)
       // load/store (immediate)
-      LDR_I        -> List(I_LSImm, OP_LDR,   Y, N, N, Y, N, N, N)
+      //LDR_I        -> List(I_LSImm, OP_LDR,   Y, N, N, Y, N, N, N)
     )
 }
 
