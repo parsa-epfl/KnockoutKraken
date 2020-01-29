@@ -43,7 +43,7 @@ object DECODE_CONTROL_SIGNALS
   val OP_BCOND = DEC_LITS.OP_BCOND.U(OP_W)
 
   val OP_CBZ = DEC_LITS.OP_CBZ.U(OP_W)
-  val OP_CBNZ = DEC_LITS.OP_CBZ.U(OP_W)
+  val OP_CBNZ = DEC_LITS.OP_CBNZ.U(OP_W)
 
   // Move wide (immediate)
   val OP_MOVN = DEC_LITS.OP_MOVN.U(OP_W)
