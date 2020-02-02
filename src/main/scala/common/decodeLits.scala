@@ -92,7 +92,7 @@ object DEC_LITS {
   val NV = 15 // 111 1
 
   // load/store operation signals
-  val OP_LDR = 0
+  val OP_LDR = 4
 
   // Load/store operation
   val OP_STRB  = 0

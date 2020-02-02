@@ -68,6 +68,7 @@ class ConditionHolds(implicit val cfg: ProcConfig) extends Module
 class AddWithCarry(implicit val cfg: ProcConfig) extends Module
 {
   val io = IO(new Bundle {
+                val is32bit = Input(Bool())
                 val a = Input(DATA_T)
                 val b = Input(DATA_T)
                 val carry = Input(UInt(1.W))
@@ -92,6 +93,16 @@ class AddWithCarry(implicit val cfg: ProcConfig) extends Module
 
   io.res := res
   io.nzcv := nzcv.asUInt
+
+  when(io.is32bit) {
+    unsigned_sum := (io.a(31,0) +& io.b(31,0)) + io.carry
+    res          := unsigned_sum(32-1, 0)
+    signed_sum   := (io.a(31,0).asSInt +& io.b(31,0).asSInt).asUInt + io.carry
+    n := res(32-1).asBool
+    z := res(31,0) === 0.U
+    c := res(31,0) =/= unsigned_sum(32,0)
+    v := res(31,0).asSInt =/= signed_sum(32,0).asSInt
+  }
 }
 
 object ALU {
@@ -388,6 +399,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   // NOTE: OP_SUB = 1 and OP_CCMP = 1 => Negative sum
   val addWithCarry = Module(new AddWithCarry)
   // I_ASSR || I_ASImm
+  addWithCarry.io.is32bit := io.dinst.is32bit
   addWithCarry.io.a := aluVal1
   addWithCarry.io.b := Mux(io.dinst.op === OP_SUB, ~aluVal2, aluVal2)
   addWithCarry.io.carry := Mux(io.dinst.op === OP_SUB, 1.U, 0.U)
@@ -409,7 +421,8 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
 
   // Build executed instruction
   val einst = Wire(new EInst)
-  einst.res := MuxLookup(io.dinst.itype, logicALU.io.res, Array(
+  val res = Wire(DATA_T)
+  res := MuxLookup(io.dinst.itype, logicALU.io.res, Array(
                  I_BitF  -> logicALU.io.res,
                  I_LogSR -> logicALU.io.res,
                  I_LogI  -> logicALU.io.res,
@@ -418,6 +431,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
                  I_MovI  -> move.io.res,
                  I_CSel  -> Mux(condHolds.io.res, rVal1, addWithCarry.io.res)
                  ))
+  einst.res := Mux(io.dinst.is32bit, Cat(0.U, res(31,0)), res)
   einst.rd := io.dinst.rd
   einst.nzcv.bits := MuxLookup(io.dinst.itype, addWithCarry.io.nzcv, Array(
                            I_LogSR -> addWithCarry.io.nzcv,

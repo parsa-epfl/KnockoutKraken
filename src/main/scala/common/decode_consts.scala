@@ -148,12 +148,12 @@ object DECODE_MATCHING_TABLES
     //    |         |  |           | NZCV
     //    |    INST |  | RS2  SHIFT|  EN
     //    |     OP  |  |  EN    EN |  |
-    //    |     |   |  |  | IMM |  |  |
-    //    |     |   |  |  |  EN |  |  |
-    //    |     |   |  |  |  |  |  |  |
-    //    |     |   |  |  |  |  |  |  |
-    //    |     |   |  |  |  |  |  |  |
-    List(I_X, OP_X, N, N, N, N, N, N, N)
+    //    |     |   |  |  | IMM |  |  |32BIT
+    //    |     |   |  |  |  EN |  |  |  |
+    //    |     |   |  |  |  |  |  |  |  |
+    //    |     |   |  |  |  |  |  |  |  |
+    //    |     |   |  |  |  |  |  |  |  |
+    List(I_X, OP_X, N, N, N, N, N, N, N, N)
 
   def decode_table: Array[(BitPat, List[UInt])]  =
     Array(
@@ -166,76 +166,83 @@ object DECODE_MATCHING_TABLES
       //                      |               |  |           | NZCV
       //                      |      INST     |  | RS2  SHIFT|  EN
       //                      |       OP      |  |  EN    EN |  |
-      //                      |       |       |  |  | IMM |  |  |
-      //                      |       |       |  |  |  EN |  |  |
-      //                      |       |       |  |  |  |  |  |  |
-      //                      |       |       |  |  |  |  |  |  |
-      //                      |       |       |  |  |  |  |  |  |
+      //                      |       |       |  |  | IMM |  |  |32BIT
+      //                      |       |       |  |  |  EN |  |  |  |
+      //                      |       |       |  |  |  |  |  |  |  |
+      //                      |       |       |  |  |  |  |  |  |  |
+      //                      |       |       |  |  |  |  |  |  |  |
       // PC-Rel
-      PCRel_ADR    -> List(I_PCRel, OP_ADR,   Y, N, N, Y, N, N, N),
-      PCRel_ADRP   -> List(I_PCRel, OP_ADRP,  Y, N, N, Y, N, N, N),
+      PCRel_ADR    -> List(I_PCRel, OP_ADR,   Y, N, N, Y, N, N, N, N),
+      PCRel_ADRP   -> List(I_PCRel, OP_ADRP,  Y, N, N, Y, N, N, N, N),
       // Logical (shifted register)
-      LogSR_AND    -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, N),
-      LogSR_BIC    -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, N),
-      LogSR_ORR    -> List(I_LogSR, OP_ORR,   Y, Y, Y, N, Y, N, N),
-      LogSR_ORN    -> List(I_LogSR, OP_ORN,   Y, Y, Y, N, Y, N, N),
-      LogSR_EOR    -> List(I_LogSR, OP_EOR,   Y, Y, Y, N, Y, N, N),
-      LogSR_EON    -> List(I_LogSR, OP_EON,   Y, Y, Y, N, Y, N, N),
-      LogSR_ANDS   -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, Y),
-      LogSR_BICS   -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, Y),
+      LogSR_AND    -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, N, N),
+      LogSR_BIC    -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, N, N),
+      LogSR_ORR    -> List(I_LogSR, OP_ORR,   Y, Y, Y, N, Y, N, N, N),
+      LogSR_ORN    -> List(I_LogSR, OP_ORN,   Y, Y, Y, N, Y, N, N, N),
+      LogSR_EOR    -> List(I_LogSR, OP_EOR,   Y, Y, Y, N, Y, N, N, N),
+      LogSR_EON    -> List(I_LogSR, OP_EON,   Y, Y, Y, N, Y, N, N, N),
+      LogSR_ANDS   -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, Y, N),
+      LogSR_BICS   -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, Y, N),
       // Logical (immediate)
-      LogI_AND     -> List(I_LogI,  OP_AND,   Y, Y, N, Y, N, N, N),
-      LogI_ORR     -> List(I_LogI,  OP_ORR,   Y, Y, N, Y, N, N, N),
-      LogI_EOR     -> List(I_LogI,  OP_EOR,   Y, Y, N, Y, N, N, N),
-      LogI_ANDS    -> List(I_LogI,  OP_AND,   Y, Y, N, Y, N, N, Y),
+      LogI_AND     -> List(I_LogI,  OP_AND,   Y, Y, N, Y, N, N, N, N),
+      LogI_ORR     -> List(I_LogI,  OP_ORR,   Y, Y, N, Y, N, N, N, N),
+      LogI_EOR     -> List(I_LogI,  OP_EOR,   Y, Y, N, Y, N, N, N, N),
+      LogI_ANDS    -> List(I_LogI,  OP_AND,   Y, Y, N, Y, N, N, Y, N),
       // Move wide (immediate)
-      MovI_MOVN     -> List(I_MovI, OP_MOVN,  Y, N, Y, Y, N, N, N),
-      MovI_MOVZ     -> List(I_MovI, OP_MOVZ,  Y, N, Y, Y, N, N, N),
-      MovI_MOVK     -> List(I_MovI, OP_MOVK,  Y, N, Y, Y, N, N, N),
+      MovI_MOVN     -> List(I_MovI, OP_MOVN,  Y, N, Y, Y, N, N, N, N),
+      MovI_MOVZ     -> List(I_MovI, OP_MOVZ,  Y, N, Y, Y, N, N, N, N),
+      MovI_MOVK     -> List(I_MovI, OP_MOVK,  Y, N, Y, Y, N, N, N, N),
       // Bitfield
-      BitF_SBFM    -> List(I_BitF,  OP_SBFM,  Y, N, Y, Y, N, N, N),
-      BitF_BFM     -> List(I_BitF,  OP_BFM,   Y, N, Y, Y, N, N, N),
-      BitF_UBFM    -> List(I_BitF,  OP_UBFM,  Y, N, Y, Y, N, N, N),
+      BitF_SBFM    -> List(I_BitF,  OP_SBFM,  Y, N, Y, Y, N, N, N, N),
+      BitF_BFM     -> List(I_BitF,  OP_BFM,   Y, N, Y, Y, N, N, N, N),
+      BitF_UBFM    -> List(I_BitF,  OP_UBFM,  Y, N, Y, Y, N, N, N, N),
       // Conditional select
-      CSel_CSEL    -> List(I_CSel,  OP_CSEL,  Y, Y, Y, N, N, Y, N),
-      CSel_CSINC   -> List(I_CSel,  OP_CSINC, Y, Y, Y, N, N, Y, N),
-      CSel_CSINV   -> List(I_CSel,  OP_CSINV, Y, Y, Y, N, N, Y, N),
-      CSel_CSNEG   -> List(I_CSel,  OP_CSNEG, Y, Y, Y, N, N, Y, N),
+      CSel_CSEL    -> List(I_CSel,  OP_CSEL,  Y, Y, Y, N, N, Y, N, N),
+      CSel_CSINC   -> List(I_CSel,  OP_CSINC, Y, Y, Y, N, N, Y, N, N),
+      CSel_CSINV   -> List(I_CSel,  OP_CSINV, Y, Y, Y, N, N, Y, N, N),
+      CSel_CSNEG   -> List(I_CSel,  OP_CSNEG, Y, Y, Y, N, N, Y, N, N),
       // Conditional compare (immediate)
-      CCImm_CCMN   -> List(I_CCImm, OP_CCMN,  N, N, Y, Y, N, Y, Y),
-      CCImm_CCMP   -> List(I_CCImm, OP_CCMP,  N, N, Y, Y, N, Y, Y),
+      CCImm_CCMN   -> List(I_CCImm, OP_CCMN,  N, N, Y, Y, N, Y, Y, N),
+      CCImm_CCMP   -> List(I_CCImm, OP_CCMP,  N, N, Y, Y, N, Y, Y, N),
+      CCImm_CCMP32 -> List(I_CCImm, OP_CCMP,  N, N, Y, Y, N, Y, Y, Y),
       // Conditional compare (register)
-      CCReg_CCMN   -> List(I_CCReg, OP_CCMN,  N, Y, Y, N, N, Y, Y),
-      CCReg_CCMP   -> List(I_CCReg, OP_CCMP,  N, Y, Y, N, N, Y, Y),
+      CCReg_CCMN   -> List(I_CCReg, OP_CCMN,  N, Y, Y, N, N, Y, Y, N),
+      CCReg_CCMP   -> List(I_CCReg, OP_CCMP,  N, Y, Y, N, N, Y, Y, N),
+      CCReg_CCMP32 -> List(I_CCReg, OP_CCMP,  N, Y, Y, N, N, Y, Y, Y),
       // Add/subtract (shifted register)
-      ASSR_CMP     -> List(I_ASSR,  OP_SUB,   N, Y, Y, N, Y, N, Y),
-      ASSR_ADD     -> List(I_ASSR,  OP_ADD,   Y, Y, Y, N, Y, N, N),
-      ASSR_ADDS    -> List(I_ASSR,  OP_ADD,   Y, Y, Y, N, Y, N, Y),
-      ASSR_SUB     -> List(I_ASSR,  OP_SUB,   Y, Y, Y, N, Y, N, N),
-      ASSR_SUBS    -> List(I_ASSR,  OP_SUB,   Y, Y, Y, N, Y, N, Y),
+      ASSR_CMP     -> List(I_ASSR,  OP_SUB,   N, Y, Y, N, Y, N, Y, N),
+      ASSR_CMP     -> List(I_ASSR,  OP_SUB,   N, Y, Y, N, Y, N, Y, N),
+      ASSR_ADD     -> List(I_ASSR,  OP_ADD,   Y, Y, Y, N, Y, N, N, N),
+      ASSR_ADDS    -> List(I_ASSR,  OP_ADD,   Y, Y, Y, N, Y, N, Y, N),
+      ASSR_SUB     -> List(I_ASSR,  OP_SUB,   Y, Y, Y, N, Y, N, N, N),
+      ASSR_SUBS    -> List(I_ASSR,  OP_SUB,   Y, Y, Y, N, Y, N, Y, N),
       // Add/subtract (immediate)
-      ASImm_CMP_I  -> List(I_ASImm, OP_SUB,   N, Y, N, Y, Y, N, Y),
-      ASImm_ADD_I  -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, N),
-      ASImm_ADDS_I -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, Y),
-      ASImm_SUB_I  -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, Y, N, N),
-      ASImm_SUBS_I -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, Y, N, Y),
+      ASImm_CMP32  -> List(I_ASImm, OP_SUB,   N, Y, N, Y, Y, N, Y, Y),
+      ASImm_CMP    -> List(I_ASImm, OP_SUB,   N, Y, N, Y, Y, N, Y, N),
+      ASImm_ADD    -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, N, N),
+      ASImm_ADDS   -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, Y, N),
+      ASImm_SUB    -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, Y, N, N, N),
+      ASImm_SUBS   -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, Y, N, Y, N),
       // Unconditional branch (immediate)
-      BImm_B       -> List(I_BImm,  OP_B,     N, N, N, Y, N, N, N),
-      BImm_BL      -> List(I_BImm,  OP_BL,    N, N, N, Y, N, N, N),
+      BImm_B       -> List(I_BImm,  OP_B,     N, N, N, Y, N, N, N, N),
+      BImm_BL      -> List(I_BImm,  OP_BL,    N, N, N, Y, N, N, N, N),
       // Conditional branch (immediate)
-      BCond        -> List(I_BCImm, OP_BCOND, N, N, N, Y, N, Y, N),
+      BCond        -> List(I_BCImm, OP_BCOND, N, N, N, Y, N, Y, N, N),
       // Compare and branch (immediate)
-      CBImm_CBZ    -> List(I_CBImm, OP_CBZ,   N, N, Y, Y, N, N, N),
-      CBImm_CBNZ   -> List(I_CBImm, OP_CBNZ,  N, N, Y, Y, N, N, N),
+      CBImm_CBZ    -> List(I_CBImm, OP_CBZ,   N, N, Y, Y, N, N, N, N),
+      CBImm_CBNZ   -> List(I_CBImm, OP_CBNZ,  N, N, Y, Y, N, N, N, N),
+      // Load/store pair register (signed offset):
+      //LSPReg_STP64 -> List(I_LSPReg, OP_STP64,Y, Y, Y, Y, N, N, N, N),
+      //LSPReg_LDP64 -> List(I_LSPReg, OP_LDP64,Y, Y, Y, Y, N, N, N, N),
       // Load/store register (unsigned immediate):
-      LSUImm_S8    -> List(I_LSUImm, OP_STRB, Y, Y, Y, Y, N, N, N),
-      LSUImm_S16   -> List(I_LSUImm, OP_STRH, Y, Y, Y, Y, N, N, N),
-      LSUImm_S32   -> List(I_LSUImm, OP_STR32,Y, Y, Y, Y, N, N, N),
-      LSUImm_S64   -> List(I_LSUImm, OP_STR64,Y, Y, Y, Y, N, N, N),
-      LSUImm_L8    -> List(I_LSUImm, OP_LDRB, Y, Y, Y, Y, N, N, N),
-      LSUImm_L16   -> List(I_LSUImm, OP_LDRH, Y, Y, Y, Y, N, N, N),
-      LSUImm_L32   -> List(I_LSUImm, OP_LDR32,Y, Y, Y, Y, N, N, N),
-      LSUImm_L64   -> List(I_LSUImm, OP_LDR64,Y, Y, Y, Y, N, N, N)
+      LSUImm_S8    -> List(I_LSUImm, OP_STRB, Y, Y, Y, Y, N, N, N, N),
+      LSUImm_S16   -> List(I_LSUImm, OP_STRH, Y, Y, Y, Y, N, N, N, N),
+      LSUImm_S32   -> List(I_LSUImm, OP_STR32,Y, Y, Y, Y, N, N, N, N),
+      LSUImm_S64   -> List(I_LSUImm, OP_STR64,Y, Y, Y, Y, N, N, N, N),
+      LSUImm_L8    -> List(I_LSUImm, OP_LDRB, Y, Y, Y, Y, N, N, N, N),
+      LSUImm_L16   -> List(I_LSUImm, OP_LDRH, Y, Y, Y, Y, N, N, N, N),
+      LSUImm_L32   -> List(I_LSUImm, OP_LDR32,Y, Y, Y, Y, N, N, N, N),
+      LSUImm_L64   -> List(I_LSUImm, OP_LDR64,Y, Y, Y, Y, N, N, N, N)
       // load/store (immediate)
       //LDR_I        -> List(I_LSImm, OP_LDR,   Y, N, N, Y, N, N, N)
     )

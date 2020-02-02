@@ -103,13 +103,13 @@ object INSTRUCTIONS
   def BitF_UBFM = BitPat("b1101001101??????????????????????")
 
   // Add/subtract (shifted register) */
-  // 31 | 30 | 29 | 28 27 26 25 24 | 23 22 | 21 | 20 19 18 17 16 | 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00| Instruction Page | Variant
-  // sf | op |  S |  0  1  0  1  0 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd      |                  |
+  // 31 | 30 | 29 | 28 27 26 25 24 | 23 22 | 21 | 20 19 18 17 16 | 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
+  // sf | op |  S |  0  1  0  1  0 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd       |                  |
   //  1 |  1 |  1 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |  1  1  1  1  1 | CMP              | 64-bit  */
-  //  1 |  0 |  0 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd      | ADD              | 64-bit  */
-  //  1 |  0 |  1 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd      | ADDS             | 64-bit  */
-  //  1 |  1 |  0 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd      | SUB              | 64-bit  */
-  //  1 |  1 |  1 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd      | SUBS             | 64-bit  */
+  //  1 |  0 |  0 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd       | ADD              | 64-bit  */
+  //  1 |  0 |  1 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd       | ADDS             | 64-bit  */
+  //  1 |  1 |  0 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd       | SUB              | 64-bit  */
+  //  1 |  1 |  1 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd       | SUBS             | 64-bit  */
   def ASSR = BitPat("b1??01011??0?????????????????????")
   def ASSR_CMP  = BitPat("b11101011??0????????????????11111")
   def ASSR_ADD  = BitPat("b10001011??0?????????????????????")
@@ -135,33 +135,40 @@ object INSTRUCTIONS
   // sf | op |  S |  1  1  0  1  0  0  1  0 |     imm5       |      cond   |  1 | o2 |       Rn       | o3 |   nzcv     |                  |
   //  1 |  0 |  1 |  1  1  0  1  0  0  1  0 |     imm5       |      cond   |  1 |  0 |       Rn       |  0 |   nzcv     | CCMN             | 64-bit
   //  1 |  1 |  1 |  1  1  0  1  0  0  1  0 |     imm5       |      cond   |  1 |  0 |       Rn       |  0 |   nzcv     | CCMP             | 64-bit
+  //  0 |  1 |  1 |  1  1  0  1  0  0  1  0 |     imm5       |      cond   |  1 |  0 |       Rn       |  0 |   nzcv     | CCMP             | 32-bit
   def CCImm = BitPat("b1?111010010?????????10?????0????")
   def CCImm_CCMN = BitPat("b10111010010?????????10?????0????")
   def CCImm_CCMP = BitPat("b11111010010?????????10?????0????")
+  def CCImm_CCMP32 = BitPat("b01111010010?????????10?????0????")
 
   // Conditional compare (register)
   // 31 | 30 | 29 | 28 27 26 25 24 23 22 21 | 20 19 18 17 16 | 15 14 13 12 | 11 | 10 | 09 08 07 06 05 | 04 | 03 02 01 00| Instruction Page | Variant
   // sf | op |  S |  1  1  0  1  0  0  1  0 |      Rm        |      cond   |  0 | o2 |       Rn       | o3 |   nzcv     |                  |
   //  1 |  0 |  1 |  1  1  0  1  0  0  1  0 |      Rm        |      cond   |  0 |  0 |       Rn       |  0 |   nzcv     | CCMN             | 64-bit
   //  1 |  1 |  1 |  1  1  0  1  0  0  1  0 |      Rm        |      cond   |  0 |  0 |       Rn       |  0 |   nzcv     | CCMP             | 64-bit
+  //  0 |  1 |  1 |  1  1  0  1  0  0  1  0 |      Rm        |      cond   |  0 |  0 |       Rn       |  0 |   nzcv     | CCMP             | 32-bit
   def CCReg = BitPat("b1?111010010?????????00?????0????")
   def CCReg_CCMN = BitPat("b10111010010?????????00?????0????")
   def CCReg_CCMP = BitPat("b11111010010?????????00?????0????")
+  def CCReg_CCMP32 = BitPat("b01111010010?????????00?????0????")
 
   // Add/subtract (immediate)
   // 31 | 30 | 29 | 28 27 26 25 24 | 23 22 | 21 20 19 18 17 16 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
   // sf | op |  S |  1  0  0  0  1 | 0  sh |               imm12                 |      Rn        |        Rd      | ADD              | 64-bit
+  //  0 |  1 |  1 |  1  0  0  0  1 | 0  sh |               imm12                 |      Rn        |  1  1  1  1  1 | CMP              | 32-bit
+  //  1 |  1 |  1 |  1  0  0  0  1 | 0  sh |               imm12                 |      Rn        |  1  1  1  1  1 | CMP              | 64-bit
   //  1 |  0 |  0 |  1  0  0  0  1 | 0  sh |               imm12                 |      Rn        |        Rd      | ADD              | 64-bit
   //  1 |  0 |  1 |  1  0  0  0  1 | 0  sh |               imm12                 |      Rn        |        Rd      | ADDS             | 64-bit
   //  1 |  1 |  0 |  1  0  0  0  1 | 0  sh |               imm12                 |      Rn        |        Rd      | SUB              | 64-bit
   //  1 |  1 |  1 |  1  0  0  0  1 | 0  sh |               imm12                 |      Rn        |        Rd      | SUBS             | 64-bit
   // Note on shift : 01 -> LSL #12, nothing else possible
   def ASImm =  BitPat("b1??100010???????????????????????")
-  def ASImm_CMP_I  = BitPat("b111100010??????????????????11111")
-  def ASImm_ADD_I  = BitPat("b100100010???????????????????????")
-  def ASImm_ADDS_I = BitPat("b101100010???????????????????????")
-  def ASImm_SUB_I  = BitPat("b110100010???????????????????????")
-  def ASImm_SUBS_I = BitPat("b111100010???????????????????????")
+  def ASImm_CMP32 = BitPat("b011100010??????????????????11111")
+  def ASImm_CMP   = BitPat("b111100010??????????????????11111")
+  def ASImm_ADD   = BitPat("b100100010???????????????????????")
+  def ASImm_ADDS  = BitPat("b101100010???????????????????????")
+  def ASImm_SUB   = BitPat("b110100010???????????????????????")
+  def ASImm_SUBS  = BitPat("b111100010???????????????????????")
 
   //  Load register (literal) */
   //  V = 1 bit is for SIMD, we ignore

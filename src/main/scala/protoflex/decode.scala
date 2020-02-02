@@ -19,6 +19,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
   val cond  = Valid(COND_T)
 
   // Control
+  val is32bit = Output(Bool())
   val itype = Output(I_T)
   val op = Output(OP_T)
 
@@ -113,7 +114,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
 
     // Control
     val cdecoder = decoder.tail
-    val csignals = Seq(op, rd.valid, rs1.valid, rs2.valid, imm.valid, shift_val.valid, cond.valid, nzcv.valid)
+    val csignals = Seq(op, rd.valid, rs1.valid, rs2.valid, imm.valid, shift_val.valid, cond.valid, nzcv.valid, is32bit)
     csignals zip cdecoder map { case (s, d) => s := d }
 
     tag := tag_
@@ -144,6 +145,7 @@ object DInst {
     // Control
     dinst.op := OP_X
     dinst.itype := I_X
+    dinst.is32bit := N
 
     // Enables
     dinst.rd.valid := N
