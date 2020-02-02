@@ -33,14 +33,40 @@ class LDSTUnitIO(implicit val cfg: ProcConfig) extends Bundle
   val minst = Output(Valid(new MInst))
 }
 
+class ExtendReg(implicit val cfg: ProcConfig) extends Module
+{
+  val io = IO(new Bundle {
+                val value = Input(DATA_T)
+                val option = Input(UInt(3.W))
+                val shift = Input(UInt(2.W))
+                val res = Output(DATA_T)
+              })
+  val value = io.value
+  val isSigned = io.option(2)
+  val size = io.option(1,0)
+  val valSExt = WireInit(MuxLookup(size, value.asSInt, Array(
+                                     0.U -> value( 7,0).asSInt.pad(DATA_SZ),
+                                     1.U -> value(15,0).asSInt.pad(DATA_SZ),
+                                     2.U -> value(31,0).asSInt.pad(DATA_SZ),
+                                     3.U -> value.asSInt
+                                   )))
+  val valUExt = WireInit(MuxLookup(size, value, Array(
+                                     0.U -> value( 7,0).pad(DATA_SZ),
+                                     1.U -> value(15,0).pad(DATA_SZ),
+                                     2.U -> value(31,0).pad(DATA_SZ),
+                                     3.U -> value
+                                   )))
+  val res = WireInit(Mux(isSigned, valSExt.asUInt, valUExt))
+  io.res := res
+}
+
 class LDSTUnit(implicit val cfg: ProcConfig) extends Module
 {
+
   val io = IO(new LDSTUnitIO)
 
-  val wback = Wire(Bool())
-  val postindex = Wire(Bool())
-  val offst = Wire(DATA_T)
-
+  // Decode All variants
+  val offst = WireInit(io.dinst.imm.bits)
   val size = Wire(UInt(2.W))
   size := MuxLookup(io.dinst.op, 0.U, Array(
                       OP_STRB  -> 0.U,
@@ -54,51 +80,67 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
                     ))
 
 
+  // Decode LSUImm variants
+  val wback = WireInit(false.B)
+  val postindex = WireInit(false.B)
+
+  // Decode LSRReg variants
+  val option = io.dinst.shift_val.bits
+  val shift = Mux(io.dinst.shift_val.valid, size, 0.U)
+  val extendReg = Module(new ExtendReg)
+  extendReg.io.value := io.rVal2
+  extendReg.io.option := option
+  extendReg.io.shift := shift
+
+
   when(io.dinst.itype === I_LSUImm) {
     wback := false.B
     postindex := false.B
     offst := (io.dinst.imm.bits << size)
-  }.otherwise {
-    wback := false.B
-    postindex := false.B
-    offst := io.dinst.imm.bits
+  }.elsewhen(io.dinst.itype === I_LSRReg) {
+    offst := extendReg.io.res
   }
-
-  val datasize = WireInit(size << 8.U)
 
 
   //  if n == 31 then
-  //     address = SP[];
+  //     address = SP[]; // SP[] == X[31]
   //  else
   //     address = X[n];
   //
-  //  if !postindex then
-  //     address = address + offset
   val base_address = WireInit(DATA_X)
-  when(io.dinst.rs1.bits === 31.U) {
+  when(io.dinst.rs1.bits === 31.U && (io.dinst.itype === I_LSUImm || io.dinst.itype === I_LSRReg)) {
     // CheckSPAAligment(); TODO
-    base_address := io.pstate.SP
+    base_address := io.rVal1
   }.otherwise {
     base_address := io.rVal1
   }
 
   val post_address = WireInit(base_address + offst)
   val ldst_address = WireInit(base_address)
+
+  //  if !postindex then
+  //     address = address + offset
   when(!postindex) {
     ldst_address := post_address
   }
 
+  //  integer datasize = 8 << size
+  //  bits(datasize) data
+
   // For WRITES
-  // if rt_unknown
-  //   data = bits(datasize) UNKNOWN
-  // else
-  //   data = X[t]
-  // Mem[address, datasize DIV 8, AccType_NORMAL] = data
+  // Only LSUImm {
+  //   if rt_unknown
+  //     data = bits(datasize) UNKNOWN
+  //   else
+  //     data = X[t]
+  //   }
   //
-  // For READS
+  // Mem[address, datasize DIV 8, AccType_NORMAL] = data
+
+  // For READS Everyone
   // data = Mem[address, datasize DIV 8, AccType_NORMAL]
   // X[t] = ZeroExtend(data, regsize)
-  //
+
   val data = WireInit(io.rVal2) // data = Rt = rVal2
   val is_store = WireInit(OP_STRB  === io.dinst.op ||
                            OP_STRH  === io.dinst.op ||
@@ -116,8 +158,13 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   io.minst.bits.mem.reg := io.dinst.rd.bits
   io.minst.bits.mem.size := size
   io.minst.bits.mem.is_store := is_store
+  io.minst.valid := MuxLookup(io.dinst.itype, false.B, Array(
+                                I_LSRReg -> true.B,
+                                I_LSUImm -> true.B
+                              ))
 
-  // Writeback address to reg
+
+  // Writeback address to reg // itype === LSUImm
   // if wback then
   //   if n == 31 then
   //     SP[] = address;
@@ -130,10 +177,6 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   io.minst.bits.rd.bits := io.dinst.rs2.bits
   io.minst.bits.rd.valid := wback
 
-  io.minst.valid := MuxLookup(io.dinst.itype, false.B, Array(
-                              I_LSUImm -> true.B
-                            ))
-
   // Tag management
   val tag_checked = RegInit(false.B)
   when(io.dinst.itype === I_LSUImm) {
@@ -142,9 +185,10 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
 
   // TODO
   // if HaveMTEExt() then
-  //   SetNotTagCheckedInstruction(!tag_checked); 
+  //   SetNotTagCheckedInstruction(!tag_checked); // itype == LSUImm
+  //   SetNotTagCheckedInstruction(FALSE);        // itype == LSRReg
 
-  // TODO
+  // TODO // itype == LSUImm
   // Checking for Transplant corner cases 
   // if wback && n == t && n != 31 then
   //     c = ConstrainUnpredictable();

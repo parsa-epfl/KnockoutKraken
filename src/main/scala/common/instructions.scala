@@ -187,19 +187,19 @@ object INSTRUCTIONS
   //  0  1 |  1  1  1 |  0 |  0  1 |  0  0 |              imm12                  |       Rn       |       Rt       | STRH             | unsigned offset
   //  1  0 |  1  1  1 |  0 |  0  1 |  0  0 |              imm12                  |       Rn       |       Rt       | STR              | 32-bit
   //  1  1 |  1  1  1 |  0 |  0  1 |  0  0 |              imm12                  |       Rn       |       Rt       | STR              | 64-bit
-  //  0  0 |  1  1  1 |  0 |  0  1 |  0  1 |              imm12                  |       Rn       |       Rt       | LDTRB            | unsigned offset
-  //  0  1 |  1  1  1 |  0 |  0  1 |  0  1 |              imm12                  |       Rn       |       Rt       | LDTRH            | unsigned offset
-  //  1  0 |  1  1  1 |  0 |  0  1 |  0  1 |              imm12                  |       Rn       |       Rt       | LDTR             | 32-bit
-  //  1  1 |  1  1  1 |  0 |  0  1 |  0  1 |              imm12                  |       Rn       |       Rt       | LDTR             | 64-bit
+  //  0  0 |  1  1  1 |  0 |  0  1 |  0  1 |              imm12                  |       Rn       |       Rt       | LDRB            | unsigned offset
+  //  0  1 |  1  1  1 |  0 |  0  1 |  0  1 |              imm12                  |       Rn       |       Rt       | LDRH            | unsigned offset
+  //  1  0 |  1  1  1 |  0 |  0  1 |  0  1 |              imm12                  |       Rn       |       Rt       | LDR             | 32-bit
+  //  1  1 |  1  1  1 |  0 |  0  1 |  0  1 |              imm12                  |       Rn       |       Rt       | LDR             | 64-bit
   def LSUImm = BitPat("b??1110010???????????????????????")
-  def LSUImm_S8  = BitPat("b0011100100??????????????????????")
-  def LSUImm_S16 = BitPat("b0111100100??????????????????????")
-  def LSUImm_S32 = BitPat("b1011100100??????????????????????")
-  def LSUImm_S64 = BitPat("b1111100100??????????????????????")
-  def LSUImm_L8  = BitPat("b0011100101??????????????????????")
-  def LSUImm_L16 = BitPat("b0111100101??????????????????????")
-  def LSUImm_L32 = BitPat("b1011100101??????????????????????")
-  def LSUImm_L64 = BitPat("b1111100101??????????????????????")
+  def LSUImm_STR8  = BitPat("b0011100100??????????????????????")
+  def LSUImm_STR16 = BitPat("b0111100100??????????????????????")
+  def LSUImm_STR32 = BitPat("b1011100100??????????????????????")
+  def LSUImm_STR64 = BitPat("b1111100100??????????????????????")
+  def LSUImm_LDR8  = BitPat("b0011100101??????????????????????")
+  def LSUImm_LDR16 = BitPat("b0111100101??????????????????????")
+  def LSUImm_LDR32 = BitPat("b1011100101??????????????????????")
+  def LSUImm_LDR64 = BitPat("b1111100101??????????????????????")
   //  0  0 |  1  1  1 |  0 |  0  1 |  1  0 |                imm12                |       Rn       |       Rt       | LDRSB            | 64-bit
   //  0  1 |  1  1  1 |  0 |  0  1 |  1  0 |                imm12                |       Rn       |       Rt       | LDRSH            | 64-bit
   //  1  0 |  1  1  1 |  0 |  0  1 |  1  0 |                imm12                |       Rn       |       Rt       | LDRSW            | unsigned offset
@@ -207,6 +207,35 @@ object INSTRUCTIONS
   //  0  0 |  1  1  1 |  0 |  0  1 |  1  1 |                imm12                |       Rn       |       Rt       | LDRSB            | 32-bit
   //  0  1 |  1  1  1 |  0 |  0  1 |  1  1 |                imm12                |       Rn       |       Rt       | LDRSH            | 32-bit
 
+  // Load/store pair register (signed offset)
+  // 31 30 | 29 28 27 | 26 | 25 24 23 | 22 | 21 20 19 18 17 16 15 | 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
+  //  opc  |  1  0  1 |  V |  0  1  0 |  L |         imm7         |       Rt2      |       Rn       |       Rt       |                  |
+  //  1  0 |  1  0  1 |  0 |  0  1  0 |  0 |         imm7         |       Rt2      |       Rn       |       Rt       | STP              | 64-bit
+  //  1  0 |  1  0  1 |  0 |  0  1  0 |  1 |         imm7         |       Rt2      |       Rn       |       Rt       | LDP              | 64-bit
+  def LSPReg = BitPat("b101010010???????????????????????")
+  def LSPReg_STP64 = BitPat("b1010100100??????????????????????")
+  def LSPReg_LDP64 = BitPat("b1010100101??????????????????????")
+
+  // Load/store register (register offset)
+  // 31 30 | 29 28 27 | 26 | 25 24 | 23 | 22 | 21 | 20 19 18 17 16 | 15 14 13 | 12 | 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
+  //  opc  |  1  1  1 |  V |  0  0 |  0 |  L |  1 |       Rm       |  option  |  S |  1  0 |       Rn       |       Rt       |                  |
+  //  0  0 |  1  1  1 |  0 |  0  0 |  0 |  0 |  1 |       Rm       |  x  1  x |  S |  1  0 |       Rn       |       Rt       |  STRB            | register
+  //  0  1 |  1  1  1 |  0 |  0  0 |  0 |  0 |  1 |       Rm       |  x  1  x |  S |  1  0 |       Rn       |       Rt       |  STRH            | register
+  //  1  0 |  1  1  1 |  0 |  0  0 |  0 |  0 |  1 |       Rm       |  x  0  x |  S |  1  0 |       Rn       |       Rt       |  STR             | 32-bit
+  //  1  1 |  1  1  1 |  0 |  0  0 |  0 |  0 |  1 |       Rm       |  x  0  x |  S |  1  0 |       Rn       |       Rt       |  STR             | 64-bit
+  //  0  0 |  1  1  1 |  0 |  0  0 |  0 |  1 |  1 |       Rm       |  x  1  x |  S |  1  0 |       Rn       |       Rt       |  LDRRB           | register
+  //  0  1 |  1  1  1 |  0 |  0  0 |  0 |  1 |  1 |       Rm       |  x  1  x |  S |  1  0 |       Rn       |       Rt       |  LDRRH           | register
+  //  1  0 |  1  1  1 |  0 |  0  0 |  0 |  1 |  1 |       Rm       |  x  0  x |  S |  1  0 |       Rn       |       Rt       |  LDR             | 32-bit
+  //  1  1 |  1  1  1 |  0 |  0  0 |  0 |  1 |  1 |       Rm       |  x  0  x |  S |  1  0 |       Rn       |       Rt       |  LDR             | 64-bit
+  def LSRReg = BitPat("b??111000001?????????10??????????")
+  def LSRReg_STR8  = BitPat("b00111000001??????1??10??????????")
+  def LSRReg_STR16 = BitPat("b01111000001??????1??10??????????")
+  def LSRReg_STR32 = BitPat("b10111000001??????0??10??????????")
+  def LSRReg_STR64 = BitPat("b11111000001??????0??10??????????")
+  def LSRReg_LDR8  = BitPat("b00111000001??????1??10??????????")
+  def LSRReg_LDR16 = BitPat("b01111000001??????1??10??????????")
+  def LSRReg_LDR32 = BitPat("b10111000001??????0??10??????????")
+  def LSRReg_LDR64 = BitPat("b11111000001??????0??10??????????")
 
   // Load/store (immediate post-indexed)
   // Load/store (immediate pre-indexed)

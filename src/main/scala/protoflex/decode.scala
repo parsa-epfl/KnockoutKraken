@@ -47,6 +47,8 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
                            I_ASSR  -> inst( 4, 0),
                            I_CSel  -> inst( 4, 0),
                            I_LSImm -> inst( 4, 0),
+                           I_LSPReg-> inst( 4, 0),
+                           I_LSRReg-> inst( 4, 0),
                            I_LSUImm-> inst( 4, 0)
                            ))
 
@@ -59,6 +61,8 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
                             I_CCImm -> inst( 9, 5),
                             I_CCReg -> inst( 9, 5),
                             I_CSel  -> inst( 9, 5),
+                            I_LSPReg-> inst( 9, 5),
+                            I_LSRReg-> inst( 9, 5),
                             I_LSUImm-> inst( 9, 5)
                             ))
 
@@ -70,6 +74,8 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
                             I_BitF  -> inst( 4, 0),
                             I_MovI  -> inst( 4, 0),
                             I_CBImm -> inst( 4, 0),
+                            I_LSPReg-> inst( 4, 0),// Rt as Source
+                            I_LSRReg-> inst(20,16),
                             I_LSUImm-> inst( 4, 0) // Rt as Source
                           ))
 
@@ -122,6 +128,12 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
     inst32.bits := inst
 
     this.itype := itype
+
+    // Special cases
+    when(itype === I_LSRReg && inst(12) === 1.U) {
+      shift_val.valid := inst(12)   // S
+      shift_val.bits := inst(15,13) // option
+    }
 
     this
   }

@@ -112,6 +112,9 @@ object DECODE_CONTROL_SIGNALS
   val OP_LDRH  = DEC_LITS.OP_LDRH.U(OP_W)
   val OP_LDR32 = DEC_LITS.OP_LDR32.U(OP_W)
   val OP_LDR64 = DEC_LITS.OP_LDR64.U(OP_W)
+  // Load/store pair register
+  val OP_STP64 = DEC_LITS.OP_STP64.U(OP_W)
+  val OP_LDP64 = DEC_LITS.OP_LDP64.U(OP_W)
 
   // Instruction Types for chisel
   val TYPE_W = DEC_LITS.TYPE_W.W
@@ -132,6 +135,9 @@ object DECODE_CONTROL_SIGNALS
   val I_CBImm = DEC_LITS.I_CBImm.U(TYPE_W)
   val I_PCRel = DEC_LITS.I_PCRel.U(TYPE_W)
   val I_LSUImm = DEC_LITS.I_LSUImm.U(TYPE_W)
+  val I_LSRReg = DEC_LITS.I_LSRReg.U(TYPE_W)
+  val I_LSPReg = DEC_LITS.I_LSPReg.U(TYPE_W)
+
 }
 
 object DECODE_MATCHING_TABLES
@@ -234,15 +240,24 @@ object DECODE_MATCHING_TABLES
       // Load/store pair register (signed offset):
       //LSPReg_STP64 -> List(I_LSPReg, OP_STP64,Y, Y, Y, Y, N, N, N, N),
       //LSPReg_LDP64 -> List(I_LSPReg, OP_LDP64,Y, Y, Y, Y, N, N, N, N),
+      // Load/store register (register offset)
+      LSRReg_STR8  -> List(I_LSRReg, OP_STRB, Y, Y, Y, Y, N, N, N, Y),
+      LSRReg_STR16 -> List(I_LSRReg, OP_STRH, Y, Y, Y, Y, N, N, N, Y),
+      LSRReg_STR32 -> List(I_LSRReg, OP_STR32,Y, Y, Y, Y, N, N, N, Y),
+      LSRReg_STR64 -> List(I_LSRReg, OP_STR64,Y, Y, Y, Y, N, N, N, N),
+      LSRReg_LDR8  -> List(I_LSRReg, OP_LDRB, Y, Y, Y, Y, N, N, N, Y),
+      LSRReg_LDR16 -> List(I_LSRReg, OP_LDRH, Y, Y, Y, Y, N, N, N, Y),
+      LSRReg_LDR32 -> List(I_LSRReg, OP_LDR32,Y, Y, Y, Y, N, N, N, Y),
+      LSRReg_LDR64 -> List(I_LSRReg, OP_LDR64,Y, Y, Y, Y, N, N, N, N),
       // Load/store register (unsigned immediate):
-      LSUImm_S8    -> List(I_LSUImm, OP_STRB, Y, Y, Y, Y, N, N, N, N),
-      LSUImm_S16   -> List(I_LSUImm, OP_STRH, Y, Y, Y, Y, N, N, N, N),
-      LSUImm_S32   -> List(I_LSUImm, OP_STR32,Y, Y, Y, Y, N, N, N, N),
-      LSUImm_S64   -> List(I_LSUImm, OP_STR64,Y, Y, Y, Y, N, N, N, N),
-      LSUImm_L8    -> List(I_LSUImm, OP_LDRB, Y, Y, Y, Y, N, N, N, N),
-      LSUImm_L16   -> List(I_LSUImm, OP_LDRH, Y, Y, Y, Y, N, N, N, N),
-      LSUImm_L32   -> List(I_LSUImm, OP_LDR32,Y, Y, Y, Y, N, N, N, N),
-      LSUImm_L64   -> List(I_LSUImm, OP_LDR64,Y, Y, Y, Y, N, N, N, N)
+      LSUImm_STR8  -> List(I_LSUImm, OP_STRB, Y, Y, Y, Y, N, N, N, Y),
+      LSUImm_STR16 -> List(I_LSUImm, OP_STRH, Y, Y, Y, Y, N, N, N, Y),
+      LSUImm_STR32 -> List(I_LSUImm, OP_STR32,Y, Y, Y, Y, N, N, N, Y),
+      LSUImm_STR64 -> List(I_LSUImm, OP_STR64,Y, Y, Y, Y, N, N, N, N),
+      LSUImm_LDR8  -> List(I_LSUImm, OP_LDRB, Y, Y, Y, Y, N, N, N, Y),
+      LSUImm_LDR16 -> List(I_LSUImm, OP_LDRH, Y, Y, Y, Y, N, N, N, Y),
+      LSUImm_LDR32 -> List(I_LSUImm, OP_LDR32,Y, Y, Y, Y, N, N, N, Y),
+      LSUImm_LDR64 -> List(I_LSUImm, OP_LDR64,Y, Y, Y, Y, N, N, N, N)
       // load/store (immediate)
       //LDR_I        -> List(I_LSImm, OP_LDR,   Y, N, N, Y, N, N, N)
     )

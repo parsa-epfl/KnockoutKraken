@@ -103,9 +103,12 @@ object DEC_LITS {
   val OP_LDRH  = 5
   val OP_LDR32 = 6
   val OP_LDR64 = 7
+  // Pair register
+  val OP_STP64 = 3
+  val OP_LDP64 = 7
 
   // Instruction Types for scala
-  val TYPE_W = 4
+  val TYPE_W = 5
   val I_X = 0
   val I_LogSR = 1 // Logical (shifted register)
   val I_LogI  = 2 // Logical (immediate)
@@ -121,8 +124,12 @@ object DEC_LITS {
   val I_CCReg = 12 // Conditional compare (register)
   val I_CBImm = 13 // Branch and Compare (immediate)
   val I_PCRel = 14 // PC-Relative
-  val I_LSUImm = 15 // Load Store (unsigned immediate)
+  val I_LSUImm = 16 // Load Store (unsigned immediate)
+  val I_LSRReg = 17 // Load/store register (register offset)
+  val I_LSPReg = 18 // Load Store pair register (signed offset)
 
+  // TODO: Remove this list? Never used for something usefull
+  //       Dropped AssemblyInstruction based verification for QEMU based
   //                  RD
   //                  EN
   //                  | RS1
@@ -135,22 +142,24 @@ object DEC_LITS {
   //                  |  |  |  |  |  |  |
   //                  |  |  |  |  |  |  |
   //                  |  |  |  |  |  |  |
-  val LI_X     = List(N, N, N, N, N, N, N)
-  val LI_LogSR = List(Y, Y, Y, N, Y, N, N)
-  val LI_LogI  = List(Y, Y, N, Y, N, N, N)
-  val LI_MovI  = List(Y, N, N, Y, N, N, N)
-  val LI_BImm  = List(N, N, N, Y, N, N, N)
-  val LI_BCImm = List(N, N, N, Y, N, Y, N)
-  val LI_ASSR  = List(Y, Y, Y, N, Y, N, N)
-  val LI_ASImm = List(Y, Y, N, Y, Y, N, N)
-  val LI_LSImm = List(Y, N, N, Y, N, N, N)
-  val LI_BitF  = List(Y, Y, N, Y, N, N, N)
-  val LI_CSel  = List(Y, Y, Y, N, N, Y, N)
-  val LI_CCImm = List(N, Y, N, Y, N, Y, Y)
-  val LI_CCReg = List(N, Y, Y, N, N, Y, Y)
-  val LI_CBImm = List(N, Y, N, Y, N, N, N)
-  val LI_PCRel = List(Y, N, N, Y, N, N, N)
+  val LI_X      = List(N, N, N, N, N, N, N)
+  val LI_LogSR  = List(Y, Y, Y, N, Y, N, N)
+  val LI_LogI   = List(Y, Y, N, Y, N, N, N)
+  val LI_MovI   = List(Y, N, N, Y, N, N, N)
+  val LI_BImm   = List(N, N, N, Y, N, N, N)
+  val LI_BCImm  = List(N, N, N, Y, N, Y, N)
+  val LI_ASSR   = List(Y, Y, Y, N, Y, N, N)
+  val LI_ASImm  = List(Y, Y, N, Y, Y, N, N)
+  val LI_LSImm  = List(Y, N, N, Y, N, N, N)
+  val LI_BitF   = List(Y, Y, N, Y, N, N, N)
+  val LI_CSel   = List(Y, Y, Y, N, N, Y, N)
+  val LI_CCImm  = List(N, Y, N, Y, N, Y, Y)
+  val LI_CCReg  = List(N, Y, Y, N, N, Y, Y)
+  val LI_CBImm  = List(N, Y, N, Y, N, N, N)
+  val LI_PCRel  = List(Y, N, N, Y, N, N, N)
   val LI_LSUImm = List(Y, Y, Y, Y, N, N, N)
+  val LI_LSRReg = List(Y, Y, Y, Y, N, N, N)
+  val LI_LSPReg = List(Y, Y, Y, Y, N, N, N)
 
   def decode_table(inst_type : Int): List[Int] =
     inst_type match {
@@ -170,5 +179,7 @@ object DEC_LITS {
       case I_CBImm => LI_BCImm
       case I_PCRel => LI_PCRel
       case I_LSUImm => LI_LSUImm
+      case I_LSRReg => LI_LSRReg
+      case I_LSPReg => LI_LSPReg
     }
 }

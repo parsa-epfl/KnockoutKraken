@@ -306,6 +306,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   //val rVal1 = WireInit(Mux(io.dinst.rs1.bits === 31.U, io.SP, io.rVal1))
   val rVal1 = WireInit(Mux(io.dinst.rs1.bits === 31.U, 0.U, io.rVal1))
   val rVal2 = WireInit(Mux(io.dinst.rs2.bits === 31.U, 0.U, io.rVal2))
+  // R[31] can be SP or Zero depending on instructions
   when(io.dinst.itype === I_ASImm && io.dinst.op === OP_ADD && io.dinst.rs1.bits === 31.U) {
     rVal1 := io.rVal1
   }
