@@ -12,7 +12,7 @@ object DEC_LITS {
   val N = 0
 
   // ALU Operation Signals
-  val OP_W = 3
+  val OP_W = 4
   val OP_X = 0
   val OP_ALU_X = 0
   val OP_AND = 0
@@ -95,17 +95,26 @@ object DEC_LITS {
   val OP_LDR = 4
 
   // Load/store operation
-  val OP_STRB  = 0
-  val OP_STRH  = 1
-  val OP_STR32 = 2
-  val OP_STR64 = 3
-  val OP_LDRB  = 4
-  val OP_LDRH  = 5
-  val OP_LDR32 = 6
-  val OP_LDR64 = 7
+  // op(1,0) = size
+  val SIZEB  = 0
+  val SIZEH  = 1
+  val SIZE32 = 2
+  val SIZE64 = 3
+  // op(2) = L
+  // op(3) = isSigned
+  val OP_STRB  = SIZEB
+  val OP_STRH  = SIZEH
+  val OP_STR32 = SIZE32
+  val OP_STR64 = SIZE64
+  val OP_LDRB  = (1 << 2) + SIZEB
+  val OP_LDRH  = (1 << 2) + SIZEH
+  val OP_LDR32 = (1 << 2) + SIZE32
+  val OP_LDR64 = (1 << 2) + SIZE64
+  // Load/store operation
+  val OP_LDRSW = (1 << 3) + (1 << 2) + SIZE32
   // Pair register
   val OP_STP64 = 3
-  val OP_LDP64 = 7
+  val OP_LDP64 = (1 << 2) + 3
 
   // Instruction Types for scala
   val TYPE_W = 5

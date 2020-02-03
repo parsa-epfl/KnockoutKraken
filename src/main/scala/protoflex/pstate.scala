@@ -27,6 +27,7 @@ class PStateRegs(implicit val cfg : ProcConfig) extends Bundle
 {
   val PC = DATA_T
   val SP = DATA_T // Normaly 4 levels 32 bits
+                  // NOTE: QEMU uses Reg[31] as SP, so this is actually not used
   //val EL = INST_T // Normaly 4 levels 32 bits
 
   // PSTATE

@@ -109,8 +109,8 @@ object ProcDriver {
     def getCommitedPC(): BigInt = { procStateDBG_.get.commitReg.bits.pc.peek.litValue }
 
     def isCommitedMem(): Boolean = { procStateDBG_.get.commitReg.bits.mem.valid.peek.litToBoolean }
-    def isCommitedLoad(): Boolean = { !procStateDBG_.get.commitReg.bits.mem.bits.mem.is_store.peek.litToBoolean }
-    def isCommitedStore(): Boolean = { procStateDBG_.get.commitReg.bits.mem.bits.mem.is_store.peek.litToBoolean }
+    def isCommitedLoad(): Boolean = { procStateDBG_.get.commitReg.bits.mem.bits.mem.isLoad.peek.litToBoolean }
+    def isCommitedStore(): Boolean = { !procStateDBG_.get.commitReg.bits.mem.bits.mem.isLoad.peek.litToBoolean }
     def getCommitedMemAddr(): BigInt = { procStateDBG_.get.commitReg.bits.mem.bits.mem.addr.peek.litValue }
     def writeLD(data: BigInt): Unit = { procStateDBG_.get.memResp.poke(data.U) }
 

@@ -13,7 +13,9 @@ class MemReq(implicit val cfg: ProcConfig) extends Bundle
   val data = DATA_T
   val reg = REG_T
   val size = UInt(2.W)
-  val is_store = Bool()
+  val wr32bit = Bool()
+  val signExtend = Bool()
+  val isLoad = Bool()
 }
 
 class MInst(implicit val cfg: ProcConfig) extends Bundle
@@ -43,7 +45,7 @@ class ExtendReg(implicit val cfg: ProcConfig) extends Module
               })
   val value = io.value
   val isSigned = io.option(2)
-  val size = io.option(1,0)
+  val size = io.option(1,0) // NOTE: option(1) == 1
   val valSExt = WireInit(MuxLookup(size, value.asSInt, Array(
                                      0.U -> value( 7,0).asSInt.pad(DATA_SZ),
                                      1.U -> value(15,0).asSInt.pad(DATA_SZ),
@@ -67,18 +69,9 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
 
   // Decode All variants
   val offst = WireInit(io.dinst.imm.bits)
-  val size = Wire(UInt(2.W))
-  size := MuxLookup(io.dinst.op, 0.U, Array(
-                      OP_STRB  -> 0.U,
-                      OP_STRH  -> 1.U,
-                      OP_STR32 -> 2.U,
-                      OP_STR64 -> 3.U,
-                      OP_LDRB  -> 0.U,
-                      OP_LDRH  -> 1.U,
-                      OP_LDR32 -> 2.U,
-                      OP_LDR64 -> 3.U
-                    ))
-
+  val size = WireInit(io.dinst.op(1,0))
+  val isLoad = WireInit(io.dinst.op(2))
+  val isSigned = WireInit(io.dinst.op(3))
 
   // Decode LSUImm variants
   val wback = WireInit(false.B)
@@ -92,7 +85,6 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   extendReg.io.option := option
   extendReg.io.shift := shift
 
-
   when(io.dinst.itype === I_LSUImm) {
     wback := false.B
     postindex := false.B
@@ -100,7 +92,6 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   }.elsewhen(io.dinst.itype === I_LSRReg) {
     offst := extendReg.io.res
   }
-
 
   //  if n == 31 then
   //     address = SP[]; // SP[] == X[31]
@@ -140,24 +131,19 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   // For READS Everyone
   // data = Mem[address, datasize DIV 8, AccType_NORMAL]
   // X[t] = ZeroExtend(data, regsize)
+  // bits(32) data = Mem[address, 4, AccType_NORMAL]             // I = LDRSW
+  // X[t] = SignExtend(data, 64)                                 // I = LDRSW
 
   val data = WireInit(io.rVal2) // data = Rt = rVal2
-  val is_store = WireInit(OP_STRB  === io.dinst.op ||
-                           OP_STRH  === io.dinst.op ||
-                           OP_STR32 === io.dinst.op ||
-                           OP_STR64 === io.dinst.op)
-
-  val is_load = WireInit(OP_LDRB  === io.dinst.op ||
-                           OP_LDRH  === io.dinst.op ||
-                           OP_LDR32 === io.dinst.op ||
-                           OP_LDR64 === io.dinst.op)
 
   // Output
   io.minst.bits.mem.addr := ldst_address
   io.minst.bits.mem.data := data
   io.minst.bits.mem.reg := io.dinst.rd.bits
   io.minst.bits.mem.size := size
-  io.minst.bits.mem.is_store := is_store
+  io.minst.bits.mem.signExtend := isSigned
+  io.minst.bits.mem.wr32bit := size =/= 3.U && (io.dinst.itype === I_LSUImm && io.dinst.op =/= OP_LDRSW)
+  io.minst.bits.mem.isLoad := isLoad
   io.minst.valid := MuxLookup(io.dinst.itype, false.B, Array(
                                 I_LSRReg -> true.B,
                                 I_LSUImm -> true.B

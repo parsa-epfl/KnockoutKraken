@@ -101,6 +101,10 @@ object DECODE_CONTROL_SIGNALS
   // val AL = DEC_LITS.AL.U(COND_W)
   // val NV = DEC_LITS.NV.U(COND_W)
 
+  val SIZEB  = DEC_LITS.SIZEB.U(2.W)
+  val SIZEH  = DEC_LITS.SIZEH.U(2.W)
+  val SIZE32 = DEC_LITS.SIZE32.U(2.W)
+  val SIZE64 = DEC_LITS.SIZE64.U(2.W)
   // load/store signal
   val OP_LDR = DEC_LITS.OP_LDR.U(OP_W)
   // Load/store operation
@@ -112,6 +116,10 @@ object DECODE_CONTROL_SIGNALS
   val OP_LDRH  = DEC_LITS.OP_LDRH.U(OP_W)
   val OP_LDR32 = DEC_LITS.OP_LDR32.U(OP_W)
   val OP_LDR64 = DEC_LITS.OP_LDR64.U(OP_W)
+  // Signed Loads
+  val OP_LDRSB = DEC_LITS.OP_LDRSW.U(OP_W)
+  val OP_LDRSH = DEC_LITS.OP_LDRSW.U(OP_W)
+  val OP_LDRSW = DEC_LITS.OP_LDRSW.U(OP_W)
   // Load/store pair register
   val OP_STP64 = DEC_LITS.OP_STP64.U(OP_W)
   val OP_LDP64 = DEC_LITS.OP_LDP64.U(OP_W)
@@ -165,7 +173,7 @@ object DECODE_MATCHING_TABLES
     Array(
       //
       //                                      RD
-      //                    IN TR             EN
+      //                    INSTR             EN
       //                    TYPE              | RS1
       //                      |               |  EN        COND
       //                      |               |  |           EN
@@ -237,7 +245,7 @@ object DECODE_MATCHING_TABLES
       // Compare and branch (immediate)
       CBImm_CBZ    -> List(I_CBImm, OP_CBZ,   N, N, Y, Y, N, N, N, N),
       CBImm_CBNZ   -> List(I_CBImm, OP_CBNZ,  N, N, Y, Y, N, N, N, N),
-      // Load/store pair register (signed offset):
+      // Load/store pair register (signed offset)
       //LSPReg_STP64 -> List(I_LSPReg, OP_STP64,Y, Y, Y, Y, N, N, N, N),
       //LSPReg_LDP64 -> List(I_LSPReg, OP_LDP64,Y, Y, Y, Y, N, N, N, N),
       // Load/store register (register offset)
@@ -249,7 +257,7 @@ object DECODE_MATCHING_TABLES
       LSRReg_LDR16 -> List(I_LSRReg, OP_LDRH, Y, Y, Y, Y, N, N, N, Y),
       LSRReg_LDR32 -> List(I_LSRReg, OP_LDR32,Y, Y, Y, Y, N, N, N, Y),
       LSRReg_LDR64 -> List(I_LSRReg, OP_LDR64,Y, Y, Y, Y, N, N, N, N),
-      // Load/store register (unsigned immediate):
+      // Load/store register (unsigned immediate)
       LSUImm_STR8  -> List(I_LSUImm, OP_STRB, Y, Y, Y, Y, N, N, N, Y),
       LSUImm_STR16 -> List(I_LSUImm, OP_STRH, Y, Y, Y, Y, N, N, N, Y),
       LSUImm_STR32 -> List(I_LSUImm, OP_STR32,Y, Y, Y, Y, N, N, N, Y),
@@ -257,7 +265,10 @@ object DECODE_MATCHING_TABLES
       LSUImm_LDR8  -> List(I_LSUImm, OP_LDRB, Y, Y, Y, Y, N, N, N, Y),
       LSUImm_LDR16 -> List(I_LSUImm, OP_LDRH, Y, Y, Y, Y, N, N, N, Y),
       LSUImm_LDR32 -> List(I_LSUImm, OP_LDR32,Y, Y, Y, Y, N, N, N, Y),
-      LSUImm_LDR64 -> List(I_LSUImm, OP_LDR64,Y, Y, Y, Y, N, N, N, N)
+      LSUImm_LDR64 -> List(I_LSUImm, OP_LDR64,Y, Y, Y, Y, N, N, N, N),
+      LSUImm_LDRSB64 -> List(I_LSUImm, OP_LDRSB,Y, Y, Y, Y, N, N, N, N),
+      LSUImm_LDRSH64 -> List(I_LSUImm, OP_LDRSH,Y, Y, Y, Y, N, N, N, N),
+      LSUImm_LDRSW -> List(I_LSUImm, OP_LDRSW,Y, Y, Y, Y, N, N, N, N)
       // load/store (immediate)
       //LDR_I        -> List(I_LSImm, OP_LDR,   Y, N, N, Y, N, N, N)
     )

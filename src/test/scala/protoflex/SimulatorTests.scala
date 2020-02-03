@@ -205,7 +205,7 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
           }
           val resp = waitForCmd(cfgSim.simCmdPath)
           val addrResp: BigInt = resp._2
-          //simLog(s"RESP:0x${"%016x".format(addr)}:0x${"%016x".format(addrResp)}")
+          simLog(s"RESP:0x${"%016x".format(addr)}:0x${"%016x".format(addrResp)}")
           if(cProcAxi.isCommitedLoad) cProcAxi.writeLD(addrResp)
         }
 

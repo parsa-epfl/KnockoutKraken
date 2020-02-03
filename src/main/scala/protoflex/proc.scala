@@ -2,11 +2,13 @@
 package protoflex
 
 import chisel3._
-import chisel3.util.{Decoupled, Queue, RegEnable, Valid, log2Ceil}
+import chisel3.util.{Decoupled, Queue, RegEnable, Valid, log2Ceil, MuxLookup}
 
 import common.constBRAM.TDPBRAM36ParamDict
 import common.PROCESSOR_TYPES._
 import common._
+
+import common.DECODE_CONTROL_SIGNALS._
 
 case class ProcConfig(val NB_THREADS : Int = 4, val DebugSignals : Boolean = false, EntriesTLB: Int = 32) {
   val ppageBRAMc = new BRAMConfig(Seq(TDPBRAM36ParamDict(36), TDPBRAM36ParamDict(36)))
@@ -207,6 +209,24 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   ldstU.io.rVal1 := rVal1
   ldstU.io.rVal2 := rVal2
   ldstU.io.pstate := pregsVec(issued_tag)
+  val wbData = io.procStateDBG.get.memResp
+  val wbLD = WireInit(wbData)
+  when(commitMem.bits.mem.signExtend) {
+    when(commitMem.bits.mem.wr32bit) {
+      wbLD := MuxLookup(commitMem.bits.mem.size, wbData(31,0), Array(
+                          SIZEB -> wbData(7,  0).asSInt.pad(32).asUInt,
+                          SIZEH -> wbData(15, 0).asSInt.pad(32).asUInt
+                        )).pad(64)
+
+    }.otherwise {
+      wbLD := MuxLookup(commitMem.bits.mem.size, wbData, Array(
+                          SIZEB  -> wbData(7,  0).asSInt.pad(64).asUInt,
+                          SIZEH  -> wbData(15, 0).asSInt.pad(64).asUInt,
+                          SIZE32 -> wbData(31, 0).asSInt.pad(64).asUInt,
+                          SIZE64 -> wbData
+                        ))
+    }
+  }
 
   // CommitReg
   commitReg.io.enq.bits.exe := executer.io.einst
@@ -238,7 +258,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
 //      rfileVec(cpu).wdata := commitMem.bits.rd_res
     }.elsewhen(commitMem.valid) { // Load TODO : Real, here QEMU Loads in single cycle
       rfileVec(cpu).waddr := commitMem.bits.mem.reg
-      rfileVec(cpu).wdata := io.procStateDBG.get.memResp
+      rfileVec(cpu).wdata := wbLD
     }.otherwise {
       // Default
       rfileVec(cpu).waddr := commitExec.bits.rd.bits
@@ -252,7 +272,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   when(commitValid && !commitReg.io.deq.bits.undef) {
     rfileVec(commitTag).wen :=
       (commitExec.valid && commitExec.bits.rd.valid) ||
-      (commitMem.valid && !commitMem.bits.mem.is_store) ||
+      (commitMem.valid && commitMem.bits.mem.isLoad) ||
       (commitPcRel.valid)
 
     when(commitExec.valid && commitExec.bits.nzcv.valid) {

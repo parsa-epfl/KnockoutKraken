@@ -130,7 +130,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
     this.itype := itype
 
     // Special cases
-    when(itype === I_LSRReg && inst(12) === 1.U) {
+    when(itype === I_LSRReg) {
       shift_val.valid := inst(12)   // S
       shift_val.bits := inst(15,13) // option
     }
