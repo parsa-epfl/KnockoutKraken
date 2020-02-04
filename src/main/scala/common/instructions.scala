@@ -11,7 +11,6 @@ object INSTRUCTIONS
 {
   def INST_X  = BitPat.dontCare(32)
 
-
   // PC-rel. addressing
   // 31 | 30 29 | 28 27 26 25 24 | 23 22 21 20 19 18 17 16 15 14 13 12 11 10 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
   // op | immlo |  1  0  0  0  0 |                                 immhi                    |        Rd      |                  |
@@ -36,6 +35,16 @@ object INSTRUCTIONS
   //  0  1  0  1  0  1  0 |  0 |                             imm19                        |  0 |    cond     | B.cond           |    -
   def BCImm = BitPat("b01010100???????????????????0????")
   def BCond = BitPat("b01010100???????????????????0????")
+
+  // Unconditional branch (register)
+  // 31 30 29 28 27 26 25 | 24 | 23 | 22  21 | 20 19 18 17 16 | 15 14 13 12 | 11 | 10 | 09 08 07 06 05 | 04 | 03 02 01 00 | Instruction Page | Variant
+  //  1  1  0  1  0  1  1 |  0 |  0 |  0   0 |  1  1  1  1  1 |  0  0  0  0 |  0 |  0 |      Rn        |  0 |  0  0  0  0 | BR               |
+  //  1  1  0  1  0  1  1 |  0 |  0 |  0   1 |  1  1  1  1  1 |  0  0  0  0 |  0 |  0 |      Rn        |  0 |  0  0  0  0 | BLR              |
+  //  1  1  0  1  0  1  1 |  0 |  0 |  1   0 |  1  1  1  1  1 |  0  0  0  0 |  0 |  0 |      Rn        |  0 |  0  0  0  0 | RET              |
+  def BReg = BitPat("b110101100??11111000000?????00000")
+  def BReg_BR   = BitPat("b1101011000011111000000?????00000")
+  def BReg_BLR  = BitPat("b1101011000111111000000?????00000")
+  def BReg_RET  = BitPat("b1101011001011111000000?????00000")
 
   // Compare and branch (immediate)          Bits[31:24]
   // 31 | 30 29 28 27 26 25 | 24 | 23 22 21 20 19 18 17 16 15 14 13 12 11 10 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
@@ -241,6 +250,7 @@ object INSTRUCTIONS
   def LSRReg_LDR16 = BitPat("b01111000011??????1??10??????????")
   def LSRReg_LDR32 = BitPat("b10111000011??????1??10??????????")
   def LSRReg_LDR64 = BitPat("b11111000011??????1??10??????????")
+
 
   // Load/store (immediate post-indexed)
   // Load/store (immediate pre-indexed)

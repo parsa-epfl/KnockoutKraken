@@ -53,6 +53,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
                            ))
 
     rs1.bits := MuxLookup(itype, REG_X, Array(
+                            I_BReg  -> inst( 9, 5),
                             I_BitF  -> inst( 9, 5),
                             I_LogSR -> inst( 9, 5),
                             I_LogI  -> inst( 9, 5),

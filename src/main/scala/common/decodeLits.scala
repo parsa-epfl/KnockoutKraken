@@ -30,10 +30,17 @@ object DEC_LITS {
   val OP_ADD = 0
   val OP_SUB = 1
 
-  // Branches signals
+  // Unconditonal branch (immediate)
   val OP_B = 0
   val OP_BL = 1
-  val OP_BCOND = 2
+
+  // Conditional branch (immediate)
+  val OP_BCOND = 0
+
+  // Uncondional branch (register)
+  val OP_BR = 0
+  val OP_BLR = 1
+  val OP_RET = 0 // Same as BR, but with different Hint_Branch (not Used)
 
   // Move wide (immediate)
   val OP_MOVN = 0
@@ -119,23 +126,28 @@ object DEC_LITS {
   // Instruction Types for scala
   val TYPE_W = 5
   val I_X = 0
-  val I_LogSR = 1 // Logical (shifted register)
-  val I_LogI  = 2 // Logical (immediate)
-  val I_MovI  = 3 // Move wide (immediate)
-  val I_BImm  = 4 // Unconditional branch (immediate)
-  val I_BCImm = 5 // Conditional branch (immediate)
-  val I_ASSR  = 6 // Add/subtract (shifted register)
-  val I_ASImm = 7 // Add/Subtract (Immediate)
-  val I_LSImm = 8 // Load/Store Immediate
-  val I_BitF  = 9 // Logical (shifted register)
-  val I_CSel  = 10 // Conditional select
-  val I_CCImm = 11 // Conditional compare (immediate)
-  val I_CCReg = 12 // Conditional compare (register)
-  val I_CBImm = 13 // Branch and Compare (immediate)
-  val I_PCRel = 14 // PC-Relative
-  val I_LSUImm = 16 // Load Store (unsigned immediate)
+  val I_LogSR = 1  // Logical (shifted register)
+  val I_LogI  = 2  // Logical (immediate)
+  val I_BitF  = 3  // Logical (shifted register)
+
+  val I_BImm  = 4  // Unconditional branch (immediate)
+  val I_BCImm = 5  // Conditional branch (immediate)
+  val I_BReg  = 6  // Conditional branch (register)
+  val I_CBImm = 7  // Branch and Compare (immediate)
+
+  val I_ASImm = 8  // Add/Subtract (Immediate)
+  val I_ASSR  = 9  // Add/subtract (shifted register)
+  val I_MovI  = 10 // Move wide (immediate)
+  val I_PCRel = 11 // PC-Relative
+
+  val I_CCImm = 12 // Conditional compare (immediate)
+  val I_CCReg = 13 // Conditional compare (register)
+  val I_CSel  = 14 // Conditional select
+
+  val I_LSUImm = 16 // Load/store (unsigned immediate)
   val I_LSRReg = 17 // Load/store register (register offset)
-  val I_LSPReg = 18 // Load Store pair register (signed offset)
+  val I_LSPReg = 18 // Load/store pair register (signed offset)
+  val I_LSImm  = 19 // Load/Store Immediate
 
   // TODO: Remove this list? Never used for something usefull
   //       Dropped AssemblyInstruction based verification for QEMU based

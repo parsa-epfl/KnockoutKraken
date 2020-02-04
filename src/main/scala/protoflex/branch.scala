@@ -55,7 +55,8 @@ class BranchUnit(implicit val cfg: ProcConfig) extends Module
   pcrel.rd := io.dinst.rd.bits
   pcrel.res := pcadd
   io.pcrel.valid := false.B
-  when(io.dinst.itype === I_BImm && io.dinst.op === OP_BL) {
+  when(io.dinst.itype === I_BImm && io.dinst.op === OP_BL ||
+       io.dinst.itype === I_BReg && io.dinst.op === OP_BLR) {
     pcrel.rd := 30.U
     pcrel.res := io.pc + 4.U
     io.pcrel.valid := true.B
@@ -67,15 +68,19 @@ class BranchUnit(implicit val cfg: ProcConfig) extends Module
   io.pcrel.bits := pcrel
 
   val binst = Wire(new BInst)
-  binst.pc := pcadd
+  binst.pc := Mux(io.dinst.itype === I_BReg, io.rVal1, pcadd)
+
   io.binst.bits := binst
   io.binst.valid :=
     MuxLookup(io.dinst.itype, false.B, Array(
                 I_BImm -> true.B,
+                I_BReg -> true.B,
                 I_BCImm -> io.cond,
                 I_CBImm -> MuxLookup(io.dinst.op, false.B, Array(
                                        OP_CBZ  -> (io.rVal2 === 0.U),
                                        OP_CBNZ -> (io.rVal2 =/= 0.U)
                                      ))
               ))
+  // TODO: Not necessary? Depending on intruction, setup HINT
+  // Hint_Branch(branch_type); // manual : shared/functions/registers/Hint_Branch
 }
