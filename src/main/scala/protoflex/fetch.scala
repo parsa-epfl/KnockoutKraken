@@ -41,29 +41,25 @@ class FetchUnit(implicit val cfg: ProcConfig) extends Module
   val insnReg = Reg(Valid(new FInst))
   val fetchReg = Module(new FlushReg(new FInst))
 
-  val insnHit = WireInit(io.pc.valid && io.hit && fetchReg.io.enq.ready)
-  when(insnReq.valid && !io.deq.ready) {
-    insnHit := false.B
-  }
-  val currPC = WireInit(prefetchPC(0))
+  val insnHit = WireInit(arbiter.io.next.valid && io.hit)
 
-  val isThreadReady = WireInit(io.fetchEn)
-  arbiter.io.ready := isThreadReady.asUInt
+  val readyThreads = WireInit(io.fetchEn)
+  arbiter.io.ready := readyThreads.asUInt
   arbiter.io.next.ready := fetchReg.io.enq.ready
-  when((arbiter.io.next.valid && fetchReg.io.enq.ready && !insnReg.valid) ||
-         (insnReg.valid && fetchReg.io.enq.ready)) {
-    currPC := prefetchPC(arbiter.io.next.bits)
-    prefetchPC(arbiter.io.next.bits) := prefetchPC(arbiter.io.next.bits) + 4.U
+  val currFetchPC = prefetchPC(arbiter.io.next.bits)
+
+  when(((insnHit && !insnReg.valid) || insnReg.valid) && fetchReg.io.enq.ready) {
+    currFetchPC := currFetchPC + 4.U
   }
 
-  io.pc.data.get := currPC
+  io.pc.data.get :=currFetchPC
   io.pc.tag := arbiter.io.next.bits
   io.pc.valid := arbiter.io.next.valid
 
   insnReq.valid := RegNext(insnHit)
   insnReq.bits.inst := io.insn
   insnReq.bits.tag := RegNext(arbiter.io.next.bits)
-  insnReq.bits.pc := RegNext(currPC)
+  insnReq.bits.pc := RegNext(currFetchPC)
 
   when(!fetchReg.io.enq.ready) {
     insnReg := insnReq
@@ -74,24 +70,24 @@ class FetchUnit(implicit val cfg: ProcConfig) extends Module
   fetchReg.io.enq.bits  := Mux(insnReg.valid, insnReg.bits, insnReq.bits)
   fetchReg.io.enq.valid := Mux(insnReg.valid, insnReg.valid, insnReq.valid)
 
+  when(io.commitReg.valid && io.commitReg.bits.br.valid) {
+    prefetchPC(io.commitReg.bits.tag) := io.nextPC
+  }.elsewhen(io.flush.valid) { // Note, Branching also flushes, so prioritize branching
+    prefetchPC(io.flush.tag) := io.pcVec(io.flush.tag)
+  }
   when(io.fire.valid) {
     prefetchPC(io.fire.tag) := io.pcVec(io.fire.tag)
   }
-  when(io.commitReg.valid && io.commitReg.bits.br.valid) {
-    prefetchPC(io.commitReg.bits.tag) := io.nextPC
-  }.elsewhen(io.flush.valid) {
-    prefetchPC(io.flush.tag) := io.pcVec(io.flush.tag)
-  }
-
-  fetchReg.io.flush := false.B
-  when(io.flush.valid) {
-    isThreadReady(io.flush.tag) := false.B
-    when(Mux(insnReg.valid, insnReg.bits.tag === io.flush.tag, insnReq.bits.tag === io.flush.tag)) {
-      fetchReg.io.enq.valid := false.B
-    }
-    fetchReg.io.flush := fetchReg.io.deq.bits.tag === io.flush.tag
-  }
- 
 
   io.deq <> fetchReg.io.deq
+
+  // Flush
+  fetchReg.io.flush := false.B
+  when(io.flush.valid) {
+    when(arbiter.io.next.bits === io.flush.tag) { insnHit := false.B }
+    readyThreads(io.flush.tag) := false.B
+    val flushInternalReg = Mux(insnReg.valid, insnReg.bits.tag === io.flush.tag, insnReq.bits.tag === io.flush.tag)
+    when(flushInternalReg) { fetchReg.io.enq.valid := false.B }
+    fetchReg.io.flush := fetchReg.io.deq.bits.tag === io.flush.tag
+  }
 }

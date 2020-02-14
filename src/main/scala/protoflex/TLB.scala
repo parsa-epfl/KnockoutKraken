@@ -4,22 +4,12 @@ import chisel3._
 import chisel3.util.{Valid}
 import common.PROCESSOR_TYPES._
 
-class TLBUnitIO(implicit val cfg: ProcConfig) extends Bundle {
-  val fillTLB = Input(Valid(new TLBEntry))
-
-  val vaddr = Input(DATA_T)
-  val paddr = Output(DATA_T)
-
-  val miss = Output(Valid(DATA_T))
-}
-
 class TLBEntry extends Bundle {
-  val vpageAddr = UInt((DATA_SZ - PAGE_SZ).W)
-  val ppageAddr = UInt((DATA_SZ - PAGE_SZ).W)
+  val vpageAddr = UInt((DATA_SZ).W)
+  val ppageAddr = UInt((DATA_SZ).W)
 }
 
 object TLBEntry {
-
   def apply(): TLBEntry = {
     val wire = Wire(new TLBEntry)
     wire.vpageAddr := 0.U
@@ -36,18 +26,31 @@ object TLBEntry {
 }
 
 class TLBUnit(implicit val cfg: ProcConfig) extends Module {
-  val pageNbr_SZ = DATA_SZ - 12 // -2 for Byte addressable to 32b
-  val io = IO(new TLBUnitIO)
+  private def getTLBEntry(bits: UInt): UInt = bits(PAGE_SZ + cfg.TLB_NB_ENTRY_W - 1, PAGE_SZ)
+  private def maskPage(bits: UInt): UInt = bits(DATA_SZ-1,PAGE_SZ)
+  val io = IO(new Bundle {
+    val fillTLB = Input(Valid(new TLBEntry))
+    val vaddr = Input(Valid(DATA_T))
+    val paddr = Output(DATA_T)
+    val miss = Output(Valid(DATA_T))
+  })
+
   val tlbLUT = RegInit(VecInit(Seq.fill(cfg.TLB_NB_ENTRY)(TLBEntry(false))))
 
-  val vpage = io.vaddr >> PAGE_SZ
+  val vpageEntryIdx = WireInit(getTLBEntry(io.vaddr.bits))
+  val fillTLBEntryIdx = WireInit(getTLBEntry(io.fillTLB.bits.vpageAddr))
 
   when(io.fillTLB.valid) {
-    tlbLUT(0) := io.fillTLB
+    tlbLUT(fillTLBEntryIdx) := io.fillTLB
   }
 
-  io.paddr := io.vaddr >> 2.U
+  io.paddr := io.vaddr.bits >> 2.U
 
-  io.miss.bits := io.vaddr
-  io.miss.valid := tlbLUT(0).valid && tlbLUT(0).bits.vpageAddr =/= vpage && false.B
+  val vpageTLBEntry = WireInit(tlbLUT(vpageEntryIdx))
+  val pageTLB = WireInit(maskPage(vpageTLBEntry.bits.vpageAddr))
+  val pagePC  = WireInit(maskPage(io.vaddr.bits))
+  val dirtyEntry = WireInit(vpageTLBEntry.valid && pageTLB =/= pagePC)
+  val invalidEntry = WireInit(!tlbLUT(vpageEntryIdx).valid)
+  io.miss.bits := io.vaddr.bits
+  io.miss.valid := io.vaddr.valid && (invalidEntry || dirtyEntry)
 }

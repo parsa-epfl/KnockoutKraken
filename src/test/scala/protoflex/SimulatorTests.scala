@@ -122,15 +122,15 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
     isTimeOut
   }
 
-  def updateProgramPage(path: String): Unit = {
+  def getProgramPageInsns(path: String): Seq[(Int, BigInt)] = {
     val bytearray: Array[Byte] = Files.readAllBytes(Paths.get(path))
     var hex = ""
-    for(i <- 0 until pageSize) {
+    val insns : Seq[(Int, BigInt)] = for(i <- 0 until pageSize) yield {
       val insn_LE = bytearray.slice(i*INSN_SIZE, i*INSN_SIZE+INSN_SIZE)
-      //val insn = ByteBuffer.wrap(insn_LE).getInt
       val insn = BigInt(Array(0.toByte) ++ insn_LE) // Zero extend for unsigned
-      cProcAxi.writePPageInst(insn, i)
+      (i, insn)
     }
+    insns
   }
 
   def readFile(path: String): String= {
@@ -181,57 +181,76 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
     cProcAxi.fireThread(0)
 
     // Wait for state to be transplanted
-    do { clock.step(1) } while(!cProcAxi.tpuIsWorking)
+    ti = System.nanoTime
+    do { clock.step(1) } while(!cProcAxi.tpuIsWorking);
     do { clock.step(1) } while(cProcAxi.tpuIsWorking);
     // RTL state after transplant must match initial QEMU state
     currState = cProcAxi.getPStateInternal(0)
     assert(currState.matches(pstate)._1)
     ti = System.nanoTime
 
-    do {
-      if(cProcAxi.hasCommitedInst) {
-        ti = System.nanoTime
-        val inst = cProcAxi.getCommitedInst
-        val pc = cProcAxi.getCommitedPC
+    fork {
+      do {
+        if(cProcAxi.hasCommitedInst) {
+          ti = System.nanoTime
+          val inst = cProcAxi.getCommitedInst
+          val pc = cProcAxi.getCommitedPC
 
-        // If Memory, request QEMU for DATA
-        if(cProcAxi.isCommitedMem) {
-          val memReqs = if(cProcAxi.isCommitedPairMem) 2 else 1
-          for(i <- 0 until memReqs) {
-            if(cProcAxi.isCommitedLoad) {
-              val addr: BigInt = cProcAxi.getCommitedMemAddr(i)
-              writeCmd((FA_QflexCmds.DATA_LOAD, addr), cfgSim.qemuCmdPath)
-              val resp = waitForCmd(cfgSim.simCmdPath)
-              val addrResp: BigInt = resp._2
-              simLog(s"RESP:0x${"%016x".format(addr)}:0x${"%016x".format(addrResp)}")
-              cProcAxi.writeLD(i, addrResp)
+          // If Memory, request QEMU for DATA
+          if(cProcAxi.isCommitedMem) {
+            val memReqs = if(cProcAxi.isCommitedPairMem) 2 else 1
+            for(i <- 0 until memReqs) {
+              if(cProcAxi.isCommitedLoad) {
+                val addr: BigInt = cProcAxi.getCommitedMemAddr(i)
+                writeCmd((FA_QflexCmds.DATA_LOAD, addr), cfgSim.qemuCmdPath)
+                val resp = waitForCmd(cfgSim.simCmdPath)
+                val addrResp: BigInt = resp._2
+                simLog(s"RESP:0x${"%016x".format(addr)}:0x${"%016x".format(addrResp)}")
+                cProcAxi.writeLD(i, addrResp)
+              }
             }
           }
+
+
+          clock.step(1)
+          currState = cProcAxi.getPStateInternal(0)
+
+          simLog(s"OUT:0x${"%016x".format(pc)}:  ${"%08x".format(inst)}")
+
+          // Ask QEMU to step and write state back to compare
+          writePState2File(cfgSim.simStatePath, currState)
+          writeCmd((FA_QflexCmds.CHECK_N_STEP, 0), cfgSim.qemuCmdPath)
+          waitForCmd(cfgSim.simCmdPath)
+
+          val qemuPState = ArmflexJson.json2state(readFile(cfgSim.qemuStatePath))
+          val matched = qemuPState.matches(currState)
+          if (!matched._1) {
+            simLog(matched._2)
+          }
+        } else {
+          clock.step(1)
         }
-
-
-        clock.step(1)
-        currState = cProcAxi.getPStateInternal(0)
-
-        simLog(s"OUT:0x${"%016x".format(pc)}:  ${"%08x".format(inst)}")
-
-        // Ask QEMU to step and write state back to compare
-        writePState2File(cfgSim.simStatePath, currState)
-        writeCmd((FA_QflexCmds.CHECK_N_STEP, 0), cfgSim.qemuCmdPath)
-        waitForCmd(cfgSim.simCmdPath)
-        val qemuPState = ArmflexJson.json2state(readFile(cfgSim.qemuStatePath))
-
-        val matched = qemuPState.matches(currState)
-        if (!matched._1) {
-          simLog(matched._2)
+      } while(!cProcAxi.tpuIsWorking);
+      simLog(s"OUT:UNDEF_INST")
+      writePState2File(cfgSim.simStatePath, cProcAxi.rdBRAM2PSTATE(0))
+      writeCmd((FA_QflexCmds.INST_UNDEF, 0), cfgSim.qemuCmdPath)
+    }.fork {
+      do {
+        if(cProcAxi.isMissTLB) {
+          val addr: BigInt = cProcAxi.getMissTLBAddr
+          simLog(s"MISSED PC ${"%016x".format(addr)}")
+          writeCmd((FA_QflexCmds.INST_FETCH, addr), cfgSim.qemuCmdPath)
+          val cmd = waitForCmd(cfgSim.simCmdPath)
+          val insns: Seq[(Int, BigInt)] = getProgramPageInsns(cfgSim.pagePath)
+          for(insn <- insns) {
+            cProcAxi.writePPageInst(insn._2, insn._1)
+          }
+          cProcAxi.writeFillTLB(addr, cmd._2)
+        } else {
+          clock.step(1)
         }
-      } else {
-        clock.step(1)
-      }
-
-      tf = System.nanoTime
-    } while(!cProcAxi.tpuIsWorking && !timedOut);
-    simLog(s"OUT:UNDEF_INST")
+      } while(!cProcAxi.tpuIsWorking);
+    }.join()
 
     do {  } while(cProcAxi.getDone._1)
 
@@ -249,12 +268,9 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
       ti = System.nanoTime
       cmd match {
         case FA_QflexCmds.SIM_START =>
-          updateProgramPage(cfgSim.pagePath)
           updatePState(readFile(cfgSim.qemuStatePath), 0)
           val pstate: PState = ArmflexJson.json2state(readFile(cfgSim.qemuStatePath))
           run(pstate)
-          writePState2File(cfgSim.simStatePath, cProcAxi.rdBRAM2PSTATE(0))
-          writeCmd((FA_QflexCmds.INST_UNDEF, 0), cfgSim.qemuCmdPath)
         case FA_QflexCmds.SIM_STOP =>
           simLog("SIMULATION STOP")
           return

@@ -116,6 +116,17 @@ object ProcDriver {
     def getCommitedMemAddr(idx: Int): BigInt = getMemReq(idx).addr.peek.litValue
     def writeLD(idx: Int, data: BigInt): Unit = procStateDBG_.get.memResp(idx).poke(data.U)
 
+    def isMissTLB: Boolean = procStateDBG_.get.missTLB.valid.peek.litToBoolean
+    def getMissTLBAddr: BigInt = procStateDBG_.get.missTLB.data.get.peek.litValue
+
+    def writeFillTLB(vaddr: BigInt, paddr: BigInt) : Unit = {
+      procStateDBG_.get.fillTLB.data.get.vpageAddr.poke(vaddr.U)
+      procStateDBG_.get.fillTLB.data.get.ppageAddr.poke(paddr.U)
+      procStateDBG_.get.fillTLB.tag.poke(0.U)
+      procStateDBG_.get.fillTLB.valid.poke(true.B)
+      clock.step(1)
+      procStateDBG_.get.fillTLB.valid.poke(false.B)
+    }
 
     def printState():Unit = {
       if(!cfgProc.DebugSignals) {

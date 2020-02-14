@@ -147,5 +147,7 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
   // DEBUG Signals ------------------------------------------------------------
   if(cfg.DebugSignals) {
     io.procStateDBG.get <> proc.io.procStateDBG.get
+    proc.io.host2tpu.fillTLB <> io.procStateDBG.get.fillTLB
+    proc.io.host2tpu.missTLB <> io.procStateDBG.get.missTLB
   }
 }

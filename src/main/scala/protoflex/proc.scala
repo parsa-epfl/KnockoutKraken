@@ -50,6 +50,8 @@ class ProcStateDBG(implicit val cfg : ProcConfig) extends Bundle
 
   val tuWorking = Output(ValidTagged(cfg.TAG_T))
   val memResp = Input(Vec(2, DATA_T))
+  val fillTLB = Input(ValidTagged(cfg.TAG_T, new TLBEntry))
+  val missTLB = Output(ValidTagged(cfg.TAG_T, DATA_T))
 }
 
 /** Processor
@@ -158,7 +160,8 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   fetch.io.nextPC := nextPC
   fetch.io.commitReg.bits := commitReg.io.deq.bits
   fetch.io.commitReg.valid := commitReg.io.deq.valid
-  insnTLB.io.vaddr := fetch.io.pc.data.get
+  insnTLB.io.vaddr.bits := fetch.io.pc.data.get
+  insnTLB.io.vaddr.valid := fetch.io.pc.valid
   fetch.io.hit := !insnTLB.io.miss.valid
   fetch.io.insn := ppage.portB.DO
 
@@ -289,7 +292,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
 
   nextPC := pregsVec(commitTag).PC
   nextSP := pregsVec(commitTag).SP
-  when(commitValid && !commitUndef) {
+  when(commitValid) {
     rfileVec(commitTag).wen :=
       (commitExec.valid && commitExec.bits.rd.valid) ||
       (commitMem.valid && commitMem.bits.isLoad) ||
@@ -326,7 +329,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   when(tpu.io.tpu2cpu.flush.valid)   { fetchEn(tpu.io.tpu2cpu.flush.tag) := false.B }
 
   // Hit unknown case -> Pass state to CPU
-  tpu.io.tpu2cpu.done.valid := commitValid && commitUndef
+  tpu.io.tpu2cpu.done.valid := commitUndef
   tpu.io.tpu2cpu.done.tag := commitReg.io.deq.bits.tag
 
   // Flushing ----------------------------------------------------------------
@@ -395,6 +398,8 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
     procStateDBG.pregsVec := pregsVec
     procStateDBG.tuWorking := tpu.io.tpu2cpu.freeze
 
+    procStateDBG.missTLB := DontCare // In ProcAxiWrap
+  }
 
 }
 
@@ -408,4 +413,3 @@ class CommitInst(implicit val cfg : ProcConfig) extends Bundle {
   val inst32 = Output(INST_T)
   val tag = Output(cfg.TAG_T)
 }
-
