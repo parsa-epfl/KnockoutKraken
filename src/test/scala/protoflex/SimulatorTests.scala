@@ -196,17 +196,19 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
 
         // If Memory, request QEMU for DATA
         if(cProcAxi.isCommitedMem) {
-          val addr: BigInt = cProcAxi.getCommitedMemAddr
-          if(cProcAxi.isCommitedLoad) {
-            writeCmd((FA_QflexCmds.DATA_LOAD, addr), cfgSim.qemuCmdPath)
-          } else {
-            writeCmd((FA_QflexCmds.DATA_STORE, addr), cfgSim.qemuCmdPath)
+          val memReqs = if(cProcAxi.isCommitedPairMem) 2 else 1
+          for(i <- 0 until memReqs) {
+            if(cProcAxi.isCommitedLoad) {
+              val addr: BigInt = cProcAxi.getCommitedMemAddr(i)
+              writeCmd((FA_QflexCmds.DATA_LOAD, addr), cfgSim.qemuCmdPath)
+              val resp = waitForCmd(cfgSim.simCmdPath)
+              val addrResp: BigInt = resp._2
+              simLog(s"RESP:0x${"%016x".format(addr)}:0x${"%016x".format(addrResp)}")
+              cProcAxi.writeLD(i, addrResp)
+            }
           }
-          val resp = waitForCmd(cfgSim.simCmdPath)
-          val addrResp: BigInt = resp._2
-          simLog(s"RESP:0x${"%016x".format(addr)}:0x${"%016x".format(addrResp)}")
-          if(cProcAxi.isCommitedLoad) cProcAxi.writeLD(addrResp)
         }
+
 
         clock.step(1)
         currState = cProcAxi.getPStateInternal(0)

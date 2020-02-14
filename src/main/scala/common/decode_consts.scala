@@ -49,8 +49,12 @@ object DECODE_CONTROL_SIGNALS
   val OP_BLR = DEC_LITS.OP_BLR.U(OP_W)
   val OP_RET = DEC_LITS.OP_RET.U(OP_W)
 
+  // Test and branch (immediate)
+  val OP_TBZ  = DEC_LITS.OP_TBZ.U(OP_W)
+  val OP_TBNZ = DEC_LITS.OP_TBNZ.U(OP_W)
 
-  val OP_CBZ = DEC_LITS.OP_CBZ.U(OP_W)
+  // Conditional Branch
+  val OP_CBZ  = DEC_LITS.OP_CBZ.U(OP_W)
   val OP_CBNZ = DEC_LITS.OP_CBNZ.U(OP_W)
 
   // Move wide (immediate)
@@ -129,7 +133,9 @@ object DECODE_CONTROL_SIGNALS
   val OP_LDRSH = DEC_LITS.OP_LDRSW.U(OP_W)
   val OP_LDRSW = DEC_LITS.OP_LDRSW.U(OP_W)
   // Load/store pair register
+  val OP_STP32 = DEC_LITS.OP_STP32.U(OP_W)
   val OP_STP64 = DEC_LITS.OP_STP64.U(OP_W)
+  val OP_LDP32 = DEC_LITS.OP_LDP32.U(OP_W)
   val OP_LDP64 = DEC_LITS.OP_LDP64.U(OP_W)
 
   // Instruction Types for chisel
@@ -141,18 +147,19 @@ object DECODE_CONTROL_SIGNALS
   val I_LogI  =  DEC_LITS.I_LogI.U(TYPE_W) // Logical (immediate)
   val I_BitF  =  DEC_LITS.I_BitF.U(TYPE_W) // Logical (shifted register)
 
-  val I_BImm  =  DEC_LITS.I_BImm.U(TYPE_W) // Unconditional branch (immediate)
+  val I_BImm  =  DEC_LITS.I_BImm.U(TYPE_W)  // Unconditional branch (immediate)
   val I_BCImm =  DEC_LITS.I_BCImm.U(TYPE_W) // Conditional branch (immediate)
-  val I_BReg  =  DEC_LITS.I_BReg.U(TYPE_W) // Conditional branch (register)
-
+  val I_BReg  =  DEC_LITS.I_BReg.U(TYPE_W)  // Conditional branch (register)
   val I_CBImm =  DEC_LITS.I_CBImm.U(TYPE_W) // Branch and Compare (immediate)
-  val I_ASImm =  DEC_LITS.I_ASImm.U(TYPE_W) // Add/Subtract (Immediate)
-  val I_ASSR  =  DEC_LITS.I_ASSR.U(TYPE_W) // Add/subtract (shifted register)
-  val I_MovI  =  DEC_LITS.I_MovI.U(TYPE_W) // Move wide (immediate)
 
+  val I_TBImm =  DEC_LITS.I_TBImm.U(TYPE_W) // Test and branch (immediate)
   val I_PCRel =  DEC_LITS.I_PCRel.U(TYPE_W) // PC-Relative
   val I_CCImm =  DEC_LITS.I_CCImm.U(TYPE_W) // Conditional compare (immediate)
   val I_CCReg =  DEC_LITS.I_CCReg.U(TYPE_W) // Conditional compare (register)
+
+  val I_ASImm =  DEC_LITS.I_ASImm.U(TYPE_W) // Add/Subtract (Immediate)
+  val I_ASSR  =  DEC_LITS.I_ASSR.U(TYPE_W) // Add/subtract (shifted register)
+  val I_MovI  =  DEC_LITS.I_MovI.U(TYPE_W) // Move wide (immediate)
   val I_CSel  =  DEC_LITS.I_CSel.U(TYPE_W) // Conditional select
 
   val I_LSUImm = DEC_LITS.I_LSUImm.U(TYPE_W) // Load/store (unsigned immediate)
@@ -203,6 +210,14 @@ object DECODE_MATCHING_TABLES
       PCRel_ADR    -> List(I_PCRel, OP_ADR,   Y, N, N, Y, N, N, N, N),
       PCRel_ADRP   -> List(I_PCRel, OP_ADRP,  Y, N, N, Y, N, N, N, N),
       // Logical (shifted register)
+      LogSR_AND32  -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, N, Y),
+      LogSR_BIC32  -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, N, Y),
+      LogSR_ORR32  -> List(I_LogSR, OP_ORR,   Y, Y, Y, N, Y, N, N, Y),
+      LogSR_ORN32  -> List(I_LogSR, OP_ORN,   Y, Y, Y, N, Y, N, N, Y),
+      LogSR_EOR32  -> List(I_LogSR, OP_EOR,   Y, Y, Y, N, Y, N, N, Y),
+      LogSR_EON32  -> List(I_LogSR, OP_EON,   Y, Y, Y, N, Y, N, N, Y),
+      LogSR_ANDS32 -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, Y, Y),
+      LogSR_BICS32 -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, Y, Y),
       LogSR_AND    -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, N, N),
       LogSR_BIC    -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, N, N),
       LogSR_ORR    -> List(I_LogSR, OP_ORR,   Y, Y, Y, N, Y, N, N, N),
@@ -212,11 +227,18 @@ object DECODE_MATCHING_TABLES
       LogSR_ANDS   -> List(I_LogSR, OP_AND,   Y, Y, Y, N, Y, N, Y, N),
       LogSR_BICS   -> List(I_LogSR, OP_BIC,   Y, Y, Y, N, Y, N, Y, N),
       // Logical (immediate)
+      LogI_AND32   -> List(I_LogI,  OP_AND,   Y, Y, N, Y, N, N, N, Y),
+      LogI_ORR32   -> List(I_LogI,  OP_ORR,   Y, Y, N, Y, N, N, N, Y),
+      LogI_EOR32   -> List(I_LogI,  OP_EOR,   Y, Y, N, Y, N, N, N, Y),
+      LogI_ANDS32  -> List(I_LogI,  OP_AND,   Y, Y, N, Y, N, N, Y, Y),
       LogI_AND     -> List(I_LogI,  OP_AND,   Y, Y, N, Y, N, N, N, N),
       LogI_ORR     -> List(I_LogI,  OP_ORR,   Y, Y, N, Y, N, N, N, N),
       LogI_EOR     -> List(I_LogI,  OP_EOR,   Y, Y, N, Y, N, N, N, N),
       LogI_ANDS    -> List(I_LogI,  OP_AND,   Y, Y, N, Y, N, N, Y, N),
       // Move wide (immediate)
+      MovI_MOVN32   -> List(I_MovI, OP_MOVN,  Y, N, Y, Y, N, N, N, Y),
+      MovI_MOVZ32   -> List(I_MovI, OP_MOVZ,  Y, N, Y, Y, N, N, N, Y),
+      MovI_MOVK32   -> List(I_MovI, OP_MOVK,  Y, N, Y, Y, N, N, N, Y),
       MovI_MOVN     -> List(I_MovI, OP_MOVN,  Y, N, Y, Y, N, N, N, N),
       MovI_MOVZ     -> List(I_MovI, OP_MOVZ,  Y, N, Y, Y, N, N, N, N),
       MovI_MOVK     -> List(I_MovI, OP_MOVK,  Y, N, Y, Y, N, N, N, N),
@@ -238,7 +260,11 @@ object DECODE_MATCHING_TABLES
       CCReg_CCMP   -> List(I_CCReg, OP_CCMP,  N, Y, Y, N, N, Y, Y, N),
       CCReg_CCMP32 -> List(I_CCReg, OP_CCMP,  N, Y, Y, N, N, Y, Y, Y),
       // Add/subtract (shifted register)
-      ASSR_CMP     -> List(I_ASSR,  OP_SUB,   N, Y, Y, N, Y, N, Y, N),
+      ASSR_CMP32   -> List(I_ASSR,  OP_SUB,   N, Y, Y, N, Y, N, Y, Y),
+      ASSR_ADD32   -> List(I_ASSR,  OP_ADD,   Y, Y, Y, N, Y, N, N, Y),
+      ASSR_ADDS32  -> List(I_ASSR,  OP_ADD,   Y, Y, Y, N, Y, N, Y, Y),
+      ASSR_SUB32   -> List(I_ASSR,  OP_SUB,   Y, Y, Y, N, Y, N, N, Y),
+      ASSR_SUBS32  -> List(I_ASSR,  OP_SUB,   Y, Y, Y, N, Y, N, Y, Y),
       ASSR_CMP     -> List(I_ASSR,  OP_SUB,   N, Y, Y, N, Y, N, Y, N),
       ASSR_ADD     -> List(I_ASSR,  OP_ADD,   Y, Y, Y, N, Y, N, N, N),
       ASSR_ADDS    -> List(I_ASSR,  OP_ADD,   Y, Y, Y, N, Y, N, Y, N),
@@ -246,6 +272,10 @@ object DECODE_MATCHING_TABLES
       ASSR_SUBS    -> List(I_ASSR,  OP_SUB,   Y, Y, Y, N, Y, N, Y, N),
       // Add/subtract (immediate)
       ASImm_CMP32  -> List(I_ASImm, OP_SUB,   N, Y, N, Y, Y, N, Y, Y),
+      ASImm_ADD32  -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, N, Y),
+      ASImm_ADDS32 -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, Y, Y),
+      ASImm_SUB32  -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, Y, N, N, Y),
+      ASImm_SUBS32 -> List(I_ASImm, OP_SUB,   Y, Y, N, Y, Y, N, Y, Y),
       ASImm_CMP    -> List(I_ASImm, OP_SUB,   N, Y, N, Y, Y, N, Y, N),
       ASImm_ADD    -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, N, N),
       ASImm_ADDS   -> List(I_ASImm, OP_ADD,   Y, Y, N, Y, Y, N, Y, N),
@@ -258,30 +288,39 @@ object DECODE_MATCHING_TABLES
       BReg_BR      -> List(I_BReg,  OP_BR,    N, Y, N, N, N, N, N, N),
       BReg_BLR     -> List(I_BReg,  OP_BLR,   N, Y, N, N, N, N, N, N),
       BReg_RET     -> List(I_BReg,  OP_RET,   N, Y, N, N, N, N, N, N),
+      // Test and branch (immediate)
+      TBImm_TBZ32  -> List(I_TBImm, OP_TBZ,   N, N, Y, Y, N, N, N, Y),
+      TBImm_TBNZ32 -> List(I_TBImm, OP_TBNZ,  N, N, Y, Y, N, N, N, Y),
+      TBImm_TBZ    -> List(I_TBImm, OP_TBZ,   N, N, Y, Y, N, N, N, N),
+      TBImm_TBNZ   -> List(I_TBImm, OP_TBNZ,  N, N, Y, Y, N, N, N, N),
       // Conditional branch (immediate)
       BCond        -> List(I_BCImm, OP_BCOND, N, N, N, Y, N, Y, N, N),
       // Compare and branch (immediate)
+      CBImm_CBZ32  -> List(I_CBImm, OP_CBZ,   N, N, Y, Y, N, N, N, Y),
+      CBImm_CBNZ32 -> List(I_CBImm, OP_CBNZ,  N, N, Y, Y, N, N, N, Y),
       CBImm_CBZ    -> List(I_CBImm, OP_CBZ,   N, N, Y, Y, N, N, N, N),
       CBImm_CBNZ   -> List(I_CBImm, OP_CBNZ,  N, N, Y, Y, N, N, N, N),
       // Load/store pair register (signed offset)
-      //LSPReg_STP64 -> List(I_LSPReg, OP_STP64,Y, Y, Y, Y, N, N, N, N),
-      //LSPReg_LDP64 -> List(I_LSPReg, OP_LDP64,Y, Y, Y, Y, N, N, N, N),
+      LSPReg_STP32 -> List(I_LSPReg, OP_STP32,Y, Y, Y, Y, N, N, N, Y),
+      LSPReg_STP64 -> List(I_LSPReg, OP_STP64,Y, Y, Y, Y, N, N, N, N),
+      LSPReg_LDP32 -> List(I_LSPReg, OP_LDP32,Y, Y, Y, Y, N, N, N, Y),
+      LSPReg_LDP64 -> List(I_LSPReg, OP_LDP64,Y, Y, Y, Y, N, N, N, N),
       // Load/store register (register offset)
-      LSRReg_STR8  -> List(I_LSRReg, OP_STRB, Y, Y, Y, Y, N, N, N, Y),
-      LSRReg_STR16 -> List(I_LSRReg, OP_STRH, Y, Y, Y, Y, N, N, N, Y),
+      LSRReg_STRB  -> List(I_LSRReg, OP_STRB, Y, Y, Y, Y, N, N, N, Y),
+      LSRReg_STRH  -> List(I_LSRReg, OP_STRH, Y, Y, Y, Y, N, N, N, Y),
       LSRReg_STR32 -> List(I_LSRReg, OP_STR32,Y, Y, Y, Y, N, N, N, Y),
       LSRReg_STR64 -> List(I_LSRReg, OP_STR64,Y, Y, Y, Y, N, N, N, N),
-      LSRReg_LDR8  -> List(I_LSRReg, OP_LDRB, Y, Y, Y, Y, N, N, N, Y),
-      LSRReg_LDR16 -> List(I_LSRReg, OP_LDRH, Y, Y, Y, Y, N, N, N, Y),
+      LSRReg_LDRB  -> List(I_LSRReg, OP_LDRB, Y, Y, Y, Y, N, N, N, Y),
+      LSRReg_LDRH  -> List(I_LSRReg, OP_LDRH, Y, Y, Y, Y, N, N, N, Y),
       LSRReg_LDR32 -> List(I_LSRReg, OP_LDR32,Y, Y, Y, Y, N, N, N, Y),
       LSRReg_LDR64 -> List(I_LSRReg, OP_LDR64,Y, Y, Y, Y, N, N, N, N),
       // Load/store register (unsigned immediate)
-      LSUImm_STR8  -> List(I_LSUImm, OP_STRB, Y, Y, Y, Y, N, N, N, Y),
-      LSUImm_STR16 -> List(I_LSUImm, OP_STRH, Y, Y, Y, Y, N, N, N, Y),
+      LSUImm_STRB  -> List(I_LSUImm, OP_STRB, Y, Y, Y, Y, N, N, N, Y),
+      LSUImm_STRH  -> List(I_LSUImm, OP_STRH, Y, Y, Y, Y, N, N, N, Y),
       LSUImm_STR32 -> List(I_LSUImm, OP_STR32,Y, Y, Y, Y, N, N, N, Y),
       LSUImm_STR64 -> List(I_LSUImm, OP_STR64,Y, Y, Y, Y, N, N, N, N),
-      LSUImm_LDR8  -> List(I_LSUImm, OP_LDRB, Y, Y, Y, Y, N, N, N, Y),
-      LSUImm_LDR16 -> List(I_LSUImm, OP_LDRH, Y, Y, Y, Y, N, N, N, Y),
+      LSUImm_LDRB  -> List(I_LSUImm, OP_LDRB, Y, Y, Y, Y, N, N, N, Y),
+      LSUImm_LDRH  -> List(I_LSUImm, OP_LDRH, Y, Y, Y, Y, N, N, N, Y),
       LSUImm_LDR32 -> List(I_LSUImm, OP_LDR32,Y, Y, Y, Y, N, N, N, Y),
       LSUImm_LDR64 -> List(I_LSUImm, OP_LDR64,Y, Y, Y, Y, N, N, N, N),
       LSUImm_LDRSB64 -> List(I_LSUImm, OP_LDRSB,Y, Y, Y, Y, N, N, N, N),

@@ -2,7 +2,6 @@
 package protoflex
 
 import chisel3._
-import chisel3.core.withReset
 import chisel3.util.{Decoupled, PriorityEncoder, PriorityMux, Queue, Reverse, Valid, log2Ceil}
 import common.PROCESSOR_TYPES._
 

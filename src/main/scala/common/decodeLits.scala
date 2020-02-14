@@ -42,6 +42,10 @@ object DEC_LITS {
   val OP_BLR = 1
   val OP_RET = 0 // Same as BR, but with different Hint_Branch (not Used)
 
+  // Test and branch (immediate)
+  val OP_TBZ  = 0
+  val OP_TBNZ = 1
+
   // Move wide (immediate)
   val OP_MOVN = 0
   val OP_MOVZ = 1
@@ -120,29 +124,32 @@ object DEC_LITS {
   // Load/store operation
   val OP_LDRSW = (1 << 3) + (1 << 2) + SIZE32
   // Pair register
-  val OP_STP64 = 3
-  val OP_LDP64 = (1 << 2) + 3
+  val OP_STP32 = SIZE32
+  val OP_STP64 = SIZE64
+  val OP_LDP32 = (1 << 2) + SIZE32
+  val OP_LDP64 = (1 << 2) + SIZE64
 
   // Instruction Types for scala
   val TYPE_W = 5
   val I_X = 0
   val I_LogSR = 1  // Logical (shifted register)
   val I_LogI  = 2  // Logical (immediate)
-  val I_BitF  = 3  // Logical (shifted register)
+  val I_BitF  = 3  // Bitfield
 
   val I_BImm  = 4  // Unconditional branch (immediate)
   val I_BCImm = 5  // Conditional branch (immediate)
   val I_BReg  = 6  // Conditional branch (register)
   val I_CBImm = 7  // Branch and Compare (immediate)
 
-  val I_ASImm = 8  // Add/Subtract (Immediate)
-  val I_ASSR  = 9  // Add/subtract (shifted register)
-  val I_MovI  = 10 // Move wide (immediate)
-  val I_PCRel = 11 // PC-Relative
+  val I_TBImm = 8  // Test and branch (immediate)
+  val I_PCRel = 9  // PC-Relative
+  val I_CCImm = 10 // Conditional compare (immediate)
+  val I_CCReg = 11 // Conditional compare (register)
 
-  val I_CCImm = 12 // Conditional compare (immediate)
-  val I_CCReg = 13 // Conditional compare (register)
-  val I_CSel  = 14 // Conditional select
+  val I_ASImm = 12 // Add/Subtract (Immediate)
+  val I_ASSR  = 13 // Add/subtract (shifted register)
+  val I_MovI  = 14 // Move wide (immediate)
+  val I_CSel  = 15 // Conditional select
 
   val I_LSUImm = 16 // Load/store (unsigned immediate)
   val I_LSRReg = 17 // Load/store register (register offset)

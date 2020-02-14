@@ -49,7 +49,7 @@ class ProcStateDBG(implicit val cfg : ProcConfig) extends Bundle
   val rfileVec = Output(Vec(cfg.NB_THREADS, Vec(REG_N, DATA_T)))
 
   val tuWorking = Output(ValidTagged(cfg.TAG_T))
-  val memResp = Input(DATA_T)
+  val memResp = Input(Vec(2, DATA_T))
 }
 
 /** Processor
@@ -208,22 +208,34 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   ldstU.io.rVal1 := rVal1
   ldstU.io.rVal2 := rVal2
   ldstU.io.pstate := pregsVec(issued_tag)
-  val wbData = io.procStateDBG.get.memResp
-  val wbLD = WireInit(wbData)
-  when(commitMem.bits.mem.signExtend) {
-    when(commitMem.bits.mem.wr32bit) {
-      wbLD := MuxLookup(commitMem.bits.mem.size, wbData(31,0), Array(
-                          SIZEB -> wbData(7,  0).asSInt.pad(32).asUInt,
-                          SIZEH -> wbData(15, 0).asSInt.pad(32).asUInt
-                        )).pad(64)
-
-    }.otherwise {
-      wbLD := MuxLookup(commitMem.bits.mem.size, wbData, Array(
-                          SIZEB  -> wbData(7,  0).asSInt.pad(64).asUInt,
-                          SIZEH  -> wbData(15, 0).asSInt.pad(64).asUInt,
-                          SIZE32 -> wbData(31, 0).asSInt.pad(64).asUInt,
-                          SIZE64 -> wbData
-                        ))
+  // WriteBack from LD's length generation
+  val wbLD = Wire(Vec(2, DATA_T))
+  if(cfg.DebugSignals) {
+    for( i <- 0 until 2 ) {
+      val wbData = io.procStateDBG.get.memResp(i)
+      when(commitMem.bits.is32bit) {
+        wbLD(i) := MuxLookup(commitMem.bits.size, wbData(31,0), Array(
+          SIZEB -> Mux(commitMem.bits.isSigned,
+            wbData(7,  0).asSInt.pad(32).asUInt,
+            wbData(7,  0).pad(32)),
+          SIZEH -> Mux(commitMem.bits.isSigned,
+            wbData(15, 0).asSInt.pad(32).asUInt,
+            wbData(15, 0).pad(32))
+        )).pad(64)
+      }.otherwise {
+        wbLD(i) := MuxLookup(commitMem.bits.size, wbData, Array(
+          SIZEB  -> Mux(commitMem.bits.isSigned,
+            wbData(7,  0).asSInt.pad(64).asUInt,
+            wbData(7,  0).pad(64)),
+          SIZEH  -> Mux(commitMem.bits.isSigned,
+            wbData(15, 0).asSInt.pad(64).asUInt,
+            wbData(15, 0).pad(64)),
+          SIZE32 -> Mux(commitMem.bits.isSigned,
+            wbData(31, 0).asSInt.pad(64).asUInt,
+            wbData(31, 0).pad(64)),
+          SIZE64 -> wbData
+        ))
+      }
     }
   }
 
@@ -240,39 +252,52 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   commitReg.io.deq.ready := true.B
 
   // ---- Commit STATE ----
+  val commitUndef = WireInit(commitValid && commitReg.io.deq.bits.undef)
   // Writeback : Execute -> PState
 
   // connect RFile's write interface
- for(cpu <- 0 until cfg.NB_THREADS) {
+  for(cpu <- 0 until cfg.NB_THREADS) {
     when(commitExec.valid) {
       rfileVec(cpu).waddr := commitExec.bits.rd.bits
       rfileVec(cpu).wdata := commitExec.bits.res
     }.elsewhen(commitPcRel.valid) {
       rfileVec(cpu).waddr := commitPcRel.bits.rd
       rfileVec(cpu).wdata := commitPcRel.bits.res
-// TODO NOT SUPPORTED wback LD/ST
-// If LD triggers transplant, CPU went to inconsistent state
-//    }.elsewhen(commitMem.valid) { // wback 
-//      rfileVec(cpu).waddr := commitMem.bits.rd.bits
-//      rfileVec(cpu).wdata := commitMem.bits.rd_res
-    }.elsewhen(commitMem.valid) { // Load TODO : Real, here QEMU Loads in single cycle
-      rfileVec(cpu).waddr := commitMem.bits.mem.reg
-      rfileVec(cpu).wdata := wbLD
-    }.otherwise {
+   }.otherwise {
       // Default
       rfileVec(cpu).waddr := commitExec.bits.rd.bits
       rfileVec(cpu).wdata := commitExec.bits.res
     }
     rfileVec(cpu).wen := false.B
+    if(cfg.DebugSignals) {
+     when(commitMem.valid) { // Load TODO : Real, here QEMU Loads in single cycle
+        rfileVec(cpu).waddr := commitMem.bits.memReq(0).reg
+        rfileVec(cpu).wdata := wbLD(0)
+        rfileVec(cpu).waddr_2.get := commitMem.bits.memReq(1).reg
+        rfileVec(cpu).wdata_2.get := wbLD(1)
+       // TODO NOT SUPPORTED REALLY LD/ST Writeback (Post-Idx)
+       //    }.elsewhen(commitMem.valid) { // wback
+       //      rfileVec(cpu).waddr := commitMem.bits.rd.bits
+       //      rfileVec(cpu).wdata := commitMem.bits.rd_res
+      }.otherwise {
+        rfileVec(cpu).waddr_2.get := commitMem.bits.memReq(1).reg
+        rfileVec(cpu).wdata_2.get := wbLD(1)
+      }
+      rfileVec(cpu).wen_2.get := false.B
+    }
   }
 
   nextPC := pregsVec(commitTag).PC
   nextSP := pregsVec(commitTag).SP
-  when(commitValid && !commitReg.io.deq.bits.undef) {
+  when(commitValid && !commitUndef) {
     rfileVec(commitTag).wen :=
       (commitExec.valid && commitExec.bits.rd.valid) ||
-      (commitMem.valid && commitMem.bits.mem.isLoad) ||
+      (commitMem.valid && commitMem.bits.isLoad) ||
       (commitPcRel.valid)
+    if(cfg.DebugSignals) {
+      rfileVec(commitTag).wen_2.get :=
+        (commitMem.valid && commitMem.bits.isLoad && commitMem.bits.isPair)
+    }
 
     when(commitExec.valid && commitExec.bits.nzcv.valid) {
       pregsVec(commitTag).NZCV := commitExec.bits.nzcv.bits
@@ -298,17 +323,20 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   when(insnTLB.io.miss.valid)        { fetchEn(fetch.io.pc.tag) := false.B }
   when(tpu.io.tpu2cpu.fire.valid)    { fetchEn(tpu.io.tpu2cpu.fire.tag) := true.B }
   when(tpu.io.tpu2cpu.fillTLB.valid) { fetchEn(tpu.io.tpu2cpu.fillTLB.tag) := true.B }
-  when((issuer.io.deq.valid && !issued_dinst.inst32.valid)) { fetchEn(tpu.io.tpu2cpu.flush.tag) := false.B }
+  when(tpu.io.tpu2cpu.flush.valid)   { fetchEn(tpu.io.tpu2cpu.flush.tag) := false.B }
 
   // Hit unknown case -> Pass state to CPU
-  tpu.io.tpu2cpu.done.valid := commitValid && commitReg.io.deq.bits.undef
+  tpu.io.tpu2cpu.done.valid := commitValid && commitUndef
   tpu.io.tpu2cpu.done.tag := commitReg.io.deq.bits.tag
 
   // Flushing ----------------------------------------------------------------
   issuer.io.flush := tpu.io.tpu2cpu.flush
   fetch.io.flush := tpu.io.tpu2cpu.flush
+  decReg.io.flush := false.B
   commitReg.io.flush := false.B
   when(tpu.io.tpu2cpu.flush.valid) {
+    issuer.io.flush := tpu.io.tpu2cpu.flush
+    fetch.io.flush := tpu.io.tpu2cpu.flush
     decReg.io.flush := decReg.io.deq.bits.tag === tpu.io.tpu2cpu.flush.tag
     commitReg.io.flush := commitReg.io.deq.bits.tag === tpu.io.tpu2cpu.flush.tag
   }.elsewhen(commitValid && commitBr.valid ) { // Branching, clean pipeline
@@ -317,9 +345,6 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
     issuer.io.flush.valid := true.B
     issuer.io.flush.tag := commitTag
     decReg.io.flush := decReg.io.deq.bits.tag === commitTag
-  }.otherwise {
-    issuer.io.flush.valid := false.B
-    decReg.io.flush := false.B
   }
 
   // Transplant Activated ----------------------------------------------------
@@ -369,7 +394,6 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
     procStateDBG.rfileVec := rfileVecWire
     procStateDBG.pregsVec := pregsVec
     procStateDBG.tuWorking := tpu.io.tpu2cpu.freeze
-  }
 
 
 }

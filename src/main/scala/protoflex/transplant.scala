@@ -213,6 +213,13 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   // CPU <-> HOST direct communcation
   io.host2tpu.missTLB <> io.tpu2cpu.missTLB
   io.host2tpu.fillTLB <> io.tpu2cpu.fillTLB
+
+  if(cfg.DebugSignals) {
+    // One cycle delay from BRAM read
+    io.rfile.wen_2.get   := DontCare
+    io.rfile.waddr_2.get := DontCare
+    io.rfile.wdata_2.get := DontCare
+  }
 }
 
 // In parsa-epfl/qemu/fa-qflex

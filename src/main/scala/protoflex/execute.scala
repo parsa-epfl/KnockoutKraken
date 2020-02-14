@@ -218,14 +218,19 @@ class ShiftALU(implicit val cfg: ProcConfig) extends Module {
   io.res := res
 }
 
+object PriorityEncoderReversed {
+  def apply(in: Seq[Bool]): UInt = PriorityMux(in.reverse, (in.size until 0 by -1).map(_.asUInt))
+  def apply(in: Bits): UInt = apply(in.asBools)
+}
+
 // aarch64/instrs/integer/bitmasks/DecodeBitMasks
-// NOTE Only supports 64 bits operations
 // (bits(M), bits(M)) DecodeBitMasks(bit immN, bits(6) imms, bits(6) immr, boolean immediate)
 // M = 64, immN = 1
 class DecodeBitMasks(implicit val cfg: ProcConfig) extends Module
 {
   // 64 bits -> immn = 1
   val io = IO(new Bundle {
+                val immn = Input(UInt(1.W))
                 val imms = Input(UInt(6.W))
                 val immr = Input(UInt(6.W))
                 val wmask = Output(DATA_T)
@@ -253,33 +258,29 @@ class DecodeBitMasks(implicit val cfg: ProcConfig) extends Module
   //
   // In all cases the rotation is by immr % e (and immr is 6 bits).
 
-  def Ones(bits: UInt): UInt = {
-    val table  = VecInit.tabulate(DATA_SZ + 1) { i => BigInt("0"*(DATA_SZ-i) ++ "1"*i, 2).U }
-    val res = Wire(DATA_T)
-    res := table(bits)
-    res
-  }
+  val OnesTable  = VecInit.tabulate(DATA_SZ + 1) { i => BigInt("0"*(DATA_SZ-i) ++ "1"*i, 2).U }
+
   val welem = Wire(DATA_T)
   val wmask = Wire(DATA_T)
   val telem = Wire(DATA_T)
   val tmask = Wire(DATA_T)
 
-  val len = 6
-  val esize = 1 << len // 64, because 64 bit instructions
-  val levels = (esize - 1).U // Mask for 64 bit: 0b111111
+  val toBeEncoded = WireInit(UInt(7.W), Cat(io.immn, ~io.imms))
+  val len = WireInit(PriorityEncoderReversed(toBeEncoded))
+  val levels = WireInit(OnesTable(len)(5,0))
 
   val s = WireInit(io.imms & levels)
   val r = WireInit(io.immr & levels)
   val diff = WireInit(s - r)
 
   val d = WireInit(diff & levels)
-  val onesS = WireInit(s +& 1.U) // Add a bit for the 0b1000000 = 64 bit case
-  val onesD = WireInit(d +& 1.U) // Add a bit for the 0b1000000 = 64 bit case
+  val onesS = WireInit(s +& 1.U)
+  val onesD = WireInit(d +& 1.U)
 
-  welem := WireInit(Ones(onesS))
+  welem := OnesTable(onesS)
   wmask := ALU.rotateRight(VecInit(welem.asBools), r).asUInt // ROR(welem, R) and truncate esize
 
-  telem := WireInit(Ones(onesD))
+  telem := OnesTable(onesD)
   tmask := telem
 
   io.wmask := wmask
@@ -336,8 +337,9 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   io.condRes := condHolds.io.res
 
   // DecodeBitMasks
-  // NOTE Logical (immediate): immr(21:16), imms(15:10)
+  // NOTE Logical (immediate): N(22), immr(21:16), imms(15:10)
   val decodeBitMask = Module(new DecodeBitMasks)
+  decodeBitMask.io.immn := io.dinst.imm.bits(22-10)
   decodeBitMask.io.immr := io.dinst.imm.bits(21-10,16-10)
   decodeBitMask.io.imms := io.dinst.imm.bits(15-10,10-10)
   decodeBitMask.io.immediate := MuxLookup(io.dinst.itype, false.B, Array(

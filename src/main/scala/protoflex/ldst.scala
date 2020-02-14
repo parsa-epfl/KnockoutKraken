@@ -12,17 +12,21 @@ class MemReq(implicit val cfg: ProcConfig) extends Bundle
   val addr = DATA_T
   val data = DATA_T
   val reg = REG_T
-  val size = UInt(2.W)
-  val wr32bit = Bool()
-  val signExtend = Bool()
-  val isLoad = Bool()
 }
 
 class MInst(implicit val cfg: ProcConfig) extends Bundle
 {
+
+  val size = UInt(2.W)
+  val isPair = Output(Bool())
+  val isLoad = Bool()
+  val is32bit = Bool()
+  val isSigned= Bool()
+  val memReq = Output(Vec(2, new MemReq))
+
+  // With Write Back
   val rd_res = Output(DATA_T)
   val rd = Output(Valid(REG_T))
-  val mem = Output(new MemReq)
 }
 
 class LDSTUnitIO(implicit val cfg: ProcConfig) extends Bundle
@@ -59,7 +63,7 @@ class ExtendReg(implicit val cfg: ProcConfig) extends Module
                                      3.U -> value
                                    )))
   val res = WireInit(Mux(isSigned, valSExt.asUInt, valUExt))
-  io.res := res
+  io.res := res << io.shift
 }
 
 class LDSTUnit(implicit val cfg: ProcConfig) extends Module
@@ -68,12 +72,14 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   val io = IO(new LDSTUnitIO)
 
   // Decode All variants
-  val offst = WireInit(io.dinst.imm.bits)
   val size = WireInit(io.dinst.op(1,0))
   val isLoad = WireInit(io.dinst.op(2))
   val isSigned = WireInit(io.dinst.op(3))
+  val offstImm = io.dinst.imm.bits << size
+  val offst = WireInit(offstImm)
 
-  // Decode LSUImm variants
+  // Decode for LD/ST with Post/Pre-index and Signed offset variants
+  // NOTE: Post-index and Pre-index have wback enabled and is not supported yet
   val wback = WireInit(false.B)
   val postindex = WireInit(false.B)
 
@@ -88,7 +94,11 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   when(io.dinst.itype === I_LSUImm) {
     wback := false.B
     postindex := false.B
-    offst := (io.dinst.imm.bits << size)
+    offst := offstImm
+  }.elsewhen(io.dinst.itype === I_LSPReg) {
+    wback := false.B
+    postindex := false.B
+    offst := offstImm
   }.elsewhen(io.dinst.itype === I_LSRReg) {
     offst := extendReg.io.res
   }
@@ -137,20 +147,28 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   val data = WireInit(io.rVal2) // data = Rt = rVal2
 
   // Output
-  io.minst.bits.mem.addr := ldst_address
-  io.minst.bits.mem.data := data
-  io.minst.bits.mem.reg := io.dinst.rd.bits
-  io.minst.bits.mem.size := size
-  io.minst.bits.mem.signExtend := isSigned
-  io.minst.bits.mem.wr32bit := size =/= 3.U && (io.dinst.itype === I_LSUImm && io.dinst.op =/= OP_LDRSW)
-  io.minst.bits.mem.isLoad := isLoad
+  io.minst.bits.size := size
+  io.minst.bits.isSigned := isSigned
+  io.minst.bits.is32bit := size =/= SIZE64 && !(io.dinst.itype === I_LSUImm && io.dinst.op === OP_LDRSW)
+  io.minst.bits.isLoad := isLoad
   io.minst.valid := MuxLookup(io.dinst.itype, false.B, Array(
+                                I_LSPReg -> true.B,
                                 I_LSRReg -> true.B,
                                 I_LSUImm -> true.B
                               ))
 
+  io.minst.bits.memReq(0).addr := ldst_address
+  io.minst.bits.memReq(0).data := data
+  io.minst.bits.memReq(0).reg := io.dinst.rd.bits
+  // For Pair LD/ST
+  val dbytes = 1.U << size // SIZE32 => 1 << 2 = 4 | SIZE64 = 3 => 1 << 3 = 8 bytes
+  io.minst.bits.isPair := io.dinst.itype === I_LSPReg
+  io.minst.bits.memReq(1).addr := ldst_address + dbytes 
+  io.minst.bits.memReq(1).data := data
+  io.minst.bits.memReq(1).reg := io.dinst.rs2.bits
 
-  // Writeback address to reg // itype === LSUImm
+
+  // Writeback address to reg // itype === LSUImm || 
   // if wback then
   //   if n == 31 then
   //     SP[] = address;
@@ -158,8 +176,7 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   //     X[n] = address;
   // NOTE:
   // - address = base_address + offst
-  // - Check for n == 31 on proc.scala
-  io.minst.bits.rd_res := ldst_address
+  io.minst.bits.rd_res := post_address
   io.minst.bits.rd.bits := io.dinst.rs2.bits
   io.minst.bits.rd.valid := wback
 
@@ -185,6 +202,13 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   //         when Constraint_UNDEF UNDEFINED;        => Transplant
   //         when Constraint_NOP EndOfInstruction(); => NOP
   // NOTE:
+  // TODO // itype == LSPReg
+  // if t == t2 then
+  //   Constraint c = ConstrainUnpredictable();
+  //   assert c IN {Constraint_UNKNOWN, Constraint_UNDEF, Constraint_NOP};
+  //   case c of
+  //     when Constraint_UNKNOWN rt_unknown = TRUE; // result is UNKNOWN
+  //     when Constraint_UNDEF UNDEFINED;
+  //     when Constraint_NOP EndOfInstruction();
   val rt_unkown = WireInit(false.B)
-
 }

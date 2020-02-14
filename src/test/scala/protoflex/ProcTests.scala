@@ -105,14 +105,17 @@ object ProcDriver {
         !procStateDBG_.get.commitReg.bits.undef.peek.litToBoolean
     }
 
-    def getCommitedInst(): BigInt = { procStateDBG_.get.commitReg.bits.inst32.peek.litValue }
-    def getCommitedPC(): BigInt = { procStateDBG_.get.commitReg.bits.pc.peek.litValue }
+    def getCommitedInst(): BigInt = procStateDBG_.get.commitReg.bits.inst32.peek.litValue
+    def getCommitedPC(): BigInt = procStateDBG_.get.commitReg.bits.pc.peek.litValue
 
-    def isCommitedMem(): Boolean = { procStateDBG_.get.commitReg.bits.mem.valid.peek.litToBoolean }
-    def isCommitedLoad(): Boolean = { procStateDBG_.get.commitReg.bits.mem.bits.mem.isLoad.peek.litToBoolean }
-    def isCommitedStore(): Boolean = { !procStateDBG_.get.commitReg.bits.mem.bits.mem.isLoad.peek.litToBoolean }
-    def getCommitedMemAddr(): BigInt = { procStateDBG_.get.commitReg.bits.mem.bits.mem.addr.peek.litValue }
-    def writeLD(data: BigInt): Unit = { procStateDBG_.get.memResp.poke(data.U) }
+    private def getMemInst = procStateDBG_.get.commitReg.bits.mem.bits
+    private def getMemReq(idx: Int) = procStateDBG_.get.commitReg.bits.mem.bits.memReq(idx)
+    def isCommitedMem: Boolean = procStateDBG_.get.commitReg.bits.mem.valid.peek.litToBoolean
+    def isCommitedPairMem: Boolean = getMemInst.isPair.peek.litToBoolean
+    def isCommitedLoad: Boolean = getMemInst.isLoad.peek.litToBoolean
+    def getCommitedMemAddr(idx: Int): BigInt = getMemReq(idx).addr.peek.litValue
+    def writeLD(idx: Int, data: BigInt): Unit = procStateDBG_.get.memResp(idx).poke(data.U)
+
 
     def printState():Unit = {
       if(!cfgProc.DebugSignals) {

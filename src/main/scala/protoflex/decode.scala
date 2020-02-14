@@ -72,26 +72,29 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
                             I_ASSR  -> inst(20,16),
                             I_CSel  -> inst(20,16),
                             I_CCReg -> inst(20,16),
+                            I_TBImm -> inst( 4, 0),
                             I_BitF  -> inst( 4, 0),
                             I_MovI  -> inst( 4, 0),
                             I_CBImm -> inst( 4, 0),
-                            I_LSPReg-> inst( 4, 0),// Rt as Source
+                            I_LSPReg-> inst(14,10),// Rt2 as Rd2
                             I_LSRReg-> inst(20,16),
                             I_LSUImm-> inst( 4, 0) // Rt as Source
                           ))
 
     imm.bits := MuxLookup(itype, IMM_X, Array(
-                            I_BitF  -> inst(21,10), // immr(21:16), imms(15:10)
-                            I_LogI  -> inst(21,10), // immr(21:16), imms(15:10)
+                            I_BitF  -> inst(22,10), // N(22), immr(21:16), imms(15:10)
+                            I_LogI  -> inst(22,10), // N(22), immr(21:16), imms(15:10)
                             I_MovI  -> inst(20+2,5), // hw(22,21), imm16(20:5)
+                            I_TBImm -> inst(23,5), // b40(23,19), imm14(18,5)
                             I_CCImm -> inst(20,16),
 
                             I_BImm  -> inst(25, 0),
-                            I_PCRel -> Cat(inst(23,5), inst(30,29)), // immlo(30,29), immhi(23,25)
+                            I_PCRel -> Cat(inst(23,5), inst(30,29)), // immlo(30,29), immhi(23,5)
                             I_BCImm -> inst(23,5),
                             I_CBImm -> inst(23,5),
 
                             I_ASImm -> inst(21,10),
+                            I_LSPReg-> inst(21,15),
                             I_LSImm -> inst(23, 5),
                             I_LSUImm-> inst(21,10)
                           ))
