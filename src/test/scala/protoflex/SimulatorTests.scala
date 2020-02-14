@@ -6,19 +6,18 @@ import java.nio.charset.StandardCharsets
 import java.nio.ByteBuffer
 
 import org.scalatest._
-
 import chisel3._
-import chisel3.tester._
-import chisel3.tester.internal._
-import chisel3.tester.experimental.TestOptionBuilder._
-import chisel3.tester.internal.VerilatorBackendAnnotation
+import chiseltest._
+import chiseltest.internal._
+import chiseltest.experimental.TestOptionBuilder._
+import chiseltest.internal.VerilatorBackendAnnotation
 import chisel3.experimental._
 
 import common.PROCESSOR_TYPES.REG_N
 
 import utils.ArmflexJson
 import utils.SoftwareStructs._
-import common.BRAMPortAXI
+import common.BRAMPort
 import common.AxiLiteSignals
 import firrtl.options.TargetDirAnnotation
 
@@ -33,12 +32,12 @@ object FA_QflexCmds {
   val INST_FETCH  = 2
   val INST_UNDEF  = 3
   val SIM_EXCP    = 4
-  val CHECK_N_STEP = 8
   // Commands QEMU->SIM
   val SIM_START  = 5 // Load state from QEMU
   val SIM_STOP   = 6
   // Commands QEMU<->SIM
   val LOCK_WAIT   = 7
+  val CHECK_N_STEP = 8
 
   def cmd_toString(cmd: Int): String = {
     val str = cmd match {
@@ -83,7 +82,7 @@ class SimulatorConfig (
 }
 
 class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : SimulatorConfig)
-                              (implicit val cfgProc : ProcConfig) {
+  (implicit val cfgProc : ProcConfig) {
 
   val file = new PrintWriter(new BufferedWriter(new FileWriter("/dev/shm/outputSim", true)), true)
 
@@ -93,8 +92,8 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
 
   implicit val clock = cProcAxi.clock
 
-  val portPPage: BRAMPortAXI = cProcAxi.io.ppageBRAM
-  val portPState: BRAMPortAXI = cProcAxi.io.stateBRAM
+  val portPPage: BRAMPort = cProcAxi.io.ppageBRAM
+  val portPState: BRAMPort = cProcAxi.io.stateBRAM
   val procStateDBG_ : Option[ProcStateDBG] = cProcAxi.io.procStateDBG
 
   var currState : PState = cProcAxi.getPStateInternal(0)

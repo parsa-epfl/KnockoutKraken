@@ -4,9 +4,8 @@ import chisel3._
 import chisel3.util.{Cat}
 import common.{AxiMemoryMappedRegFile, AxiMemoryMappedRegFileConfig}
 import common.AxiLite._
-import common.{BRAM, BRAMConfig, BRAMPort, BRAMPortAXI}
 import common.PROCESSOR_TYPES._
-import common.AxiLiteConsts
+import common.{BRAMPort, AxiLiteConsts}
 
 object AxiDriver extends App {
   chisel3.Driver.execute(Array("-tn", "ProcAxi", "-td", "Verilog", "-fsm"), () => new ProcAxiWrap()(new ProcConfig(2, false)))
@@ -28,8 +27,8 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
   val io = IO(new Bundle {
                 val axiLite = AxiLiteSlave(cfgAxiMM.axiLiteConfig)
 
-                val ppageBRAM = new BRAMPortAXI(0)(cfg.ppageBRAMc)
-                val stateBRAM = new BRAMPortAXI(0)(cfg.stateBRAMc)
+                val ppageBRAM = new BRAMPort()(cfg.bramConfig(true))
+                val stateBRAM = new BRAMPort()(cfg.bramConfig(true))
 
                 /* To Infer bram port, add these attributes to ports in the following manner
 
@@ -118,7 +117,7 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
     doneVec(proc.io.host2tpu.done.tag) := true.B
   }
 
- /** Register 2 TODO, CMD get TLB paddr
+  /** Register 2 TODO, CMD get TLB paddr
     * +----------------------------------------+
     * |                                        |
     * +----------------------------------------+
@@ -128,10 +127,10 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
     * +----------------------------------------+
     *
     */
+  // reg(2, 0, 1)
   proc.io.host2tpu.fillTLB.valid    := false.B
   proc.io.host2tpu.fillTLB.tag      := tagReg
   proc.io.host2tpu.fillTLB.data.get := TLBEntry()
-  // reg(2, 0, 1)
 
   /** Register 3
     * +----------------------------------------+

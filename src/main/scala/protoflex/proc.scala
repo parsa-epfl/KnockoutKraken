@@ -4,15 +4,13 @@ package protoflex
 import chisel3._
 import chisel3.util.{Decoupled, Queue, RegEnable, Valid, log2Ceil, MuxLookup}
 
-import common.constBRAM.TDPBRAM36ParamDict
 import common.PROCESSOR_TYPES._
 import common._
 
 import common.DECODE_CONTROL_SIGNALS._
 
-case class ProcConfig(val NB_THREADS : Int = 4, val DebugSignals : Boolean = false, EntriesTLB: Int = 32) {
-  val ppageBRAMc = new BRAMConfig(Seq(TDPBRAM36ParamDict(36), TDPBRAM36ParamDict(36)))
-  val stateBRAMc = new BRAMConfig(Seq(TDPBRAM36ParamDict(36), TDPBRAM36ParamDict(36)))
+case class ProcConfig(val NB_THREADS : Int = 4, val DebugSignals : Boolean = false, EntriesTLB: Int = 2) {
+  val bramConfig = new BRAMConfig(10, 36, 1024, false)
 
   // Threads
   val NB_THREAD_W = log2Ceil(NB_THREADS) // 4 Threads
@@ -61,8 +59,8 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
 {
   val io = IO(new Bundle {
     // BRAM Host Ports
-    val ppageBRAM = new BRAMPortAXI(0)(cfg.ppageBRAMc)
-    val stateBRAM = new BRAMPortAXI(0)(cfg.stateBRAMc)
+    val ppageBRAM = new BRAMPort()(cfg.bramConfig)
+    val stateBRAM = new BRAMPort()(cfg.bramConfig)
 
     // AXI Host Communication
     val host2tpu = new TransplantUnitHostIO
@@ -81,9 +79,9 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
 
   // Host modules
   // BRAM Program page
-  val ppage = Module(new BRAM()(cfg.ppageBRAMc))
+  val ppage = Module(new BRAM()(cfg.bramConfig))
   // BRAM PC State
-  val state = Module(new BRAM()(cfg.stateBRAMc))
+  val state = Module(new BRAM()(cfg.bramConfig))
   // Transplant Unit
   val tpu = Module(new TransplantUnit())
 
@@ -116,6 +114,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   val ldstU = Module(new LDSTUnit())
   val commitReg = Module(new FlushReg(new CommitInst))
 
+
   // Extra Regs and wires
   val fetchEn = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(false.B)))
 
@@ -131,13 +130,13 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   // Interconnect -------------------------------------------
 
   // HOST <> TP
-  io.ppageBRAM <> ppage.io.getPort(0)
-  io.stateBRAM <> state.io.getPort(0)
+  io.ppageBRAM <> ppage.portA
+  io.stateBRAM <> state.portA
 
   io.host2tpu <> tpu.io.host2tpu
 
   // Transplant Unit TP <> CPU
-  tpu.io.stateBRAM <> state.io.getPort(1)
+  tpu.io.stateBRAM <> state.portB
   tpu.io.tpu2cpu.done.valid := false.B
   tpu.io.tpu2cpu.done.tag := 0.U
   insnTLB.io.fillTLB.valid := tpu.io.tpu2cpu.fillTLB.valid
@@ -148,10 +147,10 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   tpu.io.tpu2cpu.missTLB.valid := insnTLB.io.miss.valid
   tpu.io.tpu2cpu.missTLB.data.get := insnTLB.io.miss.bits
 
-  ppage.io.getPort(1).en := true.B
-  ppage.io.getPort(1).dataIn.get := 0.U
-  ppage.io.getPort(1).writeEn.get := false.B
-  ppage.io.getPort(1).addr := insnTLB.io.paddr // PC is byte addressed, BRAM is 32bit word addressed
+  ppage.portB.EN := true.B
+  ppage.portB.DI := 0.U
+  ppage.portB.WE := false.B
+  ppage.portB.ADDR := insnTLB.io.paddr // PC is byte addressed, BRAM is 32bit word addressed
 
   fetch.io.fire := tpu.io.tpu2cpu.fire
   fetch.io.fetchEn := fetchEn
@@ -161,7 +160,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   fetch.io.commitReg.valid := commitReg.io.deq.valid
   insnTLB.io.vaddr := fetch.io.pc.data.get
   fetch.io.hit := !insnTLB.io.miss.valid
-  fetch.io.insn := ppage.io.getPort(1).dataOut.get
+  fetch.io.insn := ppage.portB.DO
 
   // Fetch -> Decode
   decoder.io.finst := fetch.io.deq.bits

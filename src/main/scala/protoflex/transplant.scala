@@ -25,7 +25,6 @@ import protoflex.TPU2STATE._
  */
 class TransplantUnitIO(implicit val cfg: ProcConfig) extends Bundle
 {
-  private implicit val stateBRAMc = cfg.stateBRAMc
   val host2tpu = new TransplantUnitHostIO
   val tpu2cpu = new TransplantUnitCPUIO
 
@@ -34,7 +33,7 @@ class TransplantUnitIO(implicit val cfg: ProcConfig) extends Bundle
   val cpu2tpuState = Input(new PStateRegs)
   val rfile = Flipped(new RFileIO)
 
-  val stateBRAM = Flipped(new BRAMPort(1))
+  val stateBRAM = Flipped(new BRAMPort()(cfg.bramConfig))
 }
 
 /*
@@ -76,12 +75,12 @@ class TransplantUnitCPUIO(implicit val cfg: ProcConfig) extends Bundle
 }
 
 class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
-  val stateAddrW = cfg.stateBRAMc.addrWidthVec(1)
+  val stateAddrW = cfg.bramConfig.ADDR_WIDTH
 
   val io = IO(new TransplantUnitIO)
 
   val bramOFFST = RegInit(0.U(log2Ceil(ARCH_MAX_OFFST).W))
-  val bramOut = WireInit(io.stateBRAM.dataOut.get(31,0)) // 32 Bits read of BRAM
+  val bramOut = WireInit(io.stateBRAM.DO(31,0)) // 32 Bits read of BRAM
   // BRAM is 32b, so if we read two words in a row, we get a 64b word (usefull for XREGS and PC)
   val bramOut1CD = RegNext(bramOut) // 1 Cycle Delay
   val bramOut64b = WireInit(Cat(bramOut1CD, bramOut))
@@ -173,19 +172,19 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
     }
   }
 
-  io.stateBRAM.en := true.B
-  io.stateBRAM.writeEn.get := stateDir === s_CPU2BRAM && stateRegType =/= r_DONE
-  io.stateBRAM.addr := bramOFFST
+  io.stateBRAM.EN := true.B
+  io.stateBRAM.WE := stateDir === s_CPU2BRAM && stateRegType =/= r_DONE
+  io.stateBRAM.ADDR := bramOFFST
   when(stateRegType === r_XREGS) {
-    io.stateBRAM.dataIn.get := Mux(bramOFFST(0), regDataInLSB, regDataInMSB)
+    io.stateBRAM.DI := Mux(bramOFFST(0), regDataInLSB, regDataInMSB)
   }.elsewhen(stateRegType === r_PC) {
-    io.stateBRAM.dataIn.get := Mux(bramOFFST(0), io.cpu2tpuState.PC(31,0), io.cpu2tpuState.PC(63,32))
+    io.stateBRAM.DI := Mux(bramOFFST(0), io.cpu2tpuState.PC(31,0), io.cpu2tpuState.PC(63,32))
   }.elsewhen(stateRegType === r_SP) {
-    io.stateBRAM.dataIn.get := Mux(bramOFFST(0), io.cpu2tpuState.SP(31,0), io.cpu2tpuState.SP(63,32))
+    io.stateBRAM.DI := Mux(bramOFFST(0), io.cpu2tpuState.SP(31,0), io.cpu2tpuState.SP(63,32))
   }.elsewhen(stateRegType === r_NZCV) {
-    io.stateBRAM.dataIn.get := Cat(0.U, io.cpu2tpuState.NZCV(3,0))
+    io.stateBRAM.DI := Cat(0.U, io.cpu2tpuState.NZCV(3,0))
   }.otherwise {
-    io.stateBRAM.dataIn.get := 0.U
+    io.stateBRAM.DI := 0.U
   }
 
   // One cycle delay from BRAM read

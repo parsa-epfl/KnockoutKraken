@@ -7,9 +7,8 @@ import java.math.BigInteger
 import scala.language.implicitConversions
 
 import org.scalatest._
-
 import chisel3._
-import chisel3.tester._
+import chiseltest._
 
 import utils.{AssemblyParser, PrintingTools}
 import utils.SoftwareStructs._
@@ -27,8 +26,8 @@ object ProcDriver {
 
     val INSN_SIZE = 4
 
-    val portPPage : BRAMPortAXI = target.io.ppageBRAM
-    val portPState : BRAMPortAXI = target.io.stateBRAM
+    val portPPage : BRAMPort = target.io.ppageBRAM
+    val portPState : BRAMPort = target.io.stateBRAM
     val procStateDBG_ : Option[ProcStateDBG] = target.io.procStateDBG
     val axiLite : AxiLiteSignals = target.io.axiLite
 
@@ -82,6 +81,7 @@ object ProcDriver {
       //println(pstate.toString())
       pstate
     }
+
 
     // DEBUG Functions ------------------------------------------------------------
     def getPStateInternal(cpu: Int): PState = {
