@@ -65,6 +65,10 @@ object AssemblyInstruction
     "BICS" -> OP_BIC
   )
 
+  def LoadStore = Map (
+    "LDR" -> OP_LDR64
+  )
+
   def AddSubImm = Map (
     "ADD" -> OP_ADD,
     "ADDS" -> OP_ADD,
@@ -74,10 +78,6 @@ object AssemblyInstruction
 
   def Branch = Map (
     "B" -> OP_BCOND
-  )
-
-  def LoadStore = Map(
-    "LDR" -> OP_LDR
   )
 
   def ShiftTypes = Map(
@@ -203,7 +203,7 @@ object AssemblyInstruction
       // load store ( immediate )
       case (Some(d), _, _,Some(i), _, _) if LoadStore.get(i_op.toUpperCase).isDefined => {
         itype = I_LSImm
-        op = OP_LDR
+        op = OP_LDR64
         rd  = d
         imm = i
       }

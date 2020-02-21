@@ -26,10 +26,10 @@ object INSTRUCTIONS
   // b5 |  0  1  1  0  1  1 |  0 |      b40       |                  imm14                    |        Rt      | TBZ              |
   // b5 |  0  1  1  0  1  1 |  1 |      b40       |                  imm14                    |        Rt      | TBNZ             |
   def TBImm = BitPat("b?011011?????????????????????????")
-  def TBImm_TBZ32 = BitPat("b00110110????????????????????????")
-  def TBImm_TBNZ32= BitPat("b00110111????????????????????????")
-  def TBImm_TBZ  = BitPat("b10110110????????????????????????")
-  def TBImm_TBNZ = BitPat("b10110111????????????????????????")
+  def TBImm_TBZ32  = BitPat("b00110110????????????????????????")
+  def TBImm_TBNZ32 = BitPat("b00110111????????????????????????")
+  def TBImm_TBZ    = BitPat("b10110110????????????????????????")
+  def TBImm_TBNZ   = BitPat("b10110111????????????????????????")
 
   // Unconditional branch (immediate)
   // 31 | 30 29 28 27 26 | 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10 09 08 07 06 05 04 03 02 01 00 | Instruction Page | Variant
@@ -73,6 +73,7 @@ object INSTRUCTIONS
   // Logical (shifted register)
   // 31 | 30 29 | 28 27 26 25 24 | 23 22 | 21 | 20 19 18 17 16 | 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00| Instruction Page | Variant
   // sf |  opc  |  0  1  0  1  0 | shift |  N |      Rm        |       imm6        |       Rn       |       Rd      |                  |
+  //  0 |  1  1 |  0  1  0  1  0 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd      | TST              | 32-bit
   //  0 |  0  0 |  0  1  0  1  0 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd      | AND              | 32-bit
   //  0 |  0  0 |  0  1  0  1  0 | shift |  1 |      Rm        |       imm6        |       Rn       |       Rd      | BIC              | 32-bit
   //  0 |  0  1 |  0  1  0  1  0 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd      | ORR              | 32-bit
@@ -81,6 +82,7 @@ object INSTRUCTIONS
   //  0 |  1  0 |  0  1  0  1  0 | shift |  1 |      Rm        |       imm6        |       Rn       |       Rd      | EON              | 32-bit
   //  0 |  1  1 |  0  1  0  1  0 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd      | ANDS             | 32-bit
   //  0 |  1  1 |  0  1  0  1  0 | shift |  1 |      Rm        |       imm6        |       Rn       |       Rd      | BICS             | 32-bit
+  //  1 |  1  1 |  0  1  0  1  0 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd      | TST              | 64-bit
   //  1 |  0  0 |  0  1  0  1  0 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd      | AND              | 64-bit
   //  1 |  0  0 |  0  1  0  1  0 | shift |  1 |      Rm        |       imm6        |       Rn       |       Rd      | BIC              | 64-bit
   //  1 |  0  1 |  0  1  0  1  0 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd      | ORR              | 64-bit
@@ -90,6 +92,7 @@ object INSTRUCTIONS
   //  1 |  1  1 |  0  1  0  1  0 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd      | ANDS             | 64-bit
   //  1 |  1  1 |  0  1  0  1  0 | shift |  1 |      Rm        |       imm6        |       Rn       |       Rd      | BICS             | 64-bit
   def LogSR = BitPat("b1??01010??0?????????????????????")
+  def LogSR_TST32  = BitPat("b01101010??0????????????????11111")
   def LogSR_AND32  = BitPat("b00001010??0?????????????????????")
   def LogSR_BIC32  = BitPat("b00001010??1?????????????????????")
   def LogSR_ORR32  = BitPat("b00101010??0?????????????????????")
@@ -98,6 +101,7 @@ object INSTRUCTIONS
   def LogSR_EON32  = BitPat("b01001010??1?????????????????????")
   def LogSR_ANDS32 = BitPat("b01101010??0?????????????????????")
   def LogSR_BICS32 = BitPat("b01101010??1?????????????????????")
+  def LogSR_TST  = BitPat("b11101010??0????????????????11111")
   def LogSR_AND  = BitPat("b10001010??0?????????????????????")
   def LogSR_BIC  = BitPat("b10001010??1?????????????????????")
   def LogSR_ORR  = BitPat("b10101010??0?????????????????????")
@@ -110,19 +114,23 @@ object INSTRUCTIONS
   // Logical (immediate)
   // 31 | 30 29 | 28 27 26 25 24 23 | 22 | 21 20 19 18 17 16 | 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
   // sf |  opc  |  1  0  0  1  0  0 |  N |       immr        |      imms         |      Rn        |        Rd      |                  |
+  //  0 |  1  1 |  1  0  0  1  0  0 |  0 |       immr        |      imms         |      Rn        |  1  1  1  1  1 | TST              | 32-bit
   //  0 |  0  0 |  1  0  0  1  0  0 |  0 |       immr        |      imms         |      Rn        |        Rd      | AND              | 32-bit
   //  0 |  0  1 |  1  0  0  1  0  0 |  0 |       immr        |      imms         |      Rn        |        Rd      | ORR              | 32-bit
   //  0 |  1  0 |  1  0  0  1  0  0 |  0 |       immr        |      imms         |      Rn        |        Rd      | EOR              | 32-bit
   //  0 |  1  1 |  1  0  0  1  0  0 |  0 |       immr        |      imms         |      Rn        |        Rd      | ANDS             | 32-bit
+  //  1 |  1  1 |  1  0  0  1  0  0 |  - |       immr        |      imms         |      Rn        |  1  1  1  1  1 | TST              | 64-bit
   //  1 |  0  0 |  1  0  0  1  0  0 |  - |       immr        |      imms         |      Rn        |        Rd      | AND              | 64-bit
   //  1 |  0  1 |  1  0  0  1  0  0 |  - |       immr        |      imms         |      Rn        |        Rd      | ORR              | 64-bit
   //  1 |  1  0 |  1  0  0  1  0  0 |  - |       immr        |      imms         |      Rn        |        Rd      | EOR              | 64-bit
   //  1 |  1  1 |  1  0  0  1  0  0 |  - |       immr        |      imms         |      Rn        |        Rd      | ANDS             | 64-bit
   def LogI = BitPat("b1??100100???????????????????????")
+  def LogI_TST32 = BitPat("b0111001000?????????????????11111")
   def LogI_AND32 = BitPat("b0001001000??????????????????????")
   def LogI_ORR32 = BitPat("b0011001000??????????????????????")
   def LogI_EOR32 = BitPat("b0101001000??????????????????????")
   def LogI_ANDS32= BitPat("b0111001000??????????????????????")
+  def LogI_TST   = BitPat("b111100100??????????????????11111")
   def LogI_AND   = BitPat("b100100100???????????????????????")
   def LogI_ORR   = BitPat("b101100100???????????????????????")
   def LogI_EOR   = BitPat("b110100100???????????????????????")
@@ -156,26 +164,77 @@ object INSTRUCTIONS
   def BitF_BFM  = BitPat("b1011001101??????????????????????")
   def BitF_UBFM = BitPat("b1101001101??????????????????????")
 
+  // Data-processing (1 source)
+  // 31 | 30 | 29 | 28 27 26 25 24 23 22 21 | 20 19 18 17 16 | 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
+  // sf |  1 |  S |  1  1  0  1  0  1  1  0 |    opcode2     |      opcode       |      Rn        |        Rd      |                  |
+  //  0 |  1 |  0 |  1  1  0  1  0  1  1  0 |  0  0  0  0  0 |  0  0  0  0  0  0 |      Rn        |        Rd      | RBIT             | 32-bit
+  //  0 |  1 |  0 |  1  1  0  1  0  1  1  0 |  0  0  0  0  0 |  0  0  0  0  0  1 |      Rn        |        Rd      | REV16            | 32-bit
+  //  0 |  1 |  0 |  1  1  0  1  0  1  1  0 |  0  0  0  0  0 |  0  0  0  0  1  0 |      Rn        |        Rd      | REV              | 32-bit
+  //  0 |  1 |  0 |  1  1  0  1  0  1  1  0 |  0  0  0  0  0 |  0  0  0  1  0  0 |      Rn        |        Rd      | CLZ              | 32-bit
+  //  0 |  1 |  0 |  1  1  0  1  0  1  1  0 |  0  0  0  0  0 |  0  0  0  1  0  1 |      Rn        |        Rd      | CLS              | 32-bit
+  //  1 |  1 |  0 |  1  1  0  1  0  1  1  0 |  0  0  0  0  0 |  0  0  0  0  0  0 |      Rn        |        Rd      | RBIT             | 64-bit
+  //  1 |  1 |  0 |  1  1  0  1  0  1  1  0 |  0  0  0  0  0 |  0  0  0  0  0  1 |      Rn        |        Rd      | REV16            | 64-bit
+  //  1 |  1 |  0 |  1  1  0  1  0  1  1  0 |  0  0  0  0  0 |  0  0  0  0  1  0 |      Rn        |        Rd      | REV32            | 64-bit
+  //  1 |  1 |  0 |  1  1  0  1  0  1  1  0 |  0  0  0  0  0 |  0  0  0  0  1  1 |      Rn        |        Rd      | REV              | 64-bit
+  //  1 |  1 |  0 |  1  1  0  1  0  1  1  0 |  0  0  0  0  0 |  0  0  0  1  0  0 |      Rn        |        Rd      | CLZ              | 64-bit
+  //  1 |  1 |  0 |  1  1  0  1  0  1  1  0 |  0  0  0  0  0 |  0  0  0  1  0  1 |      Rn        |        Rd      | CLS              | 64-bit
+  def DP1S_RBIT32  = BitPat("b0101101011000000000000??????????")
+  def DP1S_32REV16 = BitPat("b0101101011000000000001??????????")
+  def DP1S_32REV32 = BitPat("b0101101011000000000010??????????")
+  def DP1S_CLZ32   = BitPat("b0101101011000000000100??????????")
+  def DP1S_CLS32   = BitPat("b0101101011000000000101??????????")
+  def DP1S_RBIT    = BitPat("b1101101011000000000000??????????")
+  def DP1S_REV16   = BitPat("b1101101011000000000001??????????")
+  def DP1S_REV32   = BitPat("b1101101011000000000010??????????")
+  def DP1S_REV     = BitPat("b1101101011000000000011??????????")
+  def DP1S_CLZ     = BitPat("b1101101011000000000100??????????")
+  def DP1S_CLS     = BitPat("b1101101011000000000101??????????")
+
+  // Data-processing (2 sources)
+  // Don't support Division
+  // 31 | 30 | 29 | 28 27 26 25 24 23 22 21 | 20 19 18 17 16 | 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
+  // sf |  0 |  S |  1  1  0  1  0  1  1  0 |       Rm       |      opcode       |      Rn        |        Rd      |                  |
+  //  0 |  0 |  S |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  0  0 |      Rn        |        Rd      | LSLV             | 32-bit
+  //  0 |  0 |  S |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  0  1 |      Rn        |        Rd      | LSRV             | 32-bit
+  //  0 |  0 |  S |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  1  0 |      Rn        |        Rd      | ASRV             | 32-bit
+  //  0 |  0 |  S |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  1  1 |      Rn        |        Rd      | RORV             | 32-bit
+  //  1 |  0 |  S |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  0  0 |      Rn        |        Rd      | LSLV             | 64-bit
+  //  1 |  0 |  S |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  0  1 |      Rn        |        Rd      | LSRV             | 64-bit
+  //  1 |  0 |  S |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  1  0 |      Rn        |        Rd      | ASRV             | 64-bit
+  //  1 |  0 |  S |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  1  1 |      Rn        |        Rd      | RORV             | 64-bit
+  def DP2S_LSLV32 = BitPat("b00011010110?????001000??????????")
+  def DP2S_LSRV32 = BitPat("b00011010110?????001001??????????")
+  def DP2S_ASRV32 = BitPat("b00011010110?????001010??????????")
+  def DP2S_RORV32 = BitPat("b00011010110?????001011??????????")
+  def DP2S_LSLV = BitPat("b10011010110?????001000??????????")
+  def DP2S_LSRV = BitPat("b10011010110?????001001??????????")
+  def DP2S_ASRV = BitPat("b10011010110?????001010??????????")
+  def DP2S_RORV = BitPat("b10011010110?????001011??????????")
+
   // Add/subtract (shifted register) */
   // 31 | 30 | 29 | 28 27 26 25 24 | 23 22 | 21 | 20 19 18 17 16 | 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
   // sf | op |  S |  0  1  0  1  0 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd       |                  |
   //  1 |  1 |  1 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |  1  1  1  1  1 | CMP              | 32-bit  */
+  //  1 |  0 |  1 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |  1  1  1  1  1 | CMN              | 32-bit  */
   //  1 |  0 |  0 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd       | ADD              | 32-bit  */
   //  1 |  0 |  1 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd       | ADDS             | 32-bit  */
   //  1 |  1 |  0 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd       | SUB              | 32-bit  */
   //  1 |  1 |  1 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd       | SUBS             | 32-bit  */
   //  1 |  1 |  1 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |  1  1  1  1  1 | CMP              | 64-bit  */
+  //  1 |  0 |  1 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |  1  1  1  1  1 | CMN              | 64-bit  */
   //  1 |  0 |  0 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd       | ADD              | 64-bit  */
   //  1 |  0 |  1 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd       | ADDS             | 64-bit  */
   //  1 |  1 |  0 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd       | SUB              | 64-bit  */
   //  1 |  1 |  1 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd       | SUBS             | 64-bit  */
   def ASSR = BitPat("b1??01011??0?????????????????????")
   def ASSR_CMP32 = BitPat("b01101011??0????????????????11111")
+  def ASSR_CMN32 = BitPat("b00101011??0????????????????11111")
   def ASSR_ADD32 = BitPat("b00001011??0?????????????????????")
   def ASSR_ADDS32= BitPat("b00101011??0?????????????????????")
   def ASSR_SUB32 = BitPat("b01001011??0?????????????????????")
   def ASSR_SUBS32= BitPat("b01101011??0?????????????????????")
   def ASSR_CMP  = BitPat("b11101011??0????????????????11111")
+  def ASSR_CMN  = BitPat("b10101011??0????????????????11111")
   def ASSR_ADD  = BitPat("b10001011??0?????????????????????")
   def ASSR_ADDS = BitPat("b10101011??0?????????????????????")
   def ASSR_SUB  = BitPat("b11001011??0?????????????????????")
@@ -241,16 +300,6 @@ object INSTRUCTIONS
   def ASImm_ADDS  = BitPat("b101100010???????????????????????")
   def ASImm_SUB   = BitPat("b110100010???????????????????????")
   def ASImm_SUBS  = BitPat("b111100010???????????????????????")
-
-  //  Load register (literal) */
-  //  V = 1 bit is for SIMD, we ignore
-  //  31 30 | 29 28 27 | 26 | 25 24 | 23 22 21 20 19 18 17 16 15 14 13 12 11 10 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
-  //  opc  |  0  1  1 |  V |  0  0 |                           imm19                          |       Rt       |                  |
-  //  0  0 |  0  1  1 |  0 |  0  0 |                           imm19                          |       Rt       | LDR              | 32-bit
-  //  0  1 |  0  1  1 |  0 |  0  0 |                           imm19                          |       Rt       | LDR              | 64-bit
-  //  1  0 |  0  1  1 |  0 |  0  0 |                           imm19                          |       Rt       | LDRSW            |
-  //  1  1 |  0  1  1 |  0 |  0  0 |                           imm19                          |       Rt       | PRFM             |
-  def LDR_I = BitPat("b01011000????????????????????????")
 
   // Load/store register (unsigned immediate) */
   // 31 30 | 29 28 27 | 26 | 25 24 | 23 22 | 21 20 19 18 17 16 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
@@ -318,20 +367,25 @@ object INSTRUCTIONS
   def LSRReg_LDR32 = BitPat("b10111000011??????1??10??????????")
   def LSRReg_LDR64 = BitPat("b11111000011??????1??10??????????")
 
-
-  // Load/store (immediate post-indexed)
-  // Load/store (immediate pre-indexed)
-  // Load/store (unscaled immediate)
-  //
-  // 31 30 29   27  26 25 24 23 22 21  20    12 11 10 9    5 4    0
-  // +----+-------+---+-----+-----+---+--------+-----+------+------+
-  // |size| 1 1 1 | V | 0 0 | opc | 0 |  imm9  | idx |  Rn  |  Rt  |
-  // +----+-------+---+-----+-----+---+--------+-----+------+------+
-  //
-  // idx = 01 -> post-indexed, 11 pre-indexed, 00 unscaled imm. (no writeback)
-  //       10 -> unprivileged
-  // V = 0 -> non-vector
-  // size: 00 -> 8 bit, 01 -> 16 bit, 10 -> 32 bit, 11 -> 64bit
-  // opc: 00 -> store, 01 -> loadu, 10 -> loads 64, 11 -> loads 32
-  //
+  // Load/store register (unsigned immediate) */
+  // 31 30 | 29 28 27 | 26 | 25 24 | 23 | 22 | 21 | 20 19 18 17 16 15 14 13 12 | 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
+  //  size |  1  1  1 |  V |  0  0 |   opc   |  0 |           imm9             |  0  0 |       Rn       |       Rt       |                  |
+  //  size |  1  1  1 |  V |  0  0 |  0 |  L |  0 |           imm9             |  0  0 |       Rn       |       Rt       |                  |
+  //  0  0 |  1  1  1 |  0 |  0  0 |  0 |  0 |  0 |           imm9             |  0  0 |       Rn       |       Rt       |  STURB           | register
+  //  0  1 |  1  1  1 |  0 |  0  0 |  0 |  0 |  0 |           imm9             |  0  0 |       Rn       |       Rt       |  STURH           | register
+  //  1  0 |  1  1  1 |  0 |  0  0 |  0 |  0 |  0 |           imm9             |  0  0 |       Rn       |       Rt       |  STUR            | 32-bit
+  //  1  1 |  1  1  1 |  0 |  0  0 |  0 |  0 |  0 |           imm9             |  0  0 |       Rn       |       Rt       |  STUR            | 64-bit
+  //  0  0 |  1  1  1 |  0 |  0  0 |  0 |  1 |  0 |           imm9             |  0  0 |       Rn       |       Rt       |  LDURB           | register
+  //  0  1 |  1  1  1 |  0 |  0  0 |  0 |  1 |  0 |           imm9             |  0  0 |       Rn       |       Rt       |  LDURH           | register
+  //  1  0 |  1  1  1 |  0 |  0  0 |  0 |  1 |  0 |           imm9             |  0  0 |       Rn       |       Rt       |  LDUR            | 32-bit
+  //  1  1 |  1  1  1 |  0 |  0  0 |  0 |  1 |  0 |           imm9             |  0  0 |       Rn       |       Rt       |  LDUR            | 64-bit
+  def LSUReg        = BitPat("b??111000??0?????????00??????????")
+  def LSUReg_STURB  = BitPat("b00111000000?????????00??????????")
+  def LSUReg_STURH  = BitPat("b01111000000?????????00??????????")
+  def LSUReg_STUR32 = BitPat("b10111000000?????????00??????????")
+  def LSUReg_STUR64 = BitPat("b11111000000?????????00??????????")
+  def LSUReg_LDURB  = BitPat("b00111000010?????????00??????????")
+  def LSUReg_LDURH  = BitPat("b01111000010?????????00??????????")
+  def LSUReg_LDUR32 = BitPat("b10111000010?????????00??????????")
+  def LSUReg_LDUR64 = BitPat("b11111000010?????????00??????????")
 }

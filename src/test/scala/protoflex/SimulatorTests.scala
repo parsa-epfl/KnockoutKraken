@@ -100,27 +100,12 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
 
   def pageSize = cfgSim.pageSizeBytes/INSN_SIZE
 
-  var tf = System.nanoTime
-  var ti = System.nanoTime
-  var timeoutms = 100000
-
   def exit: Unit = {
-    Context().backend.finish()
     file.close()
     System.exit(1)
   }
 
   def simLog(str: String) { file.println("RTL:" + str) }
-
-  def timedOut = {
-    val isTimeOut = (tf - ti) / 1e6d > timeoutms
-    //simLog("time_elapsed:" + (tf - ti) / 1e9d)
-    if(isTimeOut) {
-      simLog("TIMED OUT: EXIT")
-      exit
-    }
-    isTimeOut
-  }
 
   def getProgramPageInsns(path: String): Seq[(Int, BigInt)] = {
     val bytearray: Array[Byte] = Files.readAllBytes(Paths.get(path))
@@ -154,13 +139,11 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
   }
 
   def waitForCmd(filepath:String): (Int, BigInt) = {
-    ti = System.nanoTime
     var cmd: (Int, BigInt) = (FA_QflexCmds.LOCK_WAIT, 0)
     do {
       Thread.sleep(500)
       cmd = ArmflexJson.json2cmd(readFile(filepath))
-      tf = System.nanoTime
-    } while(cmd._1 == FA_QflexCmds.LOCK_WAIT && !timedOut);
+    } while(cmd._1 == FA_QflexCmds.LOCK_WAIT);
     //simLog(s"CMD is ${FA_QflexCmds.cmd_toString(cmd)} in ${filepath}")
     writeCmd((FA_QflexCmds.LOCK_WAIT, 0), filepath) // Consume Command
     cmd
@@ -181,69 +164,72 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
     cProcAxi.fireThread(0)
 
     // Wait for state to be transplanted
-    ti = System.nanoTime
     do { clock.step(1) } while(!cProcAxi.tpuIsWorking);
     do { clock.step(1) } while(cProcAxi.tpuIsWorking);
     // RTL state after transplant must match initial QEMU state
     currState = cProcAxi.getPStateInternal(0)
     assert(currState.matches(pstate)._1)
-    ti = System.nanoTime
 
     fork {
       do {
         if(cProcAxi.hasCommitedInst) {
-          ti = System.nanoTime
           val inst = cProcAxi.getCommitedInst
           val pc = cProcAxi.getCommitedPC
+          // If defined, compare state with QEMU
+          if(cProcAxi.isCommitedUndef) {
+            simLog(s"OUT:0x${"%016x".format(pc)}:  ${"%08x".format(inst)}      UNDEF")
+            clock.step(1)
+          } else {
+            simLog(s"OUT:0x${"%016x".format(pc)}:  ${"%08x".format(inst)}")
 
-          // If Memory, request QEMU for DATA
-          if(cProcAxi.isCommitedMem) {
-            val memReqs = if(cProcAxi.isCommitedPairMem) 2 else 1
-            for(i <- 0 until memReqs) {
-              if(cProcAxi.isCommitedLoad) {
-                val addr: BigInt = cProcAxi.getCommitedMemAddr(i)
-                writeCmd((FA_QflexCmds.DATA_LOAD, addr), cfgSim.qemuCmdPath)
-                val resp = waitForCmd(cfgSim.simCmdPath)
-                val addrResp: BigInt = resp._2
-                simLog(s"RESP:0x${"%016x".format(addr)}:0x${"%016x".format(addrResp)}")
-                cProcAxi.writeLD(i, addrResp)
+            // If Memory, request QEMU for DATA
+            if(cProcAxi.isCommitedMem) {
+              val memReqs = if(cProcAxi.isCommitedPairMem) 2 else 1
+              for(i <- 0 until memReqs) {
+                if(cProcAxi.isCommitedLoad) {
+                  val addr: BigInt = cProcAxi.getCommitedMemAddr(i)
+                  writeCmd((FA_QflexCmds.DATA_LOAD, addr), cfgSim.qemuCmdPath)
+                  val resp = waitForCmd(cfgSim.simCmdPath)
+                  val addrResp: BigInt = resp._2
+                  //simLog(s"RESP:0x${"%016x".format(addr)}:0x${"%016x".format(addrResp)}")
+                  cProcAxi.writeLD(i, addrResp)
+                }
               }
             }
-          }
 
 
-          clock.step(1)
-          currState = cProcAxi.getPStateInternal(0)
+            clock.step(1)
+            currState = cProcAxi.getPStateInternal(0)
 
-          simLog(s"OUT:0x${"%016x".format(pc)}:  ${"%08x".format(inst)}")
 
-          // Ask QEMU to step and write state back to compare
-          writePState2File(cfgSim.simStatePath, currState)
-          writeCmd((FA_QflexCmds.CHECK_N_STEP, 0), cfgSim.qemuCmdPath)
-          waitForCmd(cfgSim.simCmdPath)
+            // Ask QEMU to step and write state back to compare
+            writePState2File(cfgSim.simStatePath, currState)
+            writeCmd((FA_QflexCmds.CHECK_N_STEP, 0), cfgSim.qemuCmdPath)
+            waitForCmd(cfgSim.simCmdPath)
 
-          val qemuPState = ArmflexJson.json2state(readFile(cfgSim.qemuStatePath))
-          val matched = qemuPState.matches(currState)
-          if (!matched._1) {
-            simLog(matched._2)
+            val qemuPState = ArmflexJson.json2state(readFile(cfgSim.qemuStatePath))
+            val matched = qemuPState.matches(currState)
+            if (!matched._1) {
+              simLog(matched._2)
+            }
           }
         } else {
           clock.step(1)
         }
       } while(!cProcAxi.tpuIsWorking);
-      simLog(s"OUT:UNDEF_INST")
       writePState2File(cfgSim.simStatePath, cProcAxi.rdBRAM2PSTATE(0))
       writeCmd((FA_QflexCmds.INST_UNDEF, 0), cfgSim.qemuCmdPath)
     }.fork {
       do {
         if(cProcAxi.isMissTLB) {
           val addr: BigInt = cProcAxi.getMissTLBAddr
-          simLog(s"MISSED PC ${"%016x".format(addr)}")
           writeCmd((FA_QflexCmds.INST_FETCH, addr), cfgSim.qemuCmdPath)
           val cmd = waitForCmd(cfgSim.simCmdPath)
           val insns: Seq[(Int, BigInt)] = getProgramPageInsns(cfgSim.pagePath)
+          val bram = ((addr & (0x1 << 12)) >> 12) // mask first bit after page to target TLB entry
+          simLog(s"MISSED PC ${"%016x".format(addr)}: BRAM: ${bram}")
           for(insn <- insns) {
-            cProcAxi.writePPageInst(insn._2, insn._1)
+            cProcAxi.writePPageInst(insn._2, insn._1, bram)
           }
           cProcAxi.writeFillTLB(addr, cmd._2)
         } else {
@@ -258,14 +244,10 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
     //simLog(s"DONE  PC:" + "%016x".format(cProcAxi.rdBRAM2PSTATE(0).pc))
   }
 
-  def runSimulator(timeoutms_i: Int): Unit = {
+  def runSimulator: Unit = {
     simLog("RUN SIMULATOR")
-    ti = System.nanoTime
-    tf = System.nanoTime
-    timeoutms = timeoutms_i
-    while(!timedOut) {
+    while(true) {
       val cmd = waitForCmd(cfgSim.simCmdPath)._1
-      ti = System.nanoTime
       cmd match {
         case FA_QflexCmds.SIM_START =>
           updatePState(readFile(cfgSim.qemuStatePath), 0)
@@ -275,7 +257,6 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
           simLog("SIMULATION STOP")
           return
       }
-      tf = System.nanoTime
     }
   }
 }
@@ -290,9 +271,13 @@ class TestSimulatorAxi(cfgSim : SimulatorConfig, val cfgProc : ProcConfig)
   behavior of "Armflex Simulator AXI interface"
 
   it should "Communicate between QEMU and RTL for verification" in {
-    test(new ProcAxiWrap()(cfgProc)).withAnnotations(annos) { proc =>
+
+    test(new ProcAxiWrap()(cfgProc))
+      .withAnnotations(annos) { proc =>
+
       val drv = new SimulatorTestsBaseDriver(proc, cfgSim)(cfgProc)
-      drv.runSimulator(30000)
+
+      drv.runSimulator
     }
   }
 }

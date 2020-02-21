@@ -27,8 +27,8 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
   val io = IO(new Bundle {
                 val axiLite = AxiLiteSlave(cfgAxiMM.axiLiteConfig)
 
-                val ppageBRAM = new BRAMPort()(cfg.bramConfig(true))
-                val stateBRAM = new BRAMPort()(cfg.bramConfig(true))
+                val ppageBRAM = new BRAMPort()(cfg.bramConfigMem(true))
+                val stateBRAM = new BRAMPort()(cfg.bramConfigState(true))
 
                 /* To Infer bram port, add these attributes to ports in the following manner
 
@@ -136,13 +136,32 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
     * +----------------------------------------+
     * |                                        |
     * +----------------------------------------+
-    * |             RESERVED                   |
+    * |             PC(31,0)                   |
     * +----------------------------------------+
     * |31                                     0|
     * +----------------------------------------+
     *
     */
-  // reg(3, 0, 1)
+  /** Register 3
+    * +----------------------------------------+
+    * |                                        |
+    * +----------------------------------------+
+    * |             PC(63,32)                  |
+    * +----------------------------------------+
+    * |31                                     0|
+    * +----------------------------------------+
+    *
+    */ // reg(3, 0, 1)
+  /** Register 3
+    * +----------------------------------|-----+
+    * |                                  | is  |
+    * +----------------------------------|-----+
+    * |             IS MISS              | Miss|
+    * +----------------------------------|-----+
+    * |31                                |  0  |
+    * +----------------------------------|-----+
+    *
+    */
 
   // DEBUG Signals ------------------------------------------------------------
   if(cfg.DebugSignals) {

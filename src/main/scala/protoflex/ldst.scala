@@ -75,7 +75,7 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   val size = WireInit(io.dinst.op(1,0))
   val isLoad = WireInit(io.dinst.op(2))
   val isSigned = WireInit(io.dinst.op(3))
-  val offstImm = io.dinst.imm.bits << size
+  val offstImm = io.dinst.imm << size
   val offst = WireInit(offstImm)
 
   // Decode for LD/ST with Post/Pre-index and Signed offset variants
@@ -109,7 +109,7 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   //     address = X[n];
   //
   val base_address = WireInit(DATA_X)
-  when(io.dinst.rs1.bits === 31.U && (io.dinst.itype === I_LSUImm || io.dinst.itype === I_LSRReg)) {
+  when(io.dinst.rs1 === 31.U && (io.dinst.itype === I_LSUImm || io.dinst.itype === I_LSRReg)) {
     // CheckSPAAligment(); TODO
     base_address := io.rVal1
   }.otherwise {
@@ -165,7 +165,7 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   io.minst.bits.isPair := io.dinst.itype === I_LSPReg
   io.minst.bits.memReq(1).addr := ldst_address + dbytes 
   io.minst.bits.memReq(1).data := data
-  io.minst.bits.memReq(1).reg := io.dinst.rs2.bits
+  io.minst.bits.memReq(1).reg := io.dinst.rs2
 
 
   // Writeback address to reg // itype === LSUImm || 
@@ -177,13 +177,13 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   // NOTE:
   // - address = base_address + offst
   io.minst.bits.rd_res := post_address
-  io.minst.bits.rd.bits := io.dinst.rs2.bits
+  io.minst.bits.rd.bits := io.dinst.rs2
   io.minst.bits.rd.valid := wback
 
   // Tag management
   val tag_checked = RegInit(false.B)
   when(io.dinst.itype === I_LSUImm) {
-    tag_checked := wback || !(io.dinst.rs1.bits === 31.U)
+    tag_checked := wback || !(io.dinst.rs1 === 31.U)
   }
 
   // TODO

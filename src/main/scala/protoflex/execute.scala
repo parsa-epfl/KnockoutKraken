@@ -17,24 +17,26 @@ class EInst(implicit val cfg: ProcConfig) extends Bundle {
 
 class LogicALU(implicit val cfg: ProcConfig) extends Module {
   val io = IO(new Bundle {
-                val a = Input(DATA_T)
-                val b = Input(DATA_T)
-                val opcode = Input(OP_T)
-                val res = Output(UInt(DATA_W))
-              })
+    val a = Input(DATA_T)
+    val b = Input(DATA_T)
+    val opcode = Input(OP_T)
+    val res = Output(UInt(DATA_W))
+    val nzcv = Output(NZCV_T)
+    val is32bit = Input(Bool())
+  })
 
-  val res =
-    MuxLookup(io.opcode, 0.U,
-              Array (
+  // Already negated on instantiator
+  val res = MuxLookup(io.opcode, 0.U, Array(
                 OP_AND -> (io.a  &  io.b),
-                OP_BIC -> (io.a  & ~io.b),
+                OP_BIC -> (io.a  &  io.b),
                 OP_ORR -> (io.a  |  io.b),
-                OP_ORN -> (io.a  | ~io.b),
+                OP_ORN -> (io.a  |  io.b),
                 OP_EOR -> (io.a  ^  io.b),
-                OP_EON -> (io.a  ^ ~io.b)
+                OP_EON -> (io.a  ^  io.b)
               ))
 
   io.res := res
+  io.nzcv := Cat(Mux(io.is32bit, res(31), res(63)), (res === 0.U).asUInt, 0.U(2.W))
 }
 
 class ConditionHolds(implicit val cfg: ProcConfig) extends Module
@@ -114,6 +116,19 @@ object ALU {
       Mux(rot < (n - i).U, norm(rot - (n - i).U), norm(i.U + rot))
     }
   }
+
+  def HighestBitSet(bits: Bits): UInt = {
+    val seq: Seq[Bool] = bits.asBools
+    // if bits === 0.U then return -1
+    PriorityMux(seq.reverse, (seq.size-1 to 0 by -1).map(_.asUInt))
+  }
+
+  def CountifyLeadingSignBits(bits: UInt, size: Int): UInt = bits(size-1, 1) ^ bits(size-2, 0)
+  def CountLeadingZeroBits(bits: UInt, size: Int): UInt = (size-1).U - HighestBitSet(bits)
+  def CountLeadingSignBits(bits: UInt, size: Int): UInt =
+    CountLeadingZeroBits(CountifyLeadingSignBits(bits,size), size)
+
+  def getByte(bits: UInt, idx: Int): UInt = bits((idx+1)*8-1, idx*8)
 }
 
 class BitfieldALU(implicit val cfg: ProcConfig) extends Module {
@@ -164,7 +179,7 @@ class BitfieldALU(implicit val cfg: ProcConfig) extends Module {
 // Move (wide immediate)
 class Move(implicit val cfg: ProcConfig) extends Module {
   val io = IO(new Bundle {
-                val op = Input(UInt(OP_W))
+                val op = Input(OP_T)
                 val hw = Input(UInt(2.W))
                 val imm = Input(UInt(16.W))
                 val rd = Input(DATA_T)
@@ -198,29 +213,32 @@ class Move(implicit val cfg: ProcConfig) extends Module {
 
 class ShiftALU(implicit val cfg: ProcConfig) extends Module {
   val io = IO(new Bundle {
-                val word = Input(DATA_T)
-                val amount = Input(SHIFT_VAL_T)
-                val opcode = Input(SHIFT_TYPE_T)
-                val res = Output(DATA_T)
-                val carry = Output(C_T)
-              })
+    val word = Input(DATA_T)
+    val amount = Input(SHIFT_VAL_T)
+    val opcode = Input(SHIFT_TYPE_T)
+    val res = Output(DATA_T)
+    val carry = Output(C_T)
+    val is32bit = Input(Bool())
+  })
 
-  val res =
-    MuxLookup(io.opcode, io.word,
-              Array(
-                LSL -> (io.word << io.amount),
-                LSR -> (io.word >> io.amount),
-                ASR -> (io.word.asSInt() >> io.amount).asUInt(),
-                ROR -> ALU.rotateRight(VecInit(io.word.asBools), io.amount).asUInt
-              ))
+  val res = MuxLookup(io.opcode, io.word, Array(
+    LSL -> (io.word << io.amount),
+    LSR -> (io.word >> io.amount),
+    ASR -> (io.word.asSInt() >> io.amount).asUInt(),
+    ROR -> ALU.rotateRight(VecInit(io.word.asBools), io.amount).asUInt
+  ))
 
-  io.carry := res(DATA_W.get).asBool()
-  io.res := res
-}
+  val word32 = io.word(31,0)
+  val amount32 = io.amount(4,0)
+  val res32 = MuxLookup(io.opcode, word32, Array(
+    LSL -> (word32 << amount32),
+    LSR -> (word32 >> amount32),
+    ASR -> (word32.asSInt() >> amount32).asUInt(),
+    ROR -> ALU.rotateRight(VecInit(word32.asBools), amount32).asUInt
+  ))
 
-object PriorityEncoderReversed {
-  def apply(in: Seq[Bool]): UInt = PriorityMux(in.reverse, (in.size until 0 by -1).map(_.asUInt))
-  def apply(in: Bits): UInt = apply(in.asBools)
+  io.carry := Mux(io.is32bit, res(32).asBool, res(64).asBool)
+  io.res := Mux(io.is32bit, res32, res)
 }
 
 // aarch64/instrs/integer/bitmasks/DecodeBitMasks
@@ -230,12 +248,12 @@ class DecodeBitMasks(implicit val cfg: ProcConfig) extends Module
 {
   // 64 bits -> immn = 1
   val io = IO(new Bundle {
-                val immn = Input(UInt(1.W))
-                val imms = Input(UInt(6.W))
-                val immr = Input(UInt(6.W))
-                val wmask = Output(DATA_T)
-                val tmask = Output(DATA_T) // NOTE: Not needed for Logical (immediate)
-                val immediate = Input(Bool())
+    val immn = Input(UInt(1.W))
+    val imms = Input(UInt(6.W))
+    val immr = Input(UInt(6.W))
+    val wmask = Output(DATA_T)
+    val tmask = Output(DATA_T) // NOTE: Not needed for Logical (immediate)
+    val is32bit = Input(Bool())
               })
 
   // The bit patterns we create here are 64 bit patterns which
@@ -258,7 +276,7 @@ class DecodeBitMasks(implicit val cfg: ProcConfig) extends Module
   //
   // In all cases the rotation is by immr % e (and immr is 6 bits).
 
-  val OnesTable  = VecInit.tabulate(DATA_SZ + 1) { i => BigInt("0"*(DATA_SZ-i) ++ "1"*i, 2).U }
+  val OnesTable = VecInit.tabulate(DATA_SZ + 1) { i => BigInt("0"*(DATA_SZ-i) ++ "1"*i, 2).U }
 
   val welem = Wire(DATA_T)
   val wmask = Wire(DATA_T)
@@ -266,12 +284,12 @@ class DecodeBitMasks(implicit val cfg: ProcConfig) extends Module
   val tmask = Wire(DATA_T)
 
   val toBeEncoded = WireInit(UInt(7.W), Cat(io.immn, ~io.imms))
-  val len = WireInit(PriorityEncoderReversed(toBeEncoded))
+  val len = WireInit(ALU.HighestBitSet(toBeEncoded))
   val levels = WireInit(OnesTable(len)(5,0))
 
   val s = WireInit(io.imms & levels)
   val r = WireInit(io.immr & levels)
-  val diff = WireInit(s - r)
+  val diff = WireInit(s -& r)
 
   val d = WireInit(diff & levels)
   val onesS = WireInit(s +& 1.U)
@@ -285,30 +303,97 @@ class DecodeBitMasks(implicit val cfg: ProcConfig) extends Module
 
   io.wmask := wmask
   io.tmask := tmask
+
+  when(io.is32bit) {
+    wmask := ALU.rotateRight(VecInit(welem(31,0).asBools), r(4,0)).asUInt.pad(64)
+  }
 }
 
-class ExecuteUnitIO(implicit val cfg: ProcConfig) extends Bundle
+class DataProcessing(implicit val cfg: ProcConfig) extends Module
 {
-  val dinst = Input(new DInst)
-  val rVal1 = Input(DATA_T)
-  val rVal2 = Input(DATA_T)
-  val nzcv = Input(NZCV_T)
-  val SP   = Input(DATA_T)
+  val io = IO(new Bundle {
+    val a = Input(DATA_T)
+    val b = Input(DATA_T)
+    val op = Input(OP_T)
+    val is32bit = Input(Bool())
+    val res = Output(DATA_T)
+  })
 
-  val condRes = Output(Bool())
+  val operand = io.a
+  val res = Wire(DATA_T)
 
-  val einst = Output(Valid(new EInst))
+  val countLeadingBits = Wire(DATA_T)
+  countLeadingBits :=
+    ALU.CountLeadingZeroBits(Mux(io.op === OP_CLS, ALU.CountifyLeadingSignBits(operand, 64), operand), 64)
+
+
+  val rev = WireInit(DATA_X)
+
+  def Catify(bits: UInt, size:Int, containers:Int): UInt = {
+    if(containers != 1) {
+      Cat(Catify(bits(size-1, size/2), size/2, containers/2),
+          Catify(bits(size/2-1, 0),    size/2, containers/2))
+    } else {
+      Cat(for(idx <- size/8-1 to 0 by -1) yield (ALU.getByte(bits, idx)))
+    }
+  }
+
+  rev := MuxLookup(io.op, operand, Array(
+    OP_REV16 -> Catify(operand, 64, 4),
+    OP_REV32 -> Catify(operand, 64, 2),
+    OP_REV   -> Catify(operand, 64, 1)
+    //OP_REV16 -> Cat(
+    //  Cat(operand(0,0), operand(0,0)),
+    //  Cat(operand(0,0), operand(0,0)),
+    //  Cat(operand(0,0), operand(0,0)),
+    //  Cat(operand(0,0), operand(0,0))),
+    //OP_REV32 -> Cat(
+    //  Cat(operand(0,0), operand(0,0), operand(0,0), operand(0,0)),
+    //  Cat(operand(0,0), operand(0,0), operand(0,0), operand(0,0))),
+    //OP_REV   -> Cat(
+    //  operand(0,0), operand(0,0), operand(0,0), operand(0,0),
+    //  operand(0,0), operand(0,0), operand(0,0), operand(0,0))
+  ))
+
+  res := MuxLookup(io.op, io.a, Array(
+    OP_CLS -> countLeadingBits,
+    OP_CLZ -> countLeadingBits,
+    OP_REV -> rev,
+    OP_REV32 -> rev,
+    OP_REV16 -> rev
+  ))
+
+  io.res := res
+
+  when(io.is32bit) {
+    countLeadingBits :=
+    ALU.CountLeadingZeroBits(Mux(io.op === OP_CLS,
+      ALU.CountifyLeadingSignBits(operand(31,0), 32), operand(31,0)), 32)
+    rev := MuxLookup(io.op, operand, Array(
+      OP_REV16 -> Catify(operand, 32, 2),
+      OP_REV32 -> Catify(operand, 32, 1)))
+  }
 }
 
 class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
 {
-  val io = IO(new ExecuteUnitIO)
+  val io = IO(new Bundle {
+    val dinst = Input(new DInst)
+    val rVal1 = Input(DATA_T)
+    val rVal2 = Input(DATA_T)
+    val nzcv = Input(NZCV_T)
+    val SP   = Input(DATA_T)
 
-  //val rVal1 = WireInit(Mux(io.dinst.rs1.bits === 31.U, io.SP, io.rVal1))
-  val rVal1 = WireInit(Mux(io.dinst.rs1.bits === 31.U, 0.U, io.rVal1))
-  val rVal2 = WireInit(Mux(io.dinst.rs2.bits === 31.U, 0.U, io.rVal2))
+    val condRes = Output(Bool())
+
+    val einst = Output(Valid(new EInst))
+})
+
+  //val rVal1 = WireInit(Mux(io.dinst.rs1 === 31.U, io.SP, io.rVal1))
+  val rVal1 = WireInit(Mux(io.dinst.rs1 === 31.U, 0.U, io.rVal1))
+  val rVal2 = WireInit(Mux(io.dinst.rs2 === 31.U, 0.U, io.rVal2))
   // R[31] can be SP or Zero depending on instructions
-  when(io.dinst.itype === I_ASImm && io.dinst.op === OP_ADD && io.dinst.rs1.bits === 31.U) {
+  when(io.dinst.itype === I_ASImm && io.dinst.op === OP_ADD && io.dinst.rs1 === 31.U) {
     rVal1 := io.rVal1
   }
 
@@ -318,17 +403,19 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   shiftALU.io.word :=
     MuxLookup(io.dinst.itype, rVal2, Array(
                 I_ASSR  -> rVal2,
-                I_PCRel -> io.dinst.imm.bits, // LSL 12
-                I_ASImm -> io.dinst.imm.bits,
-                I_CCImm -> io.dinst.imm.bits, // PASSTHROUGH
+                I_PCRel -> io.dinst.imm, // LSL 12
+                I_ASImm -> io.dinst.imm,
+                I_CCImm -> io.dinst.imm, // PASSTHROUGH
                 I_CCReg -> rVal2, // PASSTHROUGH
                 I_CSel  -> rVal2, // PASSTHROUGH
                 I_LogSR -> rVal2,
+                I_DP2S  -> rVal1,
                 I_LogI  -> rVal1, // PASSTHROUGH
                 I_BitF  -> rVal1 // ROR(X(Rn), immr)
               ))
-  shiftALU.io.amount := io.dinst.shift_val.bits // when 0 => PASSTHROUGH
+  shiftALU.io.amount := Mux(io.dinst.itype === I_DP2S, io.rVal2(5,0), io.dinst.shift_val.bits) // when 0 => PASSTHROUGH
   shiftALU.io.opcode := io.dinst.shift_type
+  shiftALU.io.is32bit := io.dinst.is32bit
 
   // CondUnit
   val condHolds = Module(new ConditionHolds)
@@ -339,20 +426,17 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   // DecodeBitMasks
   // NOTE Logical (immediate): N(22), immr(21:16), imms(15:10)
   val decodeBitMask = Module(new DecodeBitMasks)
-  decodeBitMask.io.immn := io.dinst.imm.bits(22-10)
-  decodeBitMask.io.immr := io.dinst.imm.bits(21-10,16-10)
-  decodeBitMask.io.imms := io.dinst.imm.bits(15-10,10-10)
-  decodeBitMask.io.immediate := MuxLookup(io.dinst.itype, false.B, Array(
-                                            I_LogI -> true.B,
-                                            I_BitF -> false.B
-                                          ))
+  decodeBitMask.io.immn := io.dinst.imm(22-10)
+  decodeBitMask.io.immr := io.dinst.imm(21-10,16-10)
+  decodeBitMask.io.imms := io.dinst.imm(15-10,10-10)
+  decodeBitMask.io.is32bit := io.dinst.is32bit
 
   // Bitfield
   // NOTE Logical (immediate): immr(21:16), imms(15:10)
   val bitfield = Module(new BitfieldALU)
   bitfield.io.op := io.dinst.op
-  bitfield.io.immr := io.dinst.imm.bits(21-10,16-10)
-  bitfield.io.imms := io.dinst.imm.bits(15-10,10-10)
+  bitfield.io.immr := io.dinst.imm(21-10,16-10)
+  bitfield.io.imms := io.dinst.imm(15-10,10-10)
   bitfield.io.src := rVal1
   bitfield.io.dst := rVal2 // See decoder, binds Rd to rs2
   bitfield.io.wmask := decodeBitMask.io.wmask
@@ -362,8 +446,8 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   // Move wide (immediate): hw(22,21), imm16(20,5)
   val move = Module(new Move)
   move.io.op := io.dinst.op
-  move.io.hw := io.dinst.imm.bits(22-5,21-5)
-  move.io.imm := io.dinst.imm.bits(20-5,5-5)
+  move.io.hw := io.dinst.imm(22-5,21-5)
+  move.io.imm := io.dinst.imm(20-5,5-5)
   move.io.rd := rVal2
 
   val aluVal1 = WireInit(MuxLookup(io.dinst.itype, rVal1, Array(
@@ -395,16 +479,23 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   // Execute in ALU now that we have both inputs ready
   val logicALU = Module(new LogicALU())
   logicALU.io.a := aluVal1
-  logicALU.io.b := aluVal2
+  logicALU.io.b := Mux(io.dinst.op(0), ~aluVal2, aluVal2)
   logicALU.io.opcode := aluOp
+  logicALU.io.is32bit := io.dinst.is32bit
 
+  // Data-Processing
+  val dataProcessing = Module(new DataProcessing)
+  dataProcessing.io.a := rVal1
+  dataProcessing.io.b := rVal2
+  dataProcessing.io.op := io.dinst.op
+  dataProcessing.io.is32bit := io.dinst.is32bit
 
-  // NOTE: OP_SUB = 1 and OP_CCMP = 1 => Negative sum
+  // NOTE: if op(0) = 1 => op = (OP_SUB || OP_CCMP) => Negative sum
   val addWithCarry = Module(new AddWithCarry)
   // I_ASSR || I_ASImm
   addWithCarry.io.is32bit := io.dinst.is32bit
   addWithCarry.io.a := aluVal1
-  addWithCarry.io.b := Mux(io.dinst.op === OP_SUB, ~aluVal2, aluVal2)
+  addWithCarry.io.b := Mux(io.dinst.op(0), ~aluVal2, aluVal2)
   addWithCarry.io.carry := Mux(io.dinst.op === OP_SUB, 1.U, 0.U)
   when(io.dinst.itype === I_CSel) {
     addWithCarry.io.a := 0.U
@@ -414,7 +505,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
       Mux(io.dinst.op === OP_CSINC || io.dinst.op === OP_CSNEG, 1.U, 0.U)
   }.elsewhen(io.dinst.itype === I_CCImm || io.dinst.itype === I_CCReg) {
     addWithCarry.io.a := aluVal1
-    addWithCarry.io.b := Mux(io.dinst.op === OP_CCMP, ~aluVal2, aluVal2)
+    addWithCarry.io.b := Mux(io.dinst.op(0), ~aluVal2, aluVal2)
     addWithCarry.io.carry := Mux(io.dinst.op === OP_CCMP, 1.U, 0.U)
   }.elsewhen(io.dinst.itype === I_LogSR) { // Get nzcv flags from addWithCarry
     addWithCarry.io.a := 0.U
@@ -429,31 +520,35 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
                  I_BitF  -> logicALU.io.res,
                  I_LogSR -> logicALU.io.res,
                  I_LogI  -> logicALU.io.res,
+                 I_DP2S  -> shiftALU.io.res,
                  I_ASSR  -> addWithCarry.io.res,
                  I_ASImm -> addWithCarry.io.res,
+                 I_DP1S  -> dataProcessing.io.res,
                  I_MovI  -> move.io.res,
                  I_CSel  -> Mux(condHolds.io.res, rVal1, addWithCarry.io.res)
                  ))
   einst.res := Mux(io.dinst.is32bit, Cat(0.U, res(31,0)), res)
   einst.rd := io.dinst.rd
   einst.nzcv.bits := MuxLookup(io.dinst.itype, addWithCarry.io.nzcv, Array(
-                           I_LogSR -> addWithCarry.io.nzcv,
+                           I_LogSR -> logicALU.io.nzcv,
+                           I_LogI  -> logicALU.io.nzcv,
                            I_CCImm -> Mux(condHolds.io.res, addWithCarry.io.nzcv, io.dinst.nzcv.bits),
                            I_CCReg -> Mux(condHolds.io.res, addWithCarry.io.nzcv, io.dinst.nzcv.bits)
                          ))
   einst.nzcv.valid := io.dinst.nzcv.valid
 
   io.einst.bits := einst
-  io.einst.valid :=
-    MuxLookup(io.dinst.itype, false.B, Array(
-                I_MovI  -> true.B,
-                I_LogSR -> true.B,
-                I_LogI  -> true.B,
-                I_ASSR  -> true.B,
-                I_ASImm -> true.B,
-                I_BitF  -> true.B,
-                I_CCImm -> true.B,
-                I_CCReg -> true.B,
-                I_CSel  -> true.B
-              ))
+  io.einst.valid := MuxLookup(io.dinst.itype, false.B, Array(
+    I_LogSR -> true.B,
+    I_LogI  -> true.B,
+    I_BitF  -> true.B,
+    I_DP1S  -> true.B,
+    //I_DP2S  -> true.B,
+    I_CCImm -> true.B,
+    I_CCReg -> true.B,
+    I_ASImm -> true.B,
+    I_ASSR  -> true.B,
+    I_MovI  -> true.B,
+    I_CSel  -> true.B
+  ))
 }

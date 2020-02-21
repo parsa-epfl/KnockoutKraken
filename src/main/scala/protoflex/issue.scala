@@ -4,6 +4,7 @@ package protoflex
 import chisel3._
 import chisel3.util.{Decoupled, PriorityEncoder, PriorityMux, Queue, Reverse, Valid, log2Ceil}
 import common.PROCESSOR_TYPES._
+import common._
 
 class RRArbiter(arbN: Int)
     extends Module {
@@ -42,19 +43,6 @@ class RRArbiter(arbN: Int)
   when(io.next.ready && valid) { curr := next + 1.U}
 }
 
-class IssueUnitIO(implicit val cfg: ProcConfig) extends Bundle {
-  // flush
-  val flush = Input(ValidTagged(cfg.TAG_T))
-  // Decode - Issue
-  val enq = Flipped(Decoupled(new DInst))
-
-  // Issue - Exec
-  val deq = Decoupled(new DInst)
-
-  // Back Pressure
-  val commitReg = Flipped(Valid(new CommitInst))
-}
-
 /** IssueUnit
   *
   * Recieves the decoded instruction.
@@ -67,7 +55,16 @@ class IssueUnitIO(implicit val cfg: ProcConfig) extends Bundle {
   */
 class IssueUnit(implicit val cfg: ProcConfig) extends Module
 {
-  val io = IO(new IssueUnitIO)
+  val io = IO(new Bundle {
+    // Decode - Issue
+    val enq = Flipped(Decoupled(new DInst))
+    // Issue - Exec
+    val deq = Decoupled(new DInst)
+
+    // Back Pressure
+    val commitReg = Flipped(Valid(new CommitInst))
+    val flush = Input(ValidTagged(cfg.TAG_T))
+  })
 
   /** Issue stage pipeline register
     * reg_pipe   Contains the next decoded instruction to issue per thread.
@@ -157,3 +154,31 @@ class IssueUnit(implicit val cfg: ProcConfig) extends Module
   }
 }
 
+class IssueUnitRevamp(implicit val cfg: ProcConfig) extends Module
+{
+  val io = IO(new Bundle {
+    // Decode - Issue
+    val enq = Flipped(Decoupled(new DInst))
+    // Issue - Exec
+    val deq = Decoupled(new DInst)
+
+    // Back Pressure
+    val commitReg = Flipped(Valid(new CommitInst))
+    val flush = Input(ValidTagged(cfg.TAG_T))
+  })
+
+  val fifos = VecInit(Seq.fill(cfg.NB_THREADS)(Module(FlushQueue(new DInst, 4)).io))
+
+  for (cpu <- 0 until cfg.NB_THREADS) {
+    fifos(cpu).enq.bits <> io.enq.bits
+    fifos(cpu).enq.valid := false.B
+    fifos(cpu).deq.ready := false.B
+    fifos(cpu).flush := io.flush.valid && io.flush.tag === cpu.U
+  }
+
+  //fifos(io.enq.bits.tag).enq.ready <> io.enq.ready
+  //fifos(io.enq.bits.tag).enq.valid <> io.enq.valid
+  //fifos(io.flush.tag).deq <> io.deq
+  fifos(0).enq <> io.enq
+  fifos(0).deq <> io.deq
+}

@@ -52,7 +52,7 @@ object ProcDriver {
       }
     }
 
-    def writePPageInst(inst: BigInt, offst: BigInt) = { portPPage.wrBRAM32b(inst, offst) }
+    def writePPageInst(inst: BigInt, offst: BigInt, bram: BigInt) = portPPage.wrBRAM32b(inst, offst + (bram << 10))
 
     def wrPSTATE2BRAM(tag: Int, pstate: PState): Unit ={
       //println(pstate.toString())
@@ -100,10 +100,8 @@ object ProcDriver {
       new PState(xregs.toList: List[BigInt], pc: BigInt, sp:BigInt, nzcv: Int)
     }
 
-    def hasCommitedInst(): Boolean = {
-      procStateDBG_.get.commitReg.valid.peek.litToBoolean &&
-        !procStateDBG_.get.commitReg.bits.undef.peek.litToBoolean
-    }
+    def hasCommitedInst(): Boolean = procStateDBG_.get.commitReg.valid.peek.litToBoolean
+    def isCommitedUndef(): Boolean = procStateDBG_.get.commitReg.bits.undef.peek.litToBoolean
 
     def getCommitedInst(): BigInt = procStateDBG_.get.commitReg.bits.inst32.peek.litValue
     def getCommitedPC(): BigInt = procStateDBG_.get.commitReg.bits.pc.peek.litValue

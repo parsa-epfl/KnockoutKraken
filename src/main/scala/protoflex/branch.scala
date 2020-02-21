@@ -34,12 +34,12 @@ class BranchUnit(implicit val cfg: ProcConfig) extends Module
   val io = IO(new BranchUnitIO)
 
 
-  val immS2 = WireInit(Cat(io.dinst.imm.bits, 0.U(2.W)))
+  val immS2 = WireInit(Cat(io.dinst.imm, 0.U(2.W)))
   val imm14S2 = WireInit(immS2(2+13,0).asSInt.pad(64))
   val imm26S2 = WireInit(immS2(2+25,0).asSInt.pad(64))
   val imm19S2 = WireInit(immS2(2+18,0).asSInt.pad(64))
-  val imm21S0 = WireInit(io.dinst.imm.bits(20,0).asSInt.pad(64))
-  val imm21S12 = WireInit(Cat(io.dinst.imm.bits(20,0), 0.U(12.W)).asSInt.pad(64))
+  val imm21S0 = WireInit(io.dinst.imm(20,0).asSInt.pad(64))
+  val imm21S12 = WireInit(Cat(io.dinst.imm(20,0), 0.U(12.W)).asSInt.pad(64))
   val immSExt = MuxLookup(io.dinst.itype, imm21S0, Array(
                         I_BImm  -> imm26S2,
                         I_BCImm -> imm19S2,
@@ -55,7 +55,7 @@ class BranchUnit(implicit val cfg: ProcConfig) extends Module
   val pcadd = WireInit((pc.zext + immSExt).asUInt)
 
   // TBImm
-  val bit_pos = WireInit(Cat(io.dinst.is32bit.asUInt, io.dinst.imm.bits(23-5,19-5)))
+  val bit_pos = WireInit(Cat(~io.dinst.is32bit.asUInt, io.dinst.imm(23-5,19-5)))
 
   val binst = Wire(new BInst)
   binst.pc := Mux(io.dinst.itype === I_BReg, io.rVal1, pcadd)

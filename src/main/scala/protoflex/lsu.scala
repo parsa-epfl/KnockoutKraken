@@ -58,7 +58,7 @@ class LegacyLoadStoreUnit(implicit val cfg: ProcConfig) extends Module
 
   // Offset
   val imm_sign_extened = Wire(SInt(DATA_W))
-  imm_sign_extened := io.dinst.bits.imm.bits.asSInt
+  imm_sign_extened := io.dinst.bits.imm.asSInt
   // val offset = Mux(io.dinst.imm_en , 0.S(DATA_W), imm_sign_extened)
   val offset = imm_sign_extened
 

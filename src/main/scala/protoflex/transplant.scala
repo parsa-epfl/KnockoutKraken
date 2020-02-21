@@ -33,7 +33,7 @@ class TransplantUnitIO(implicit val cfg: ProcConfig) extends Bundle
   val cpu2tpuState = Input(new PStateRegs)
   val rfile = Flipped(new RFileIO)
 
-  val stateBRAM = Flipped(new BRAMPort()(cfg.bramConfig))
+  val stateBRAM = Flipped(new BRAMPort()(cfg.bramConfigState))
 }
 
 /*
@@ -75,7 +75,7 @@ class TransplantUnitCPUIO(implicit val cfg: ProcConfig) extends Bundle
 }
 
 class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
-  val stateAddrW = cfg.bramConfig.ADDR_WIDTH
+  val stateAddrW = cfg.bramConfigState.ADDR_WIDTH
 
   val io = IO(new TransplantUnitIO)
 
@@ -188,9 +188,14 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   }
 
   // One cycle delay from BRAM read
-  io.rfile.wen := RegNext(stateDir === s_BRAM2CPU && stateRegType === r_XREGS)
-  io.rfile.waddr := RegNext(regAddr)
-  io.rfile.wdata := bramOut64b
+  io.rfile.w1_en := RegNext(stateDir === s_BRAM2CPU && stateRegType === r_XREGS)
+  io.rfile.w1_addr := RegNext(regAddr)
+  io.rfile.w1_data := bramOut64b
+
+  // One cycle delay from BRAM read
+  io.rfile.w2_en   := DontCare
+  io.rfile.w2_addr := DontCare
+  io.rfile.w2_data := DontCare
 
   io.tpu2cpuState.PC := bramOut64b
   io.tpu2cpuState.SP := bramOut64b
@@ -213,13 +218,6 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   // CPU <-> HOST direct communcation
   io.host2tpu.missTLB <> io.tpu2cpu.missTLB
   io.host2tpu.fillTLB <> io.tpu2cpu.fillTLB
-
-  if(cfg.DebugSignals) {
-    // One cycle delay from BRAM read
-    io.rfile.wen_2.get   := DontCare
-    io.rfile.waddr_2.get := DontCare
-    io.rfile.wdata_2.get := DontCare
-  }
 }
 
 // In parsa-epfl/qemu/fa-qflex

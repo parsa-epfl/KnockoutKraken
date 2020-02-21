@@ -5,8 +5,8 @@ import chisel3.util.{Valid}
 import common.PROCESSOR_TYPES._
 
 class TLBEntry extends Bundle {
-  val vpageAddr = UInt((DATA_SZ).W)
-  val ppageAddr = UInt((DATA_SZ).W)
+  val vpageAddr = DATA_T
+  val ppageAddr = DATA_T
 }
 
 object TLBEntry {

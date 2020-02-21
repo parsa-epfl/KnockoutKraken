@@ -38,7 +38,7 @@ object PrintingTools {
       }
 
       case I_LSImm => op.toInt match {
-        case OP_LDR => "LDR"
+        case OP_LDR64 => "LDR"
       }
 
       case I_ASImm => op.toInt match {
@@ -54,21 +54,12 @@ object PrintingTools {
     str.padTo(3, ' ')
   }
 
-  def get_imm(imm : BigInt, imm_en: BigInt) : String = {
-    imm_en.toInt match{
-      case Y => "IMM".padTo(8, ' ') + ": "+imm.toInt.toString
-      case N => "IMM".padTo(8, ' ') + ": "+"XXX"
-    }
-  }
+  def get_imm(imm : BigInt) : String = "IMM".padTo(8, ' ') + ": "+imm.toInt.toString
 
-  def getReg_op(rd : BigInt, rs1 : BigInt, rs2 : BigInt, rd_en : BigInt, rs1_en : BigInt, rs2_en : BigInt) : String = {
-    (rd_en.toInt, rs1_en.toInt, rs2_en.toInt) match {
-      case (0,0,0) => "XXX" + " <- " + "XXX" + "," + "XXX"
-      case (1,0,0) => getReg(rd) + " <- "
-      case (0,1,0) => "XXX" + " <- " + getReg(rs1)
-      case (1,1,0) => getReg(rd) + " <- " + getReg(rs1)
-      case (1,1,1) => getReg(rd) + " <- " + getReg(rs1) + "," + getReg(rs2)
-      case _ => "? <-   ?,   ?"
+  def getReg_op(rd : BigInt, rs1 : BigInt, rs2 : BigInt, rd_en : BigInt) : String = {
+    rd_en.toInt match {
+      case 0 => "XXX" + " <- " + getReg(rs1) + "," + getReg(rs2)
+      case 1 => getReg(rd) + " <- " + getReg(rs1) + "," + getReg(rs2)
     }
   }
 
@@ -242,9 +233,6 @@ object SoftwareStructs {
      val shift_type   : BigInt,
      val cond         : BigInt,
      val rd_en        : BigInt,
-     val rs1_en       : BigInt,
-     val rs2_en       : BigInt,
-     val imm_en       : BigInt,
      val shift_en     : BigInt,
      val cond_en      : BigInt,
      val nzcv_en      : BigInt,
@@ -258,8 +246,8 @@ object SoftwareStructs {
           "tag: " + tag.toString,
           get_itype(itype: BigInt),
           get_op(itype: BigInt, op: BigInt),
-          getReg_op(rd: BigInt, rs1: BigInt, rs2: BigInt, rd_en: BigInt, rs1_en: BigInt, rs2_en: BigInt),
-          get_imm(imm: BigInt, imm_en: BigInt),
+          getReg_op(rd: BigInt, rs1: BigInt, rs2: BigInt, rd_en: BigInt),
+          get_imm(imm: BigInt),
           get_shift(shift_type, shift_en, shift_val),
           get_cond(cond: BigInt, cond_en : BigInt),
           get_nzcv_is_update(nzcv_en),
@@ -316,16 +304,13 @@ object SoftwareStructs {
       bundle.itype : BigInt,
       bundle.op : BigInt,
       bundle.rd.bits : BigInt,
-      bundle.rs1.bits : BigInt,
-      bundle.rs2.bits : BigInt,
-      bundle.imm.bits : BigInt,
+      bundle.rs1 : BigInt,
+      bundle.rs2 : BigInt,
+      bundle.imm : BigInt,
       bundle.shift_val.bits : BigInt,
       bundle.shift_type : BigInt,
       bundle.cond.bits : BigInt,
       bundle.rd.valid : BigInt,
-      bundle.rs1.valid : BigInt,
-      bundle.rs2.valid : BigInt,
-      bundle.imm.valid : BigInt,
       bundle.shift_val.valid : BigInt,
       bundle.cond.valid : BigInt,
       bundle.nzcv.valid : BigInt,

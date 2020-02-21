@@ -48,11 +48,11 @@ class FetchUnit(implicit val cfg: ProcConfig) extends Module
   arbiter.io.next.ready := fetchReg.io.enq.ready
   val currFetchPC = prefetchPC(arbiter.io.next.bits)
 
-  when(((insnHit && !insnReg.valid) || insnReg.valid) && fetchReg.io.enq.ready) {
+  when(insnHit && fetchReg.io.enq.ready) {
     currFetchPC := currFetchPC + 4.U
   }
 
-  io.pc.data.get :=currFetchPC
+  io.pc.data.get := currFetchPC
   io.pc.tag := arbiter.io.next.bits
   io.pc.valid := arbiter.io.next.valid
 

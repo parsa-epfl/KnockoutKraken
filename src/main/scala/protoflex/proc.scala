@@ -10,7 +10,8 @@ import common._
 import common.DECODE_CONTROL_SIGNALS._
 
 case class ProcConfig(val NB_THREADS : Int = 4, val DebugSignals : Boolean = false, EntriesTLB: Int = 2) {
-  val bramConfig = new BRAMConfig(10, 36, 1024, false)
+  val bramConfigState = new BRAMConfig(10, 36, 1024, false)
+  val bramConfigMem = new BRAMConfig(11, 36, 2048, false)
 
   // Threads
   val NB_THREAD_W = log2Ceil(NB_THREADS) // 4 Threads
@@ -61,8 +62,8 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
 {
   val io = IO(new Bundle {
     // BRAM Host Ports
-    val ppageBRAM = new BRAMPort()(cfg.bramConfig)
-    val stateBRAM = new BRAMPort()(cfg.bramConfig)
+    val ppageBRAM = new BRAMPort()(cfg.bramConfigMem)
+    val stateBRAM = new BRAMPort()(cfg.bramConfigState)
 
     // AXI Host Communication
     val host2tpu = new TransplantUnitHostIO
@@ -81,9 +82,9 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
 
   // Host modules
   // BRAM Program page
-  val ppage = Module(new BRAM()(cfg.bramConfig))
+  val ppage = Module(new BRAM()(cfg.bramConfigMem))
   // BRAM PC State
-  val state = Module(new BRAM()(cfg.bramConfig))
+  val state = Module(new BRAM()(cfg.bramConfigState))
   // Transplant Unit
   val tpu = Module(new TransplantUnit())
 
@@ -185,8 +186,8 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   /** Execute */
   // connect rfile read(address) interface
   rfileVec map { case rfile =>
-    rfile.rs1_addr := issued_dinst.rs1.bits
-    rfile.rs2_addr := issued_dinst.rs2.bits
+    rfile.rs1_addr := issued_dinst.rs1
+    rfile.rs2_addr := issued_dinst.rs2
   }
   // Read register data from rfile
   val rVal1 = rfileVec(issued_dinst.tag).rs1_data
@@ -260,47 +261,48 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
 
   // connect RFile's write interface
   for(cpu <- 0 until cfg.NB_THREADS) {
+    // WB Port 1
     when(commitExec.valid) {
-      rfileVec(cpu).waddr := commitExec.bits.rd.bits
-      rfileVec(cpu).wdata := commitExec.bits.res
+      rfileVec(cpu).w1_addr := commitExec.bits.rd.bits
+      rfileVec(cpu).w1_data := commitExec.bits.res
     }.elsewhen(commitPcRel.valid) {
-      rfileVec(cpu).waddr := commitPcRel.bits.rd
-      rfileVec(cpu).wdata := commitPcRel.bits.res
-   }.otherwise {
+      rfileVec(cpu).w1_addr := commitPcRel.bits.rd
+      rfileVec(cpu).w1_data := commitPcRel.bits.res
+    }.elsewhen(commitMem.valid) {
+      rfileVec(cpu).w1_addr := commitMem.bits.memReq(0).reg
+      rfileVec(cpu).w1_data := wbLD(0)
+    }.otherwise {
       // Default
-      rfileVec(cpu).waddr := commitExec.bits.rd.bits
-      rfileVec(cpu).wdata := commitExec.bits.res
+      rfileVec(cpu).w1_addr := commitExec.bits.rd.bits
+      rfileVec(cpu).w1_data := commitExec.bits.res
     }
-    rfileVec(cpu).wen := false.B
-    if(cfg.DebugSignals) {
-     when(commitMem.valid) { // Load TODO : Real, here QEMU Loads in single cycle
-        rfileVec(cpu).waddr := commitMem.bits.memReq(0).reg
-        rfileVec(cpu).wdata := wbLD(0)
-        rfileVec(cpu).waddr_2.get := commitMem.bits.memReq(1).reg
-        rfileVec(cpu).wdata_2.get := wbLD(1)
-       // TODO NOT SUPPORTED REALLY LD/ST Writeback (Post-Idx)
-       //    }.elsewhen(commitMem.valid) { // wback
-       //      rfileVec(cpu).waddr := commitMem.bits.rd.bits
-       //      rfileVec(cpu).wdata := commitMem.bits.rd_res
+    rfileVec(cpu).w1_en := false.B
+
+    // WB Port 2
+    when(commitMem.valid ) { // Load TODO : Real, here QEMU Loads in single cycle
+      when(commitMem.bits.isPair) {
+        rfileVec(cpu).w2_addr := commitMem.bits.memReq(1).reg
+        rfileVec(cpu).w2_data := wbLD(1)
       }.otherwise {
-        rfileVec(cpu).waddr_2.get := commitMem.bits.memReq(1).reg
-        rfileVec(cpu).wdata_2.get := wbLD(1)
+        rfileVec(cpu).w2_addr := commitMem.bits.rd.bits
+        rfileVec(cpu).w2_data := commitMem.bits.rd_res
       }
-      rfileVec(cpu).wen_2.get := false.B
+    }.otherwise {
+      rfileVec(cpu).w2_addr := commitMem.bits.rd.bits
+      rfileVec(cpu).w2_data := commitMem.bits.rd_res
     }
+    rfileVec(cpu).w2_en := false.B
   }
 
   nextPC := pregsVec(commitTag).PC
   nextSP := pregsVec(commitTag).SP
   when(commitValid) {
-    rfileVec(commitTag).wen :=
+    rfileVec(commitTag).w1_en :=
       (commitExec.valid && commitExec.bits.rd.valid) ||
       (commitMem.valid && commitMem.bits.isLoad) ||
       (commitPcRel.valid)
-    if(cfg.DebugSignals) {
-      rfileVec(commitTag).wen_2.get :=
-        (commitMem.valid && commitMem.bits.isLoad && commitMem.bits.isPair)
-    }
+    rfileVec(commitTag).w2_en := commitMem.valid &&
+      ((commitMem.bits.isLoad && commitMem.bits.isPair) || commitMem.bits.rd.valid)
 
     when(commitExec.valid && commitExec.bits.nzcv.valid) {
       pregsVec(commitTag).NZCV := commitExec.bits.nzcv.bits
