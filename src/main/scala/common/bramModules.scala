@@ -96,7 +96,7 @@ class BRAMPort(implicit val cfg: BRAMConfig) extends Bundle {
 class BRAM(implicit cfg: BRAMConfig) extends MultiIOModule {
   val portA = IO(new BRAMPort)
   val portB = IO(new BRAMPort)
-  private val bramTDP = Module(new BRAMTDP(cfg.ADDR_WIDTH, cfg.DATA_WIDTH, cfg.SIZE))
+  private val bramTDP = Module(new BRAMTDP(cfg.ADDR_WIDTH, cfg.DATA_WIDTH))
 
   bramTDP.io.enA <> portA.EN
   bramTDP.io.weA <> portA.WE
@@ -112,7 +112,8 @@ class BRAM(implicit cfg: BRAMConfig) extends MultiIOModule {
 }
 
 // Inspired from inline string
-class BRAMTDP(val ADDR_WIDTH: Int = 10, val DATA_WIDTH: Int = 36, val SIZE: Int = 1024) extends Module {
+class BRAMTDP(val ADDR_WIDTH: Int = 10, val DATA_WIDTH: Int = 36) extends Module {
+  val SIZE = 1 << (ADDR_WIDTH - 1)
   val io = IO(new Bundle(){
     val enA = Input(Bool())
     val enB = Input(Bool())
