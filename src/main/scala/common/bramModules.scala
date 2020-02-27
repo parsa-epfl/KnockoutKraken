@@ -113,7 +113,7 @@ class BRAM(implicit cfg: BRAMConfig) extends MultiIOModule {
 
 // Inspired from inline string
 class BRAMTDP(val ADDR_WIDTH: Int = 10, val DATA_WIDTH: Int = 36) extends Module {
-  val SIZE = 1 << (ADDR_WIDTH - 1)
+  val SIZE = 1 << ADDR_WIDTH
   val io = IO(new Bundle(){
     val enA = Input(Bool())
     val enB = Input(Bool())
