@@ -75,11 +75,11 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   val size = WireInit(io.dinst.op(1,0))
   val isLoad = WireInit(io.dinst.op(2))
   val isSigned = WireInit(io.dinst.op(3))
-  val offstImm = io.dinst.imm << size
-  val offst = WireInit(offstImm)
+  val offstSignExt7 = io.dinst.imm(6,0).asSInt.pad(64).asUInt
+  val offstSignExt9 = io.dinst.imm(8,0).asSInt.pad(64).asUInt
+  val offst = WireInit(DATA_T, io.dinst.imm)
 
   // Decode for LD/ST with Post/Pre-index and Signed offset variants
-  // NOTE: Post-index and Pre-index have wback enabled and is not supported yet
   val wback = WireInit(false.B)
   val postindex = WireInit(false.B)
 
@@ -94,55 +94,72 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   when(io.dinst.itype === I_LSUImm) {
     wback := false.B
     postindex := false.B
-    offst := offstImm
+    offst := io.dinst.imm(11,0) << size
+  }.elsewhen(io.dinst.itype === I_LSUReg) {
+    wback := false.B
+    postindex := false.B
+    offst := offstSignExt9
   }.elsewhen(io.dinst.itype === I_LSPReg) {
     wback := false.B
     postindex := false.B
-    offst := offstImm
+    offst := offstSignExt7 << size
   }.elsewhen(io.dinst.itype === I_LSRReg) {
+    wback := false.B
+    postindex := false.B
     offst := extendReg.io.res
+  }.elsewhen(io.dinst.itype === I_LSPoReg) {
+    wback := true.B
+    postindex := true.B
+    offst := offstSignExt9
+  }.elsewhen(io.dinst.itype === I_LSPrReg) {
+    wback := true.B
+    postindex := false.B
+    offst := offstSignExt9
   }
-
   //  if n == 31 then
   //     address = SP[]; // SP[] == X[31]
   //  else
   //     address = X[n];
   //
-  val base_address = WireInit(DATA_X)
-  when(io.dinst.rs1 === 31.U && (io.dinst.itype === I_LSUImm || io.dinst.itype === I_LSRReg)) {
+  when(io.dinst.rs1 === 31.U) {
     // CheckSPAAligment(); TODO
-    base_address := io.rVal1
-  }.otherwise {
-    base_address := io.rVal1
   }
+  val base_address = WireInit(io.rVal1)
 
-  val post_address = WireInit(base_address + offst)
-  val ldst_address = WireInit(base_address)
 
   //  if !postindex then
   //     address = address + offset
-  when(!postindex) {
-    ldst_address := post_address
+  // ==> implicitly
+  //  if postindex then
+  //     address = address
+  //  else
+  //     address = address + offset
+  val ldst_address = WireInit(base_address + offst)
+  when(postindex) {
+    ldst_address := base_address
   }
 
-  //  integer datasize = 8 << size
-  //  bits(datasize) data
+  // integer datasize = 8 << size
+  // bits(datasize) data
 
   // For WRITES
-  // Only LSUImm {
-  //   if rt_unknown
-  //     data = bits(datasize) UNKNOWN
-  //   else
-  //     data = X[t]
-  //   }
+  // if rt_unknown
+  //   data = bits(datasize) UNKNOWN
+  // else
+  //   data = X[t]
   //
   // Mem[address, datasize DIV 8, AccType_NORMAL] = data
 
-  // For READS Everyone
+  // LD's
   // data = Mem[address, datasize DIV 8, AccType_NORMAL]
-  // X[t] = ZeroExtend(data, regsize)
-  // bits(32) data = Mem[address, 4, AccType_NORMAL]             // I = LDRSW
-  // X[t] = SignExtend(data, 64)                                 // I = LDRSW
+  // if signed then
+  //   X[t] = SignExtend(data, regsize)
+  // else
+  //   X[t] = ZeroExtend(data, regsize)
+
+  // ST's
+  // data = X[t]
+  // Mem[address, datasize DIV 8, AccType_NORMAL] = data
 
   val data = WireInit(io.rVal2) // data = Rt = rVal2
 
@@ -152,47 +169,50 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   io.minst.bits.is32bit := size =/= SIZE64 && !(io.dinst.itype === I_LSUImm && io.dinst.op === OP_LDRSW)
   io.minst.bits.isLoad := isLoad
   io.minst.valid := MuxLookup(io.dinst.itype, false.B, Array(
-                                I_LSPReg -> true.B,
-                                I_LSRReg -> true.B,
-                                I_LSUImm -> true.B
-                              ))
+    I_LSUReg -> true.B,
+    I_LSPReg -> true.B,
+    I_LSRReg -> true.B,
+    I_LSPrReg -> true.B,
+    I_LSPoReg -> true.B,
+    I_LSUImm -> true.B
+  ))
 
   io.minst.bits.memReq(0).addr := ldst_address
   io.minst.bits.memReq(0).data := data
   io.minst.bits.memReq(0).reg := io.dinst.rd.bits
   // For Pair LD/ST
-  val dbytes = 1.U << size // SIZE32 => 1 << 2 = 4 | SIZE64 = 3 => 1 << 3 = 8 bytes
+  val dbytes = 1.U << size
   io.minst.bits.isPair := io.dinst.itype === I_LSPReg
-  io.minst.bits.memReq(1).addr := ldst_address + dbytes 
-  io.minst.bits.memReq(1).data := data
+  io.minst.bits.memReq(1).addr := ldst_address + dbytes
+  io.minst.bits.memReq(1).data := DontCare // Read 3 ports from RFile in single cycle Rd;Rt;Rt2
   io.minst.bits.memReq(1).reg := io.dinst.rs2
 
 
-  // Writeback address to reg // itype === LSUImm || 
   // if wback then
+  //   if wb_unknown then
+  //     address = bits(64) UNKNOWN;
+  //   elsif postindex then
+  //     address = address + offset; => base_address + offset
   //   if n == 31 then
   //     SP[] = address;
   //   else
   //     X[n] = address;
-  // NOTE:
-  // - address = base_address + offst
-  io.minst.bits.rd_res := post_address
-  io.minst.bits.rd.bits := io.dinst.rs2
+  io.minst.bits.rd_res := base_address + offst
+  io.minst.bits.rd.bits := io.dinst.rs1
   io.minst.bits.rd.valid := wback
 
-  // Tag management
-  val tag_checked = RegInit(false.B)
-  when(io.dinst.itype === I_LSUImm) {
-    tag_checked := wback || !(io.dinst.rs1 === 31.U)
-  }
-
   // TODO
+  // boolean tag_checked = memop != MemOp_PREFETCH && (n != 31); // itype == LSUReg
+  // boolean tag_checked = wback || (n != 31);                   // itype == LSUImm
+  val tag_checked = WireInit(false.B)
+
   // if HaveMTEExt() then
   //   SetNotTagCheckedInstruction(!tag_checked); // itype == LSUImm
+  //   SetNotTagCheckedInstruction(!tag_checked); // itype == LSUReg
   //   SetNotTagCheckedInstruction(FALSE);        // itype == LSRReg
 
-  // TODO // itype == LSUImm
-  // Checking for Transplant corner cases 
+  // NOTE itype == LSUImm
+  // Checking for Transplant corner cases
   // if wback && n == t && n != 31 then
   //     c = ConstrainUnpredictable();
   //     assert c IN {Constraint_NONE, Constraint_UNKNOWN, Constraint_UNDEF, Constraint_NOP};
@@ -201,8 +221,8 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   //         when Constraint_UNKNOWN rt_unknown = TRUE; // value stored is UNKNOWN => Transplant (?)
   //         when Constraint_UNDEF UNDEFINED;        => Transplant
   //         when Constraint_NOP EndOfInstruction(); => NOP
-  // NOTE:
-  // TODO // itype == LSPReg
+
+  // NOTE itype == LSPReg
   // if t == t2 then
   //   Constraint c = ConstrainUnpredictable();
   //   assert c IN {Constraint_UNKNOWN, Constraint_UNDEF, Constraint_NOP};

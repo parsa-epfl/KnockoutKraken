@@ -200,16 +200,7 @@ object AssemblyInstruction
         }
       }
 
-      // load store ( immediate )
-      case (Some(d), _, _,Some(i), _, _) if LoadStore.get(i_op.toUpperCase).isDefined => {
-        itype = I_LSImm
-        op = OP_LDR64
-        rd  = d
-        imm = i
-      }
-
-      case _ =>
-    }
+   }
 
     val ctrl = decode_table(itype.toInt)
     val rd_en    = ctrl(0)

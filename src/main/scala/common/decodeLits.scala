@@ -117,22 +117,41 @@ object DEC_LITS {
   val SIZE32 = 2
   val SIZE64 = 3
   // op(2) = L
+  val isLoad = (1 << 2)
   // op(3) = isSigned
-  val OP_STRB  = SIZEB
-  val OP_STRH  = SIZEH
-  val OP_STR32 = SIZE32
-  val OP_STR64 = SIZE64
-  val OP_LDRB  = (1 << 2) + SIZEB
-  val OP_LDRH  = (1 << 2) + SIZEH
-  val OP_LDR32 = (1 << 2) + SIZE32
-  val OP_LDR64 = (1 << 2) + SIZE64
-  // Load/store operation
-  val OP_LDRSW = (1 << 3) + (1 << 2) + SIZE32
+  val isSigned = (1 << 3)
+
+  val OP_STRB   = SIZEB
+  val OP_STRH   = SIZEH
+  val OP_STR32  = SIZE32
+  val OP_STR64  = SIZE64
+  val OP_LDRB   = SIZEB  + isLoad
+  val OP_LDRH   = SIZEH  + isLoad
+  val OP_LDR32  = SIZE32 + isLoad
+  val OP_LDR64  = SIZE64 + isLoad
+
+  val OP_LDRSB = SIZEB  + isLoad + isSigned
+  val OP_LDRSH = SIZEH  + isLoad + isSigned
+  val OP_LDRSW = SIZE32 + isLoad + isSigned
+
+  val OP_STURB  = SIZEB
+  val OP_STURH  = SIZEH
+  val OP_STUR32 = SIZE32
+  val OP_STUR64 = SIZE64
+  val OP_LDURB  = SIZEB  + isLoad
+  val OP_LDURH  = SIZEH  + isLoad
+  val OP_LDUR32 = SIZE32 + isLoad
+  val OP_LDUR64 = SIZE64 + isLoad
+
+  val OP_LDURSB = SIZEB  + isLoad + isSigned
+  val OP_LDURSH = SIZEH  + isLoad + isSigned
+  val OP_LDURSW = SIZE32 + isLoad + isSigned
+
   // Pair register
   val OP_STP32 = SIZE32
   val OP_STP64 = SIZE64
-  val OP_LDP32 = (1 << 2) + SIZE32
-  val OP_LDP64 = (1 << 2) + SIZE64
+  val OP_LDP32 = SIZE32 + isLoad
+  val OP_LDP64 = SIZE64 + isLoad
 
   // Instruction Types for scala
   val TYPE_W = 5
@@ -151,19 +170,21 @@ object DEC_LITS {
   val I_MovI  = 10 // Move wide (immediate)
   val I_CSel  = 11 // Conditional select
 
-  val I_LSUImm = 12 // Load/store (unsigned immediate)
+  val I_BImm  = 12 // Unconditional branch (immediate)
+  val I_BCImm = 13 // Conditional branch (immediate)
+  val I_BReg  = 14 // Conditional branch (register)
+  val I_CBImm = 15 // Branch and Compare (immediate)
 
-  val I_LSRReg = 13 // Load/store register (register offset)
-  val I_LSPReg = 14 // Load/store pair register (signed offset)
-  val I_LSImm  = 15 // Load/Store Immediate
+  val I_LSRReg  = 16 // Load/store register (register offset)
+  val I_LSPoReg = 17 // Load/store register (post-indexed)
+  val I_LSPrReg = 18 // Load/store register (pre-indexed)
+  val I_LSUReg  = 19 // Load/store register (unscaled immediate)
 
-  val I_BImm  = 16 // Unconditional branch (immediate)
-  val I_BCImm = 17 // Conditional branch (immediate)
-  val I_BReg  = 18 // Conditional branch (register)
-  val I_CBImm = 19 // Branch and Compare (immediate)
+  val I_LSUImm = 20 // Load/store (unsigned immediate)
+  val I_LSPReg = 21 // Load/store pair register (signed offset)
 
-  val I_TBImm = 20 // Test and branch (immediate)
-  val I_PCRel = 21 // PC-Relative
+  val I_TBImm  = 24 // Test and branch (immediate)
+  val I_PCRel  = 25 // PC-Relative
 
   // TODO: Remove this list? Never used for something usefull
   //       Dropped AssemblyInstruction based verification for QEMU based
@@ -187,7 +208,6 @@ object DEC_LITS {
   val LI_BCImm  = List(N, N, N, Y, N, Y, N)
   val LI_ASSR   = List(Y, Y, Y, N, Y, N, N)
   val LI_ASImm  = List(Y, Y, N, Y, Y, N, N)
-  val LI_LSImm  = List(Y, N, N, Y, N, N, N)
   val LI_BitF   = List(Y, Y, N, Y, N, N, N)
   val LI_CSel   = List(Y, Y, Y, N, N, Y, N)
   val LI_CCImm  = List(N, Y, N, Y, N, Y, Y)
@@ -208,7 +228,6 @@ object DEC_LITS {
       case I_BCImm => LI_BCImm
       case I_ASSR  => LI_ASSR
       case I_ASImm => LI_ASImm
-      case I_LSImm => LI_LSImm
       case I_BitF  => LI_BitF
       case I_CSel  => LI_CSel
       case I_CCImm => LI_CCImm

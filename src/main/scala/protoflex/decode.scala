@@ -37,96 +37,98 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
     // Data
     val itype = decoder.head
     rd.bits := MuxLookup(itype,  inst(4, 0), Array(
-                           I_PCRel -> inst( 4, 0),
-                           I_BitF  -> inst( 4, 0),
-                           I_DP1S  -> inst( 4, 0),
-                           I_DP2S  -> inst( 4, 0),
-                           I_LogSR -> inst( 4, 0),
-                           I_LogI  -> inst( 4, 0),
-                           I_MovI  -> inst( 4, 0),
-                           I_ASImm -> inst( 4, 0),
-                           I_ASSR  -> inst( 4, 0),
-                           I_ASSR  -> inst( 4, 0),
-                           I_CSel  -> inst( 4, 0),
-                           I_LSImm -> inst( 4, 0),
-                           I_LSPReg-> inst( 4, 0),
-                           I_LSRReg-> inst( 4, 0),
-                           I_LSUImm-> inst( 4, 0)
-                           ))
+      I_PCRel -> inst( 4, 0),
+      I_BitF  -> inst( 4, 0),
+      I_DP1S  -> inst( 4, 0),
+      I_DP2S  -> inst( 4, 0),
+      I_LogSR -> inst( 4, 0),
+      I_LogI  -> inst( 4, 0),
+      I_MovI  -> inst( 4, 0),
+      I_ASImm -> inst( 4, 0),
+      I_ASSR  -> inst( 4, 0),
+      I_ASSR  -> inst( 4, 0),
+      I_CSel  -> inst( 4, 0),
+      I_LSPReg-> inst( 4, 0),
+      I_LSRReg-> inst( 4, 0),
+      I_LSUImm-> inst( 4, 0)
+    ))
 
     rs1 := MuxLookup(itype, inst( 9, 5), Array(
-                            I_BReg  -> inst( 9, 5),
-                            I_BitF  -> inst( 9, 5),
-                            I_DP1S  -> inst( 9, 5),
-                            I_DP2S  -> inst( 9, 5),
-                            I_LogSR -> inst( 9, 5),
-                            I_LogI  -> inst( 9, 5),
-                            I_ASSR  -> inst( 9, 5),
-                            I_ASImm -> inst( 9, 5),
-                            I_CCImm -> inst( 9, 5),
-                            I_CCReg -> inst( 9, 5),
-                            I_CSel  -> inst( 9, 5),
-                            I_LSPReg-> inst( 9, 5),
-                            I_LSRReg-> inst( 9, 5),
-                            I_LSUImm-> inst( 9, 5)
-                            ))
+      I_BReg  -> inst( 9, 5),
+      I_BitF  -> inst( 9, 5),
+      I_DP1S  -> inst( 9, 5),
+      I_DP2S  -> inst( 9, 5),
+      I_LogSR -> inst( 9, 5),
+      I_LogI  -> inst( 9, 5),
+      I_ASSR  -> inst( 9, 5),
+      I_ASImm -> inst( 9, 5),
+      I_CCImm -> inst( 9, 5),
+      I_CCReg -> inst( 9, 5),
+      I_CSel  -> inst( 9, 5),
+      I_LSUReg-> inst( 9, 5),
+      I_LSPReg-> inst( 9, 5),
+      I_LSRReg-> inst( 9, 5),
+      I_LSUImm-> inst( 9, 5)
+    ))
 
+    // rs2 = inst(4,0) => Rs2 = Rt
     rs2 := MuxLookup(itype, inst(20,16), Array(
-                            I_LogSR -> inst(20,16),
-                            I_ASSR  -> inst(20,16),
-                            I_CSel  -> inst(20,16),
-                            I_CCReg -> inst(20,16),
-                            I_TBImm -> inst( 4, 0),
-                            I_BitF  -> inst( 4, 0),
-                            I_DP2S  -> inst(20,16),
-                            I_MovI  -> inst( 4, 0),
-                            I_CBImm -> inst( 4, 0),
-                            I_LSPReg-> inst(14,10),// Rt2 as Rd2
-                            I_LSRReg-> inst(20,16),
-                            I_LSUImm-> inst( 4, 0) // Rt as Source
-                          ))
+      I_LogSR -> inst(20,16),
+      I_ASSR  -> inst(20,16),
+      I_CSel  -> inst(20,16),
+      I_CCReg -> inst(20,16),
+      I_TBImm -> inst( 4, 0),
+      I_BitF  -> inst( 4, 0),
+      I_DP2S  -> inst(20,16),
+      I_MovI  -> inst( 4, 0),
+      I_CBImm -> inst( 4, 0),
+      I_LSPReg-> inst(14,10), // Rt2 as Rd2
+      I_LSRReg-> inst(20,16),
+      I_LSUImm-> inst( 4, 0)
+    ))
 
     imm := MuxLookup(itype, inst(23,5), Array(
-                            I_BitF  -> inst(22,10), // N(22), immr(21:16), imms(15:10)
-                            I_LogI  -> inst(22,10), // N(22), immr(21:16), imms(15:10)
-                            I_MovI  -> inst(20+2,5), // hw(22,21), imm16(20:5)
-                            I_TBImm -> inst(23,5), // b40(23,19), imm14(18,5)
-                            I_CCImm -> inst(20,16),
+      I_BitF  -> inst(22,10), // N(22), immr(21:16), imms(15:10)
+      I_LogI  -> inst(22,10), // N(22), immr(21:16), imms(15:10)
+      I_MovI  -> inst(22, 5), // hw(22,21), imm16(20:5)
+      I_TBImm -> inst(23, 5), // b40(23,19), imm14(18,5)
+      I_CCImm -> inst(21,16), // zero(21), imm5(20,16)
 
-                            I_BImm  -> inst(25, 0),
-                            I_PCRel -> Cat(inst(23,5), inst(30,29)), // immlo(30,29), immhi(23,5)
-                            I_BCImm -> inst(23,5),
-                            I_CBImm -> inst(23,5),
+      I_BImm  -> inst(25, 0),
+      I_PCRel -> Cat(inst(23,5), inst(30,29)), // immlo(30,29), immhi(23,5)
+      I_BCImm -> inst(23,5),
+      I_CBImm -> inst(23,5),
 
-                            I_ASImm -> inst(21,10),
-                            I_LSPReg-> inst(21,15),
-                            I_LSImm -> inst(23, 5),
-                            I_LSUImm-> inst(21,10)
-                          ))
+      I_ASImm -> inst(21,10),
+
+      I_LSUReg-> inst(21,12), // zero(21), imm9(20,12)
+      I_LSPReg-> inst(21,15), // imm7(21,15)
+      I_LSUImm-> inst(21,10)
+    ))
 
     shift_val.bits := MuxLookup(itype, inst(15,10), Array(
-                                  I_LogSR -> inst(15,10),
-                                  I_ASSR  -> inst(15,10),
-                                  I_ASImm -> Mux(inst(22), 12.U, 0.U),
-                                  I_BitF  -> inst(21,16) ))
+      I_LogSR -> inst(15,10),
+      I_ASSR  -> inst(15,10),
+      I_ASImm -> Mux(inst(22), 12.U, 0.U),
+      I_BitF  -> inst(21,16) ))
 
     shift_type := MuxLookup(itype, inst(23,22), Array(
-                              I_DP2S  -> inst(11,10),
-                              I_LogSR -> inst(23,22),
-                              I_ASSR  -> inst(23,22),
-                              I_ASImm -> LSL,
-                              I_BitF  -> ROR))
+      I_DP2S  -> inst(11,10),
+      I_LogSR -> inst(23,22),
+      I_ASSR  -> inst(23,22),
+      I_ASImm -> LSL,
+      I_BitF  -> ROR))
 
     cond.bits := MuxLookup(itype,  inst(15,12), Array(
-                             I_CSel  -> inst(15,12),
-                             I_CCImm -> inst(15,12),
-                             I_CCReg -> inst(15,12),
-                             I_BCImm -> inst( 3, 0)
-                           ))
+      I_CSel  -> inst(15,12),
+      I_CCImm -> inst(15,12),
+      I_CCReg -> inst(15,12),
+      I_BCImm -> inst( 3, 0)
+    ))
     nzcv.bits := MuxLookup(itype, inst( 3, 0), Array (
-                             I_CCImm -> inst( 3, 0),
-                             I_CCReg -> inst( 3, 0)
-                           ))
+      I_CCImm -> inst( 3, 0),
+      I_CCReg -> inst( 3, 0)
+    ))
 
     // Control
     val cdecoder = decoder.tail

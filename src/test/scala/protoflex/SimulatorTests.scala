@@ -10,7 +10,6 @@ import chisel3._
 import chiseltest._
 import chiseltest.internal._
 import chiseltest.experimental.TestOptionBuilder._
-import chiseltest.internal.VerilatorBackendAnnotation
 import chisel3.experimental._
 
 import common.PROCESSOR_TYPES.REG_N
@@ -226,7 +225,8 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
           writeCmd((FA_QflexCmds.INST_FETCH, addr), cfgSim.qemuCmdPath)
           val cmd = waitForCmd(cfgSim.simCmdPath)
           val insns: Seq[(Int, BigInt)] = getProgramPageInsns(cfgSim.pagePath)
-          val bram = ((addr & (0x1 << 12)) >> 12) // mask first bit after page to target TLB entry
+          val bramMask = for (i <- 0 until cfgProc.TLB_NB_ENTRY_W) yield '1'
+          val bram = ((addr & (BigInt(bramMask.mkString, 2) << 12)) >> 12) // mask first bit after page to target TLB entry
           simLog(s"MISSED PC ${"%016x".format(addr)}: BRAM: ${bram}")
           for(insn <- insns) {
             cProcAxi.writePPageInst(insn._2, insn._1, bram)

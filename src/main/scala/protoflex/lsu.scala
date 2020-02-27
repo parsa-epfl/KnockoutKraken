@@ -101,7 +101,7 @@ class LegacyLoadStoreUnit(implicit val cfg: ProcConfig) extends Module
   val state = RegInit(s_IDLE)
   switch (state) {
     is(s_IDLE){
-      when(io.dinst.bits.itype === I_LSImm) {
+      when(io.dinst.bits.itype === I_LSUImm) {
         dinst_reg := io.dinst.bits
         tlb.io.vaddr.valid := io.dinst.valid // tlb request
         state := s_TLB_CHK

@@ -9,9 +9,7 @@ import common._
 
 import common.DECODE_CONTROL_SIGNALS._
 
-case class ProcConfig(val NB_THREADS : Int = 4, val DebugSignals : Boolean = false, EntriesTLB: Int = 2) {
-  val bramConfigState = new BRAMConfig(10, 36, 1024, false)
-  val bramConfigMem = new BRAMConfig(11, 36, 2048, false)
+case class ProcConfig(val NB_THREADS : Int = 4, val DebugSignals : Boolean = false, EntriesTLB: Int = 16) {
 
   // Threads
   val NB_THREAD_W = log2Ceil(NB_THREADS) // 4 Threads
@@ -23,6 +21,9 @@ case class ProcConfig(val NB_THREADS : Int = 4, val DebugSignals : Boolean = fal
   // Memory
   val TLB_NB_ENTRY = EntriesTLB
   val TLB_NB_ENTRY_W = log2Ceil(TLB_NB_ENTRY)
+
+  val bramConfigState = new BRAMConfig(10, 36, 1024, false)
+  val bramConfigMem = new BRAMConfig(10+TLB_NB_ENTRY_W, 36, 2048, false)
 }
 
 class ValidTagged[T1 <: Data, T2 <: Data](genTag: T1, genData: Option[T2]) extends Bundle
