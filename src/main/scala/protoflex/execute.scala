@@ -201,7 +201,7 @@ class Move(implicit val cfg: ProcConfig) extends Module {
   val vecResult = VecInit(result.asBools)
   val vecBools = VecInit(io.imm.asBools)
 
-  for(i <- 0 until DATA_SZ-16) {
+  for(i <- 0 to DATA_SZ-16) {
     when(i.U === pos) {
       for(j <- 0 until 16) {
         vecResult(i + j) := vecBools(j)
