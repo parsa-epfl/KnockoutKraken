@@ -52,7 +52,8 @@ object ProcDriver {
       }
     }
 
-    def writePPageInst(inst: BigInt, offst: BigInt, bram: BigInt) = portPPage.wrBRAM32b(inst, offst + (bram << 10))
+    def writePPageInst(inst: BigInt, offst: BigInt, bram: BigInt) =
+      portPPage.wrBRAM32b(inst, offst + (bram << 10))
 
     def wrPSTATE2BRAM(tag: Int, pstate: PState): Unit ={
       //println(pstate.toString())
@@ -117,10 +118,11 @@ object ProcDriver {
     def isMissTLB: Boolean = procStateDBG_.get.missTLB.valid.peek.litToBoolean
     def getMissTLBAddr: BigInt = procStateDBG_.get.missTLB.data.get.peek.litValue
 
-    def writeFillTLB(vaddr: BigInt, paddr: BigInt) : Unit = {
-      procStateDBG_.get.fillTLB.data.get.vpageAddr.poke(vaddr.U)
-      procStateDBG_.get.fillTLB.data.get.ppageAddr.poke(paddr.U)
-      procStateDBG_.get.fillTLB.tag.poke(0.U)
+    def writeFillTLB(vaddr: BigInt, isWr: Boolean) : Unit = {
+      procStateDBG_.get.fillTLB.data.get.tag.poke(TLBEntry.getTLBtag(vaddr.U))
+      procStateDBG_.get.fillTLB.data.get.wrEn.poke(isWr.B)
+      procStateDBG_.get.fillTLB.data.get.valid.poke(true.B)
+      procStateDBG_.get.fillTLB.tag.poke(vaddr.U)
       procStateDBG_.get.fillTLB.valid.poke(true.B)
       clock.step(1)
       procStateDBG_.get.fillTLB.valid.poke(false.B)

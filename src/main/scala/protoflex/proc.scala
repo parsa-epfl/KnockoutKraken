@@ -9,7 +9,7 @@ import common._
 
 import common.DECODE_CONTROL_SIGNALS._
 
-case class ProcConfig(val NB_THREADS : Int = 4, val DebugSignals : Boolean = false, EntriesTLB: Int = 16) {
+case class ProcConfig(val NB_THREADS : Int = 4, val DebugSignals : Boolean = false, EntriesTLB: Int = 4) {
 
   // Threads
   val NB_THREAD_W = log2Ceil(NB_THREADS) // 4 Threads
@@ -52,7 +52,7 @@ class ProcStateDBG(implicit val cfg : ProcConfig) extends Bundle
 
   val tuWorking = Output(ValidTagged(cfg.TAG_T))
   val memResp = Input(Vec(2, DATA_T))
-  val fillTLB = Input(ValidTagged(cfg.TAG_T, new TLBEntry))
+  val fillTLB = Input(ValidTagged(DATA_T, new TLBEntry))
   val missTLB = Output(ValidTagged(cfg.TAG_T, DATA_T))
 }
 
@@ -143,18 +143,18 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   tpu.io.stateBRAM <> state.portB
   tpu.io.tpu2cpu.done.valid := false.B
   tpu.io.tpu2cpu.done.tag := 0.U
-  insnTLB.io.fillTLB.valid := tpu.io.tpu2cpu.fillTLB.valid
-  insnTLB.io.fillTLB.bits := tpu.io.tpu2cpu.fillTLB.data.get
+  insnTLB.io.fillTLB := tpu.io.tpu2cpu.fillTLB
+  insnTLB.io.fillTLB := tpu.io.tpu2cpu.fillTLB
 
   // PState + Branching -> Fetch
   tpu.io.tpu2cpu.missTLB.tag := fetch.io.pc.tag
-  tpu.io.tpu2cpu.missTLB.valid := insnTLB.io.miss.valid
-  tpu.io.tpu2cpu.missTLB.data.get := insnTLB.io.miss.bits
+  tpu.io.tpu2cpu.missTLB.valid := insnTLB.io.iPort.miss.valid
+  tpu.io.tpu2cpu.missTLB.data.get := insnTLB.io.iPort.miss.bits
 
   ppage.portB.EN := true.B
   ppage.portB.DI := 0.U
   ppage.portB.WE := false.B
-  ppage.portB.ADDR := insnTLB.io.paddr // PC is byte addressed, BRAM is 32bit word addressed
+  ppage.portB.ADDR := insnTLB.io.iPort.paddr // PC is byte addressed, BRAM is 32bit word addressed
 
   fetch.io.fire := tpu.io.tpu2cpu.fire
   fetch.io.fetchEn := fetchEn
@@ -162,10 +162,12 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   fetch.io.nextPC := nextPC
   fetch.io.commitReg.bits := commitReg.io.deq.bits
   fetch.io.commitReg.valid := commitReg.io.deq.valid
-  insnTLB.io.vaddr.bits := fetch.io.pc.data.get
-  insnTLB.io.vaddr.valid := fetch.io.pc.valid
-  fetch.io.hit := !insnTLB.io.miss.valid
+  insnTLB.io.iPort.vaddr.bits := fetch.io.pc.data.get
+  insnTLB.io.iPort.vaddr.valid := fetch.io.pc.valid
+  fetch.io.hit := !insnTLB.io.iPort.miss.valid
   fetch.io.insn := ppage.portB.DO
+
+  insnTLB.io.dPort := DontCare
 
   // Fetch -> Decode
   decoder.io.finst := fetch.io.deq.bits
@@ -326,7 +328,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   }
 
   // Start and stop ---------------
-  when(insnTLB.io.miss.valid)        { fetchEn(fetch.io.pc.tag) := false.B }
+  when(insnTLB.io.iPort.miss.valid)        { fetchEn(fetch.io.pc.tag) := false.B }
   when(tpu.io.tpu2cpu.fire.valid)    { fetchEn(tpu.io.tpu2cpu.fire.tag) := true.B }
   when(tpu.io.tpu2cpu.fillTLB.valid) { fetchEn(tpu.io.tpu2cpu.fillTLB.tag) := true.B }
   when(tpu.io.tpu2cpu.flush.valid)   { fetchEn(tpu.io.tpu2cpu.flush.tag) := false.B }
