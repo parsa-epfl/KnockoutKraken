@@ -1,8 +1,9 @@
 package common
 
 import chisel3._
+import chisel3.experimental._
+import chisel3.util._
 import chiseltest._
-import chisel3.util.log2Floor
 
 object BRAMPort {
   implicit class BRAMPortDriver(target: BRAMPort)(implicit clock: Clock) {
@@ -124,6 +125,7 @@ class BRAM(implicit cfg: BRAMConfig) extends MultiIOModule {
   val portB = IO(new BRAMPort)
   private val bramTDP = Module(new BRAMTDP(cfg.ADDR_WIDTH, cfg.DATA_WIDTH))
 
+  bramTDP.io.clk <> this.clock.asUInt
   bramTDP.io.enA <> portA.EN
   bramTDP.io.weA <> portA.WE
   bramTDP.io.addrA <> portA.ADDR
@@ -138,9 +140,14 @@ class BRAM(implicit cfg: BRAMConfig) extends MultiIOModule {
 }
 
 // Inspired from inline string
-class BRAMTDP(val ADDR_WIDTH: Int = 10, val DATA_WIDTH: Int = 36, outputReg: Boolean = true) extends Module {
+class BRAMTDP(val ADDR_WIDTH: Int = 10, val DATA_WIDTH: Int = 36, outputReg: Boolean = true) //extends Module {
+    extends BlackBox(Map(
+      "ADDR_SIZE"-> ADDR_WIDTH,
+      "DATA_SIZE" -> DATA_WIDTH))
+    with HasBlackBoxInline {
   val SIZE = (1 << ADDR_WIDTH)*36/DATA_WIDTH
   val io = IO(new Bundle(){
+    val clk = Input(Bool())
     val enA = Input(Bool())
     val enB = Input(Bool())
     val weA = Input(Bool())
@@ -153,6 +160,7 @@ class BRAMTDP(val ADDR_WIDTH: Int = 10, val DATA_WIDTH: Int = 36, outputReg: Boo
     val doB = Output(UInt(DATA_WIDTH.W))
   })
 
+  /* This logic would enable simulations with Treadle, but it's too slow for full system
   val ram = Mem(SIZE, UInt(DATA_WIDTH.W))
 
   def genReg[T <: Data] (isReg: Boolean, gen: T) = if(isReg) Reg(gen) else Wire(gen)
@@ -175,13 +183,13 @@ class BRAMTDP(val ADDR_WIDTH: Int = 10, val DATA_WIDTH: Int = 36, outputReg: Boo
 
   io.doA := readA;
   io.doB := readB;
-
-  private val setInLineBlackBoxTDPInfer = (
-    s"BlackBoxBRAMTDP.v",
+  // */
+  //*
+  setInline("BRAMTDP.v",
     s"""
       |// Dual-Port Block RAM with Two Write Ports
       |
-      |module BlackBoxBRAMTDP #(
+      |module BRAMTDP #(
       |                         parameter ADDR_SIZE = ${ADDR_WIDTH},
       |                         parameter DATA_SIZE = ${DATA_WIDTH})
       |   (clk,enA,enB,weA,weB,addrA,addrB,diA,diB,doA,doB);
@@ -197,6 +205,8 @@ class BRAMTDP(val ADDR_WIDTH: Int = 10, val DATA_WIDTH: Int = 36, outputReg: Boo
       |   (* ram_style = "block" *) reg [DATA_SIZE-1:0] ram [0:2**ADDR_SIZE-1];
       |   reg [DATA_SIZE-1:0] readA;
       |   reg [DATA_SIZE-1:0] readB;
+      |   wire [DATA_SIZE-1:0] readingA;
+      |   wire [DATA_SIZE-1:0] readingB;
       |
       |   always @(posedge clk)
       |     begin
@@ -218,11 +228,14 @@ class BRAMTDP(val ADDR_WIDTH: Int = 10, val DATA_WIDTH: Int = 36, outputReg: Boo
       |          end
       |     end
       |
+      |   assign readingA = ram[addrA];
+      |   assign readingB = ram[addrB];
       |   assign doA = readA;
       |   assign doB = readB;
       |
       |endmodule
   """.stripMargin)
+ // */
 }
 
 object BRAMConfig {
