@@ -364,8 +364,8 @@ object DECODE_MATCHING_TABLES
       // I_TYPE_OP -> List(I_TYPE,   OP_OP,    RD, SHIFT, COND, NZCV, IS32BIT)
       //LSPReg_STP32 -> List(I_LSPReg, OP_STP32,   Y, N, N, N, Y),
       //LSPReg_STP64 -> List(I_LSPReg, OP_STP64,   Y, N, N, N, N),
-      LSPReg_LDP32 -> List(I_LSPReg, OP_LDP32,   Y, N, N, N, Y),
-      LSPReg_LDP64 -> List(I_LSPReg, OP_LDP64,   Y, N, N, N, N),
+      //LSPReg_LDP32 -> List(I_LSPReg, OP_LDP32,   Y, N, N, N, Y),
+      //LSPReg_LDP64 -> List(I_LSPReg, OP_LDP64,   Y, N, N, N, N),
       // Load/store register (register offset)
       LSRReg_STRB  -> List(I_LSRReg, OP_STRB,    Y, N, N, N, Y),
       LSRReg_STRH  -> List(I_LSRReg, OP_STRH,    Y, N, N, N, Y),

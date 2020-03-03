@@ -43,6 +43,7 @@ class TLBUnit(implicit val cfg: ProcConfig) extends Module {
       val paddr = Output(DATA_T)
       val miss = Output(Valid(DATA_T))
     }
+    val excpWrProt = Output(Bool())
   })
 
   val tlb = Mem(cfg.TLB_NB_ENTRY, new TLBEntry)
@@ -63,11 +64,11 @@ class TLBUnit(implicit val cfg: ProcConfig) extends Module {
   val iPortMiss = !iPortOut.valid || iPortDirty
   val dPortMiss = !dPortOut.valid || dPortDirty
 
-  val excpWrProt = io.dPort.vaddr.valid && !dPortOut.wrEn && io.dPort.isWr
+  val excpWrProt = io.dPort.vaddr.valid && dPortOut.valid && !dPortOut.wrEn && io.dPort.isWr
 
   // BRAM Word addressed
-  io.iPort.paddr := io.iPort.vaddr.bits >> 2.U
-  io.dPort.paddr := io.dPort.vaddr.bits >> 2.U
+  io.iPort.paddr := io.iPort.vaddr.bits >> 3.U
+  io.dPort.paddr := io.dPort.vaddr.bits >> 3.U
   io.iPort.miss.valid := io.iPort.vaddr.valid && iPortMiss
   io.dPort.miss.valid := io.dPort.vaddr.valid && dPortMiss
   io.iPort.miss.bits  := io.iPort.vaddr.bits
@@ -78,4 +79,6 @@ class TLBUnit(implicit val cfg: ProcConfig) extends Module {
   when(io.fillTLB.valid) {
     tlb(fPortIdx) := io.fillTLB.data.get
   }
+
+  io.excpWrProt := excpWrProt
 }

@@ -24,9 +24,9 @@ object ProcDriver {
 
     implicit val clock : Clock = target.clock
 
-    val INSN_SIZE = 4
+    val WORD_SIZE = 8
 
-    val portPPage : BRAMPort = target.io.ppageBRAM
+    val portMem: BRAMPort = target.io.ppageBRAM
     val portPState : BRAMPort = target.io.stateBRAM
     val procStateDBG_ : Option[ProcStateDBG] = target.io.procStateDBG
     val axiLite : AxiLiteSignals = target.io.axiLite
@@ -52,8 +52,8 @@ object ProcDriver {
       }
     }
 
-    def writePPageInst(inst: BigInt, offst: BigInt, bram: BigInt) =
-      portPPage.wrBRAM32b(inst, offst + (bram << 10))
+    def writeMem(word: BigInt, offst: BigInt, bram: BigInt) =
+      portMem.wrBRAM64b(word, offst + (bram << 9))
 
     def wrPSTATE2BRAM(tag: Int, pstate: PState): Unit ={
       //println(pstate.toString())

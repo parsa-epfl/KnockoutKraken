@@ -85,7 +85,7 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
 
   val file = new PrintWriter(new BufferedWriter(new FileWriter("/dev/shm/outputSim", true)), true)
 
-  val INSN_SIZE = cProcAxi.INSN_SIZE
+  val WORD_SIZE = cProcAxi.WORD_SIZE
 
   val axiLite: AxiLiteSignals =  cProcAxi.io.axiLite
 
@@ -97,7 +97,7 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
 
   var currState : PState = cProcAxi.getPStateInternal(0)
 
-  def pageSize = cfgSim.pageSizeBytes/INSN_SIZE
+  def pageSize = cfgSim.pageSizeBytes/WORD_SIZE
 
   def exit: Unit = {
     file.close()
@@ -110,8 +110,9 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
     val bytearray: Array[Byte] = Files.readAllBytes(Paths.get(path))
     var hex = ""
     val insns : Seq[(Int, BigInt)] = for(i <- 0 until pageSize) yield {
-      val insn_LE = bytearray.slice(i*INSN_SIZE, i*INSN_SIZE+INSN_SIZE)
-      val insn = BigInt(Array(0.toByte) ++ insn_LE) // Zero extend for unsigned
+      val insn_LE = bytearray.slice(i*WORD_SIZE, (i+1)*WORD_SIZE)
+      val (insn_0,insn_1) = insn_LE.splitAt(4)
+      val insn = BigInt(Array(0.toByte) ++ insn_1 ++ insn_0)
       (i, insn)
     }
     insns
@@ -227,10 +228,10 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
           writeCmd((FA_QflexCmds.INST_FETCH, addr), cfgSim.qemuCmdPath)
           val cmd = waitForCmd(cfgSim.simCmdPath)
           val insns: Seq[(Int, BigInt)] = getProgramPageInsns(cfgSim.pagePath)
-          val bram = ((addr & (bramMask << 12)) >> 12) // mask first bit after page to target TLB entry
+          val bram = ((addr & (bramMask << 12)) >> 12) // mask bits after page to target TLB entry
           simLog(s"MISSED PC ${"%016x".format(addr)}: BRAM: ${bram}")
           for(insn <- insns) {
-            cProcAxi.writePPageInst(insn._2, insn._1, bram)
+            cProcAxi.writeMem(insn._2, insn._1, bram)
           }
           cProcAxi.writeFillTLB(addr, false)
         } else {

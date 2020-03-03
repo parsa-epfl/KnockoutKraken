@@ -38,7 +38,6 @@ class FetchUnit(implicit val cfg: ProcConfig) extends Module
   val arbiter = Module(new RRArbiter(cfg.NB_THREADS))
 
   val insnReq = Wire(Valid(new FInst))
-  val insnReg = Reg(Valid(new FInst))
   val fetchReg = Module(new FlushReg(new FInst))
 
   val insnHit = WireInit(arbiter.io.next.valid && io.hit)
@@ -56,19 +55,31 @@ class FetchUnit(implicit val cfg: ProcConfig) extends Module
   io.pc.tag := arbiter.io.next.bits
   io.pc.valid := arbiter.io.next.valid
 
-  insnReq.valid := RegNext(insnHit)
-  insnReq.bits.inst := io.insn
-  insnReq.bits.tag := RegNext(arbiter.io.next.bits)
-  insnReq.bits.pc := RegNext(currFetchPC)
+  val insnReg = Reg(Valid(new FInst))
+  if (cfg.bramConfigMem.isRegistered) {
+    insnReq.valid := RegNext(insnHit)
+    insnReq.bits.inst := io.insn
+    insnReq.bits.tag := RegNext(arbiter.io.next.bits)
+    insnReq.bits.pc := RegNext(currFetchPC)
 
-  when(!fetchReg.io.enq.ready) {
-    insnReg := insnReq
-  }.elsewhen(fetchReg.io.enq.ready) {
-    insnReg.valid := false.B
+    when(!fetchReg.io.enq.ready) {
+      insnReg := insnReq
+    }.elsewhen(fetchReg.io.enq.ready) {
+      insnReg.valid := false.B
+    }
+
+    fetchReg.io.enq.bits  := Mux(insnReg.valid, insnReg.bits, insnReq.bits)
+    fetchReg.io.enq.valid := Mux(insnReg.valid, insnReg.valid, insnReq.valid)
+
+  } else {
+    insnReq.valid := insnHit
+    insnReq.bits.inst := io.insn
+    insnReq.bits.tag := arbiter.io.next.bits
+    insnReq.bits.pc := currFetchPC
+
+    fetchReg.io.enq.bits  := insnReq.bits
+    fetchReg.io.enq.valid := insnReq.valid
   }
-
-  fetchReg.io.enq.bits  := Mux(insnReg.valid, insnReg.bits, insnReq.bits)
-  fetchReg.io.enq.valid := Mux(insnReg.valid, insnReg.valid, insnReq.valid)
 
   when(io.commitReg.valid && io.commitReg.bits.br.valid) {
     prefetchPC(io.commitReg.bits.tag) := io.nextPC
@@ -86,7 +97,11 @@ class FetchUnit(implicit val cfg: ProcConfig) extends Module
   when(io.flush.valid) {
     when(arbiter.io.next.bits === io.flush.tag) { insnHit := false.B }
     readyThreads(io.flush.tag) := false.B
-    val flushInternalReg = Mux(insnReg.valid, insnReg.bits.tag === io.flush.tag, insnReq.bits.tag === io.flush.tag)
+    val flushInternalReg = if(cfg.bramConfigMem.isRegistered) {
+      Mux(insnReg.valid, insnReg.bits.tag === io.flush.tag, insnReq.bits.tag === io.flush.tag)
+    } else {
+      insnReq.bits.tag === io.flush.tag
+    }
     when(flushInternalReg) { fetchReg.io.enq.valid := false.B }
     fetchReg.io.flush := fetchReg.io.deq.bits.tag === io.flush.tag
   }

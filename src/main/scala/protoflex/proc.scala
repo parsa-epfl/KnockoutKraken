@@ -9,7 +9,7 @@ import common._
 
 import common.DECODE_CONTROL_SIGNALS._
 
-case class ProcConfig(val NB_THREADS : Int = 4, val DebugSignals : Boolean = false, EntriesTLB: Int = 4) {
+case class ProcConfig(val NB_THREADS : Int = 2, val DebugSignals : Boolean = false, EntriesTLB: Int = 4) {
 
   // Threads
   val NB_THREAD_W = log2Ceil(NB_THREADS) // 4 Threads
@@ -22,8 +22,8 @@ case class ProcConfig(val NB_THREADS : Int = 4, val DebugSignals : Boolean = fal
   val TLB_NB_ENTRY = EntriesTLB
   val TLB_NB_ENTRY_W = log2Ceil(TLB_NB_ENTRY)
 
-  val bramConfigState = new BRAMConfig(10, 36, 1024, false)
-  val bramConfigMem = new BRAMConfig(10+TLB_NB_ENTRY_W, 36, 2048, false)
+  val bramConfigState = new BRAMConfig(10, 36, isAXI = false, isRegistered = true)
+  val bramConfigMem = new BRAMConfig(10+TLB_NB_ENTRY_W, 36*2, isAXI = false, isRegistered = true)
 }
 
 class ValidTagged[T1 <: Data, T2 <: Data](genTag: T1, genData: Option[T2]) extends Bundle
@@ -134,7 +134,6 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   // Interconnect -------------------------------------------
 
   // HOST <> TP
-  io.ppageBRAM <> ppage.portA
   io.stateBRAM <> state.portA
 
   io.host2tpu <> tpu.io.host2tpu
@@ -151,11 +150,6 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   tpu.io.tpu2cpu.missTLB.valid := insnTLB.io.iPort.miss.valid
   tpu.io.tpu2cpu.missTLB.data.get := insnTLB.io.iPort.miss.bits
 
-  ppage.portB.EN := true.B
-  ppage.portB.DI := 0.U
-  ppage.portB.WE := false.B
-  ppage.portB.ADDR := insnTLB.io.iPort.paddr // PC is byte addressed, BRAM is 32bit word addressed
-
   fetch.io.fire := tpu.io.tpu2cpu.fire
   fetch.io.fetchEn := fetchEn
   fetch.io.pcVec zip pregsVec foreach {case (pcFetch, pcState) => pcFetch := pcState.PC}
@@ -164,10 +158,20 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   fetch.io.commitReg.valid := commitReg.io.deq.valid
   insnTLB.io.iPort.vaddr.bits := fetch.io.pc.data.get
   insnTLB.io.iPort.vaddr.valid := fetch.io.pc.valid
-  fetch.io.hit := !insnTLB.io.iPort.miss.valid
-  fetch.io.insn := ppage.portB.DO
+  val sel32bit = if(cfg.bramConfigMem.isRegistered) {
+    RegNext(fetch.io.pc.data.get(2))
+  } else {
+    fetch.io.pc.data.get(2)
+  }
 
-  insnTLB.io.dPort := DontCare
+  ppage.portB.EN := true.B
+  ppage.portB.DI := 0.U
+  ppage.portB.WE := false.B
+  ppage.portB.ADDR := insnTLB.io.iPort.paddr // PC is byte addressed, BRAM is 32bit word addressed
+
+  fetch.io.hit := !insnTLB.io.iPort.miss.valid
+  fetch.io.insn := Mux(sel32bit, ppage.portB.DO(63,32), ppage.portB.DO(31,0))
+
 
   // Fetch -> Decode
   decoder.io.finst := fetch.io.deq.bits
@@ -180,8 +184,8 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   issuer.io.enq <> decReg.io.deq
 
   // Execute : Issue -> Execute
-  val issued_dinst = WireInit(issuer.io.deq.bits)
-  val issued_tag = WireInit(issued_dinst.tag)
+  val issued_dinst = issuer.io.deq.bits
+  val issued_tag = issued_dinst.tag
   issuer.io.deq.ready := commitReg.io.enq.ready
   issuer.io.commitReg.bits := commitReg.io.deq.bits
   issuer.io.commitReg.valid := commitReg.io.deq.valid
@@ -215,11 +219,36 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   ldstU.io.rVal1 := rVal1
   ldstU.io.rVal2 := rVal2
   ldstU.io.pstate := pregsVec(issued_tag)
-  // WriteBack from LD's length generation
+
+  // CommitReg
+  commitReg.io.enq.bits.exe := executer.io.einst
+  commitReg.io.enq.bits.br := brancher.io.binst
+  commitReg.io.enq.bits.pcrel := brancher.io.pcrel
+  commitReg.io.enq.bits.mem := ldstU.io.minst
+  commitReg.io.enq.bits.undef := !issued_dinst.inst32.valid
+  commitReg.io.enq.bits.inst32 := issued_dinst.inst32.bits
+  commitReg.io.enq.bits.pc := issued_dinst.pc
+  commitReg.io.enq.bits.tag := issued_tag
+  commitReg.io.enq.valid := issuer.io.deq.valid
+  commitReg.io.deq.ready := true.B
+
+  // ---- Commit STATE ----
+  val commitUndef = WireInit(commitReg.io.deq.bits.undef)
+
+  // Writeback : Execute -> PState
+  insnTLB.io.dPort.isWr := !commitMem.bits.isLoad
+  insnTLB.io.dPort.vaddr.bits := commitMem.bits.memReq(0).addr
+  insnTLB.io.dPort.vaddr.valid := commitValid && commitMem.valid
+
+  ppage.portA.EN := commitValid && commitMem.valid && !insnTLB.io.dPort.miss.valid
+  ppage.portA.DI := commitMem.bits.memReq(0).data
+  ppage.portA.WE := !commitMem.bits.isLoad
+  ppage.portA.ADDR := insnTLB.io.dPort.paddr
+
   val wbLD = Wire(Vec(2, DATA_T))
   if(cfg.DebugSignals) {
     for( i <- 0 until 2 ) {
-      val wbData = io.procStateDBG.get.memResp(i)
+      val wbData = io.procStateDBG.get.memResp(i) // ppage.portA.DO
       when(commitMem.bits.is32bit) {
         wbLD(i) := MuxLookup(commitMem.bits.size, wbData(31,0), Array(
           SIZEB -> Mux(commitMem.bits.isSigned,
@@ -246,21 +275,11 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
     }
   }
 
-  // CommitReg
-  commitReg.io.enq.bits.exe := executer.io.einst
-  commitReg.io.enq.bits.br := brancher.io.binst
-  commitReg.io.enq.bits.pcrel := brancher.io.pcrel
-  commitReg.io.enq.bits.mem := ldstU.io.minst
-  commitReg.io.enq.bits.undef := !issued_dinst.inst32.valid
-  commitReg.io.enq.bits.inst32 := issued_dinst.inst32.bits
-  commitReg.io.enq.bits.pc := issued_dinst.pc
-  commitReg.io.enq.bits.tag := issued_tag
-  commitReg.io.enq.valid := issuer.io.deq.valid
-  commitReg.io.deq.ready := true.B
-
-  // ---- Commit STATE ----
-  val commitUndef = WireInit(commitValid && commitReg.io.deq.bits.undef)
-  // Writeback : Execute -> PState
+  io.ppageBRAM.DO := DontCare
+  when(io.ppageBRAM.EN && io.ppageBRAM.WE) {
+    io.ppageBRAM <> ppage.portA
+    commitReg.io.deq.ready := !commitMem.valid
+  }
 
   // connect RFile's write interface
   for(cpu <- 0 until cfg.NB_THREADS) {
@@ -334,7 +353,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   when(tpu.io.tpu2cpu.flush.valid)   { fetchEn(tpu.io.tpu2cpu.flush.tag) := false.B }
 
   // Hit unknown case -> Pass state to CPU
-  tpu.io.tpu2cpu.done.valid := commitUndef
+  tpu.io.tpu2cpu.done.valid := commitValid && (commitUndef || insnTLB.io.excpWrProt)
   tpu.io.tpu2cpu.done.tag := commitReg.io.deq.bits.tag
 
   // Flushing ----------------------------------------------------------------

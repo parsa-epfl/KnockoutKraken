@@ -256,7 +256,7 @@ class DecodeBitMasks(implicit val cfg: ProcConfig) extends Module
     val wmask = Output(DATA_T)
     val tmask = Output(DATA_T) // NOTE: Not needed for Logical (immediate)
     val is32bit = Input(Bool())
-              })
+  })
 
   // The bit patterns we create here are 64 bit patterns which
   // are vectors of identical elements of size e = 2, 4, 8, 16, 32 or

@@ -2,6 +2,7 @@ package common
 
 import chisel3._
 import chiseltest._
+import chisel3.util.log2Floor
 
 object BRAMPort {
   implicit class BRAMPortDriver(target: BRAMPort)(implicit clock: Clock) {
@@ -17,12 +18,46 @@ object BRAMPort {
       clock.step()
       target.EN.poke(false.B)
       target.WE.poke(false.B)
-      target.ADDR.poke(0.U)
-      target.DI.poke(0.U)
     }
 
     def rdBRAM32b(offst:BigInt): BigInt = {
       target.EN.poke(true.B)
+      target.WE.poke(false.B)
+      if(target.cfg.isAXI) {
+        target.ADDR.poke((offst << 2).U)
+      } else {
+        target.ADDR.poke(offst.U)
+      }
+      clock.step()
+      target.EN.poke(false.B)
+      val uint32 = target.DO.peek
+      return uint32.litValue()
+    }
+
+    def wrBRAM64b(lw: BigInt, offst: BigInt) = if(target.cfg.DATA_WIDTH == 72) {
+      target.EN.poke(true.B)
+      target.WE.poke(true.B)
+      if(target.cfg.isAXI) {
+        target.ADDR.poke((offst << 2).U)
+      } else {
+        target.ADDR.poke(offst.U)
+      }
+      target.DI.poke(lw.U)
+      clock.step()
+      target.EN.poke(false.B)
+      target.WE.poke(false.B)
+    } else {
+      val bytes = Array.fill(8)(0.toByte)
+      for( i <- 0 until 8 ) bytes(i) = ((lw >> ((7-i) * 8)) & 0xFF).toByte
+      val msb = BigInt(Array(0.toByte) ++ bytes.slice(0, 4))
+      val lsb = BigInt(Array(0.toByte) ++ bytes.slice(4, 8))
+      wrBRAM32b(msb, offst)
+      wrBRAM32b(lsb, offst+1)
+    }
+
+    def rdBRAM64b(offst:BigInt): BigInt = if(target.cfg.DATA_WIDTH == 72) {
+      target.EN.poke(true.B)
+      target.WE.poke(false.B)
       if(target.cfg.isAXI) {
         target.ADDR.poke((offst << 2).U)
       } else {
@@ -31,20 +66,9 @@ object BRAMPort {
       clock.step()
       target.EN.poke(false.B)
       target.ADDR.poke(0.U)
-      val uint32 = target.DO.peek
-      return uint32.litValue()
-    }
-
-    def wrBRAM64b(lw: BigInt, offst: BigInt) = {
-      val bytes = Array.fill(8)(0.toByte)
-      for( i <- 0 to 7 ) bytes(i) = ((lw >> ((7-i) * 8)) & 0xFF).toByte
-      val msb = BigInt(Array(0.toByte) ++ bytes.slice(0, 4))
-      val lsb = BigInt(Array(0.toByte) ++ bytes.slice(4, 8))
-      wrBRAM32b(msb, offst)
-      wrBRAM32b(lsb, offst+1)
-    }
-
-    def rdBRAM64b(offst:BigInt): BigInt = {
+      val uint64 = target.DO.peek
+      return uint64.litValue()
+    } else {
       val msb = rdBRAM32b(offst)
       val lsb = rdBRAM32b(offst+1)
       val byte_msb = Array.fill(4)(0.toByte)
@@ -60,13 +84,15 @@ object BRAMPort {
 case class BRAMConfig(
   C_ADDR_WIDTH: Int = 10,
   val DATA_WIDTH: Int = 36,
-  val SIZE: Int = 1024,
-  val isAXI: Boolean = false
+  val isAXI: Boolean = false, // AXI is byte addressed
+  val isRegistered: Boolean = true
 ) {
-  val ADDR_WIDTH = if(isAXI) (C_ADDR_WIDTH + 2) else C_ADDR_WIDTH
+  private val ratio = (DATA_WIDTH/36).ceil.toInt
+  private val extraBits = log2Floor(ratio)
+  val ADDR_WIDTH = if(isAXI) (C_ADDR_WIDTH + 2) - extraBits else C_ADDR_WIDTH - extraBits
 
   // Clone function with set AXI ports
-  def apply(isAXI: Boolean): BRAMConfig = new BRAMConfig(C_ADDR_WIDTH, DATA_WIDTH, SIZE, isAXI)
+  def apply(isAXI: Boolean): BRAMConfig = new BRAMConfig(C_ADDR_WIDTH, DATA_WIDTH, isAXI, isRegistered)
 }
 
 class BRAMPort(implicit val cfg: BRAMConfig) extends Bundle {
@@ -112,8 +138,8 @@ class BRAM(implicit cfg: BRAMConfig) extends MultiIOModule {
 }
 
 // Inspired from inline string
-class BRAMTDP(val ADDR_WIDTH: Int = 10, val DATA_WIDTH: Int = 36) extends Module {
-  val SIZE = 1 << ADDR_WIDTH
+class BRAMTDP(val ADDR_WIDTH: Int = 10, val DATA_WIDTH: Int = 36, outputReg: Boolean = true) extends Module {
+  val SIZE = (1 << ADDR_WIDTH)*36/DATA_WIDTH
   val io = IO(new Bundle(){
     val enA = Input(Bool())
     val enB = Input(Bool())
@@ -129,8 +155,9 @@ class BRAMTDP(val ADDR_WIDTH: Int = 10, val DATA_WIDTH: Int = 36) extends Module
 
   val ram = Mem(SIZE, UInt(DATA_WIDTH.W))
 
-  val readA = RegInit(0.U(DATA_WIDTH.W));
-  val readB = RegInit(0.U(DATA_WIDTH.W));
+  def genReg[T <: Data] (isReg: Boolean, gen: T) = if(isReg) Reg(gen) else Wire(gen)
+  val readA = genReg(outputReg, UInt(DATA_WIDTH.W));
+  val readB = genReg(outputReg, UInt(DATA_WIDTH.W));
 
   when(io.enA) {
     readA := ram(io.addrA)
@@ -167,7 +194,7 @@ class BRAMTDP(val ADDR_WIDTH: Int = 10, val DATA_WIDTH: Int = 36) extends Module
       |   output [DATA_SIZE-1:0] doA;
       |   output [DATA_SIZE-1:0] doB;
       |
-      |   reg [DATA_SIZE-1:0] ram [0:2**ADDR_SIZE-1];
+      |   (* ram_style = "block" *) reg [DATA_SIZE-1:0] ram [0:2**ADDR_SIZE-1];
       |   reg [DATA_SIZE-1:0] readA;
       |   reg [DATA_SIZE-1:0] readB;
       |
@@ -202,18 +229,18 @@ object BRAMConfig {
   // Possible configurations Xilinx Ultrascale BRAM
   // 18 TDP
   //  (ADDR_WIDTH, DATA_WIDTH, SIZE)
-  val BRAM18TD1A14     = BRAMConfig(1,  14, 16384)
-  val BRAM18TD2A13     = BRAMConfig(2,  13, 8192)
-  val BRAM18TD4A12     = BRAMConfig(4,  12, 4096)
-  val BRAM18TD9A11     = BRAMConfig(9,  11, 2048)
-  val BRAM18TD18A10    = BRAMConfig(18, 10, 1024)
+  val BRAM18TD1A14     = BRAMConfig(1,  14) // DEPTH: 16384
+  val BRAM18TD2A13     = BRAMConfig(2,  13) // DEPTH: 8192
+  val BRAM18TD4A12     = BRAMConfig(4,  12) // DEPTH: 4096
+  val BRAM18TD9A11     = BRAMConfig(9,  11) // DEPTH: 2048
+  val BRAM18TD18A10    = BRAMConfig(18, 10) // DEPTH: 1024
 
   // 36 TDP
-  val BRAM36TD1A15     = BRAMConfig(1,  15, 32768)
-  val BRAM36TD2A14     = BRAMConfig(2,  14, 16384)
-  val BRAM36TD4A13     = BRAMConfig(4,  13, 8192)
-  val BRAM36TD9A12     = BRAMConfig(9,  12, 4096)
-  val BRAM36TD18A11    = BRAMConfig(18, 11, 2048)
-  val BRAM36TD36A10    = BRAMConfig(36, 10, 1024)
+  val BRAM36TD1A15     = BRAMConfig(1,  15) // DEPTH: 32768
+  val BRAM36TD2A14     = BRAMConfig(2,  14) // DEPTH: 16384
+  val BRAM36TD4A13     = BRAMConfig(4,  13) // DEPTH: 8192
+  val BRAM36TD9A12     = BRAMConfig(9,  12) // DEPTH: 4096
+  val BRAM36TD18A11    = BRAMConfig(18, 11) // DEPTH: 2048
+  val BRAM36TD36A10    = BRAMConfig(36, 10) // DEPTH: 1024
 }
 
