@@ -26,8 +26,8 @@ case class ProcConfig(val NB_THREADS : Int = 2, val DebugSignals : Boolean = fal
   val bramConfigMem = new BRAMConfig(8, 8, 1 << (9+TLB_NB_ENTRY_W), "", false, false)
 }
 
-class ProcStateDBG(implicit val cfg : ProcConfig) extends Bundle
-{
+class ProcStateDBG(implicit val cfg : ProcConfig) extends Bundle {
+
   val fetchReg = Output(Decoupled(new FInst))
   val decReg   = Output(Decoupled(new DInst))
   val issueReg = Output(Decoupled(new DInst))
@@ -85,7 +85,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   val decoder = Module(new DecodeUnit())
   val decReg = Module(new FlushReg(new DInst))
   // Issue
-  val issuer = Module(new IssueUnit())
+  val issuer = Module(new IssueUnitRevamp())
   // issueReg in Issue Unit
   // Commitement stage
   // |         |        |            |

@@ -168,17 +168,34 @@ class IssueUnitRevamp(implicit val cfg: ProcConfig) extends Module
   })
 
   val fifos = VecInit(Seq.fill(cfg.NB_THREADS)(Module(FlushQueue(new DInst, 4)).io))
-
+  // Defaults
   for (cpu <- 0 until cfg.NB_THREADS) {
-    fifos(cpu).enq.bits <> io.enq.bits
     fifos(cpu).enq.valid := false.B
+    fifos(cpu).enq.bits  := io.enq.bits
     fifos(cpu).deq.ready := false.B
-    fifos(cpu).flush := io.flush.valid && io.flush.tag === cpu.U
+    fifos(cpu).flush := false.B
   }
 
-  //fifos(io.enq.bits.tag).enq.ready <> io.enq.ready
-  //fifos(io.enq.bits.tag).enq.valid <> io.enq.valid
-  //fifos(io.flush.tag).deq <> io.deq
-  fifos(0).enq <> io.enq
-  fifos(0).deq <> io.deq
+  io.enq.ready := fifos(io.enq.bits.tag).enq.ready
+  fifos(io.enq.bits.tag).enq.valid := io.enq.valid
+
+  /** Issue stage arbiter
+    * arbiter        Round Robin Arbiter
+    * valid_threads  This signal indicates which threads are ready to be issued
+    * issue_thread   This signal indicates the next thread to issue
+    */
+  val arbiter = Module(new RRArbiter(cfg.NB_THREADS))
+  val ready_threads = VecInit(fifos map (_.deq.valid))
+  ready_threads(io.commitReg.bits.tag) := !io.commitReg.valid
+  arbiter.io.ready := ready_threads.asUInt
+
+  arbiter.io.next.ready := io.deq.ready
+  val issue_thread = WireInit(arbiter.io.next.bits)
+
+  io.deq <> fifos(issue_thread).deq
+
+  when(io.flush.valid) {
+    fifos(io.flush.tag).flush := true.B
+    ready_threads(io.flush.tag) := false.B
+  }
 }

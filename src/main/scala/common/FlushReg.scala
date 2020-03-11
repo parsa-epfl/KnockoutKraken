@@ -36,22 +36,21 @@ class FlushReg[T <: Data](gen: T)
 
 }
 
-class FlushQueue[T <: Data](gen: T, entries: Int = 2)
-    extends Module() {
+class FlushQueue[T <: Data](gen: T, entries: Int = 2) extends Module() {
 
   val io = IO(new FlushRegIO(gen))
 
-  private val ram = Mem(entries, gen)
-  private val enq_ptr = RegInit(0.U(log2Ceil(entries).W))
-  private val deq_ptr = RegInit(0.U(log2Ceil(entries).W))
-  private val maybe_full = RegInit(false.B)
+  val ram = Mem(entries, gen)
+  val enq_ptr = RegInit(0.U(log2Ceil(entries).W))
+  val deq_ptr = RegInit(0.U(log2Ceil(entries).W))
+  val maybe_full = RegInit(false.B)
 
-  private val ptr_match = WireInit(enq_ptr === deq_ptr)
-  private val empty = WireInit(ptr_match && !maybe_full)
-  private val full = WireInit(ptr_match && maybe_full)
+  val ptr_match = WireInit(enq_ptr === deq_ptr)
+  val empty = WireInit(ptr_match && !maybe_full)
+  val full = WireInit(ptr_match && maybe_full)
 
-  private val do_enq = WireInit(io.enq.valid && !full)
-  private val do_deq = WireInit(io.deq.ready && !empty)
+  val do_enq = WireInit(io.enq.valid && !full)
+  val do_deq = WireInit(io.deq.ready && !empty)
 
   when (do_enq) {
     ram(enq_ptr) := io.enq.bits
@@ -67,7 +66,7 @@ class FlushQueue[T <: Data](gen: T, entries: Int = 2)
 
   io.enq.ready := !full || io.deq.ready
   io.deq.valid := !empty && !io.flush
-  io.deq.bits := ram(do_deq)
+  io.deq.bits := ram(deq_ptr)
 
   when(io.flush) {
     enq_ptr := 0.U
@@ -75,7 +74,7 @@ class FlushQueue[T <: Data](gen: T, entries: Int = 2)
     maybe_full := false.B
 
     io.deq.valid := false.B
-    io.enq.ready := true.B
+    io.enq.ready := false.B
   }
 }
 
