@@ -384,14 +384,12 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
     val rVal1 = Input(DATA_T)
     val rVal2 = Input(DATA_T)
     val nzcv = Input(NZCV_T)
-    val SP   = Input(DATA_T)
 
     val condRes = Output(Bool())
 
     val einst = Output(Valid(new EInst))
 })
 
-  //val rVal1 = WireInit(Mux(io.dinst.rs1 === 31.U, io.SP, io.rVal1))
   val rVal1 = WireInit(Mux(io.dinst.rs1 === 31.U, 0.U, io.rVal1))
   val rVal2 = WireInit(Mux(io.dinst.rs2 === 31.U, 0.U, io.rVal2))
   // R[31] can be SP or Zero depending on instructions

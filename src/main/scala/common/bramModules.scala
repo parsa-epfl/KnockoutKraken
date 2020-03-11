@@ -1,9 +1,10 @@
-package common
+package legacy
 
 import chisel3._
 import chisel3.experimental._
 import chisel3.util._
 import chiseltest._
+
 
 object BRAMPort {
   implicit class BRAMPortDriver(target: BRAMPort)(implicit clock: Clock) {
@@ -78,6 +79,50 @@ object BRAMPort {
       for (i <- 0 to 3) byte_lsb(i) = ((lsb >> ((3-i) * 8)) & 0xFF).toByte
       val uint64 = BigInt(Array(0.toByte) ++ byte_msb ++ byte_lsb) // Unsigned long
       return uint64
+    }
+  }
+
+  implicit class BRAMPortDriver_FULL(target: BRAMPort_FULL)(implicit clock: Clock) {
+    def wrBRAM(bits:BigInt, offst: BigInt) = {
+      target.EN.poke(true.B)
+      target.WE.poke("b11111111".U) // Assumes 64bit
+      if(target.cfg.isAXI) {
+        target.ADDR.poke((offst << 2).U)
+      } else {
+        target.ADDR.poke(offst.U)
+      }
+      target.DI.poke(bits.U)
+      clock.step()
+      target.EN.poke(false.B)
+      target.WE.poke(0.U)
+    }
+
+    def wrBRAM(bits:BigInt, offst: BigInt, strobe: BigInt) = {
+      target.EN.poke(true.B)
+      target.WE.poke(strobe.U)
+      if(target.cfg.isAXI) {
+        target.ADDR.poke((offst << 2).U)
+      } else {
+        target.ADDR.poke(offst.U)
+      }
+      target.DI.poke(bits.U)
+      clock.step()
+      target.EN.poke(false.B)
+      target.WE.poke(0.U)
+    }
+
+    def rdBRAM(offst:BigInt): BigInt = {
+      target.EN.poke(true.B)
+      target.WE.poke(false.B)
+      if(target.cfg.isAXI) {
+        target.ADDR.poke((offst << 2).U)
+      } else {
+        target.ADDR.poke(offst.U)
+      }
+      clock.step()
+      target.EN.poke(false.B)
+      val uint32 = target.DO.peek
+      return uint32.litValue()
     }
   }
 }
@@ -237,23 +282,3 @@ class BRAMTDP(val ADDR_WIDTH: Int = 10, val DATA_WIDTH: Int = 36, outputReg: Boo
   """.stripMargin)
  // */
 }
-
-object BRAMConfig {
-  // Possible configurations Xilinx Ultrascale BRAM
-  // 18 TDP
-  //  (ADDR_WIDTH, DATA_WIDTH, SIZE)
-  val BRAM18TD1A14     = BRAMConfig(1,  14) // DEPTH: 16384
-  val BRAM18TD2A13     = BRAMConfig(2,  13) // DEPTH: 8192
-  val BRAM18TD4A12     = BRAMConfig(4,  12) // DEPTH: 4096
-  val BRAM18TD9A11     = BRAMConfig(9,  11) // DEPTH: 2048
-  val BRAM18TD18A10    = BRAMConfig(18, 10) // DEPTH: 1024
-
-  // 36 TDP
-  val BRAM36TD1A15     = BRAMConfig(1,  15) // DEPTH: 32768
-  val BRAM36TD2A14     = BRAMConfig(2,  14) // DEPTH: 16384
-  val BRAM36TD4A13     = BRAMConfig(4,  13) // DEPTH: 8192
-  val BRAM36TD9A12     = BRAMConfig(9,  12) // DEPTH: 4096
-  val BRAM36TD18A11    = BRAMConfig(18, 11) // DEPTH: 2048
-  val BRAM36TD36A10    = BRAMConfig(36, 10) // DEPTH: 1024
-}
-

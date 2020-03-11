@@ -18,6 +18,8 @@ import common._
 import common.AxiLite._
 import common.BRAMPort.BRAMPortDriver
 
+import protoflex.TPU2STATE._
+
 object ProcDriver {
   implicit class ProcAxiDriver(target: ProcAxiWrap)(implicit val cfgProc: ProcConfig) {
     implicit def bool2boolean(x: Bool): Boolean = x.litToBoolean
@@ -26,7 +28,7 @@ object ProcDriver {
 
     val WORD_SIZE = 8
 
-    val portMem: BRAMPort = target.io.ppageBRAM
+    val portMem: BRAMPort = target.io.memoryBRAM
     val portPState : BRAMPort = target.io.stateBRAM
     val procStateDBG_ : Option[ProcStateDBG] = target.io.procStateDBG
     val axiLite : AxiLiteSignals = target.io.axiLite
@@ -52,31 +54,27 @@ object ProcDriver {
       }
     }
 
-    def writeMem(word: BigInt, offst: BigInt, bram: BigInt) =
-      portMem.wrBRAM64b(word, offst + (bram << 9))
+    def writeMem(word: BigInt, offst: BigInt, bram: BigInt) = {
+      portMem.wrBRAM(word, offst + (bram << 9))
+    }
 
     def wrPSTATE2BRAM(tag: Int, pstate: PState): Unit ={
-      //println(pstate.toString())
-      var offst = 0
-      for(i <- 0 until 32 ) {
-        portPState.wrBRAM64b(pstate.xregs(i), offst); offst += 2
+      for(i <- ARCH_XREGS_OFFST until ARCH_XREGS_OFFST+32 ) {
+        portPState.wrBRAM(pstate.xregs(i), i)
       }
-      portPState.wrBRAM64b(pstate.pc, offst: Int); offst+=2
-      portPState.wrBRAM64b(pstate.sp, offst: Int); offst+=2
-      portPState.wrBRAM32b(pstate.nzcv, offst); offst+=1
+      portPState.wrBRAM(pstate.pc, ARCH_PC_OFFST)
+      portPState.wrBRAM(pstate.sp, ARCH_SP_OFFST)
+      portPState.wrBRAM(pstate.nzcv, ARCH_PSTATE_OFFST)
     }
 
     def rdBRAM2PSTATE(tag: Int): PState = {
-      var offst = 0
-
-      val xregs = for(i <- 0 until 32 ) yield  {
-        val reg = portPState.rdBRAM64b(offst); offst+=2
+      val xregs = for(i <- ARCH_XREGS_OFFST until ARCH_XREGS_OFFST+32 ) yield {
+        val reg = portPState.rdBRAM(i)
         reg
       }
-
-      val pc = portPState.rdBRAM64b(offst: Int); offst+=2
-      val sp = portPState.rdBRAM64b(offst: Int); offst+=2
-      val nzcv = portPState.rdBRAM32b(offst); offst+=1
+      val pc = portPState.rdBRAM(ARCH_PC_OFFST)
+      val sp = portPState.rdBRAM(ARCH_SP_OFFST)
+      val nzcv = portPState.rdBRAM(ARCH_PSTATE_OFFST)
 
       val pstate = new PState(xregs.toList: List[BigInt], pc: BigInt, sp: BigInt, nzcv: Int)
       //println(pstate.toString())
@@ -101,7 +99,7 @@ object ProcDriver {
       new PState(xregs.toList: List[BigInt], pc: BigInt, sp:BigInt, nzcv: Int)
     }
 
-    def hasCommitedInst(): Boolean = procStateDBG_.get.commitReg.valid.peek.litToBoolean
+    def hasCommitedInst(): Boolean = procStateDBG_.get.commited.peek.litToBoolean
     def isCommitedUndef(): Boolean = procStateDBG_.get.commitReg.bits.undef.peek.litToBoolean
 
     def getCommitedInst(): BigInt = procStateDBG_.get.commitReg.bits.inst32.peek.litValue
@@ -113,7 +111,6 @@ object ProcDriver {
     def isCommitedPairMem: Boolean = getMemInst.isPair.peek.litToBoolean
     def isCommitedLoad: Boolean = getMemInst.isLoad.peek.litToBoolean
     def getCommitedMemAddr(idx: Int): BigInt = getMemReq(idx).addr.peek.litValue
-    def writeLD(idx: Int, data: BigInt): Unit = procStateDBG_.get.memResp(idx).poke(data.U)
 
     def isMissTLB: Boolean = procStateDBG_.get.missTLB.valid.peek.litToBoolean
     def getMissTLBAddr: BigInt = procStateDBG_.get.missTLB.data.get.peek.litValue
@@ -126,70 +123,6 @@ object ProcDriver {
       procStateDBG_.get.fillTLB.valid.poke(true.B)
       clock.step(1)
       procStateDBG_.get.fillTLB.valid.poke(false.B)
-    }
-
-    def printState():Unit = {
-      if(!cfgProc.DebugSignals) {
-        println("ProportPStateDBG signals are not available: Enable DebugSignals in ProcConfig")
-        return
-      }
-      val procStateDBG = procStateDBG_.get
-      val fetchReg = procStateDBG.fetchReg
-      val decReg   = procStateDBG.decReg
-      val issueReg = procStateDBG.issueReg
-      val exeReg   = procStateDBG.commitReg.bits.exe
-      val brReg    = procStateDBG.commitReg.bits.br
-      val sFet = if(fetchReg.valid.peek) finst(procStateDBG.fetchReg.bits.peek) else "XXX"
-      val sDec = if(decReg.valid.peek)   dinst(procStateDBG.decReg.bits.peek)   else "XXX"
-      val sIss = if(issueReg.valid.peek) dinst(procStateDBG.issueReg.bits.peek) else "XXX"
-      val sExe = if(exeReg.valid.peek) einst(exeReg.bits.peek) else "XXX"
-      val sBr  = if(brReg.valid.peek)  binst(brReg.bits.peek)  else "XXX"
-      val PC = procStateDBG.pregsVec(0).PC.peek
-      val state = Seq(
-        "+----------------------------------------------------------------------------------+",
-        "|                                   STATE                                          |",
-        "+----------------------------------------------------------------------------------+",
-        "-------------------------------- FETCH STAGE ---------------------------------------",
-        "RegFetch: \n" + sFet,
-        "-------------------------------- DECODE STAGE --------------------------------------",
-        "Reg_Dec : \n" + sDec,
-        "-------------------------------- ISSUE STAGE ---------------------------------------",
-        "Reg_Iss : \n" + sIss,
-        "------------------------------- EXECUTE STAGE --------------------------------------",
-        "                    |      ",
-        "                    |      ",
-        "             +------------+",
-        "             |            |",
-        "  +---------Reg_Exe :     |",
-        "  |                        \n" + sExe,
-        "             |            |",
-        "             |            |",
-        "             |            |",
-        "  +----------------------Reg_Br :",
-        "  |                        \n" + sBr,
-        "             |            |",
-        "             |            |",
-        "             |            |",
-        "             |------------|",
-        "                    |      ",
-        "                    |      ",
-        "------------------------------- WB STAGE -------------------------------------------",
-        "                                                                               ",
-        " PC : " + PC,
-        "+----------------------------------------------------------------------------------+",
-        "|                                   DONE                                           |",
-        "+-----------------------------------------------------------------------------------\n",
-        ).mkString("\n")
-      print(state)
-    }
-
-    def printCycle(cycle: Int) = {
-      val cycle_str = Seq(
-        "+----------------------------------------------------------------------------------+",
-        "|                                Cycle : "+ cycle.toString.padTo(2,' ')
-          + "                                        |",
-        "+-----------------------------------------------------------------------------------\n").mkString("\n")
-      print(cycle_str)
     }
   }
 }

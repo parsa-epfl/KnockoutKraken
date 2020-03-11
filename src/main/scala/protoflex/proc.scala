@@ -2,14 +2,14 @@
 package protoflex
 
 import chisel3._
-import chisel3.util.{Decoupled, Queue, RegEnable, Valid, log2Ceil, MuxLookup}
+import chisel3.util._
 
 import common.PROCESSOR_TYPES._
 import common._
 
 import common.DECODE_CONTROL_SIGNALS._
 
-case class ProcConfig(val NB_THREADS : Int = 2, val DebugSignals : Boolean = false, EntriesTLB: Int = 4) {
+case class ProcConfig(val NB_THREADS : Int = 2, val DebugSignals : Boolean = false, EntriesTLB: Int = 32) {
 
   // Threads
   val NB_THREAD_W = log2Ceil(NB_THREADS) // 4 Threads
@@ -22,22 +22,8 @@ case class ProcConfig(val NB_THREADS : Int = 2, val DebugSignals : Boolean = fal
   val TLB_NB_ENTRY = EntriesTLB
   val TLB_NB_ENTRY_W = log2Ceil(TLB_NB_ENTRY)
 
-  val bramConfigState = new BRAMConfig(10, 36, isAXI = false, isRegistered = true)
-  val bramConfigMem = new BRAMConfig(10+TLB_NB_ENTRY_W, 36*2, isAXI = false, isRegistered = true)
-}
-
-class ValidTagged[T1 <: Data, T2 <: Data](genTag: T1, genData: Option[T2]) extends Bundle
-{
-  val valid = Bool()
-  val data = genData
-  val tag = genTag
-  override def cloneType: this.type = ValidTagged(genTag, genData).asInstanceOf[this.type]
-}
-
-object ValidTagged {
-  def apply[T1 <: Data, T2 <: Data](genTag: T1, genData : Option[T2]): ValidTagged[T1,T2] = new ValidTagged(genTag, genData)
-  def apply[T1 <: Data, T2 <: Data](genTag: T1, genData : T2): ValidTagged[T1,T2] = new ValidTagged(genTag, Some(genData))
-  def apply[T <: Data](genTag: T): ValidTagged[T,T] = new ValidTagged(genTag, None)
+  val bramConfigState = new BRAMConfig(8, 8, 512, "", false, false)
+  val bramConfigMem = new BRAMConfig(8, 8, 1 << (9+TLB_NB_ENTRY_W), "", false, false)
 }
 
 class ProcStateDBG(implicit val cfg : ProcConfig) extends Bundle
@@ -46,13 +32,13 @@ class ProcStateDBG(implicit val cfg : ProcConfig) extends Bundle
   val decReg   = Output(Decoupled(new DInst))
   val issueReg = Output(Decoupled(new DInst))
   val commitReg = Output(Decoupled(new CommitInst))
+  val commited = Output(Bool())
 
   val pregsVec = Output(Vec(cfg.NB_THREADS, new PStateRegs))
   val rfileVec = Output(Vec(cfg.NB_THREADS, Vec(REG_N, DATA_T)))
 
   val tuWorking = Output(ValidTagged(cfg.TAG_T))
-  val memResp = Input(Vec(2, DATA_T))
-  val fillTLB = Input(ValidTagged(DATA_T, new TLBEntry))
+  val fillTLB = Input(ValidTagged(DATA_T, new TLBEntry)) // NOTE: Tag is the addr, not the thread
   val missTLB = Output(ValidTagged(cfg.TAG_T, DATA_T))
 }
 
@@ -63,17 +49,11 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
 {
   val io = IO(new Bundle {
     // BRAM Host Ports
-    val ppageBRAM = new BRAMPort()(cfg.bramConfigMem)
+    val memoryBRAM = new BRAMPort()(cfg.bramConfigMem)
     val stateBRAM = new BRAMPort()(cfg.bramConfigState)
 
     // AXI Host Communication
     val host2tpu = new TransplantUnitHostIO
-
-    // Memory Interface
-    // TODO: For the moment the simulator fakes
-    //       response in single cycle by requesting to QEMU
-    // val memReq = Output(Valid(new MemReq))
-    // val memResp = Input(Valid(DATA_T))
 
     // Debug
     val procStateDBG = if(cfg.DebugSignals) Some(new ProcStateDBG) else None
@@ -83,7 +63,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
 
   // Host modules
   // BRAM Program page
-  val ppage = Module(new BRAM()(cfg.bramConfigMem))
+  val memory = Module(new BRAM()(cfg.bramConfigMem))
   // BRAM PC State
   val state = Module(new BRAM()(cfg.bramConfigState))
   // Transplant Unit
@@ -121,17 +101,21 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
 
   // Extra Regs and wires
   val fetchEn = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(false.B)))
+  val s_Commiting :: s_MemCommiting :: s_MemCommitingPair :: s_GettingPage :: s_RestartMem :: Nil = Enum(5)
+  val commitingStage = RegInit(s_Commiting)
+  val commitingLastStageWasMem = RegInit(false.B)
 
   val commitExec  = WireInit(commitReg.io.deq.bits.exe)
   val commitMem   = WireInit(commitReg.io.deq.bits.mem)
   val commitBr    = WireInit(commitReg.io.deq.bits.br)
   val commitPcRel = WireInit(commitReg.io.deq.bits.pcrel)
   val commitTag   = WireInit(commitReg.io.deq.bits.tag)
-  val commitValid = WireInit(commitReg.io.deq.valid)
 
   val nextPC = Wire(DATA_T)
-  val nextSP = Wire(DATA_T)
-  // Interconnect -------------------------------------------
+  val nextSP = Wire(DATA_T) // X[31] == SP
+                            // Interconnect -------------------------------------------
+  val memArbiterInst = Module(new MemArbiterInst)
+  val memArbiterData = Module(new MemArbiterData)
 
   // HOST <> TP
   io.stateBRAM <> state.portA
@@ -143,34 +127,36 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   tpu.io.tpu2cpu.done.valid := false.B
   tpu.io.tpu2cpu.done.tag := 0.U
   insnTLB.io.fillTLB := tpu.io.tpu2cpu.fillTLB
-  insnTLB.io.fillTLB := tpu.io.tpu2cpu.fillTLB
 
   // PState + Branching -> Fetch
-  tpu.io.tpu2cpu.missTLB.tag := fetch.io.pc.tag
-  tpu.io.tpu2cpu.missTLB.valid := insnTLB.io.iPort.miss.valid
-  tpu.io.tpu2cpu.missTLB.data.get := insnTLB.io.iPort.miss.bits
-
   fetch.io.fire := tpu.io.tpu2cpu.fire
   fetch.io.fetchEn := fetchEn
   fetch.io.pcVec zip pregsVec foreach {case (pcFetch, pcState) => pcFetch := pcState.PC}
   fetch.io.nextPC := nextPC
   fetch.io.commitReg.bits := commitReg.io.deq.bits
   fetch.io.commitReg.valid := commitReg.io.deq.valid
-  insnTLB.io.iPort.vaddr.bits := fetch.io.pc.data.get
-  insnTLB.io.iPort.vaddr.valid := fetch.io.pc.valid
-  val sel32bit = if(cfg.bramConfigMem.isRegistered) {
-    RegNext(fetch.io.pc.data.get(2))
-  } else {
-    fetch.io.pc.data.get(2)
+
+  memArbiterInst.io.vaddr.bits := fetch.io.pc.data.get
+  memArbiterInst.io.vaddr.valid := fetch.io.pc.valid
+  insnTLB.io.iPort <> memArbiterInst.io.tlbPort
+
+  memArbiterInst.io.fillTLB := tpu.io.tpu2cpu.fillTLB
+
+  tpu.io.tpu2cpu.missTLB.tag := fetch.io.pc.tag
+  tpu.io.tpu2cpu.missTLB.valid := memArbiterInst.io.reqMiss.valid || memArbiterData.io.reqMiss.valid
+  tpu.io.tpu2cpu.missTLB.data.get := Mux(memArbiterInst.io.reqMiss.valid, memArbiterInst.io.reqMiss.bits, memArbiterData.io.reqMiss.bits)
+
+  memory.portB <> memArbiterInst.io.memPort
+  when(memArbiterInst.io.selMem) {
+    memory.portB <> memArbiterInst.io.memPort
+  }.elsewhen(memArbiterInst.io.selHost) {
+    memory.portB <> io.memoryBRAM
   }
 
-  ppage.portB.EN := true.B
-  ppage.portB.DI := 0.U
-  ppage.portB.WE := false.B
-  ppage.portB.ADDR := insnTLB.io.iPort.paddr // PC is byte addressed, BRAM is 32bit word addressed
+  val sel32bit = RegNext(fetch.io.pc.data.get(2))
 
-  fetch.io.hit := !insnTLB.io.iPort.miss.valid
-  fetch.io.insn := Mux(sel32bit, ppage.portB.DO(63,32), ppage.portB.DO(31,0))
+  fetch.io.hit := !memArbiterInst.io.tlbPort.miss.valid
+  fetch.io.insn := Mux(sel32bit, memory.portB.DO(63,32), memory.portB.DO(31,0))
 
 
   // Fetch -> Decode
@@ -193,8 +179,8 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   /** Execute */
   // connect rfile read(address) interface
   rfileVec map { case rfile =>
-    rfile.rs1_addr := issued_dinst.rs1
-    rfile.rs2_addr := issued_dinst.rs2
+    rfile.rs1_addr := Mux(memArbiterData.io.rfileRd, memArbiterData.io.rfile.rs1_addr, issued_dinst.rs1)
+    rfile.rs2_addr := Mux(memArbiterData.io.rfileRd, memArbiterData.io.rfile.rs2_addr, issued_dinst.rs2)
   }
   // Read register data from rfile
   val rVal1 = rfileVec(issued_dinst.tag).rs1_data
@@ -205,7 +191,6 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   executer.io.rVal1 := rVal1
   executer.io.rVal2 := rVal2
   executer.io.nzcv := pregsVec(issued_tag).NZCV
-  executer.io.SP   := pregsVec(issued_tag).SP
 
   // connect BranchUnit interface
   brancher.io.dinst := issued_dinst
@@ -221,65 +206,37 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   ldstU.io.pstate := pregsVec(issued_tag)
 
   // CommitReg
-  commitReg.io.enq.bits.exe := executer.io.einst
-  commitReg.io.enq.bits.br := brancher.io.binst
-  commitReg.io.enq.bits.pcrel := brancher.io.pcrel
-  commitReg.io.enq.bits.mem := ldstU.io.minst
-  commitReg.io.enq.bits.undef := !issued_dinst.inst32.valid
-  commitReg.io.enq.bits.inst32 := issued_dinst.inst32.bits
-  commitReg.io.enq.bits.pc := issued_dinst.pc
-  commitReg.io.enq.bits.tag := issued_tag
+  val commitNext = Wire(new CommitInst)
+  commitNext.exe := executer.io.einst
+  commitNext.br := brancher.io.binst
+  commitNext.pcrel := brancher.io.pcrel
+  commitNext.mem := ldstU.io.minst
+  commitNext.undef := !issued_dinst.inst32.valid
+  commitNext.inst32 := issued_dinst.inst32.bits
+  commitNext.pc := issued_dinst.pc
+  commitNext.tag := issued_tag
+
+  commitReg.io.enq.bits := commitNext
   commitReg.io.enq.valid := issuer.io.deq.valid
-  commitReg.io.deq.ready := true.B
 
   // ---- Commit STATE ----
-  val commitUndef = WireInit(commitReg.io.deq.bits.undef)
+  val commited = WireInit(commitReg.io.deq.fire())
+  memArbiterData.io.commitEnq := commitReg.io.enq
+  memArbiterData.io.commitDeq := commitReg.io.deq
+  memArbiterData.io.fillTLB := tpu.io.tpu2cpu.fillTLB
+  memArbiterData.io.rfile.rfileVec foreach(_ := DontCare)
+  memArbiterData.io.rfile.rs1_data := rfileVec(commitTag).rs1_data
+  memArbiterData.io.rfile.rs2_data := rfileVec(commitTag).rs2_data
+  // -- Transplant cases --
+  val commitUndef = WireInit(commitReg.io.deq.valid && commitReg.io.deq.bits.undef)
+  // - Exceptions -
+  val unalignedExcpData = WireInit(commitMem.valid && memArbiterData.io.unalignedExcp)
+  val unalignedExcpSP = WireInit(commitMem.valid && commitMem.bits.unalignedExcpSP)
+  val unalignedExcpBranch = WireInit(commitBr.valid && commitBr.bits.unalignedExcp)
 
-  // Writeback : Execute -> PState
-  insnTLB.io.dPort.isWr := !commitMem.bits.isLoad
-  insnTLB.io.dPort.vaddr.bits := commitMem.bits.memReq(0).addr
-  insnTLB.io.dPort.vaddr.valid := commitValid && commitMem.valid
+  val exception = WireInit(commitReg.io.deq.valid && (unalignedExcpData || unalignedExcpBranch || unalignedExcpSP))
 
-  ppage.portA.EN := commitValid && commitMem.valid && !insnTLB.io.dPort.miss.valid
-  ppage.portA.DI := commitMem.bits.memReq(0).data
-  ppage.portA.WE := !commitMem.bits.isLoad
-  ppage.portA.ADDR := insnTLB.io.dPort.paddr
-
-  val wbLD = Wire(Vec(2, DATA_T))
-  if(cfg.DebugSignals) {
-    for( i <- 0 until 2 ) {
-      val wbData = io.procStateDBG.get.memResp(i) // ppage.portA.DO
-      when(commitMem.bits.is32bit) {
-        wbLD(i) := MuxLookup(commitMem.bits.size, wbData(31,0), Array(
-          SIZEB -> Mux(commitMem.bits.isSigned,
-            wbData(7,  0).asSInt.pad(32).asUInt,
-            wbData(7,  0).pad(32)),
-          SIZEH -> Mux(commitMem.bits.isSigned,
-            wbData(15, 0).asSInt.pad(32).asUInt,
-            wbData(15, 0).pad(32))
-        )).pad(64)
-      }.otherwise {
-        wbLD(i) := MuxLookup(commitMem.bits.size, wbData, Array(
-          SIZEB  -> Mux(commitMem.bits.isSigned,
-            wbData(7,  0).asSInt.pad(64).asUInt,
-            wbData(7,  0).pad(64)),
-          SIZEH  -> Mux(commitMem.bits.isSigned,
-            wbData(15, 0).asSInt.pad(64).asUInt,
-            wbData(15, 0).pad(64)),
-          SIZE32 -> Mux(commitMem.bits.isSigned,
-            wbData(31, 0).asSInt.pad(64).asUInt,
-            wbData(31, 0).pad(64)),
-          SIZE64 -> wbData
-        ))
-      }
-    }
-  }
-
-  io.ppageBRAM.DO := DontCare
-  when(io.ppageBRAM.EN && io.ppageBRAM.WE) {
-    io.ppageBRAM <> ppage.portA
-    commitReg.io.deq.ready := !commitMem.valid
-  }
+  val transplant = WireInit(commitUndef || exception)
 
   // connect RFile's write interface
   for(cpu <- 0 until cfg.NB_THREADS) {
@@ -290,41 +247,26 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
     }.elsewhen(commitPcRel.valid) {
       rfileVec(cpu).w1_addr := commitPcRel.bits.rd
       rfileVec(cpu).w1_data := commitPcRel.bits.res
-    }.elsewhen(commitMem.valid) {
-      rfileVec(cpu).w1_addr := commitMem.bits.memReq(0).reg
-      rfileVec(cpu).w1_data := wbLD(0)
+    }.elsewhen(memArbiterData.io.rfileWr){
+      // Mem Writeback
+      rfileVec(cpu).w1_addr := memArbiterData.io.rfile.w1_addr
+      rfileVec(cpu).w1_data := memArbiterData.io.rfile.w1_data
     }.otherwise {
-      // Default
-      rfileVec(cpu).w1_addr := commitExec.bits.rd.bits
-      rfileVec(cpu).w1_data := commitExec.bits.res
+      rfileVec(cpu).w1_addr := DontCare
+      rfileVec(cpu).w1_data := DontCare
     }
     rfileVec(cpu).w1_en := false.B
 
-    // WB Port 2
-    when(commitMem.valid ) { // Load TODO : Real, here QEMU Loads in single cycle
-      when(commitMem.bits.isPair) {
-        rfileVec(cpu).w2_addr := commitMem.bits.memReq(1).reg
-        rfileVec(cpu).w2_data := wbLD(1)
-      }.otherwise {
-        rfileVec(cpu).w2_addr := commitMem.bits.rd.bits
-        rfileVec(cpu).w2_data := commitMem.bits.rd_res
-      }
-    }.otherwise {
-      rfileVec(cpu).w2_addr := commitMem.bits.rd.bits
-      rfileVec(cpu).w2_data := commitMem.bits.rd_res
-    }
+    rfileVec(cpu).w2_addr := memArbiterData.io.rfile.w2_addr
+    rfileVec(cpu).w2_data := memArbiterData.io.rfile.w2_data
     rfileVec(cpu).w2_en := false.B
   }
 
   nextPC := pregsVec(commitTag).PC
-  nextSP := pregsVec(commitTag).SP
-  when(commitValid) {
-    rfileVec(commitTag).w1_en :=
-      (commitExec.valid && commitExec.bits.rd.valid) ||
-      (commitMem.valid && commitMem.bits.isLoad) ||
-      (commitPcRel.valid)
-    rfileVec(commitTag).w2_en := commitMem.valid &&
-      ((commitMem.bits.isLoad && commitMem.bits.isPair) || commitMem.bits.rd.valid)
+  nextSP := pregsVec(commitTag).SP // X[31] == SP
+  when(commited && !exception && !commitUndef) {
+    rfileVec(commitTag).w1_en := (commitExec.valid && commitExec.bits.rd.valid) || (commitPcRel.valid)
+    rfileVec(commitTag).w2_en := false.B
 
     when(commitExec.valid && commitExec.bits.nzcv.valid) {
       pregsVec(commitTag).NZCV := commitExec.bits.nzcv.bits
@@ -336,24 +278,35 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
       nextPC := pregsVec(commitTag).PC + 4.U
     }
 
-    when(commitMem.valid) {
-      when(commitMem.bits.rd.bits === 31.U) {
-        nextSP := commitMem.bits.rd_res
-      }
-    }
-
     pregsVec(commitTag).PC := nextPC
-    pregsVec(commitTag).SP := nextSP
   }
 
+  when(memArbiterData.io.busy && !exception) {
+    rfileVec(commitTag).w1_en := memArbiterData.io.rfile.w1_en
+    rfileVec(commitTag).w2_en := memArbiterData.io.rfile.w2_en
+  }
+
+  // Memory Data Port
+  io.memoryBRAM.DO := memory.portA.DO
+  insnTLB.io.dPort <> memArbiterData.io.tlbPort
+
+  memory.portA <> memArbiterData.io.memPort
+  when(memArbiterData.io.selMem) {
+    memory.portA <> memArbiterData.io.memPort
+  }.elsewhen(memArbiterData.io.selHost) {
+    memory.portA <> io.memoryBRAM
+  }
+  commitReg.io.deq.ready := exception || !memArbiterData.io.busy
+
   // Start and stop ---------------
-  when(insnTLB.io.iPort.miss.valid)        { fetchEn(fetch.io.pc.tag) := false.B }
-  when(tpu.io.tpu2cpu.fire.valid)    { fetchEn(tpu.io.tpu2cpu.fire.tag) := true.B }
+  when(insnTLB.io.iPort.miss.valid)  { fetchEn(fetch.io.pc.tag) := false.B }
   when(tpu.io.tpu2cpu.fillTLB.valid) { fetchEn(tpu.io.tpu2cpu.fillTLB.tag) := true.B }
+  when(tpu.io.tpu2cpu.freeze.valid)  { fetchEn(tpu.io.tpu2cpu.freeze.tag) := false.B }
+  when(tpu.io.tpu2cpu.fire.valid)    { fetchEn(tpu.io.tpu2cpu.fire.tag) := true.B }
   when(tpu.io.tpu2cpu.flush.valid)   { fetchEn(tpu.io.tpu2cpu.flush.tag) := false.B }
 
   // Hit unknown case -> Pass state to CPU
-  tpu.io.tpu2cpu.done.valid := commitValid && (commitUndef || insnTLB.io.excpWrProt)
+  tpu.io.tpu2cpu.done.valid := transplant
   tpu.io.tpu2cpu.done.tag := commitReg.io.deq.bits.tag
 
   // Flushing ----------------------------------------------------------------
@@ -366,7 +319,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
     fetch.io.flush := tpu.io.tpu2cpu.flush
     decReg.io.flush := decReg.io.deq.bits.tag === tpu.io.tpu2cpu.flush.tag
     commitReg.io.flush := commitReg.io.deq.bits.tag === tpu.io.tpu2cpu.flush.tag
-  }.elsewhen(commitValid && commitBr.valid ) { // Branching, clean pipeline
+  }.elsewhen(commited && commitBr.valid ) { // Branching, clean pipeline
     fetch.io.flush.valid := fetch.io.deq.bits.tag === commitTag
     fetch.io.flush.tag := commitTag
     issuer.io.flush.valid := true.B
@@ -377,8 +330,8 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   // Transplant Activated ----------------------------------------------------
   // Default Inputs
   tpu.io.cpu2tpuState := pregsVec(tpu.io.tpu2cpu.freeze.tag)
-  tpu.io.rfile.rs1_data := rfileVec(0).rs1_data
-  tpu.io.rfile.rs2_data := rfileVec(0).rs2_data
+  tpu.io.rfile.rs1_data := DontCare
+  tpu.io.rfile.rs2_data := DontCare
   // When working
   when(tpu.io.tpu2cpu.freeze.valid) {
     // Redirect freezed cpu to tpu
@@ -399,18 +352,19 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   // DEBUG Signals ------------------------------------------------------------
   if(cfg.DebugSignals) {
     val procStateDBG = io.procStateDBG.get
-    procStateDBG.fetchReg.ready := decReg.io.enq.ready
+    procStateDBG.fetchReg.ready := fetch.io.deq.ready
     procStateDBG.fetchReg.valid := fetch.io.deq.valid
     procStateDBG.fetchReg.bits  := fetch.io.deq.bits
-    procStateDBG.decReg.ready := issuer.io.enq.ready
+    procStateDBG.decReg.ready := decReg.io.deq.ready
     procStateDBG.decReg.valid := decReg.io.deq.valid
     procStateDBG.decReg.bits  := decReg.io.deq.bits
-    procStateDBG.issueReg.ready := commitReg.io.enq.ready
+    procStateDBG.issueReg.ready := issuer.io.deq.ready
     procStateDBG.issueReg.valid := issuer.io.deq.valid
     procStateDBG.issueReg.bits  := issuer.io.deq.bits
-    procStateDBG.commitReg.ready := true.B
+    procStateDBG.commitReg.ready := commitReg.io.deq.ready
     procStateDBG.commitReg.valid := commitReg.io.deq.valid
     procStateDBG.commitReg.bits  := commitReg.io.deq.bits
+    procStateDBG.commited := commited
 
     // Processor State (XREGS + PSTATE)
     val rfileVecWire = Wire(Vec(cfg.NB_THREADS, Vec(REG_N, DATA_T)))
@@ -436,4 +390,18 @@ class CommitInst(implicit val cfg : ProcConfig) extends Bundle {
   val pc = Output(DATA_T)
   val inst32 = Output(INST_T)
   val tag = Output(cfg.TAG_T)
+}
+
+class ValidTagged[T1 <: Data, T2 <: Data](genTag: T1, genData: Option[T2]) extends Bundle
+{
+  val valid = Bool()
+  val data = genData
+  val tag = genTag
+  override def cloneType: this.type = ValidTagged(genTag, genData).asInstanceOf[this.type]
+}
+
+object ValidTagged {
+  def apply[T1 <: Data, T2 <: Data](genTag: T1, genData : Option[T2]): ValidTagged[T1,T2] = new ValidTagged(genTag, genData)
+  def apply[T1 <: Data, T2 <: Data](genTag: T1, genData : T2): ValidTagged[T1,T2] = new ValidTagged(genTag, Some(genData))
+  def apply[T <: Data](genTag: T): ValidTagged[T,T] = new ValidTagged(genTag, None)
 }

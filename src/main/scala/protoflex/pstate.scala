@@ -72,7 +72,6 @@ class RFileIO(implicit val cfg : ProcConfig) extends Bundle
   val w2_en   = Input(Bool())
 
   val rfileVec = if(cfg.DebugSignals) Some(Output(Vec(REG_N, DATA_T))) else None
-
 }
 
 /**

@@ -27,6 +27,7 @@ class MInst(implicit val cfg: ProcConfig) extends Bundle
   // With Write Back
   val rd_res = Output(DATA_T)
   val rd = Output(Valid(REG_T))
+  val unalignedExcpSP = Output(Bool())
 }
 
 class LDSTUnitIO(implicit val cfg: ProcConfig) extends Bundle
@@ -51,15 +52,15 @@ class ExtendReg(implicit val cfg: ProcConfig) extends Module
   val isSigned = io.option(2)
   val size = io.option(1,0) // NOTE: option(1) == 1
   val valSExt = WireInit(MuxLookup(size, value.asSInt, Array(
-                                     0.U -> value( 7,0).asSInt.pad(DATA_SZ),
-                                     1.U -> value(15,0).asSInt.pad(DATA_SZ),
-                                     2.U -> value(31,0).asSInt.pad(DATA_SZ),
+                                     0.U -> value( 7,0).asSInt.pad(64),
+                                     1.U -> value(15,0).asSInt.pad(64),
+                                     2.U -> value(31,0).asSInt.pad(64),
                                      3.U -> value.asSInt
                                    )))
   val valUExt = WireInit(MuxLookup(size, value, Array(
-                                     0.U -> value( 7,0).pad(DATA_SZ),
-                                     1.U -> value(15,0).pad(DATA_SZ),
-                                     2.U -> value(31,0).pad(DATA_SZ),
+                                     0.U -> value( 7,0).pad(64),
+                                     1.U -> value(15,0).pad(64),
+                                     2.U -> value(31,0).pad(64),
                                      3.U -> value
                                    )))
   val res = WireInit(Mux(isSigned, valSExt.asUInt, valUExt))
@@ -197,7 +198,9 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   //     SP[] = address;
   //   else
   //     X[n] = address;
-  io.minst.bits.rd_res := base_address + offst
+  val wback_addr = WireInit(base_address + offst)
+  io.minst.bits.unalignedExcpSP := io.dinst.rs1 === 31.U && wback_addr(1,0) =/= 0.U
+  io.minst.bits.rd_res := wback_addr
   io.minst.bits.rd.bits := io.dinst.rs1
   io.minst.bits.rd.valid := wback
 
@@ -231,4 +234,89 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   //     when Constraint_UNDEF UNDEFINED;
   //     when Constraint_NOP EndOfInstruction();
   val rt_unkown = WireInit(false.B)
+}
+
+class DataAlignByte(implicit val cfg: ProcConfig) extends Module {
+  val io = IO(new Bundle {
+    val currReq = Input(UInt(1.W))
+    val minst = Input(new MInst)
+    val data = Input(DATA_T)
+    val aligned = Output(DATA_T)
+    val byteEn = Output(UInt(8.W)) // Byte enable for Memory Store
+
+    val unalignedExcp = Output(Bool())
+  })
+
+  val data = WireInit(io.data)
+  val minst = WireInit(io.minst)
+  val addr = io.minst.memReq(io.currReq).addr
+  val dataBytes = VecInit.tabulate(8) { i => data((i+1)*8-1, i*8) }
+  // Seq(
+  // data(63,56), data(55,48), data(47,40), data(39,32),
+  // data(21,24), data(23,16), data(15, 8), data( 7, 0)
+  // ).reverse)
+
+  val data2align = MuxLookup(minst.size, data, Array(
+    SIZEB  -> dataBytes(addr(2,0)),
+    SIZEH  -> Cat(dataBytes(addr(2,0) + 1.U), dataBytes(addr(2,0))),
+    SIZE32 -> Mux(addr(2), data(63,32), data(31, 0)),
+    SIZE64 -> data
+  ))
+
+  val alignedLoad = WireInit(data2align)
+  Mux(minst.is32bit,
+    MuxLookup(minst.size, data2align(31,0), Array(
+      SIZEB -> Mux(minst.isSigned,
+        data2align( 7, 0).asSInt.pad(32).asUInt,
+        data2align( 7, 0).pad(32)),
+      SIZEH -> Mux(minst.isSigned,
+        data2align(15, 0).asSInt.pad(32).asUInt,
+        data2align(15, 0).pad(32))
+    )).pad(64),
+    MuxLookup(minst.size, data2align, Array(
+      SIZEB  -> Mux(minst.isSigned,
+        data2align( 7, 0).asSInt.pad(64).asUInt,
+        data2align( 7, 0).pad(64)),
+      SIZEH  -> Mux(minst.isSigned,
+        data2align(15, 0).asSInt.pad(64).asUInt,
+        data2align(15, 0).pad(64)),
+      SIZE32 -> Mux(minst.isSigned,
+        data2align(31, 0).asSInt.pad(64).asUInt,
+        data2align(31, 0).pad(64)),
+      SIZE64 -> data2align
+    ))
+  )
+
+  val alignedStore = WireInit(data << Cat(addr(2,0), 0.U(3.W)))
+
+
+  // Byte enable for Stores
+  val mask = WireInit(MuxLookup(minst.size, 255.U, Array(
+    SIZEB  -> "b1".U,
+    SIZEH  -> "b11".U,
+    SIZE32 -> "b1111".U,
+    SIZE64 -> "b11111111".U
+  )))
+  val byteEn = WireInit(mask << addr(2,0))
+
+  // NOTE: Read Manual section B2.5 for alignment support -> Possible performance improvements
+  val isAlignedMem_0 = WireInit(MuxLookup(minst.size, false.B, Array(
+    SIZEB  -> false.B,
+    SIZEH  -> (minst.memReq(0).addr(0) === 0.U),
+    SIZE32 -> (minst.memReq(0).addr(1,0) === 0.U),
+    SIZE64 -> (minst.memReq(0).addr(2,0) === 0.U)
+  )))
+
+  val isAlignedMem_1 = WireInit(MuxLookup(minst.size, false.B, Array(
+    SIZEB  -> false.B,
+    SIZEH  -> (minst.memReq(1).addr(0) === 0.U),
+    SIZE32 -> (minst.memReq(1).addr(1,0) === 0.U),
+    SIZE64 -> (minst.memReq(1).addr(2,0) === 0.U)
+  )))
+
+
+  io.byteEn := Mux(minst.isLoad, 0.U, byteEn)
+  io.aligned := Mux(minst.isLoad, alignedLoad, alignedStore)
+
+  io.unalignedExcp := !isAlignedMem_0 || (minst.isPair && !isAlignedMem_1)
 }

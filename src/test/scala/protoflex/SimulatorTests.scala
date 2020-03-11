@@ -16,8 +16,7 @@ import common.PROCESSOR_TYPES.REG_N
 
 import utils.ArmflexJson
 import utils.SoftwareStructs._
-import common.BRAMPort
-import common.AxiLiteSignals
+import common._
 import firrtl.options.TargetDirAnnotation
 
 import protoflex.ProcDriver._
@@ -91,7 +90,7 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
 
   implicit val clock = cProcAxi.clock
 
-  val portPPage: BRAMPort = cProcAxi.io.ppageBRAM
+  val portMemory: BRAMPort = cProcAxi.io.memoryBRAM
   val portPState: BRAMPort = cProcAxi.io.stateBRAM
   val procStateDBG_ : Option[ProcStateDBG] = cProcAxi.io.procStateDBG
 
@@ -168,7 +167,12 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
     do { clock.step(1) } while(cProcAxi.tpuIsWorking);
     // RTL state after transplant must match initial QEMU state
     currState = cProcAxi.getPStateInternal(0)
-    assert(currState.matches(pstate)._1)
+    val matched = currState.matches(pstate)
+    if(!matched._1) {
+      clock.step(13)
+      Context().backend.finish()
+      assert(matched._1)
+    }
 
     fork {
       do {
@@ -192,7 +196,7 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
                   val resp = waitForCmd(cfgSim.simCmdPath)
                   val addrResp: BigInt = resp._2
                   //simLog(s"RESP:0x${"%016x".format(addr)}:0x${"%016x".format(addrResp)}")
-                  cProcAxi.writeLD(i, addrResp)
+                  //cProcAxi.writeLD(i, addrResp)
                 }
               }
             }
@@ -221,7 +225,6 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
       writeCmd((FA_QflexCmds.INST_UNDEF, 0), cfgSim.qemuCmdPath)
     }.fork {
       val bramMask = cfgProc.TLB_NB_ENTRY - 1 //for (i <- 0 until cfgProc.TLB_NB_ENTRY_W) yield '1'
-
       do {
         if(cProcAxi.isMissTLB) {
           val addr: BigInt = cProcAxi.getMissTLBAddr
@@ -268,7 +271,7 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
 class TestSimulatorAxi(cfgSim : SimulatorConfig, val cfgProc : ProcConfig)
     extends FlatSpec with ChiselScalatestTester {
 
-  val annos = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("./test/Sim/Axi"), WriteVcdAnnotation)
+  val annos = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/Axi"), WriteVcdAnnotation)
 
   behavior of "Armflex Simulator AXI interface"
 

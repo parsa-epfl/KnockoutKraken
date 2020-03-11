@@ -2,7 +2,7 @@ package protoflex
 
 import chisel3._
 import chisel3.util._
-import common.{BRAMConfig, BRAMPort}
+import common._
 import common.PROCESSOR_TYPES._
 import protoflex.TPU2STATE._
 
@@ -75,23 +75,14 @@ class TransplantUnitCPUIO(implicit val cfg: ProcConfig) extends Bundle
 }
 
 class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
-  val stateAddrW = cfg.bramConfigState.ADDR_WIDTH
-
   val io = IO(new TransplantUnitIO)
 
   val bramOFFST = RegInit(0.U(log2Ceil(ARCH_MAX_OFFST).W))
-  val bramOut = WireInit(io.stateBRAM.DO(31,0)) // 32 Bits read of BRAM
-  // BRAM is 32b, so if we read two words in a row, we get a 64b word (usefull for XREGS and PC)
-  val bramOut1CD = RegNext(bramOut) // 1 Cycle Delay
-  val bramOut64b = WireInit(Cat(bramOut1CD, bramOut))
+  val bramOut = WireInit(io.stateBRAM.DO) 
 
   // Only port rs1 of RFILE is used
   val regDataIn = io.rfile.rs1_data
-  val regDataInMSB = regDataIn(63,32)
-  val regDataInLSB = regDataIn(31, 0)
-  // RFILE is 64bits, BRAM is 32bits. XREGS are first 32 words
-  // By shifting lsb, we get the RFILE addr from BRAM offst
-  val regAddr = bramOFFST >> 1.U
+  val regAddr = bramOFFST // First 32 word are registers
   io.rfile.rs1_addr := regAddr
   io.rfile.rs2_addr := 0.U
 
@@ -173,14 +164,14 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   }
 
   io.stateBRAM.EN := true.B
-  io.stateBRAM.WE := stateDir === s_CPU2BRAM && stateRegType =/= r_DONE
+  io.stateBRAM.WE := Fill(8, stateDir === s_CPU2BRAM && stateRegType =/= r_DONE)
   io.stateBRAM.ADDR := bramOFFST
   when(stateRegType === r_XREGS) {
-    io.stateBRAM.DI := Mux(bramOFFST(0), regDataInLSB, regDataInMSB)
+    io.stateBRAM.DI := regDataIn
   }.elsewhen(stateRegType === r_PC) {
-    io.stateBRAM.DI := Mux(bramOFFST(0), io.cpu2tpuState.PC(31,0), io.cpu2tpuState.PC(63,32))
+    io.stateBRAM.DI := io.cpu2tpuState.PC
   }.elsewhen(stateRegType === r_SP) {
-    io.stateBRAM.DI := Mux(bramOFFST(0), io.cpu2tpuState.SP(31,0), io.cpu2tpuState.SP(63,32))
+    io.stateBRAM.DI := io.cpu2tpuState.SP
   }.elsewhen(stateRegType === r_NZCV) {
     io.stateBRAM.DI := Cat(0.U, io.cpu2tpuState.NZCV(3,0))
   }.otherwise {
@@ -190,15 +181,14 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   // One cycle delay from BRAM read
   io.rfile.w1_en := RegNext(stateDir === s_BRAM2CPU && stateRegType === r_XREGS)
   io.rfile.w1_addr := RegNext(regAddr)
-  io.rfile.w1_data := bramOut64b
+  io.rfile.w1_data := bramOut
 
-  // One cycle delay from BRAM read
-  io.rfile.w2_en   := DontCare
+  io.rfile.w2_en   := false.B
   io.rfile.w2_addr := DontCare
   io.rfile.w2_data := DontCare
 
-  io.tpu2cpuState.PC := bramOut64b
-  io.tpu2cpuState.SP := bramOut64b
+  io.tpu2cpuState.PC := bramOut
+  io.tpu2cpuState.SP := bramOut
   io.tpu2cpuState.NZCV := TPU2STATE.PStateGet_NZCV(bramOut)
   // One cycle delay from BRAM read
   io.tpu2cpuStateReg.bits := RegNext(stateRegType)
@@ -226,8 +216,8 @@ object TPU2STATE {
   val r_DONE :: r_XREGS :: r_PC :: r_SP :: r_NZCV :: Nil = Enum(5)
   def PStateGet_NZCV(word: UInt): UInt = word(3,0)
   val ARCH_XREGS_OFFST = 0
-  val ARCH_PC_OFFST    = 64
-  val ARCH_SP_OFFST    = 66
-  val ARCH_PSTATE_OFFST = 68
+  val ARCH_PC_OFFST    = 32
+  val ARCH_SP_OFFST    = 33
+  val ARCH_PSTATE_OFFST = 34
   val ARCH_MAX_OFFST = ARCH_PSTATE_OFFST + 1
 }

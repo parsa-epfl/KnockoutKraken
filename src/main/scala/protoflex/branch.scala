@@ -9,6 +9,7 @@ import common.PROCESSOR_TYPES._
 
 class BInst(implicit val cfg: ProcConfig) extends Bundle {
   val pc = Output(DATA_T)
+  val unalignedExcp = Output(Bool())
 }
 
 // Writeback to register based on PC value instruction
@@ -58,7 +59,9 @@ class BranchUnit(implicit val cfg: ProcConfig) extends Module
   val bit_pos = WireInit(Cat(~io.dinst.is32bit.asUInt, io.dinst.imm(23-5,19-5)))
 
   val binst = Wire(new BInst)
-  binst.pc := Mux(io.dinst.itype === I_BReg, io.rVal1, pcadd)
+  val bpc = Mux(io.dinst.itype === I_BReg, io.rVal1, pcadd)
+  binst.pc := bpc
+  binst.unalignedExcp := bpc(1,0) =/= 0.U
 
   io.binst.bits := binst
   io.binst.valid :=

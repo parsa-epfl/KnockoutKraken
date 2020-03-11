@@ -56,30 +56,19 @@ class FetchUnit(implicit val cfg: ProcConfig) extends Module
   io.pc.valid := arbiter.io.next.valid
 
   val insnReg = Reg(Valid(new FInst))
-  if (cfg.bramConfigMem.isRegistered) {
-    insnReq.valid := RegNext(insnHit)
-    insnReq.bits.inst := io.insn
-    insnReq.bits.tag := RegNext(arbiter.io.next.bits)
-    insnReq.bits.pc := RegNext(currFetchPC)
+  insnReq.valid := RegNext(insnHit)
+  insnReq.bits.inst := io.insn
+  insnReq.bits.tag := RegNext(arbiter.io.next.bits)
+  insnReq.bits.pc := RegNext(currFetchPC)
 
-    when(!fetchReg.io.enq.ready) {
-      insnReg := insnReq
-    }.elsewhen(fetchReg.io.enq.ready) {
-      insnReg.valid := false.B
-    }
-
-    fetchReg.io.enq.bits  := Mux(insnReg.valid, insnReg.bits, insnReq.bits)
-    fetchReg.io.enq.valid := Mux(insnReg.valid, insnReg.valid, insnReq.valid)
-
-  } else {
-    insnReq.valid := insnHit
-    insnReq.bits.inst := io.insn
-    insnReq.bits.tag := arbiter.io.next.bits
-    insnReq.bits.pc := currFetchPC
-
-    fetchReg.io.enq.bits  := insnReq.bits
-    fetchReg.io.enq.valid := insnReq.valid
+  when(!fetchReg.io.enq.ready) {
+    insnReg := insnReq
+  }.elsewhen(fetchReg.io.enq.ready) {
+    insnReg.valid := false.B
   }
+
+  fetchReg.io.enq.bits  := Mux(insnReg.valid, insnReg.bits, insnReq.bits)
+  fetchReg.io.enq.valid := Mux(insnReg.valid, insnReg.valid, insnReq.valid)
 
   when(io.commitReg.valid && io.commitReg.bits.br.valid) {
     prefetchPC(io.commitReg.bits.tag) := io.nextPC
