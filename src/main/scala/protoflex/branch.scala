@@ -71,9 +71,9 @@ class BranchUnit(implicit val cfg: ProcConfig) extends Module
       I_BCImm -> io.cond,
       I_TBImm -> (io.rVal2(bit_pos) === io.dinst.op),
       I_CBImm -> MuxLookup(io.dinst.op, false.B, Array(
-                   OP_CBZ  -> Mux(io.dinst.is32bit, io.rVal2(31,0) === 0.U, io.rVal2 === 0.U),
-                   OP_CBNZ -> Mux(io.dinst.is32bit, io.rVal2(31,0) =/= 0.U, io.rVal2 =/= 0.U)
-                 ))
+        OP_CBZ  -> Mux(io.dinst.is32bit, io.rVal2(31,0) === 0.U, io.rVal2 === 0.U),
+        OP_CBNZ -> Mux(io.dinst.is32bit, io.rVal2(31,0) =/= 0.U, io.rVal2 =/= 0.U)
+      ))
     ))
 
   val pcrel = Wire(new PCRel)

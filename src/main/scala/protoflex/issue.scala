@@ -193,6 +193,7 @@ class IssueUnitRevamp(implicit val cfg: ProcConfig) extends Module
   val issue_thread = WireInit(arbiter.io.next.bits)
 
   io.deq <> fifos(issue_thread).deq
+  io.deq.valid := fifos(issue_thread).deq.valid && arbiter.io.next.valid
 
   when(io.flush.valid) {
     fifos(io.flush.tag).flush := true.B
