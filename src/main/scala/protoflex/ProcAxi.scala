@@ -16,6 +16,12 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
     case '1' => true
   }
 
+  def reverseEndianess(bits: UInt, wordSize: Integer, wordNb: Integer): UInt = {
+    val splitted = VecInit.tabulate(wordNb) { idx => bits((idx+1)*wordSize-1, idx*wordSize) }
+    val reversed = VecInit(splitted.reverse)
+    reversed.asUInt
+  }
+
   val readOnly  = "0100".map(str2bool)
   val pulseOnly = "1000".map(str2bool)
   val cfgAxiMM = new AxiMemoryMappedRegFileConfig(4, readOnly, pulseOnly)
@@ -65,6 +71,11 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
   })
 
   io.memoryBRAM <> proc.io.memoryBRAM
+  val revDI = reverseEndianess(io.memoryBRAM.DI,      cfg.bramConfigMem.COL_WIDTH, cfg.bramConfigMem.NB_COL)
+  val revDO = reverseEndianess(proc.io.memoryBRAM.DO, cfg.bramConfigMem.COL_WIDTH, cfg.bramConfigMem.NB_COL)
+  proc.io.memoryBRAM.DI := revDI
+  io.memoryBRAM.DO := revDO
+
   io.stateBRAM <> proc.io.stateBRAM
   io.axiLite <> regFile.io.axiLite
 

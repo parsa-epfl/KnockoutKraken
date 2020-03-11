@@ -110,8 +110,8 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
     var hex = ""
     val insns : Seq[(Int, BigInt)] = for(i <- 0 until pageSize) yield {
       val insn_LE = bytearray.slice(i*WORD_SIZE, (i+1)*WORD_SIZE)
-      val (insn_0,insn_1) = insn_LE.splitAt(4)
-      val insn = BigInt(Array(0.toByte) ++ insn_1 ++ insn_0)
+      //val (insn_0,insn_1) = insn_LE.splitAt(4)
+      val insn = BigInt(Array(0.toByte) ++ insn_LE ) //++ insn_1 ++ insn_0)
       (i, insn)
     }
     insns

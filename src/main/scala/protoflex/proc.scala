@@ -281,7 +281,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
     pregsVec(commitTag).PC := nextPC
   }
 
-  when(memArbiterData.io.busy && !exception) {
+  when(memArbiterData.io.rfileWr && !exception) {
     rfileVec(commitTag).w1_en := memArbiterData.io.rfile.w1_en
     rfileVec(commitTag).w2_en := memArbiterData.io.rfile.w2_en
   }

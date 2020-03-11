@@ -247,8 +247,15 @@ class DataAlignByte(implicit val cfg: ProcConfig) extends Module {
     val unalignedExcp = Output(Bool())
   })
 
-  val data = WireInit(io.data)
+
   val minst = WireInit(io.minst)
+
+  val data = WireInit(io.data)
+//    Mux(minst.isLoad, Cat(
+//    io.data(39,32), io.data(47,40), io.data(55,48), io.data(63,56),
+//    io.data( 7, 0), io.data(15, 8), io.data(23,16), io.data(31,24)),
+//    io.data)) // Little Endian processor
+
   val addr = io.minst.memReq(io.currReq).addr
   val dataBytes = VecInit.tabulate(8) { i => data((i+1)*8-1, i*8) }
   // Seq(
@@ -287,7 +294,13 @@ class DataAlignByte(implicit val cfg: ProcConfig) extends Module {
     ))
   )
 
-  val alignedStore = WireInit(data << Cat(addr(2,0), 0.U(3.W)))
+  val byteAlignStore = WireInit(data << Cat(addr(2,0), 0.U(3.W)))
+  val alignedStore = WireInit(byteAlignStore)
+//    Cat(  // Change Endianness
+//    byteAlignStore(39,32), byteAlignStore(47,40), byteAlignStore(55,48), byteAlignStore(63,56),
+//    byteAlignStore( 7, 0), byteAlignStore(15, 8), byteAlignStore(23,16), byteAlignStore(31,24)))
+//    //byteAlignStore(63,56), byteAlignStore(55,48), byteAlignStore(47,40), byteAlignStore(39,32),
+//    //byteAlignStore(31,24), byteAlignStore(23,16), byteAlignStore(15, 8), byteAlignStore( 7, 0)))
 
 
   // Byte enable for Stores
