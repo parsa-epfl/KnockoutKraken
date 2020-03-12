@@ -308,14 +308,14 @@ class DataAlignByte(implicit val cfg: ProcConfig) extends Module {
 
   // NOTE: Read Manual section B2.5 for alignment support -> Possible performance improvements
   val isAlignedMem_0 = WireInit(MuxLookup(minst.size, false.B, Array(
-    SIZEB  -> false.B,
+    SIZEB  -> true.B,
     SIZEH  -> (minst.memReq(0).addr(0) === 0.U),
     SIZE32 -> (minst.memReq(0).addr(1,0) === 0.U),
     SIZE64 -> (minst.memReq(0).addr(2,0) === 0.U)
   )))
 
   val isAlignedMem_1 = WireInit(MuxLookup(minst.size, false.B, Array(
-    SIZEB  -> false.B,
+    SIZEB  -> true.B,
     SIZEH  -> (minst.memReq(1).addr(0) === 0.U),
     SIZE32 -> (minst.memReq(1).addr(1,0) === 0.U),
     SIZE64 -> (minst.memReq(1).addr(2,0) === 0.U)
