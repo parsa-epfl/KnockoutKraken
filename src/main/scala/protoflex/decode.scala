@@ -159,6 +159,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
 }
 
 object DInst {
+  def genTypeUInt()(implicit cfg: ProcConfig): UInt = WireInit(new DInst, DontCare).asUInt.cloneType
   def apply()(implicit cfg: ProcConfig): DInst = {
     val dinst = Wire(new DInst)
 

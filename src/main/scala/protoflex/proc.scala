@@ -37,9 +37,9 @@ class ProcStateDBG(implicit val cfg : ProcConfig) extends Bundle {
   val pregsVec = Output(Vec(cfg.NB_THREADS, new PStateRegs))
   val rfileVec = Output(Vec(cfg.NB_THREADS, Vec(REG_N, DATA_T)))
 
-  val tuWorking = Output(ValidTagged(cfg.TAG_T))
-  val fillTLB = Input(ValidTagged(DATA_T, new TLBEntry)) // NOTE: Tag is the addr, not the thread
-  val missTLB = Output(ValidTagged(cfg.TAG_T, DATA_T))
+  val tuWorking = Output(ValidTag(cfg.TAG_T))
+  val fillTLB = Input(ValidTag(DATA_T, new TLBEntry)) // NOTE: Tag is the addr, not the thread
+  val missTLB = Output(ValidTag(cfg.TAG_T, DATA_T))
 }
 
 /** Processor
@@ -392,16 +392,29 @@ class CommitInst(implicit val cfg : ProcConfig) extends Bundle {
   val tag = Output(cfg.TAG_T)
 }
 
-class ValidTagged[T1 <: Data, T2 <: Data](genTag: T1, genData: Option[T2]) extends Bundle
+class ValidTag[T1 <: Data, T2 <: Data](genTag: T1, genData: Option[T2]) extends Bundle
 {
   val valid = Bool()
   val data = genData
   val tag = genTag
-  override def cloneType: this.type = ValidTagged(genTag, genData).asInstanceOf[this.type]
+  override def cloneType: this.type = ValidTag(genTag, genData).asInstanceOf[this.type]
 }
 
-object ValidTagged {
-  def apply[T1 <: Data, T2 <: Data](genTag: T1, genData : Option[T2]): ValidTagged[T1,T2] = new ValidTagged(genTag, genData)
-  def apply[T1 <: Data, T2 <: Data](genTag: T1, genData : T2): ValidTagged[T1,T2] = new ValidTagged(genTag, Some(genData))
-  def apply[T <: Data](genTag: T): ValidTagged[T,T] = new ValidTagged(genTag, None)
+object ValidTag {
+  def apply[T1 <: Data, T2 <: Data](genTag: T1, genData : Option[T2]): ValidTag[T1,T2] = new ValidTag(genTag, genData)
+  def apply[T1 <: Data, T2 <: Data](genTag: T1, genData : T2): ValidTag[T1,T2] = new ValidTag(genTag, Some(genData))
+  def apply[T <: Data](genTag: T): ValidTag[T,T] = new ValidTag(genTag, None)
+}
+
+class DecoupledTag[T1 <: Data, T2 <: Data](genTag: T1, genData: T2) extends Bundle
+{
+  val ready = Input(Bool())
+  val valid = Output(Bool())
+  val bits = Output(genData)
+  val tag = Output(genTag)
+  override def cloneType: this.type = DecoupledTag(genTag, genData).asInstanceOf[this.type]
+}
+
+object DecoupledTag {
+  def apply[T1 <: Data, T2 <: Data](genTag: T1, genData : T2): DecoupledTag[T1,T2] = new DecoupledTag(genTag, genData)
 }

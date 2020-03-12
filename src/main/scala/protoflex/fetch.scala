@@ -15,15 +15,15 @@ class FInst(implicit val cfg: ProcConfig) extends Bundle
 
 class FetchUnitIO(implicit val cfg: ProcConfig) extends Bundle
 {
-  val flush = Input(ValidTagged(cfg.TAG_T))
-  val fire = Input(ValidTagged(cfg.TAG_T))
+  val flush = Input(ValidTag(cfg.TAG_T))
+  val fire = Input(ValidTag(cfg.TAG_T))
   val commitReg = Flipped(Valid(new CommitInst))
   val nextPC = Input(DATA_T)
 
   val fetchEn = Input(Vec(cfg.NB_THREADS, Bool()))
   val pcVec = Input(Vec(cfg.NB_THREADS, DATA_T))
 
-  val pc = Output(ValidTagged(cfg.TAG_T, DATA_T))
+  val pc = Output(ValidTag(cfg.TAG_T, DATA_T))
 
   val hit = Input(Bool())
   val insn = Input(INST_T)

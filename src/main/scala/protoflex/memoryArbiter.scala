@@ -16,7 +16,7 @@ class MemArbiterData(implicit val cfg: ProcConfig) extends MultiIOModule
     val commitEnq = Input(Decoupled(new CommitInst))
     val commitDeq = Input(Decoupled(new CommitInst))
 
-    val fillTLB = Input(ValidTagged(DATA_T, new TLBEntry))
+    val fillTLB = Input(ValidTag(DATA_T, new TLBEntry))
     val memPort = Flipped(new BRAMPort()(cfg.bramConfigMem))
     val tlbPort = Flipped(new Bundle {
       val isWr = Input(Bool())
@@ -197,7 +197,7 @@ class MemArbiterInst(implicit val cfg: ProcConfig) extends MultiIOModule
     val selHost = Output(Bool())
     val selMem = Output(Bool())
 
-    val fillTLB = Input(ValidTagged(DATA_T, new TLBEntry))
+    val fillTLB = Input(ValidTag(DATA_T, new TLBEntry))
     val memPort = Flipped(new BRAMPort()(cfg.bramConfigMem))
     val tlbPort = Flipped(new Bundle {
       val isWr = Input(Bool())

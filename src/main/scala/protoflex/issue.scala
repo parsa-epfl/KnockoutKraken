@@ -63,7 +63,7 @@ class IssueUnit(implicit val cfg: ProcConfig) extends Module
 
     // Back Pressure
     val commitReg = Flipped(Valid(new CommitInst))
-    val flush = Input(ValidTagged(cfg.TAG_T))
+    val flush = Input(ValidTag(cfg.TAG_T))
   })
 
   /** Issue stage pipeline register
@@ -164,14 +164,14 @@ class IssueUnitRevamp(implicit val cfg: ProcConfig) extends Module
 
     // Back Pressure
     val commitReg = Flipped(Valid(new CommitInst))
-    val flush = Input(ValidTagged(cfg.TAG_T))
+    val flush = Input(ValidTag(cfg.TAG_T))
   })
 
-  val fifos = VecInit(Seq.fill(cfg.NB_THREADS)(Module(FlushQueue(new DInst, 4)).io))
+  val fifos = VecInit(Seq.fill(cfg.NB_THREADS)(Module(FlushQueue(io.enq.bits.asUInt.cloneType, 4)).io))
   // Defaults
   for (cpu <- 0 until cfg.NB_THREADS) {
     fifos(cpu).enq.valid := false.B
-    fifos(cpu).enq.bits  := io.enq.bits
+    fifos(cpu).enq.bits  := io.enq.bits.asUInt
     fifos(cpu).deq.ready := false.B
     fifos(cpu).flush := false.B
   }
@@ -192,8 +192,9 @@ class IssueUnitRevamp(implicit val cfg: ProcConfig) extends Module
   arbiter.io.next.ready := io.deq.ready
   val issue_thread = WireInit(arbiter.io.next.bits)
 
-  io.deq <> fifos(issue_thread).deq
+  io.deq.bits  := fifos(issue_thread).deq.bits.asTypeOf(new DInst)
   io.deq.valid := fifos(issue_thread).deq.valid && arbiter.io.next.valid
+  fifos(issue_thread).deq.ready := io.deq.ready && arbiter.io.next.valid
 
   when(io.flush.valid) {
     fifos(io.flush.tag).flush := true.B

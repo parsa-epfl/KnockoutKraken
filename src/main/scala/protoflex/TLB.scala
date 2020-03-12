@@ -28,7 +28,7 @@ class TLBEntry(implicit val cfg: ProcConfig) extends Bundle {
 class TLBUnit(implicit val cfg: ProcConfig) extends Module {
   import TLBEntry._
   val io = IO(new Bundle {
-    val fillTLB = Input(ValidTagged(DATA_T, new TLBEntry))
+    val fillTLB = Input(ValidTag(DATA_T, new TLBEntry))
     val iPort = new Bundle {
       val isWr = Input(Bool())
       val vaddr = Input(Valid(DATA_T))

@@ -48,11 +48,11 @@ class TransplantUnitIO(implicit val cfg: ProcConfig) extends Bundle
  */
 class TransplantUnitHostIO(implicit val cfg: ProcConfig) extends Bundle
 {
-  val fire = Input(ValidTagged(cfg.TAG_T))
-  val done = Output(ValidTagged(cfg.TAG_T))
-  val missTLB = Output(ValidTagged(cfg.TAG_T, DATA_T))
-  val fillTLB = Input(ValidTagged(DATA_T, new TLBEntry))
-  val getState = Input(ValidTagged(cfg.TAG_T))
+  val fire = Input(ValidTag(cfg.TAG_T))
+  val done = Output(ValidTag(cfg.TAG_T))
+  val missTLB = Output(ValidTag(cfg.TAG_T, DATA_T))
+  val fillTLB = Input(ValidTag(DATA_T, new TLBEntry))
+  val getState = Input(ValidTag(cfg.TAG_T))
 }
 
 /*
@@ -65,13 +65,13 @@ class TransplantUnitHostIO(implicit val cfg: ProcConfig) extends Bundle
  */
 class TransplantUnitCPUIO(implicit val cfg: ProcConfig) extends Bundle
 {
-  val flush = Output(ValidTagged(cfg.TAG_T))
-  val fire = Output(ValidTagged(cfg.TAG_T))
-  val freeze = Output(ValidTagged(cfg.TAG_T))
-  val done = Input(ValidTagged(cfg.TAG_T))
+  val flush = Output(ValidTag(cfg.TAG_T))
+  val fire = Output(ValidTag(cfg.TAG_T))
+  val freeze = Output(ValidTag(cfg.TAG_T))
+  val done = Input(ValidTag(cfg.TAG_T))
 
-  val missTLB = Input(ValidTagged(cfg.TAG_T, DATA_T))
-  val fillTLB = Output(ValidTagged(DATA_T, new TLBEntry))
+  val missTLB = Input(ValidTag(cfg.TAG_T, DATA_T))
+  val fillTLB = Output(ValidTag(DATA_T, new TLBEntry))
 }
 
 class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
