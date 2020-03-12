@@ -158,6 +158,7 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
       simLog("DebugSignals not enabled, enable them to run with verification; EXIT")
       exit
     }
+    Context().backend.setTimeout(clock, 1000)
 
     //simLog(s"START PC:" + "%016x".format(pstate.pc))
     cProcAxi.fireThread(0)
@@ -184,22 +185,21 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
             simLog(s"OUT:0x${"%016x".format(pc)}:  ${"%08x".format(inst)}      UNDEF")
             clock.step(1)
           } else {
-            simLog(s"OUT:0x${"%016x".format(pc)}:  ${"%08x".format(inst)}")
 
             // If Memory, request QEMU for DATA
-            if(cProcAxi.isCommitedMem) {
-              val memReqs = if(cProcAxi.isCommitedPairMem) 2 else 1
-              for(i <- 0 until memReqs) {
-                if(cProcAxi.isCommitedLoad) {
-                  val addr: BigInt = cProcAxi.getCommitedMemAddr(i)
-                  writeCmd((FA_QflexCmds.DATA_LOAD, addr), cfgSim.qemuCmdPath)
-                  val resp = waitForCmd(cfgSim.simCmdPath)
-                  val addrResp: BigInt = resp._2
-                  //simLog(s"RESP:0x${"%016x".format(addr)}:0x${"%016x".format(addrResp)}")
-                  //cProcAxi.writeLD(i, addrResp)
-                }
-              }
-            }
+            //if(cProcAxi.isCommitedMem) {
+            //  val memReqs = if(cProcAxi.isCommitedPairMem) 2 else 1
+            //  for(i <- 0 until memReqs) {
+            //    if(cProcAxi.isCommitedLoad) {
+            //      val addr: BigInt = cProcAxi.getCommitedMemAddr(i)
+            //      writeCmd((FA_QflexCmds.DATA_LOAD, addr), cfgSim.qemuCmdPath)
+            //      val resp = waitForCmd(cfgSim.simCmdPath)
+            //      val addrResp: BigInt = resp._2
+            //      //simLog(s"RESP:0x${"%016x".format(addr)}:0x${"%016x".format(addrResp)}")
+            //      //cProcAxi.writeLD(i, addrResp)
+            //    }
+            //  }
+            //}
 
 
             clock.step(1)
@@ -208,6 +208,7 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
 
             // Ask QEMU to step and write state back to compare
             writePState2File(cfgSim.simStatePath, currState)
+            simLog(s"OUT:0x${"%016x".format(pc)}:  ${"%08x".format(inst)}")
             writeCmd((FA_QflexCmds.CHECK_N_STEP, 0), cfgSim.qemuCmdPath)
             waitForCmd(cfgSim.simCmdPath)
 
@@ -227,16 +228,16 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
       val bramMask = cfgProc.TLB_NB_ENTRY - 1 //for (i <- 0 until cfgProc.TLB_NB_ENTRY_W) yield '1'
       do {
         if(cProcAxi.isMissTLB) {
-          val addr: BigInt = cProcAxi.getMissTLBAddr
-          writeCmd((FA_QflexCmds.INST_FETCH, addr), cfgSim.qemuCmdPath)
+          val (addr, tag): (BigInt, BigInt) = cProcAxi.getMissTLBAddrNType
+          writeCmd((tag, addr), cfgSim.qemuCmdPath)
           val cmd = waitForCmd(cfgSim.simCmdPath)
-          val insns: Seq[(Int, BigInt)] = getProgramPageInsns(cfgSim.pagePath)
           val bram = ((addr & (bramMask << 12)) >> 12) // mask bits after page to target TLB entry
-          simLog(s"MISSED PC ${"%016x".format(addr)}: BRAM: ${bram}")
+          val insns: Seq[(Int, BigInt)] = getProgramPageInsns(cfgSim.pagePath)
+          simLog(s"${"%016x".format(addr)}:BRAM:${bram}:MISSED:${FA_QflexCmds.cmd_toString(tag)}:${tag}")
           for(insn <- insns) {
             cProcAxi.writeMem(insn._2, insn._1, bram)
           }
-          cProcAxi.writeFillTLB(addr, false)
+          cProcAxi.writeFillTLB(addr, cmd._2 == FA_QflexCmds.DATA_STORE)
         } else {
           clock.step(1)
         }

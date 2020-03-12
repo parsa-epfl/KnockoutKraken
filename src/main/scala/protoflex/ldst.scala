@@ -296,12 +296,6 @@ class DataAlignByte(implicit val cfg: ProcConfig) extends Module {
 
   val byteAlignStore = WireInit(data << Cat(addr(2,0), 0.U(3.W)))
   val alignedStore = WireInit(byteAlignStore)
-//    Cat(  // Change Endianness
-//    byteAlignStore(39,32), byteAlignStore(47,40), byteAlignStore(55,48), byteAlignStore(63,56),
-//    byteAlignStore( 7, 0), byteAlignStore(15, 8), byteAlignStore(23,16), byteAlignStore(31,24)))
-//    //byteAlignStore(63,56), byteAlignStore(55,48), byteAlignStore(47,40), byteAlignStore(39,32),
-//    //byteAlignStore(31,24), byteAlignStore(23,16), byteAlignStore(15, 8), byteAlignStore( 7, 0)))
-
 
   // Byte enable for Stores
   val mask = WireInit(MuxLookup(minst.size, 255.U, Array(

@@ -51,7 +51,7 @@ class FetchUnit(implicit val cfg: ProcConfig) extends Module
     currFetchPC := currFetchPC + 4.U
   }
 
-  io.pc.data.get := currFetchPC
+  io.pc.bits.get := currFetchPC
   io.pc.tag := arbiter.io.next.bits
   io.pc.valid := arbiter.io.next.valid
 
@@ -61,7 +61,7 @@ class FetchUnit(implicit val cfg: ProcConfig) extends Module
   insnReq.bits.tag := RegNext(arbiter.io.next.bits)
   insnReq.bits.pc := RegNext(currFetchPC)
 
-  when(!fetchReg.io.enq.ready) {
+  when(!fetchReg.io.enq.ready && !insnReg.valid) {
     insnReg := insnReq
   }.elsewhen(fetchReg.io.enq.ready) {
     insnReg.valid := false.B

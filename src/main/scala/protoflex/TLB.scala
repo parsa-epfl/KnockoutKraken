@@ -75,7 +75,7 @@ class TLBUnit(implicit val cfg: ProcConfig) extends Module {
   val fPortIdx = WireInit(getTLBidx(io.fillTLB.tag))
   val tlb_fPort = tlb(fPortIdx)
   when(io.fillTLB.valid) {
-    tlb(fPortIdx) := io.fillTLB.data.get
+    tlb(fPortIdx) := io.fillTLB.bits.get
   }
 
   io.excpWrProt := excpWrProt

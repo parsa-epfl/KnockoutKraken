@@ -39,7 +39,7 @@ class ProcStateDBG(implicit val cfg : ProcConfig) extends Bundle {
 
   val tuWorking = Output(ValidTag(cfg.TAG_T))
   val fillTLB = Input(ValidTag(DATA_T, new TLBEntry)) // NOTE: Tag is the addr, not the thread
-  val missTLB = Output(ValidTag(cfg.TAG_T, DATA_T))
+  val missTLB = Output(ValidTag(MISS_T, DATA_T))
 }
 
 /** Processor
@@ -136,15 +136,25 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   fetch.io.commitReg.bits := commitReg.io.deq.bits
   fetch.io.commitReg.valid := commitReg.io.deq.valid
 
-  memArbiterInst.io.vaddr.bits := fetch.io.pc.data.get
+  memArbiterInst.io.vaddr.bits := fetch.io.pc.bits.get
   memArbiterInst.io.vaddr.valid := fetch.io.pc.valid
   insnTLB.io.iPort <> memArbiterInst.io.tlbPort
 
   memArbiterInst.io.fillTLB := tpu.io.tpu2cpu.fillTLB
 
-  tpu.io.tpu2cpu.missTLB.tag := fetch.io.pc.tag
-  tpu.io.tpu2cpu.missTLB.valid := memArbiterInst.io.reqMiss.valid || memArbiterData.io.reqMiss.valid
-  tpu.io.tpu2cpu.missTLB.data.get := Mux(memArbiterInst.io.reqMiss.valid, memArbiterInst.io.reqMiss.bits, memArbiterData.io.reqMiss.bits)
+  when(memArbiterInst.io.reqMiss.valid) {
+    tpu.io.tpu2cpu.missTLB.valid := true.B
+    tpu.io.tpu2cpu.missTLB.tag := INST_FETCH.U
+    tpu.io.tpu2cpu.missTLB.bits.get := memArbiterInst.io.reqMiss.bits
+  }.elsewhen(memArbiterData.io.reqMiss.valid){
+    tpu.io.tpu2cpu.missTLB.valid := true.B
+    tpu.io.tpu2cpu.missTLB.tag := memArbiterData.io.reqMiss.tag
+    tpu.io.tpu2cpu.missTLB.bits.get := memArbiterData.io.reqMiss.bits.get
+  }.otherwise {
+    tpu.io.tpu2cpu.missTLB.valid := false.B
+    tpu.io.tpu2cpu.missTLB.tag := DontCare
+    tpu.io.tpu2cpu.missTLB.bits.get := DontCare
+  }
 
   memory.portB <> memArbiterInst.io.memPort
   when(memArbiterInst.io.selMem) {
@@ -153,7 +163,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
     memory.portB <> io.memoryBRAM
   }
 
-  val sel32bit = RegNext(fetch.io.pc.data.get(2))
+  val sel32bit = RegNext(fetch.io.pc.bits.get(2))
 
   fetch.io.hit := !memArbiterInst.io.tlbPort.miss.valid
   fetch.io.insn := Mux(sel32bit, memory.portB.DO(63,32), memory.portB.DO(31,0))
@@ -395,7 +405,7 @@ class CommitInst(implicit val cfg : ProcConfig) extends Bundle {
 class ValidTag[T1 <: Data, T2 <: Data](genTag: T1, genData: Option[T2]) extends Bundle
 {
   val valid = Bool()
-  val data = genData
+  val bits = genData
   val tag = genTag
   override def cloneType: this.type = ValidTag(genTag, genData).asInstanceOf[this.type]
 }

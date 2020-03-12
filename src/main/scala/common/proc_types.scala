@@ -37,6 +37,12 @@ object PROCESSOR_TYPES
   val VADDR = 48
   val PADDR = 32
 
+  // Miss type
+  def MISS_T = UInt(2.W)
+  val DATA_LOAD  = 0 // FA_QflexCmds.DATA_LOAD
+  val DATA_STORE = 1 // FA_QflexCmds.DATA_STORE
+  val INST_FETCH = 2 // FA_QflexCmds.INST_FETCH
+
   // TLB
   val PG_OFFSET = 12 // 4K page
   val TLB_ENTRIES = 256

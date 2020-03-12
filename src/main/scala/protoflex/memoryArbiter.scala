@@ -30,7 +30,7 @@ class MemArbiterData(implicit val cfg: ProcConfig) extends MultiIOModule
     val rfileRd = Output(Bool())
 
     val busy = Output(Bool())
-    val reqMiss = Output(Valid(DATA_T))
+    val reqMiss = Output(ValidTag(MISS_T, DATA_T))
     val unalignedExcp = Output(Bool())
   })
 
@@ -61,7 +61,8 @@ class MemArbiterData(implicit val cfg: ProcConfig) extends MultiIOModule
   io.busy := !(commitingStage === s_Commiting)
 
   io.reqMiss.valid := commitingStage === s_GettingPage
-  io.reqMiss.bits := missAddr
+  io.reqMiss.tag := Mux(minst.isLoad, DATA_LOAD.U, DATA_STORE.U)
+  io.reqMiss.bits.get := missAddr
 
   io.rfileWr := false.B
   io.rfileRd := false.B

@@ -113,12 +113,12 @@ object ProcDriver {
     def getCommitedMemAddr(idx: Int): BigInt = getMemReq(idx).addr.peek.litValue
 
     def isMissTLB: Boolean = procStateDBG_.get.missTLB.valid.peek.litToBoolean
-    def getMissTLBAddr: BigInt = procStateDBG_.get.missTLB.data.get.peek.litValue
+    def getMissTLBAddrNType: (BigInt, BigInt) = (procStateDBG_.get.missTLB.bits.get.peek.litValue, procStateDBG_.get.missTLB.tag.peek.litValue)
 
     def writeFillTLB(vaddr: BigInt, isWr: Boolean) : Unit = {
-      procStateDBG_.get.fillTLB.data.get.tag.poke(TLBEntry.getTLBtag(vaddr.U))
-      procStateDBG_.get.fillTLB.data.get.wrEn.poke(isWr.B)
-      procStateDBG_.get.fillTLB.data.get.valid.poke(true.B)
+      procStateDBG_.get.fillTLB.bits.get.tag.poke(TLBEntry.getTLBtag(vaddr.U))
+      procStateDBG_.get.fillTLB.bits.get.wrEn.poke(isWr.B)
+      procStateDBG_.get.fillTLB.bits.get.valid.poke(true.B)
       procStateDBG_.get.fillTLB.tag.poke(vaddr.U)
       procStateDBG_.get.fillTLB.valid.poke(true.B)
       clock.step(1)

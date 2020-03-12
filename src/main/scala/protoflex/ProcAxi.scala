@@ -140,7 +140,7 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
   // reg(2, 0, 1)
   proc.io.host2tpu.fillTLB.valid    := false.B
   proc.io.host2tpu.fillTLB.tag      := tagReg
-  proc.io.host2tpu.fillTLB.data.get := TLBEntry()
+  proc.io.host2tpu.fillTLB.bits.get := TLBEntry()
 
   /** Register 3
     * +----------------------------------------+
