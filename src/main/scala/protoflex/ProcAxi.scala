@@ -138,9 +138,7 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
     *
     */
   // reg(2, 0, 1)
-  proc.io.host2tpu.fillTLB.valid    := false.B
-  proc.io.host2tpu.fillTLB.tag      := tagReg
-  proc.io.host2tpu.fillTLB.bits.get := TLBEntry()
+  proc.io.host2tpu.fillTLB := DontCare
 
   /** Register 3
     * +----------------------------------------+
@@ -175,7 +173,7 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
 
   // DEBUG Signals ------------------------------------------------------------
   if(cfg.DebugSignals) {
-    io.procStateDBG.get <> proc.io.procStateDBG.get
+    proc.io.procStateDBG.get <> io.procStateDBG.get
     proc.io.host2tpu.fillTLB <> io.procStateDBG.get.fillTLB
     proc.io.host2tpu.missTLB <> io.procStateDBG.get.missTLB
   }

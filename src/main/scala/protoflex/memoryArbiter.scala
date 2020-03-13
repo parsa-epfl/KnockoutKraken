@@ -151,10 +151,13 @@ class MemArbiterData(implicit val cfg: ProcConfig) extends MultiIOModule
       io.tlbPort.vaddr.bits := DontCare
       io.tlbPort.vaddr.valid := false.B
 
+      // Load
       io.rfile.w1_addr := minst.memReq(1).reg
       io.rfile.w1_data := dataAligner.io.aligned
       io.rfile.w1_en := minst.isLoad
 
+      // Stores
+      io.rfile.rs1_addr := minst.memReq(1).reg
 
       // Write to memory if Store
       io.memPort.EN := true.B

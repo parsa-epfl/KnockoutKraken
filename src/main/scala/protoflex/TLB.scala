@@ -25,6 +25,9 @@ class TLBEntry(implicit val cfg: ProcConfig) extends Bundle {
   val valid = Bool()
 }
 
+/* Full Associative
+ *    LRU -> Least Recently Used
+ */
 class TLBUnit(implicit val cfg: ProcConfig) extends Module {
   import TLBEntry._
   val io = IO(new Bundle {
@@ -62,7 +65,7 @@ class TLBUnit(implicit val cfg: ProcConfig) extends Module {
   val iPortMiss = !iPortOut.valid || iPortDirty
   val dPortMiss = !dPortOut.valid || dPortDirty
 
-  val excpWrProt = (io.dPort.vaddr.valid && dPortOut.valid && !dPortOut.wrEn && io.dPort.isWr) ||
+  val excpWrProt = WireInit(io.dPort.vaddr.valid && dPortOut.valid && !dPortOut.wrEn && io.dPort.isWr) ||
     (io.iPort.vaddr.valid && iPortOut.valid && !iPortOut.wrEn && io.iPort.isWr)
 
   io.iPort.paddr := vaddr2paddr(io.iPort.vaddr.bits)
