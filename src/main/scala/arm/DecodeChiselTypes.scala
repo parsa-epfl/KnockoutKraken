@@ -187,11 +187,12 @@ object DECODE_CONTROL_SIGNALS
   val I_LSPrReg = DEC_LITS.I_LSPrReg.U(TYPE_W) // Load/store register (pre-indexed)
 
   val I_LSUImm = DEC_LITS.I_LSUImm.U(TYPE_W) // Load/store (unsigned immediate)
-  val I_LSPReg = DEC_LITS.I_LSPReg.U(TYPE_W) // Load/store pair register (signed offset)
+  val I_LSPPoReg = DEC_LITS.I_LSPoReg.U(TYPE_W) // Load/store pair register (post-indexed)
+  val I_LSPReg   = DEC_LITS.I_LSPReg.U(TYPE_W)  // Load/store pair register (signed offset)
+  val I_LSPPrReg = DEC_LITS.I_LSPrReg.U(TYPE_W) // Load/store pair register (pre-indexed)
 
   val I_TBImm =  DEC_LITS.I_TBImm.U(TYPE_W) // Test and branch (immediate)
   val I_PCRel =  DEC_LITS.I_PCRel.U(TYPE_W) // PC-Relative
-
 }
 
 object DECODE_MATCHING_TABLES
@@ -360,12 +361,22 @@ object DECODE_MATCHING_TABLES
       CBImm_CBNZ32 -> List(I_CBImm, OP_CBNZ,  N, N, N, N, Y),
       CBImm_CBZ    -> List(I_CBImm, OP_CBZ,   N, N, N, N, N),
       CBImm_CBNZ   -> List(I_CBImm, OP_CBNZ,  N, N, N, N, N),
-      // Load/store pair register (signed offset)
       // I_TYPE_OP -> List(I_TYPE,   OP_OP,    RD, SHIFT, COND, NZCV, IS32BIT)
+      // Load/store pair register (post-indexed)
+      LSPPoReg_STP32 -> List(I_LSPPoReg, OP_STP32,   Y, N, N, N, Y),
+      LSPPoReg_STP64 -> List(I_LSPPoReg, OP_STP64,   Y, N, N, N, N),
+      LSPPoReg_LDP32 -> List(I_LSPPoReg, OP_LDP32,   Y, N, N, N, Y),
+      LSPPoReg_LDP64 -> List(I_LSPPoReg, OP_LDP64,   Y, N, N, N, N),
+      // Load/store pair register (signed offset)
       LSPReg_STP32 -> List(I_LSPReg, OP_STP32,   Y, N, N, N, Y),
       LSPReg_STP64 -> List(I_LSPReg, OP_STP64,   Y, N, N, N, N),
       LSPReg_LDP32 -> List(I_LSPReg, OP_LDP32,   Y, N, N, N, Y),
       LSPReg_LDP64 -> List(I_LSPReg, OP_LDP64,   Y, N, N, N, N),
+      // Load/store pair register (pre-indexed)
+      LSPPrReg_STP32 -> List(I_LSPPrReg, OP_STP32,   Y, N, N, N, Y),
+      LSPPrReg_STP64 -> List(I_LSPPrReg, OP_STP64,   Y, N, N, N, N),
+      LSPPrReg_LDP32 -> List(I_LSPPrReg, OP_LDP32,   Y, N, N, N, Y),
+      LSPPrReg_LDP64 -> List(I_LSPPrReg, OP_LDP64,   Y, N, N, N, N),
       // Load/store register (register offset)
       LSRReg_STRB  -> List(I_LSRReg, OP_STRB,    Y, N, N, N, Y),
       LSRReg_STRH  -> List(I_LSRReg, OP_STRH,    Y, N, N, N, Y),

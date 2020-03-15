@@ -354,6 +354,20 @@ object INSTRUCTIONS
   def LSUImm_LDRSW   = BitPat("b1011100110??????????????????????")
   //def LSUImm_PRFUM = BitPat("b1111100110??????????????????????")
 
+  // Load/store pair register (post-indexed)
+  // 31 30 | 29 28 27 | 26 | 25 24 23 | 22 | 21 20 19 18 17 16 15 | 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
+  //  opc  |  1  0  1 |  V |  0  0  1 |  L |         imm7         |       Rt2      |       Rn       |       Rt       |                  |
+  //  0  0 |  1  0  1 |  0 |  0  0  1 |  0 |         imm7         |       Rt2      |       Rn       |       Rt       | STP              | 32-bit
+  //  1  0 |  1  0  1 |  0 |  0  0  1 |  0 |         imm7         |       Rt2      |       Rn       |       Rt       | STP              | 64-bit
+  //  0  0 |  1  0  1 |  0 |  0  0  1 |  1 |         imm7         |       Rt2      |       Rn       |       Rt       | LDP              | 32-bit
+  //  1  0 |  1  0  1 |  0 |  0  0  1 |  1 |         imm7         |       Rt2      |       Rn       |       Rt       | LDP              | 64-bit
+  def LSPPoReg = BitPat("b101010010???????????????????????")
+  def LSPPoReg_STP32 = BitPat("b0010100010??????????????????????")
+  def LSPPoReg_STP64 = BitPat("b1010100010??????????????????????")
+  def LSPPoReg_LDP32 = BitPat("b0010100011??????????????????????")
+  def LSPPoReg_LDP64 = BitPat("b1010100011??????????????????????")
+
+
   // Load/store pair register (signed offset)
   // 31 30 | 29 28 27 | 26 | 25 24 23 | 22 | 21 20 19 18 17 16 15 | 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
   //  opc  |  1  0  1 |  V |  0  1  0 |  L |         imm7         |       Rt2      |       Rn       |       Rt       |                  |
@@ -366,6 +380,19 @@ object INSTRUCTIONS
   def LSPReg_STP64 = BitPat("b1010100100??????????????????????")
   def LSPReg_LDP32 = BitPat("b0010100101??????????????????????")
   def LSPReg_LDP64 = BitPat("b1010100101??????????????????????")
+
+  // Load/store pair register (pre-indexed)
+  // 31 30 | 29 28 27 | 26 | 25 24 23 | 22 | 21 20 19 18 17 16 15 | 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
+  //  opc  |  1  0  1 |  V |  0  1  1 |  L |         imm7         |       Rt2      |       Rn       |       Rt       |                  |
+  //  0  0 |  1  0  1 |  0 |  0  1  1 |  0 |         imm7         |       Rt2      |       Rn       |       Rt       | STP              | 32-bit
+  //  1  0 |  1  0  1 |  0 |  0  1  1 |  0 |         imm7         |       Rt2      |       Rn       |       Rt       | STP              | 64-bit
+  //  0  0 |  1  0  1 |  0 |  0  1  1 |  1 |         imm7         |       Rt2      |       Rn       |       Rt       | LDP              | 32-bit
+  //  1  0 |  1  0  1 |  0 |  0  1  1 |  1 |         imm7         |       Rt2      |       Rn       |       Rt       | LDP              | 64-bit
+  def LSPPrReg = BitPat("b101010010???????????????????????")
+  def LSPPrReg_STP32 = BitPat("b0010100110??????????????????????")
+  def LSPPrReg_STP64 = BitPat("b1010100110??????????????????????")
+  def LSPPrReg_LDP32 = BitPat("b0010100111??????????????????????")
+  def LSPPrReg_LDP64 = BitPat("b1010100111??????????????????????")
 
   // Load/store register (register offset)
   // 31 30 | 29 28 27 | 26 | 25 24 | 23 | 22 | 21 | 20 19 18 17 16 | 15 14 13 | 12 | 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant

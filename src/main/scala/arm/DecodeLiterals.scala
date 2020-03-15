@@ -181,7 +181,9 @@ object DEC_LITS {
   val I_LSUReg  = 19 // Load/store register (unscaled immediate)
 
   val I_LSUImm = 20 // Load/store (unsigned immediate)
-  val I_LSPReg = 21 // Load/store pair register (signed offset)
+  val I_LSPPoReg = 21 // Load/store pair register (post-indexed)
+  val I_LSPReg   = 22 // Load/store pair register (pre-indexed)
+  val I_LSPPrReg = 23 // Load/store pair register (signed offset)
 
   val I_TBImm  = 24 // Test and branch (immediate)
   val I_PCRel  = 25 // PC-Relative

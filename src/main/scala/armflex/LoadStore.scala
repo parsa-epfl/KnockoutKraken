@@ -100,18 +100,26 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
     wback := false.B
     postindex := false.B
     offst := offstSignExt9
+  }.elsewhen(io.dinst.itype === I_LSPPoReg) {
+    wback := true.B
+    postindex := true.B
+    offst := offstSignExt7 << size
   }.elsewhen(io.dinst.itype === I_LSPReg) {
     wback := false.B
     postindex := false.B
     offst := offstSignExt7 << size
-  }.elsewhen(io.dinst.itype === I_LSRReg) {
-    wback := false.B
+  }.elsewhen(io.dinst.itype === I_LSPPrReg) {
+    wback := true.B
     postindex := false.B
-    offst := extendReg.io.res
+    offst := offstSignExt7 << size
   }.elsewhen(io.dinst.itype === I_LSPoReg) {
     wback := true.B
     postindex := true.B
     offst := offstSignExt9
+  }.elsewhen(io.dinst.itype === I_LSRReg) {
+    wback := false.B
+    postindex := false.B
+    offst := extendReg.io.res
   }.elsewhen(io.dinst.itype === I_LSPrReg) {
     wback := true.B
     postindex := false.B
