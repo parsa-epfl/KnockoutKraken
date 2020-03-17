@@ -48,13 +48,13 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
       I_ASSR  -> inst( 4, 0),
       I_ASSR  -> inst( 4, 0),
       I_CSel  -> inst( 4, 0),
-      I_LSPoReg -> inst( 4, 0),
-      I_LSRReg  -> inst( 4, 0),
-      I_LSPrReg -> inst( 4, 0),
+      I_LSRegPo -> inst( 4, 0),
+      I_LSReg  -> inst( 4, 0),
+      I_LSRegPr -> inst( 4, 0),
       I_LSUReg  -> inst( 4, 0),
-      I_LSPoReg -> inst( 4, 0),
-      I_LSPReg  -> inst( 4, 0),
-      I_LSPrReg -> inst( 4, 0),
+      I_LSRegPo -> inst( 4, 0),
+      I_LSPair  -> inst( 4, 0),
+      I_LSRegPr -> inst( 4, 0),
       I_LSUImm  -> inst( 4, 0)
     ))
 
@@ -70,13 +70,13 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
       I_CCImm -> inst( 9, 5),
       I_CCReg -> inst( 9, 5),
       I_CSel  -> inst( 9, 5),
-      I_LSPoReg -> inst( 9, 5),
-      I_LSRReg  -> inst( 9, 5),
-      I_LSPrReg -> inst( 9, 5),
+      I_LSRegPo -> inst( 9, 5),
+      I_LSReg  -> inst( 9, 5),
+      I_LSRegPr -> inst( 9, 5),
       I_LSUReg  -> inst( 9, 5),
-      I_LSPPoReg-> inst( 9, 5),
-      I_LSPReg  -> inst( 9, 5),
-      I_LSPPrReg-> inst( 9, 5),
+      I_LSPairPo-> inst( 9, 5),
+      I_LSPair  -> inst( 9, 5),
+      I_LSPairPr-> inst( 9, 5),
       I_LSUImm  -> inst( 9, 5)
     ))
 
@@ -91,10 +91,10 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
       I_DP2S  -> inst(20,16),
       I_MovI  -> inst( 4, 0),
       I_CBImm -> inst( 4, 0),
-      I_LSPPoReg-> inst(14,10), // Rt2 as Rd2
-      I_LSPReg  -> inst(14,10), // Rt2 as Rd2
-      I_LSPPrReg-> inst(14,10), // Rt2 as Rd2
-      I_LSRReg-> inst(20,16),
+      I_LSPairPo-> inst(14,10), // Rt2 as Rd2
+      I_LSPair  -> inst(14,10), // Rt2 as Rd2
+      I_LSPairPr-> inst(14,10), // Rt2 as Rd2
+      I_LSReg-> inst(20,16),
       I_LSUImm-> inst( 4, 0)
     ))
 
@@ -112,12 +112,12 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
 
       I_ASImm -> inst(21,10),
 
-      I_LSPoReg -> inst(20,12),
-      I_LSPrReg -> inst(20,12),
+      I_LSRegPo -> inst(20,12),
+      I_LSRegPr -> inst(20,12),
       I_LSUReg  -> inst(21,12), // zero(21), imm9(20,12)
-      I_LSPPoReg -> inst(21,15), // imm7(21,15)
-      I_LSPReg   -> inst(21,15), // imm7(21,15)
-      I_LSPPrReg -> inst(21,15), // imm7(21,15)
+      I_LSPairPo -> inst(21,15), // imm7(21,15)
+      I_LSPair   -> inst(21,15), // imm7(21,15)
+      I_LSPairPr -> inst(21,15), // imm7(21,15)
       I_LSUImm-> inst(21,10)
     ))
 
@@ -157,7 +157,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
     this.itype := itype
 
     // Special cases
-    when(itype === I_LSRReg) {
+    when(itype === I_LSReg) {
       shift_val.valid := inst(12)   // S
       shift_val.bits := inst(15,13) // option
     }

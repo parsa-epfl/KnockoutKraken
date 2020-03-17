@@ -181,15 +181,15 @@ object DECODE_CONTROL_SIGNALS
   val I_BReg  =  DEC_LITS.I_BReg.U(TYPE_W)  // Conditional branch (register)
   val I_CBImm =  DEC_LITS.I_CBImm.U(TYPE_W) // Branch and Compare (immediate)
 
-  val I_LSRReg  = DEC_LITS.I_LSRReg.U(TYPE_W)  // Load/store register (register offset)
-  val I_LSPoReg = DEC_LITS.I_LSPoReg.U(TYPE_W) // Load/store register (post-indexed)
   val I_LSUReg  = DEC_LITS.I_LSUReg.U(TYPE_W)  // Load/store register (unscaled immediate)
-  val I_LSPrReg = DEC_LITS.I_LSPrReg.U(TYPE_W) // Load/store register (pre-indexed)
+  val I_LSRegPo = DEC_LITS.I_LSRegPo.U(TYPE_W) // Load/store register (post-indexed)
+  val I_LSReg   = DEC_LITS.I_LSReg.U(TYPE_W)   // Load/store register (register offset)
+  val I_LSRegPr = DEC_LITS.I_LSRegPr.U(TYPE_W) // Load/store register (pre-indexed)
 
   val I_LSUImm = DEC_LITS.I_LSUImm.U(TYPE_W) // Load/store (unsigned immediate)
-  val I_LSPPoReg = DEC_LITS.I_LSPoReg.U(TYPE_W) // Load/store pair register (post-indexed)
-  val I_LSPReg   = DEC_LITS.I_LSPReg.U(TYPE_W)  // Load/store pair register (signed offset)
-  val I_LSPPrReg = DEC_LITS.I_LSPrReg.U(TYPE_W) // Load/store pair register (pre-indexed)
+  val I_LSPairPo = DEC_LITS.I_LSRegPo.U(TYPE_W) // Load/store pair register (post-indexed)
+  val I_LSPair   = DEC_LITS.I_LSPair.U(TYPE_W)  // Load/store pair register (signed offset)
+  val I_LSPairPr = DEC_LITS.I_LSRegPr.U(TYPE_W) // Load/store pair register (pre-indexed)
 
   val I_TBImm =  DEC_LITS.I_TBImm.U(TYPE_W) // Test and branch (immediate)
   val I_PCRel =  DEC_LITS.I_PCRel.U(TYPE_W) // PC-Relative
@@ -363,29 +363,29 @@ object DECODE_MATCHING_TABLES
       CBImm_CBNZ   -> List(I_CBImm, OP_CBNZ,  N, N, N, N, N),
       // I_TYPE_OP -> List(I_TYPE,   OP_OP,    RD, SHIFT, COND, NZCV, IS32BIT)
       // Load/store pair register (post-indexed)
-      LSPPoReg_STP32 -> List(I_LSPPoReg, OP_STP32,   Y, N, N, N, Y),
-      LSPPoReg_STP64 -> List(I_LSPPoReg, OP_STP64,   Y, N, N, N, N),
-      LSPPoReg_LDP32 -> List(I_LSPPoReg, OP_LDP32,   Y, N, N, N, Y),
-      LSPPoReg_LDP64 -> List(I_LSPPoReg, OP_LDP64,   Y, N, N, N, N),
+      LSPairPo_STP32 -> List(I_LSPairPo, OP_STP32,   Y, N, N, N, Y),
+      LSPairPo_STP64 -> List(I_LSPairPo, OP_STP64,   Y, N, N, N, N),
+      LSPairPo_LDP32 -> List(I_LSPairPo, OP_LDP32,   Y, N, N, N, Y),
+      LSPairPo_LDP64 -> List(I_LSPairPo, OP_LDP64,   Y, N, N, N, N),
       // Load/store pair register (signed offset)
-      LSPReg_STP32 -> List(I_LSPReg, OP_STP32,   Y, N, N, N, Y),
-      LSPReg_STP64 -> List(I_LSPReg, OP_STP64,   Y, N, N, N, N),
-      LSPReg_LDP32 -> List(I_LSPReg, OP_LDP32,   Y, N, N, N, Y),
-      LSPReg_LDP64 -> List(I_LSPReg, OP_LDP64,   Y, N, N, N, N),
+      LSPair_STP32 -> List(I_LSPair, OP_STP32,   Y, N, N, N, Y),
+      LSPair_STP64 -> List(I_LSPair, OP_STP64,   Y, N, N, N, N),
+      LSPair_LDP32 -> List(I_LSPair, OP_LDP32,   Y, N, N, N, Y),
+      LSPair_LDP64 -> List(I_LSPair, OP_LDP64,   Y, N, N, N, N),
       // Load/store pair register (pre-indexed)
-      LSPPrReg_STP32 -> List(I_LSPPrReg, OP_STP32,   Y, N, N, N, Y),
-      LSPPrReg_STP64 -> List(I_LSPPrReg, OP_STP64,   Y, N, N, N, N),
-      LSPPrReg_LDP32 -> List(I_LSPPrReg, OP_LDP32,   Y, N, N, N, Y),
-      LSPPrReg_LDP64 -> List(I_LSPPrReg, OP_LDP64,   Y, N, N, N, N),
+      LSPairPr_STP32 -> List(I_LSPairPr, OP_STP32,   Y, N, N, N, Y),
+      LSPairPr_STP64 -> List(I_LSPairPr, OP_STP64,   Y, N, N, N, N),
+      LSPairPr_LDP32 -> List(I_LSPairPr, OP_LDP32,   Y, N, N, N, Y),
+      LSPairPr_LDP64 -> List(I_LSPairPr, OP_LDP64,   Y, N, N, N, N),
       // Load/store register (register offset)
-      LSRReg_STRB  -> List(I_LSRReg, OP_STRB,    Y, N, N, N, Y),
-      LSRReg_STRH  -> List(I_LSRReg, OP_STRH,    Y, N, N, N, Y),
-      LSRReg_STR32 -> List(I_LSRReg, OP_STR32,   Y, N, N, N, Y),
-      LSRReg_STR64 -> List(I_LSRReg, OP_STR64,   Y, N, N, N, N),
-      LSRReg_LDRB  -> List(I_LSRReg, OP_LDRB,    Y, N, N, N, Y),
-      LSRReg_LDRH  -> List(I_LSRReg, OP_LDRH,    Y, N, N, N, Y),
-      LSRReg_LDR32 -> List(I_LSRReg, OP_LDR32,   Y, N, N, N, Y),
-      LSRReg_LDR64 -> List(I_LSRReg, OP_LDR64,   Y, N, N, N, N),
+      LSReg_STRB  -> List(I_LSReg, OP_STRB,    Y, N, N, N, Y),
+      LSReg_STRH  -> List(I_LSReg, OP_STRH,    Y, N, N, N, Y),
+      LSReg_STR32 -> List(I_LSReg, OP_STR32,   Y, N, N, N, Y),
+      LSReg_STR64 -> List(I_LSReg, OP_STR64,   Y, N, N, N, N),
+      LSReg_LDRB  -> List(I_LSReg, OP_LDRB,    Y, N, N, N, Y),
+      LSReg_LDRH  -> List(I_LSReg, OP_LDRH,    Y, N, N, N, Y),
+      LSReg_LDR32 -> List(I_LSReg, OP_LDR32,   Y, N, N, N, Y),
+      LSReg_LDR64 -> List(I_LSReg, OP_LDR64,   Y, N, N, N, N),
       // Load/store register (unsigned immediate)
       LSUImm_STRB  -> List(I_LSUImm, OP_STRB,    Y, N, N, N, Y),
       LSUImm_STRH  -> List(I_LSUImm, OP_STRH,    Y, N, N, N, Y),
@@ -397,7 +397,9 @@ object DECODE_MATCHING_TABLES
       LSUImm_LDR64 -> List(I_LSUImm, OP_LDR64,   Y, N, N, N, N),
       LSUImm_LDRSW -> List(I_LSUImm, OP_LDRSW,   Y, N, N, N, N),
       LSUImm_LDRSB64 -> List(I_LSUImm, OP_LDRSB, Y, N, N, N, N),
+      LSUImm_LDRSB32 -> List(I_LSUImm, OP_LDRSB, Y, N, N, N, Y),
       LSUImm_LDRSH64 -> List(I_LSUImm, OP_LDRSH, Y, N, N, N, N),
+      LSUImm_LDRSH32 -> List(I_LSUImm, OP_LDRSH, Y, N, N, N, Y),
       // Load/store register (unscaled immediate)
       LSUReg_STURB    -> List(I_LSUReg, OP_STURB,  Y, N, N, N, N),
       LSUReg_LDURB    -> List(I_LSUReg, OP_LDURB,  Y, N, N, N, N),
@@ -413,33 +415,33 @@ object DECODE_MATCHING_TABLES
       LSUReg_STUR     -> List(I_LSUReg, OP_STUR64, Y, N, N, N, N),
       LSUReg_LDUR     -> List(I_LSUReg, OP_LDUR64, Y, N, N, N, N),
       // Load/store register (post-indexed)
-      LSPoReg_STRB    -> List(I_LSPoReg, OP_STRB,  Y, N, N, N, N),
-      LSPoReg_LDRB    -> List(I_LSPoReg, OP_LDRB,  Y, N, N, N, N),
-      LSPoReg_LDRSB   -> List(I_LSPoReg, OP_LDRSB, Y, N, N, N, N),
-      LSPoReg_LDRSB32 -> List(I_LSPoReg, OP_LDRSB, Y, N, N, N, Y),
-      LSPoReg_STRH    -> List(I_LSPoReg, OP_STRH,  Y, N, N, N, N),
-      LSPoReg_LDRH    -> List(I_LSPoReg, OP_LDRH,  Y, N, N, N, N),
-      LSPoReg_LDRSH   -> List(I_LSPoReg, OP_LDRSH, Y, N, N, N, N),
-      LSPoReg_LDRSH32 -> List(I_LSPoReg, OP_LDRSH, Y, N, N, N, Y),
-      LSPoReg_STR32   -> List(I_LSPoReg, OP_STR32, Y, N, N, N, Y),
-      LSPoReg_LDR32   -> List(I_LSPoReg, OP_LDR32, Y, N, N, N, Y),
-      LSPoReg_LDRSW   -> List(I_LSPoReg, OP_LDRSW, Y, N, N, N, N),
-      LSPoReg_STR     -> List(I_LSPoReg, OP_STR64, Y, N, N, N, N),
-      LSPoReg_LDR     -> List(I_LSPoReg, OP_LDR64, Y, N, N, N, N),
+      LSRegPo_STRB    -> List(I_LSRegPo, OP_STRB,  Y, N, N, N, N),
+      LSRegPo_LDRB    -> List(I_LSRegPo, OP_LDRB,  Y, N, N, N, N),
+      LSRegPo_LDRSB   -> List(I_LSRegPo, OP_LDRSB, Y, N, N, N, N),
+      LSRegPo_LDRSB32 -> List(I_LSRegPo, OP_LDRSB, Y, N, N, N, Y),
+      LSRegPo_STRH    -> List(I_LSRegPo, OP_STRH,  Y, N, N, N, N),
+      LSRegPo_LDRH    -> List(I_LSRegPo, OP_LDRH,  Y, N, N, N, N),
+      LSRegPo_LDRSH   -> List(I_LSRegPo, OP_LDRSH, Y, N, N, N, N),
+      LSRegPo_LDRSH32 -> List(I_LSRegPo, OP_LDRSH, Y, N, N, N, Y),
+      LSRegPo_STR32   -> List(I_LSRegPo, OP_STR32, Y, N, N, N, Y),
+      LSRegPo_LDR32   -> List(I_LSRegPo, OP_LDR32, Y, N, N, N, Y),
+      LSRegPo_LDRSW   -> List(I_LSRegPo, OP_LDRSW, Y, N, N, N, N),
+      LSRegPo_STR     -> List(I_LSRegPo, OP_STR64, Y, N, N, N, N),
+      LSRegPo_LDR     -> List(I_LSRegPo, OP_LDR64, Y, N, N, N, N),
       // Load/store register (pre-indexed)
-      LSPrReg_STRB    -> List(I_LSPrReg, OP_STRB,  Y, N, N, N, N),
-      LSPrReg_LDRB    -> List(I_LSPrReg, OP_LDRB,  Y, N, N, N, N),
-      LSPrReg_LDRSB   -> List(I_LSPrReg, OP_LDRSB, Y, N, N, N, N),
-      LSPrReg_LDRSB32 -> List(I_LSPrReg, OP_LDRSB, Y, N, N, N, Y),
-      LSPrReg_STRH    -> List(I_LSPrReg, OP_STRH,  Y, N, N, N, N),
-      LSPrReg_LDRH    -> List(I_LSPrReg, OP_LDRH,  Y, N, N, N, N),
-      LSPrReg_LDRSH   -> List(I_LSPrReg, OP_LDRSH, Y, N, N, N, N),
-      LSPrReg_LDRSH32 -> List(I_LSPrReg, OP_LDRSH, Y, N, N, N, Y),
-      LSPrReg_STR32   -> List(I_LSPrReg, OP_STR32, Y, N, N, N, Y),
-      LSPrReg_LDR32   -> List(I_LSPrReg, OP_LDR32, Y, N, N, N, Y),
-      LSPrReg_LDRSW   -> List(I_LSPrReg, OP_LDRSW, Y, N, N, N, N),
-      LSPrReg_STR     -> List(I_LSPrReg, OP_STR64, Y, N, N, N, N),
-      LSPrReg_LDR     -> List(I_LSPrReg, OP_LDR64, Y, N, N, N, N)
+      LSRegPr_STRB    -> List(I_LSRegPr, OP_STRB,  Y, N, N, N, N),
+      LSRegPr_LDRB    -> List(I_LSRegPr, OP_LDRB,  Y, N, N, N, N),
+      LSRegPr_LDRSB   -> List(I_LSRegPr, OP_LDRSB, Y, N, N, N, N),
+      LSRegPr_LDRSB32 -> List(I_LSRegPr, OP_LDRSB, Y, N, N, N, Y),
+      LSRegPr_STRH    -> List(I_LSRegPr, OP_STRH,  Y, N, N, N, N),
+      LSRegPr_LDRH    -> List(I_LSRegPr, OP_LDRH,  Y, N, N, N, N),
+      LSRegPr_LDRSH   -> List(I_LSRegPr, OP_LDRSH, Y, N, N, N, N),
+      LSRegPr_LDRSH32 -> List(I_LSRegPr, OP_LDRSH, Y, N, N, N, Y),
+      LSRegPr_STR32   -> List(I_LSRegPr, OP_STR32, Y, N, N, N, Y),
+      LSRegPr_LDR32   -> List(I_LSRegPr, OP_LDR32, Y, N, N, N, Y),
+      LSRegPr_LDRSW   -> List(I_LSRegPr, OP_LDRSW, Y, N, N, N, N),
+      LSRegPr_STR     -> List(I_LSRegPr, OP_STR64, Y, N, N, N, N),
+      LSRegPr_LDR     -> List(I_LSRegPr, OP_LDR64, Y, N, N, N, N)
    )
 }
 

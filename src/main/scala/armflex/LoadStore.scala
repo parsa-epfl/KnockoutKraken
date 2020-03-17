@@ -84,7 +84,7 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   val wback = WireInit(false.B)
   val postindex = WireInit(false.B)
 
-  // Decode LSRReg variants
+  // Decode LSReg variants
   val option = io.dinst.shift_val.bits
   val shift = Mux(io.dinst.shift_val.valid, size, 0.U)
   val extendReg = Module(new ExtendReg)
@@ -100,27 +100,27 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
     wback := false.B
     postindex := false.B
     offst := offstSignExt9
-  }.elsewhen(io.dinst.itype === I_LSPPoReg) {
+  }.elsewhen(io.dinst.itype === I_LSPairPo) {
     wback := true.B
     postindex := true.B
     offst := offstSignExt7 << size
-  }.elsewhen(io.dinst.itype === I_LSPReg) {
+  }.elsewhen(io.dinst.itype === I_LSPair) {
     wback := false.B
     postindex := false.B
     offst := offstSignExt7 << size
-  }.elsewhen(io.dinst.itype === I_LSPPrReg) {
+  }.elsewhen(io.dinst.itype === I_LSPairPr) {
     wback := true.B
     postindex := false.B
     offst := offstSignExt7 << size
-  }.elsewhen(io.dinst.itype === I_LSPoReg) {
+  }.elsewhen(io.dinst.itype === I_LSRegPo) {
     wback := true.B
     postindex := true.B
     offst := offstSignExt9
-  }.elsewhen(io.dinst.itype === I_LSRReg) {
+  }.elsewhen(io.dinst.itype === I_LSReg) {
     wback := false.B
     postindex := false.B
     offst := extendReg.io.res
-  }.elsewhen(io.dinst.itype === I_LSPrReg) {
+  }.elsewhen(io.dinst.itype === I_LSRegPr) {
     wback := true.B
     postindex := false.B
     offst := offstSignExt9
@@ -178,13 +178,13 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   io.minst.bits.is32bit := size =/= SIZE64 && !(io.dinst.itype === I_LSUImm && io.dinst.op === OP_LDRSW)
   io.minst.bits.isLoad := isLoad
   io.minst.valid := MuxLookup(io.dinst.itype, false.B, Array(
-    I_LSPPrReg -> true.B,
-    I_LSPReg   -> true.B,
-    I_LSPPoReg -> true.B,
+    I_LSPairPr -> true.B,
+    I_LSPair   -> true.B,
+    I_LSPairPo -> true.B,
     I_LSUReg   -> true.B,
-    I_LSPrReg  -> true.B,
-    I_LSRReg   -> true.B,
-    I_LSPoReg  -> true.B,
+    I_LSRegPr  -> true.B,
+    I_LSReg   -> true.B,
+    I_LSRegPo  -> true.B,
     I_LSUImm -> true.B
   ))
 
@@ -194,9 +194,9 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   // For Pair LD/ST
   val dbytes = 1.U << size
   io.minst.bits.isPair :=
-  (io.dinst.itype === I_LSPPrReg ||
-    io.dinst.itype === I_LSPReg  ||
-    io.dinst.itype === I_LSPPoReg)
+  (io.dinst.itype === I_LSPairPr ||
+    io.dinst.itype === I_LSPair  ||
+    io.dinst.itype === I_LSPairPo)
   io.minst.bits.memReq(1).addr := ldst_address + dbytes
   io.minst.bits.memReq(1).data := DontCare // Read 3 ports from RFile in single cycle Rd;Rt;Rt2
   io.minst.bits.memReq(1).reg := io.dinst.rs2
@@ -225,7 +225,7 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   // if HaveMTEExt() then
   //   SetNotTagCheckedInstruction(!tag_checked); // itype == LSUImm
   //   SetNotTagCheckedInstruction(!tag_checked); // itype == LSUReg
-  //   SetNotTagCheckedInstruction(FALSE);        // itype == LSRReg
+  //   SetNotTagCheckedInstruction(FALSE);        // itype == LSReg
 
   // NOTE itype == LSUImm
   // Checking for Transplant corner cases
@@ -238,7 +238,7 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   //         when Constraint_UNDEF UNDEFINED;        => Transplant
   //         when Constraint_NOP EndOfInstruction(); => NOP
 
-  // NOTE itype == LSPReg
+  // NOTE itype == LSPair
   // if t == t2 then
   //   Constraint c = ConstrainUnpredictable();
   //   assert c IN {Constraint_UNKNOWN, Constraint_UNDEF, Constraint_NOP};

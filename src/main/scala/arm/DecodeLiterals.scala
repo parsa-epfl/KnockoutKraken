@@ -175,15 +175,15 @@ object DEC_LITS {
   val I_BReg  = 14 // Conditional branch (register)
   val I_CBImm = 15 // Branch and Compare (immediate)
 
-  val I_LSRReg  = 16 // Load/store register (register offset)
-  val I_LSPoReg = 17 // Load/store register (post-indexed)
-  val I_LSPrReg = 18 // Load/store register (pre-indexed)
-  val I_LSUReg  = 19 // Load/store register (unscaled immediate)
+  val I_LSUReg  = 16 // Load/store register (unscaled immediate)
+  val I_LSRegPo = 17 // Load/store register (post-indexed)
+  val I_LSReg   = 18 // Load/store register (register offset)
+  val I_LSRegPr = 19 // Load/store register (pre-indexed)
 
-  val I_LSUImm = 20 // Load/store (unsigned immediate)
-  val I_LSPPoReg = 21 // Load/store pair register (post-indexed)
-  val I_LSPReg   = 22 // Load/store pair register (pre-indexed)
-  val I_LSPPrReg = 23 // Load/store pair register (signed offset)
+  val I_LSUImm   = 20 // Load/store (unsigned immediate)
+  val I_LSPairPo = 21 // Load/store pair register (post-indexed)
+  val I_LSPair   = 22 // Load/store pair register (signed offset)
+  val I_LSPairPr = 23 // Load/store pair register (pre-indexed)
 
   val I_TBImm  = 24 // Test and branch (immediate)
   val I_PCRel  = 25 // PC-Relative
@@ -217,8 +217,8 @@ object DEC_LITS {
   val LI_CBImm  = List(N, Y, N, Y, N, N, N)
   val LI_PCRel  = List(Y, N, N, Y, N, N, N)
   val LI_LSUImm = List(Y, Y, Y, Y, N, N, N)
-  val LI_LSRReg = List(Y, Y, Y, Y, N, N, N)
-  val LI_LSPReg = List(Y, Y, Y, Y, N, N, N)
+  val LI_LSReg = List(Y, Y, Y, Y, N, N, N)
+  val LI_LSPair = List(Y, Y, Y, Y, N, N, N)
 
   def decode_table(inst_type : Int): List[Int] =
     inst_type match {
@@ -237,7 +237,7 @@ object DEC_LITS {
       case I_CBImm => LI_BCImm
       case I_PCRel => LI_PCRel
       case I_LSUImm => LI_LSUImm
-      case I_LSRReg => LI_LSRReg
-      case I_LSPReg => LI_LSPReg
+      case I_LSReg => LI_LSReg
+      case I_LSPair => LI_LSPair
     }
 }
