@@ -28,9 +28,26 @@ class PseudoLRU(NB_ENTRY: Int, NB_ENTRY_WIDTH: Int) extends Module {
     }
   }
 
-  when(io.idx_1.valid) { updateTree(io.idx_1.bits, NB_ENTRY_WIDTH-1, 0, NB_ENTRY) }
+  // To unskew the tree
+  val invertPorts = RegInit(false.B)
+  val port_1 = WireInit(io.idx_1)
+  val port_2 = WireInit(io.idx_2)
+  when(invertPorts) {
+    port_1 := io.idx_2
+    port_2 := io.idx_1
+  }
+  when(port_1.valid) {
+    updateTree(port_1.bits, NB_ENTRY_WIDTH-1, 0, NB_ENTRY)
+    // Unskew techniques
+    treeNodes_next(0) := ~treeNodes(0)
+    invertPorts := !invertPorts
+  }
   // NOTE Can override some of the tree updates of the other port
-  when(io.idx_2.valid) { updateTree(io.idx_2.bits, NB_ENTRY_WIDTH-1, 0, NB_ENTRY) }
+  when(port_2.valid) {
+    // Unskew techinques
+    updateTree(port_2.bits, NB_ENTRY_WIDTH-1, 0, NB_ENTRY)
+    treeNodes_next(0) := ~treeNodes(0)
+  }
 
   treeNodes := treeNodes_next.asUInt
 

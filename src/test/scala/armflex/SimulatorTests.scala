@@ -162,7 +162,7 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
       simLog("DebugSignals not enabled, enable them to run with verification; EXIT")
       exit
     }
-    Context().backend.setTimeout(clock, 1000)
+    Context().backend.setTimeout(clock, 10000)
 
     //simLog(s"START PC:" + "%016x".format(pstate.pc))
     cProcAxi.fireThread(0)
