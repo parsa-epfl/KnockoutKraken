@@ -105,16 +105,18 @@ object ProcDriver {
     def getCommitedMemAddr(idx: Int): BigInt = getMemReq(idx).addr.peek.litValue
 
     def isMissTLB: Boolean = procStateDBG_.get.missTLB.valid.peek.litToBoolean
-    def getMissTLBAddrNType: (Int, BigInt) = (
+    def getMissTLB: (Int, BigInt, BigInt) = (
       procStateDBG_.get.missTLB.tag.peek.litValue.toInt,
-      procStateDBG_.get.missTLB.bits.get.peek.litValue,
+      procStateDBG_.get.missTLB.bits.get.vaddr.peek.litValue,
+      procStateDBG_.get.missTLB.bits.get.tlbIdx.peek.litValue
     )
 
-    def writeFillTLB(vaddr: BigInt, isWr: Boolean) : Unit = {
-      procStateDBG_.get.fillTLB.bits.get.tag.poke(TLBEntry.getTLBtag(vaddr.U))
-      procStateDBG_.get.fillTLB.bits.get.wrEn.poke(isWr.B)
-      procStateDBG_.get.fillTLB.bits.get.valid.poke(true.B)
-      procStateDBG_.get.fillTLB.tag.poke(vaddr.U)
+    def writeFillTLB(vaddr: BigInt, isWr: Boolean, tlbIdx: BigInt) : Unit = {
+      procStateDBG_.get.fillTLB.bits.tlbEntry.tag.poke(TLBEntry.getTLBtag(vaddr.U))
+      procStateDBG_.get.fillTLB.bits.tlbEntry.wrEn.poke(isWr.B)
+      procStateDBG_.get.fillTLB.bits.tlbEntry.valid.poke(true.B)
+      procStateDBG_.get.fillTLB.bits.vaddr.poke(vaddr.U)
+      procStateDBG_.get.fillTLB.bits.tlbIdx.poke(tlbIdx.U)
       procStateDBG_.get.fillTLB.valid.poke(true.B)
       clock.step(1)
       procStateDBG_.get.fillTLB.valid.poke(false.B)

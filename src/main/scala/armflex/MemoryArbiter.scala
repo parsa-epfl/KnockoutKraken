@@ -17,13 +17,13 @@ class MemArbiterData(implicit val cfg: ProcConfig) extends MultiIOModule
     val commitEnq = Input(Decoupled(new CommitInst))
     val commitDeq = Input(Decoupled(new CommitInst))
 
-    val fillTLB = Input(ValidTag(DATA_T, new TLBEntry))
+    val fillTLB = Input(Valid(new TLBFill))
     val memPort = Flipped(new BRAMPort()(cfg.bramConfigMem))
     val tlbPort = Flipped(new Bundle {
       val isWr = Input(Bool())
       val vaddr = Input(Valid(DATA_T))
       val paddr = Output(DATA_T)
-      val miss = Output(Valid(DATA_T))
+      val miss = Output(Valid(new TLBMiss))
     })
 
     val rfile = Flipped(new RFileIO)
@@ -31,7 +31,7 @@ class MemArbiterData(implicit val cfg: ProcConfig) extends MultiIOModule
     val rfileRd = Output(Bool())
 
     val busy = Output(Bool())
-    val reqMiss = Output(ValidTag(MISS_T, DATA_T))
+    val reqMiss = Output(ValidTag(MISS_T, new TLBMiss))
     val unalignedExcp = Output(Bool())
   })
 
@@ -40,7 +40,8 @@ class MemArbiterData(implicit val cfg: ProcConfig) extends MultiIOModule
 
   val minst = WireInit(io.commitDeq.bits.mem.bits)
   val commitNext = WireInit(io.commitEnq.bits)
-  val missAddr = RegInit(DATA_X)
+  val tlbpaddr = RegInit(DATA_X)
+  val missTLB = RegInit(new TLBMiss, 0.U.asTypeOf(new TLBMiss))
 
   // Commit Memory takes more cycles
   val dataAligner = Module(new DataAlignByte)
@@ -63,7 +64,7 @@ class MemArbiterData(implicit val cfg: ProcConfig) extends MultiIOModule
 
   io.reqMiss.valid := commitingStage === s_GettingPage
   io.reqMiss.tag := Mux(minst.isLoad, DATA_LOAD.U, DATA_STORE.U)
-  io.reqMiss.bits.get := missAddr
+  io.reqMiss.bits.get := missTLB
 
   io.rfileWr := false.B
   io.rfileRd := false.B
@@ -90,12 +91,13 @@ class MemArbiterData(implicit val cfg: ProcConfig) extends MultiIOModule
       io.memPort.ADDR := io.tlbPort.paddr
 
       when(io.commitEnq.fire() && commitNext.mem.valid) {
+        tlbpaddr := io.tlbPort.paddr
         commitingStage := s_MemCommiting
       }
 
       when(io.tlbPort.miss.valid) {
         commitingStage := s_GettingPage
-        missAddr := io.tlbPort.miss.bits
+        missTLB := io.tlbPort.miss.bits
       }
     }
     // Load is available
@@ -104,6 +106,11 @@ class MemArbiterData(implicit val cfg: ProcConfig) extends MultiIOModule
 
       io.rfileWr := true.B
       io.rfileRd := !minst.isLoad
+
+      // Check for TLB miss if Pair Memory inst
+      io.tlbPort.isWr := !minst.isLoad
+      io.tlbPort.vaddr.bits := minst.memReq(1).addr
+      io.tlbPort.vaddr.valid := minst.isPair
 
       // WriteBack
       io.rfile.w2_addr := minst.rd.bits
@@ -122,22 +129,18 @@ class MemArbiterData(implicit val cfg: ProcConfig) extends MultiIOModule
       io.memPort.DI := dataAligner.io.aligned
       io.memPort.WE := dataAligner.io.byteEn
       io.memPort.ADDR := Mux(minst.isLoad,
-        TLBEntry.vaddr2paddr(minst.memReq(1).addr), // Load -> Load next address if Pair
-        TLBEntry.vaddr2paddr(minst.memReq(0).addr)) // Store -> Store current address
+        io.tlbPort.paddr, // Load -> Load next address if Pair
+        tlbpaddr)         // Store -> Store last cycle preread memReq(0) address
 
+      tlbpaddr := io.tlbPort.paddr
       commitingStage := Mux(minst.isPair, s_MemCommitingPair, s_Commiting)
-
-      // Check for TLB miss if Pair Memory inst
-      io.tlbPort.isWr := !minst.isLoad
-      io.tlbPort.vaddr.bits := minst.memReq(1).addr
-      io.tlbPort.vaddr.valid := minst.isPair
 
       // ABORT Commit: Pair instruction missed
       when(io.tlbPort.miss.valid) {
         io.rfile.w1_en := false.B
         io.rfile.w2_en := false.B
         io.memPort.WE := 0.U
-        missAddr := io.tlbPort.miss.bits
+        missTLB := io.tlbPort.miss.bits
         commitingStage := s_GettingPage
       }
     }
@@ -159,17 +162,16 @@ class MemArbiterData(implicit val cfg: ProcConfig) extends MultiIOModule
 
       // Stores
       io.rfile.rs1_addr := minst.memReq(1).reg
-
       // Write to memory if Store
       io.memPort.EN := true.B
       io.memPort.DI := dataAligner.io.aligned
       io.memPort.WE := dataAligner.io.byteEn
-      io.memPort.ADDR := TLBEntry.vaddr2paddr(minst.memReq(1).addr)
+      io.memPort.ADDR := tlbpaddr
 
       commitingStage := s_Commiting
     }
     is(s_GettingPage) {
-      when(io.fillTLB.valid && io.fillTLB.tag === missAddr) {
+      when(io.fillTLB.valid && io.fillTLB.bits.vaddr === missTLB.vaddr) {
         commitingStage := s_RestartMem
       }
     }
@@ -185,6 +187,7 @@ class MemArbiterData(implicit val cfg: ProcConfig) extends MultiIOModule
       io.memPort.WE := 0.U
       io.memPort.ADDR := io.tlbPort.paddr
 
+      tlbpaddr := io.tlbPort.paddr
       commitingStage := s_MemCommiting
 
       when(io.tlbPort.miss.valid) {
@@ -202,23 +205,23 @@ class MemArbiterInst(implicit val cfg: ProcConfig) extends MultiIOModule
     val selHost = Output(Bool())
     val selMem = Output(Bool())
 
-    val fillTLB = Input(ValidTag(DATA_T, new TLBEntry))
+    val fillTLB = Input(Valid(new TLBFill))
     val memPort = Flipped(new BRAMPort()(cfg.bramConfigMem))
     val tlbPort = Flipped(new Bundle {
       val isWr = Input(Bool())
       val vaddr = Input(Valid(DATA_T))
       val paddr = Output(DATA_T)
-      val miss = Output(Valid(DATA_T))
+      val miss = Output(Valid(new TLBMiss))
     })
 
     val busy = Output(Bool())
-    val reqMiss = Output(Valid(DATA_T))
+    val reqMiss = Output(Valid(new TLBMiss))
   })
 
   val s_Fetching :: s_GettingPage :: Nil = Enum(2)
   val fetchStage = RegInit(s_Fetching)
 
-  val missAddr = RegInit(DATA_X)
+  val missTLB = RegInit(new TLBMiss, 0.U.asTypeOf(new TLBMiss))
 
   io.selHost := fetchStage === s_GettingPage
   io.selMem := !(fetchStage === s_GettingPage)
@@ -228,7 +231,7 @@ class MemArbiterInst(implicit val cfg: ProcConfig) extends MultiIOModule
 
   io.busy := !(fetchStage === s_Fetching)
   io.reqMiss.valid := fetchStage === s_GettingPage
-  io.reqMiss.bits := missAddr
+  io.reqMiss.bits := missTLB
 
   io.memPort.EN := true.B
   io.memPort.DI := 0.U
@@ -239,12 +242,12 @@ class MemArbiterInst(implicit val cfg: ProcConfig) extends MultiIOModule
     is(s_Fetching) {
       when(io.tlbPort.miss.valid) {
         fetchStage := s_GettingPage
-        missAddr := io.tlbPort.miss.bits
+        missTLB := io.tlbPort.miss.bits
       }
     }
 
     is(s_GettingPage) {
-      when(io.fillTLB.valid && io.fillTLB.tag === missAddr) {
+      when(io.fillTLB.valid && io.fillTLB.bits.vaddr === missTLB.vaddr) {
         fetchStage := s_Fetching
       }
     }

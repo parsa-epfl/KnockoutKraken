@@ -190,37 +190,18 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
             clock.step(1)
           } else {
 
-            // If Memory, request QEMU for DATA
-            //if(cProcAxi.isCommitedMem) {
-            //  val memReqs = if(cProcAxi.isCommitedPairMem) 2 else 1
-            //  for(i <- 0 until memReqs) {
-            //    if(cProcAxi.isCommitedLoad) {
-            //      val addr: BigInt = cProcAxi.getCommitedMemAddr(i)
-            //      writeCmd((FA_QflexCmds.DATA_LOAD, addr), cfgSim.qemuCmdPath)
-            //      val resp = waitForCmd(cfgSim.simCmdPath)
-            //      val addrResp: BigInt = resp._2
-            //      //simLog(s"RESP:0x${"%016x".format(addr)}:0x${"%016x".format(addrResp)}")
-            //      //cProcAxi.writeLD(i, addrResp)
-            //    }
-            //  }
-            //}
-
-
-            clock.step(1)
+            clock.step(1) // Next clock cycle state is updated
             currState = cProcAxi.getPStateInternal(0)
-
 
             // Ask QEMU to step and write state back to compare
             writePState2File(cfgSim.simStatePath, currState)
-            simLog(s"OUT:0x${"%016x".format(pc)}:  ${"%08x".format(inst)}")
+            simLog(s"OUT:0x${"%016x".format(pc)}:  ${"%08x".format(inst)}") // Executed instruction
             writeCmd((FA_QflexCmds.CHECK_N_STEP, 0), cfgSim.qemuCmdPath)
             waitForCmd(cfgSim.simCmdPath)
 
             val qemuPState = ArmflexJson.json2state(readFile(cfgSim.qemuStatePath))
-            val matched = qemuPState.matches(currState)
-            if (!matched._1) {
-              simLog(matched._2)
-            }
+            val (hasMatched, diffLog) = currState.matches(qemuPState)
+            if (!hasMatched) simLog(diffLog)
           }
         } else {
           clock.step(1)
@@ -232,16 +213,17 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
       val bramMask = cfgProc.TLB_NB_ENTRY - 1 //for (i <- 0 until cfgProc.TLB_NB_ENTRY_W) yield '1'
       do {
         if(cProcAxi.isMissTLB) {
-          val (tag, addr): (Int, BigInt) = cProcAxi.getMissTLBAddrNType
+          val (tag, addr, tlbIdx): (Int, BigInt, BigInt) = cProcAxi.getMissTLB
           writeCmd((tag, addr), cfgSim.qemuCmdPath)
           val cmd = waitForCmd(cfgSim.simCmdPath)
-          val bram = ((addr & (bramMask << 12)) >> 12) // mask bits after page to target TLB entry
+          //val bram = ((addr & (bramMask << 12)) >> 12) // mask bits after page to target TLB entry
+          val bram = tlbIdx
           val insns: Seq[(Int, BigInt)] = getProgramPageInsns(cfgSim.pagePath)
           simLog(s"${"%016x".format(addr)}:BRAM:${bram}:MISSED:${FA_QflexCmds.cmd_toString(tag)}:${tag}")
           for(insn <- insns) {
             cProcAxi.writeMem(insn._2, insn._1, bram)
           }
-          cProcAxi.writeFillTLB(addr, cmd._2 == FA_QflexCmds.DATA_STORE)
+          cProcAxi.writeFillTLB(addr, cmd._2 == FA_QflexCmds.DATA_STORE, bram)
         } else {
           clock.step(1)
         }

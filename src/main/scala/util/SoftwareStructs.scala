@@ -50,7 +50,7 @@ object SoftwareStructs {
         case ((t,o), i) => t != o
       }
       if(!diffXRegs.isEmpty || this.pc != other.pc || this.nzcv != other.nzcv) {
-        str = str ++ "PState didn't match, differences QEMU - FPGA:\n"
+        str = str ++ "PState didn't match, differences FPGA - QEMU:\n"
         diffXRegs foreach {
           case ((t, o), i) =>
             str = str ++ s"X${i}:0x${"%016x".format(t)} != 0x${"%016x".format(o)}\n"

@@ -38,8 +38,8 @@ class ProcStateDBG(implicit val cfg : ProcConfig) extends Bundle {
   val rfileVec = Output(Vec(cfg.NB_THREADS, Vec(REG_N, DATA_T)))
 
   val tuWorking = Output(ValidTag(cfg.TAG_T))
-  val fillTLB = Input(ValidTag(DATA_T, new TLBEntry)) // NOTE: Tag is the addr, not the thread
-  val missTLB = Output(ValidTag(MISS_T, DATA_T))
+  val fillTLB = Input(Valid(new TLBFill)) // NOTE: Tag is the addr, not the thread
+  val missTLB = Output(ValidTag(MISS_T, new TLBMiss))
 }
 
 /** Processor
@@ -310,7 +310,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
 
   // Start and stop ---------------
   when(insnTLB.io.iPort.miss.valid)  { fetchEn(fetch.io.pc.tag) := false.B }
-  when(tpu.io.tpu2cpu.fillTLB.valid) { fetchEn(tpu.io.tpu2cpu.fillTLB.tag) := true.B }
+  when(tpu.io.tpu2cpu.fillTLB.valid) { fetchEn(0) := true.B } // TODO Support for multithread
   when(tpu.io.tpu2cpu.freeze.valid)  { fetchEn(tpu.io.tpu2cpu.freeze.tag) := false.B }
   when(tpu.io.tpu2cpu.fire.valid)    { fetchEn(tpu.io.tpu2cpu.fire.tag) := true.B }
   when(tpu.io.tpu2cpu.flush.valid)   { fetchEn(tpu.io.tpu2cpu.flush.tag) := false.B }
