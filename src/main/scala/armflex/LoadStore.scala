@@ -131,7 +131,7 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   //     address = X[n];
   //
   when(io.dinst.rs1 === 31.U) {
-    // CheckSPAAligment(); TODO
+    // CheckSPAAligment(); Checked in MemoryArbiter - DataAligner
   }
   val base_address = WireInit(io.rVal1)
 
@@ -178,11 +178,13 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   io.minst.bits.is32bit := size =/= SIZE64 && !(io.dinst.itype === I_LSUImm && io.dinst.op === OP_LDRSW)
   io.minst.bits.isLoad := isLoad
   io.minst.valid := MuxLookup(io.dinst.itype, false.B, Array(
-    I_LSUReg -> true.B,
-    I_LSPReg -> true.B,
-    I_LSRReg -> true.B,
-    I_LSPrReg -> true.B,
-    I_LSPoReg -> true.B,
+    I_LSPPrReg -> true.B,
+    I_LSPReg   -> true.B,
+    I_LSPPoReg -> true.B,
+    I_LSUReg   -> true.B,
+    I_LSPrReg  -> true.B,
+    I_LSRReg   -> true.B,
+    I_LSPoReg  -> true.B,
     I_LSUImm -> true.B
   ))
 
@@ -191,7 +193,10 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   io.minst.bits.memReq(0).reg := io.dinst.rd.bits
   // For Pair LD/ST
   val dbytes = 1.U << size
-  io.minst.bits.isPair := io.dinst.itype === I_LSPReg
+  io.minst.bits.isPair :=
+  (io.dinst.itype === I_LSPPrReg ||
+    io.dinst.itype === I_LSPReg  ||
+    io.dinst.itype === I_LSPPoReg)
   io.minst.bits.memReq(1).addr := ldst_address + dbytes
   io.minst.bits.memReq(1).data := DontCare // Read 3 ports from RFile in single cycle Rd;Rt;Rt2
   io.minst.bits.memReq(1).reg := io.dinst.rs2
