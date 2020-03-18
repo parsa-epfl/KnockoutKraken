@@ -49,12 +49,12 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
       I_ASSR  -> inst( 4, 0),
       I_CSel  -> inst( 4, 0),
       I_LSRegPo -> inst( 4, 0),
-      I_LSReg  -> inst( 4, 0),
+      I_LSReg   -> inst( 4, 0),
       I_LSRegPr -> inst( 4, 0),
       I_LSUReg  -> inst( 4, 0),
-      I_LSRegPo -> inst( 4, 0),
-      I_LSPair  -> inst( 4, 0),
-      I_LSRegPr -> inst( 4, 0),
+      I_LSPairPo -> inst( 4, 0),
+      I_LSPair   -> inst( 4, 0),
+      I_LSPairPr -> inst( 4, 0),
       I_LSUImm  -> inst( 4, 0)
     ))
 

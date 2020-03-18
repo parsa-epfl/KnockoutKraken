@@ -219,7 +219,7 @@ object INSTRUCTIONS
 
   // Add/subtract (shifted register)
   // 31 | 30 | 29 | 28 27 26 25 24 | 23 22 | 21 | 20 19 18 17 16 | 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
-  // sf | op |  S |  0  1  0  1  0 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd       |                  |
+  // sf | op |  S |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd       |                  |
   //  1 |  1 |  1 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |  1  1  1  1  1 | CMP              | 32-bit  */
   //  1 |  0 |  1 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |  1  1  1  1  1 | CMN              | 32-bit  */
   //  1 |  0 |  0 |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd       | ADD              | 32-bit  */
@@ -245,6 +245,13 @@ object INSTRUCTIONS
   def ASSR_ADDS = BitPat("b10101011??0?????????????????????")
   def ASSR_SUB  = BitPat("b11001011??0?????????????????????")
   def ASSR_SUBS = BitPat("b11101011??0?????????????????????")
+
+  // Add/subtract (extended register)
+  // 31 | 30 | 29 | 28 27 26 25 24 | 23 22 | 21 | 20 19 18 17 16 | 15 14 13 | 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
+  // sf | op |  S |  0  1  0  1  1 |  opt  |  1 |      Rm        |  option  |   imm3   |       Rn       |       Rd       |                  |
+  //  1 |  0 |  0 |  0  1  0  1  1 |  0  0 |  1 |      Rm        |  option  |   imm3   |       Rn       |  1  1  1  1  1 | CMP              | 32-bit  */
+  def ASER = BitPat("b1??01011??1?????????????????????")
+  def ASER_ADD = BitPat("b10001011??1?????????????????????")
 
   // Add/subtract (immediate)
   // 31 | 30 | 29 | 28 27 26 25 24 | 23 22 | 21 20 19 18 17 16 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant

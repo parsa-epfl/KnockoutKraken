@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 
 import arm.PROCESSOR_TYPES._
+import arm.DECODE_CONTROL_SIGNALS._
 
 import util._
 
@@ -127,6 +128,10 @@ class MemArbiterData(implicit val cfg: ProcConfig) extends MultiIOModule
       // Write to memory if Store else read Pair Load
       io.memPort.EN := true.B
       io.memPort.DI := dataAligner.io.aligned
+      // ST wzr, addr NOTE Might be missing cases
+      when(minst.memReq(0).reg === 31.U) {
+        io.memPort.DI := 0.U
+      }
       io.memPort.WE := dataAligner.io.byteEn
       io.memPort.ADDR := Mux(minst.isLoad,
         io.tlbPort.paddr, // Load -> Load next address if Pair
@@ -165,6 +170,9 @@ class MemArbiterData(implicit val cfg: ProcConfig) extends MultiIOModule
       // Write to memory if Store
       io.memPort.EN := true.B
       io.memPort.DI := dataAligner.io.aligned
+      when(minst.memReq(1).reg === 31.U) {
+        io.memPort.DI := 0.U
+      }
       io.memPort.WE := dataAligner.io.byteEn
       io.memPort.ADDR := tlbpaddr
 

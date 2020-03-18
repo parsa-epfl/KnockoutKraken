@@ -225,6 +225,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   commitNext.inst32 := issued_dinst.inst32.bits
   commitNext.pc := issued_dinst.pc
   commitNext.tag := issued_tag
+  commitNext.itype := issued_dinst.itype
 
   commitReg.io.enq.bits := commitNext
   commitReg.io.enq.valid := issuer.io.deq.valid
@@ -399,6 +400,7 @@ class CommitInst(implicit val cfg : ProcConfig) extends Bundle {
   val undef = Output(Bool())
   val pc = Output(DATA_T)
   val inst32 = Output(INST_T)
+  val itype = Output(I_T)
   val tag = Output(cfg.TAG_T)
 }
 
