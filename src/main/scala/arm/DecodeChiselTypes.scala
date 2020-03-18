@@ -187,9 +187,9 @@ object DECODE_CONTROL_SIGNALS
   val I_LSRegPr = DEC_LITS.I_LSRegPr.U(TYPE_W) // Load/store register (pre-indexed)
 
   val I_LSUImm = DEC_LITS.I_LSUImm.U(TYPE_W) // Load/store (unsigned immediate)
-  val I_LSPairPo = DEC_LITS.I_LSRegPo.U(TYPE_W) // Load/store pair register (post-indexed)
+  val I_LSPairPo = DEC_LITS.I_LSPairPo.U(TYPE_W) // Load/store pair register (post-indexed)
   val I_LSPair   = DEC_LITS.I_LSPair.U(TYPE_W)  // Load/store pair register (signed offset)
-  val I_LSPairPr = DEC_LITS.I_LSRegPr.U(TYPE_W) // Load/store pair register (pre-indexed)
+  val I_LSPairPr = DEC_LITS.I_LSPairPr.U(TYPE_W) // Load/store pair register (pre-indexed)
 
   val I_TBImm =  DEC_LITS.I_TBImm.U(TYPE_W) // Test and branch (immediate)
   val I_PCRel =  DEC_LITS.I_PCRel.U(TYPE_W) // PC-Relative
