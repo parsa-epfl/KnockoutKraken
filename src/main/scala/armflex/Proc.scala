@@ -33,6 +33,7 @@ class ProcStateDBG(implicit val cfg : ProcConfig) extends Bundle {
   val issueReg = Output(Decoupled(new DInst))
   val commitReg = Output(Decoupled(new CommitInst))
   val commited = Output(Bool())
+  val exception = Output(Valid(UInt(3.W)))
 
   val pregsVec = Output(Vec(cfg.NB_THREADS, new PStateRegs))
   val rfileVec = Output(Vec(cfg.NB_THREADS, Vec(REG_N, DATA_T)))
@@ -307,7 +308,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   }.elsewhen(memArbiterData.io.selHost) {
     memory.portA <> io.memoryBRAM
   }
-  commitReg.io.deq.ready := exception || !memArbiterData.io.busy
+  commitReg.io.deq.ready := !memArbiterData.io.busy
 
   // Start and stop ---------------
   when(insnTLB.io.iPort.miss.valid)  { fetchEn(fetch.io.pc.tag) := false.B }
@@ -376,7 +377,8 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
     procStateDBG.commitReg.valid := commitReg.io.deq.valid
     procStateDBG.commitReg.bits  := commitReg.io.deq.bits
     procStateDBG.commited := commited
-
+    procStateDBG.exception.valid := exception
+    procStateDBG.exception.bits := Cat(unalignedExcpData, unalignedExcpSP, unalignedExcpBranch)
     // Processor State (XREGS + PSTATE)
     val rfileVecWire = Wire(Vec(cfg.NB_THREADS, Vec(REG_N, DATA_T)))
     for(cpu <- 0 until cfg.NB_THREADS) {

@@ -541,7 +541,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
     I_LogI  -> true.B,
     I_BitF  -> true.B,
     I_DP1S  -> true.B,
-    //I_DP2S  -> true.B,
+    I_DP2S  -> true.B,
     I_CCImm -> true.B,
     I_CCReg -> true.B,
     I_ASImm -> true.B,

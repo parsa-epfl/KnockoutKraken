@@ -188,6 +188,14 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
           if(cProcAxi.isCommitedUndef) {
             simLog(s"OUT:0x${"%016x".format(pc)}:  ${"%08x".format(inst)}      UNDEF")
             clock.step(1)
+          } else if(cProcAxi.isException) {
+            val excpType = cProcAxi.getException match {
+              case ExcpUnalignedBr   => "Branch"
+              case ExcpUnalignedSP   => "SP misaligned"
+              case ExcpUnalignedData => "Data misaligned"
+            }
+            simLog(s"OUT:0x${"%016x".format(pc)}:  ${"%08x".format(inst)}      EXCP ${excpType}")
+            clock.step(1)
           } else {
 
             clock.step(1) // Next clock cycle state is updated
@@ -233,7 +241,6 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
     do {  } while(cProcAxi.getDone._1)
 
     clock.step(1)
-    //simLog(s"DONE  PC:" + "%016x".format(cProcAxi.rdBRAM2PSTATE(0).pc))
   }
 
   def runSimulator: Unit = {

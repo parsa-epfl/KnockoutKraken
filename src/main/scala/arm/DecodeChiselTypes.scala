@@ -156,6 +156,7 @@ object DECODE_CONTROL_SIGNALS
   val OP_STP64  = DEC_LITS.OP_STP64.U(OP_W)
   val OP_LDP32  = DEC_LITS.OP_LDP32.U(OP_W)
   val OP_LDP64  = DEC_LITS.OP_LDP64.U(OP_W)
+  val OP_LDPSW  = DEC_LITS.OP_LDPSW.U(OP_W)
 
   // Instruction Types for chisel
   val TYPE_W = DEC_LITS.TYPE_W.W
@@ -367,16 +368,19 @@ object DECODE_MATCHING_TABLES
       LSPairPo_STP64 -> List(I_LSPairPo, OP_STP64,   Y, N, N, N, N),
       LSPairPo_LDP32 -> List(I_LSPairPo, OP_LDP32,   Y, N, N, N, Y),
       LSPairPo_LDP64 -> List(I_LSPairPo, OP_LDP64,   Y, N, N, N, N),
+      LSPairPo_LDPSW -> List(I_LSPairPo, OP_LDPSW,   Y, N, N, N, N),
       // Load/store pair register (signed offset)
-      LSPair_STP32 -> List(I_LSPair, OP_STP32,   Y, N, N, N, Y),
-      LSPair_STP64 -> List(I_LSPair, OP_STP64,   Y, N, N, N, N),
-      LSPair_LDP32 -> List(I_LSPair, OP_LDP32,   Y, N, N, N, Y),
-      LSPair_LDP64 -> List(I_LSPair, OP_LDP64,   Y, N, N, N, N),
+      LSPair_STP32   -> List(I_LSPair,   OP_STP32,   Y, N, N, N, Y),
+      LSPair_STP64   -> List(I_LSPair,   OP_STP64,   Y, N, N, N, N),
+      LSPair_LDP32   -> List(I_LSPair,   OP_LDP32,   Y, N, N, N, Y),
+      LSPair_LDP64   -> List(I_LSPair,   OP_LDP64,   Y, N, N, N, N),
+      LSPair_LDPSW   -> List(I_LSPair,   OP_LDPSW,   Y, N, N, N, N),
       // Load/store pair register (pre-indexed)
       LSPairPr_STP32 -> List(I_LSPairPr, OP_STP32,   Y, N, N, N, Y),
       LSPairPr_STP64 -> List(I_LSPairPr, OP_STP64,   Y, N, N, N, N),
       LSPairPr_LDP32 -> List(I_LSPairPr, OP_LDP32,   Y, N, N, N, Y),
       LSPairPr_LDP64 -> List(I_LSPairPr, OP_LDP64,   Y, N, N, N, N),
+      LSPairPr_LDPSW -> List(I_LSPairPr, OP_LDPSW,   Y, N, N, N, N),
       // Load/store register (register offset)
       LSReg_STRB  -> List(I_LSReg, OP_STRB,    Y, N, N, N, Y),
       LSReg_STRH  -> List(I_LSReg, OP_STRH,    Y, N, N, N, Y),

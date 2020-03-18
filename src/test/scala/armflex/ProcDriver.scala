@@ -16,6 +16,9 @@ import util.BRAMPortDriver.BRAMPortDriver
 import util.SoftwareStructs._
 
 object ProcDriver {
+  val ExcpUnalignedBr   = BigInt(1 << 0)
+  val ExcpUnalignedSP   = BigInt(1 << 1)
+  val ExcpUnalignedData = BigInt(1 << 2)
   implicit class ProcAxiDriver(target: ProcAxiWrap)(implicit val cfgProc: ProcConfig) {
     implicit val clock : Clock = target.clock
 
@@ -103,6 +106,9 @@ object ProcDriver {
     def isCommitedPairMem: Boolean = getMemInst.isPair.peek.litToBoolean
     def isCommitedLoad: Boolean = getMemInst.isLoad.peek.litToBoolean
     def getCommitedMemAddr(idx: Int): BigInt = getMemReq(idx).addr.peek.litValue
+
+    def isException: Boolean = procStateDBG_.get.exception.valid.peek.litToBoolean
+    def getException: BigInt = procStateDBG_.get.exception.bits.peek.litValue
 
     def isMissTLB: Boolean = procStateDBG_.get.missTLB.valid.peek.litToBoolean
     def getMissTLB: (Int, BigInt, BigInt) = (
