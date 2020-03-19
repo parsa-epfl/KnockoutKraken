@@ -94,7 +94,7 @@ We provide a sample program that is already instrumented for KnockoutKraken. You
 $ ./a.out
 ```
 
-To abort QFlex execution, run the following command on another terminal on the AWS F1 node.
+To abort QEMU execution, run the following command on another terminal on the AWS F1 node.
 ```
 $ pgrep "qemu" | xargs sudo kill -9
 ```
