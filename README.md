@@ -52,7 +52,14 @@ $ /home/centos/generate_afi.sh
 ```
 
 ## Load the AFI image
-Now that you created the image, you can load it on the FPGA. First, clear any FPGA image in socket 0
+After `generate_afi.sh` completes, a new file will appear in the folder `/home/centos` with the name `afi_info`. Open that file and note down the ID of the image generated.
+```
+$ cat /home/centos/afi_info
+>>> agfi-XXX afi-XXX
+# You want the value of "agfi-xxx"
+```
+
+Now you can load the image on the FPGA. First, clear any FPGA image in socket 0
 ```
 $ sudo fpga-clear-local-image  -S 0
 ```
@@ -66,6 +73,7 @@ Check whether the image is properly loaded.
 ```
 $ sudo fpga-describe-local-image -S 0 -H
 ```
+
 ## Launch the driver/ARMFlex shell
 Open a terminal in your AWS F1 node and source the AWS SDK.
 ```
