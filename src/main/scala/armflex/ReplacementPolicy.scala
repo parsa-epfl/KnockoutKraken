@@ -67,6 +67,33 @@ class PseudoLRU(NB_ENTRY: Int, NB_ENTRY_WIDTH: Int) extends Module {
   io.lru_idx := lru.asUInt
 }
 
+import chisel3.util.{PriorityEncoder, Fill}
+
+class PseudoBitmapLRU(NB_ENTRY: Int, NB_ENTRY_WIDTH: Int) extends Module {
+  val io = IO(new Bundle {
+    val idx_1 = Input(Valid(UInt(NB_ENTRY_WIDTH.W)))
+    val idx_2 = Input(Valid(UInt(NB_ENTRY_WIDTH.W)))
+    val lru_idx = Output(UInt(NB_ENTRY_WIDTH.W))
+  })
+  val bitmap = RegInit(VecInit((0.U(NB_ENTRY.W).asBools)))
+  when(io.idx_1.valid) {
+    bitmap(io.idx_1.bits) := true.B
+  }
+  // NOTE Can override some of the tree updates of the other port
+  when(io.idx_2.valid) {
+    bitmap(io.idx_2.bits) := true.B
+  }
+
+  val bitmapU = WireInit(bitmap.asUInt)
+  when(bitmapU(NB_ENTRY-2, 0) === Fill(NB_ENTRY-2, 1.U)) {
+    bitmap := 0.U(NB_ENTRY.W).asBools
+  }
+
+  val bitmapUNeg = WireInit(UInt(NB_ENTRY.W), ~bitmapU)
+  io.lru_idx := PriorityEncoder(bitmapUNeg)
+}
+
+
 // Source:
 // https://chipress.co/2019/07/09/how-to-implement-true-lru-ii/
 class lru_linked_list(NB_ENTRY: Int) extends BlackBox(Map(
