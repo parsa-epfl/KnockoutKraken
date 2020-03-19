@@ -29,11 +29,24 @@ object ProcDriver {
     val procStateDBG_ : Option[ProcStateDBG] = target.io.procStateDBG
     val axiLite : AxiLiteSignals = target.io.axiLite
 
+    def init: Unit = {
+      axiLite.init
+    }
+
     def readData32Bit(addr: BigInt) : BigInt = { axiLite.rd32B(addr << 2) }
 
     def fireThread(tag: Int): Unit = {
       val data = (1.toLong << 31) | tag
       axiLite.wr32B(0, data)
+    }
+
+    def fireFillTLB(vaddr: BigInt, isWr: Boolean, tlbIdx: BigInt): Unit = {
+      axiLite.wr32B((8 << 2), vaddr)
+      axiLite.wr32B((9 << 2), vaddr >> 32)
+      axiLite.wr32B((10 << 2), tlbIdx)
+      val wrEn = if(isWr) 1 else 0
+      val fire = (1.toLong << 29) | wrEn << 28
+      axiLite.wr32B(0, fire)
     }
 
     def tpuIsWorking(): Boolean = {
@@ -42,11 +55,24 @@ object ProcDriver {
 
     def getDone(): (Boolean, Int) = {
       val addr = 1
-      val doneVec = axiLite.rd32B((addr*4)).toInt
+      val doneVec = axiLite.rd32B(1 << 2).toInt
       if(doneVec != 0) {
         return (true, doneVec)
       } else {
         return (false, doneVec)
+      }
+    }
+
+    def isMiss: (Boolean, BigInt, BigInt) = {
+      val missTag = axiLite.rd32B(1 << 2) >> 15
+      if(missTag != 0) {
+        val vaddr_31_0:BigInt = axiLite.rd32B(3 << 2)
+        val vaddr_63_32: BigInt = axiLite.rd32B(4 << 2)
+        val vaddr: BigInt = (vaddr_63_32 << 32) | vaddr_31_0
+        val tlbIdx: BigInt = axiLite.rd32B(5 << 2)
+        (true, vaddr, tlbIdx)
+      } else {
+        (false, 0, 0)
       }
     }
 

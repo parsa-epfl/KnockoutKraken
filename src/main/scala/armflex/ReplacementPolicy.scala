@@ -39,14 +39,11 @@ class PseudoLRU(NB_ENTRY: Int, NB_ENTRY_WIDTH: Int) extends Module {
   when(port_1.valid) {
     updateTree(port_1.bits, NB_ENTRY_WIDTH-1, 0, NB_ENTRY)
     // Unskew techniques
-    treeNodes_next(0) := ~treeNodes(0)
-    invertPorts := !invertPorts
   }
   // NOTE Can override some of the tree updates of the other port
   when(port_2.valid) {
     // Unskew techinques
     updateTree(port_2.bits, NB_ENTRY_WIDTH-1, 0, NB_ENTRY)
-    treeNodes_next(0) := ~treeNodes(0)
   }
 
   treeNodes := treeNodes_next.asUInt

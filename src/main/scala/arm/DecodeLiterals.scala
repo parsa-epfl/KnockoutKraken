@@ -188,59 +188,10 @@ object DEC_LITS {
   val I_LSPair   = 22 // Load/store pair register (signed offset)
   val I_LSPairPr = 23 // Load/store pair register (pre-indexed)
 
-  val I_TBImm  = 24 // Test and branch (immediate)
-  val I_PCRel  = 25 // PC-Relative
+  val I_BImm  = 24 // Unconditional branch (immediate)
+  val I_BCImm = 25 // Conditional branch (immediate)
+  val I_TBImm = 26 // Test and branch (immediate)
+  val I_CBImm = 27 // Branch and Compare (immediate)
 
-  // TODO: Remove this list? Never used for something usefull
-  //       Dropped AssemblyInstruction based verification for QEMU based
-  //                  RD
-  //                  EN
-  //                  | RS1
-  //                  |  EN        COND
-  //                  |  |           EN
-  //                  |  | RS2  SHIFT| NZCV
-  //                  |  |  EN    EN |  EN
-  //                  |  |  | IMM |  |  |
-  //                  |  |  |  EN |  |  |
-  //                  |  |  |  |  |  |  |
-  //                  |  |  |  |  |  |  |
-  //                  |  |  |  |  |  |  |
-  val LI_X      = List(N, N, N, N, N, N, N)
-  val LI_LogSR  = List(Y, Y, Y, N, Y, N, N)
-  val LI_LogI   = List(Y, Y, N, Y, N, N, N)
-  val LI_MovI   = List(Y, N, N, Y, N, N, N)
-  val LI_BImm   = List(N, N, N, Y, N, N, N)
-  val LI_BCImm  = List(N, N, N, Y, N, Y, N)
-  val LI_ASSR   = List(Y, Y, Y, N, Y, N, N)
-  val LI_ASImm  = List(Y, Y, N, Y, Y, N, N)
-  val LI_BitF   = List(Y, Y, N, Y, N, N, N)
-  val LI_CSel   = List(Y, Y, Y, N, N, Y, N)
-  val LI_CCImm  = List(N, Y, N, Y, N, Y, Y)
-  val LI_CCReg  = List(N, Y, Y, N, N, Y, Y)
-  val LI_CBImm  = List(N, Y, N, Y, N, N, N)
-  val LI_PCRel  = List(Y, N, N, Y, N, N, N)
-  val LI_LSUImm = List(Y, Y, Y, Y, N, N, N)
-  val LI_LSReg = List(Y, Y, Y, Y, N, N, N)
-  val LI_LSPair = List(Y, Y, Y, Y, N, N, N)
-
-  def decode_table(inst_type : Int): List[Int] =
-    inst_type match {
-      case I_X     => LI_X
-      case I_LogSR => LI_LogSR
-      case I_LogI  => LI_LogI
-      case I_MovI  => LI_MovI
-      case I_BImm  => LI_BImm
-      case I_BCImm => LI_BCImm
-      case I_ASSR  => LI_ASSR
-      case I_ASImm => LI_ASImm
-      case I_BitF  => LI_BitF
-      case I_CSel  => LI_CSel
-      case I_CCImm => LI_CCImm
-      case I_CCReg => LI_CCReg
-      case I_CBImm => LI_BCImm
-      case I_PCRel => LI_PCRel
-      case I_LSUImm => LI_LSUImm
-      case I_LSReg => LI_LSReg
-      case I_LSPair => LI_LSPair
-    }
+  val I_BReg  = 28 // Conditional branch (register)
 }

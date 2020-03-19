@@ -25,9 +25,12 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
   }
 
   // Register file
-  val readOnly  = "0100".map(str2bool)
-  val pulseOnly = "1000".map(str2bool)
-  val cfgAxiMM = new AxiMemoryMappedRegFileConfig(4, readOnly, pulseOnly)
+  //val readOnly  = "0100".map(str2bool)
+  //val pulseOnly = "1000".map(str2bool)
+  // 1 Pulse Reg, 7 ReadOnly regs, 8 Rd-Write Regs
+  val readOnly  = "0111111100000000".map(str2bool)
+  val pulseOnly = "1000000000000000".map(str2bool)
+  val cfgAxiMM = new AxiMemoryMappedRegFileConfig(16, readOnly, pulseOnly)
   val regFile  = Module(new AxiMemoryMappedRegFile()(cfgAxiMM))
 
   val proc = Module(new Proc())
@@ -82,46 +85,47 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
   io.stateBRAM <> proc.io.stateBRAM
   io.axiLite <> regFile.io.axiLite
 
-  // 0 -> RDONLY, 1 -> Pulse, 2 -> CTRL, 3 -> CTRL
+  // 0 -> PulseOnly, 1-7 -> ReadOnly, 8-16->Rd/Wr
   val regValues = WireInit(VecInit(Seq.fill(cfgAxiMM.nbrReg)(0.U(AxiLiteConsts.dataWidth.W))))
   def regOut(reg:Int, offst:Int, size:Int) = regFile.io.regsOutput(reg)(offst+(size-1),offst)
   def regIn(reg:Int) = regValues(reg)
   regFile.io.regsInput := regValues
 
   /** Register 0 (Pulse-Only)
-    * +-----------------------+----------------------------------------+
-    * |                             to Transplant Cmds                 |
-    * |-----------+-----------+--------------------+-------------------+
-    * |   fire    | getState  |      RESERVED      |        Tag        |
-    * +-----------+-----------+--------------------+-------------------+
-    * |31       31|30       30|30        NB_THREADS|NB_THREADS-1      0|
-    * +-----------+-----------+--------------------+-------------------+
+    * +-----------------------+-------------------------------------------------+
+    * |                   Transplant Commands HOST->FPGA                        |
+    * |-----------+-----------+---------------+-------------+-------------------+
+    * |   fire    | getState  |   fillTLB     |   TLB.isWr  |        Tag        |
+    * +-----------+-----------+---------------+-------------+-------------------+
+    * |31       31|30       30|29           29|28         28| NB_THREADS-1      0|
+    * +-----------+-----------+---------------+-------------+-------------------+
     *
     */
   val tagReg = regOut(0, 0, cfg.NB_THREADS)
-
-  val fireReg    = regOut(0, 31, 1).asBool
+  val fireReg = regOut(0, 31, 1).asBool
   proc.io.host2tpu.fire.valid := fireReg
   proc.io.host2tpu.fire.tag := tagReg
 
-  val getState = regOut(0, 30, 1).asBool()
+  val getState = regOut(0, 30, 1).asBool
   proc.io.host2tpu.getState.valid := getState
   proc.io.host2tpu.getState.tag := tagReg
 
-
+  val fillTLB = regOut(0, 29, 1).asBool
+  val fillTLB_isWr = regOut(0, 29, 1).asBool
 
   /** Register 1 (Read-Only)
-    * +----------------------------------------+
-    * |          to Host Cmds                  |
-    * +-----------------+----------------------+
-    * |    RESERVED     |        done          |
-    * +-----------------+----------------------+
-    * |31      NB_THREAD|NB_THREADS-1         0|
-    * +-----------------+----------+-----------+
+    * +---------------------------------+
+    * |      to Host Cmds               |
+    * +-------------------+-------------+
+    * |    TLB Miss       |   done      |
+    * +-------------------+-------------+
+    * |31              16 | 15         0|
+    * +-------------------+-------------+
     *
     */
   val doneVec = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(false.B)))
-  regIn(1):= Cat(0.U, doneVec.asUInt)
+  val tlbMiss = WireInit(proc.io.host2tpu.missTLB.valid)
+  regIn(1) := Cat(0.U, tlbMiss.asUInt, 0.U((16-cfg.NB_THREADS).W), doneVec.asUInt)
 
   when(fireReg) {
     doneVec(tagReg) := false.B
@@ -130,7 +134,7 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
     doneVec(proc.io.host2tpu.done.tag) := true.B
   }
 
-  /** Register 2 TODO, CMD get TLB paddr
+  /** Register 2 (Read-Only)
     * +----------------------------------------+
     * |                                        |
     * +----------------------------------------+
@@ -140,44 +144,75 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
     * +----------------------------------------+
     *
     */
-  // reg(2, 0, 1)
-  proc.io.host2tpu.fillTLB := DontCare
 
-  /** Register 3
+  /** Register 4 (Read-Only)            Register 3 (Read-Only)
+    * +------------------------------++-----------------------+
+    * |                              ||                       |
+    * +------------------------------++-----------------------+
+    * |       Miss vaddr(63,32)      ||     Miss vaddr(31,0)  |
+    * +------------------------------++-----------------------+
+    * |31                           0||31                    0|
+    * +------------------------------++-----------------------+
+    *
+    */
+  val missTLB_vaddr = RegInit(DATA_X)
+  regIn(3) := missTLB_vaddr(31,0)
+  regIn(4) := missTLB_vaddr(63,32)
+
+  when(proc.io.host2tpu.missTLB.valid) {
+    missTLB_vaddr := proc.io.host2tpu.missTLB.bits.get.vaddr
+  }
+
+  /** Register 5 (ReadOnly)
     * +----------------------------------------+
     * |                                        |
     * +----------------------------------------+
-    * |             PC(31,0)                   |
+    * |             TLB Entry                  |
     * +----------------------------------------+
     * |31                                     0|
     * +----------------------------------------+
     *
     */
-  /** Register 3
-    * +----------------------------------------+
-    * |                                        |
-    * +----------------------------------------+
-    * |             PC(63,32)                  |
-    * +----------------------------------------+
-    * |31                                     0|
-    * +----------------------------------------+
+  val missTLB_tlbIdx = RegInit(0.U(32.W))
+  regIn(5) := missTLB_tlbIdx
+  when(proc.io.host2tpu.missTLB.valid) {
+    missTLB_tlbIdx := proc.io.host2tpu.missTLB.bits.get.tlbIdx
+  }
+
+  /** Register 9            Register 8
+    * +----------------++---------------------+
+    * |                ||                     |
+    * +----------------++---------------------+
+    * | vaddr(63,32)   ||    vaddr(31,0)      |
+    * +----------------++---------------------+
+    * |31             0||31                  0|
+    * +----------------++---------------------+
     *
     */ // reg(3, 0, 1)
-  /** Register 3
-    * +----------------------------------|-----+
-    * |                                  | is  |
-    * +----------------------------------|-----+
-    * |             IS MISS              | Miss|
-    * +----------------------------------|-----+
-    * |31                                |  0  |
-    * +----------------------------------|-----+
+  /** Register 10
+    * +----------------------------+
+    * |             tlbIndex       |
+    * +----------------------------+
+    * |                            |
+    * +----------------------------+
+    * |31                         0|
+    * +----------------------------+
     *
     */
+  val fillTLB_valid = fillTLB // Check Reg 0 Pulse Only
+  val fillTLB_vaddr = WireInit(Cat(regOut(9, 0, 32), regOut(8, 0, 32)))
+  val fillTLB_tlbIdx = WireInit(regOut(10, 0, 32))
+  proc.io.host2tpu.fillTLB.valid := fillTLB
+  proc.io.host2tpu.fillTLB.bits.vaddr := fillTLB_vaddr.asUInt
+  proc.io.host2tpu.fillTLB.bits.tlbIdx := fillTLB_tlbIdx
+  proc.io.host2tpu.fillTLB.bits.tlbEntry.valid := true.B
+  proc.io.host2tpu.fillTLB.bits.tlbEntry.wrEn := fillTLB_isWr
+  proc.io.host2tpu.fillTLB.bits.tlbEntry.tag := TLBEntry.getTLBtag(fillTLB_vaddr)
 
   // DEBUG Signals ------------------------------------------------------------
   if(cfg.DebugSignals) {
     proc.io.procStateDBG.get <> io.procStateDBG.get
-    proc.io.host2tpu.fillTLB <> io.procStateDBG.get.fillTLB
-    proc.io.host2tpu.missTLB <> io.procStateDBG.get.missTLB
+    //proc.io.host2tpu.fillTLB <> io.procStateDBG.get.fillTLB
+    //proc.io.host2tpu.missTLB <> io.procStateDBG.get.missTLB
   }
 }

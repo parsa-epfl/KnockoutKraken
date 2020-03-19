@@ -165,6 +165,7 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
     Context().backend.setTimeout(clock, 10000)
 
     //simLog(s"START PC:" + "%016x".format(pstate.pc))
+    cProcAxi.init
     cProcAxi.fireThread(0)
 
     // Wait for state to be transplanted
@@ -220,18 +221,18 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
     }.fork {
       val bramMask = cfgProc.TLB_NB_ENTRY - 1 //for (i <- 0 until cfgProc.TLB_NB_ENTRY_W) yield '1'
       do {
-        if(cProcAxi.isMissTLB) {
-          val (tag, addr, tlbIdx): (Int, BigInt, BigInt) = cProcAxi.getMissTLB
+        val (isMiss, addr: BigInt, tlbIdx: BigInt) = cProcAxi.isMiss
+        if(isMiss) {
+          val tag = FA_QflexCmds.DATA_STORE // Assume highest right possible
+          //val (tag, addr, tlbIdx): (Int, BigInt, BigInt) = cProcAxi.getMissTLB
           writeCmd((tag, addr), cfgSim.qemuCmdPath)
           val cmd = waitForCmd(cfgSim.simCmdPath)
-          //val bram = ((addr & (bramMask << 12)) >> 12) // mask bits after page to target TLB entry
-          val bram = tlbIdx
           val insns: Seq[(Int, BigInt)] = getProgramPageInsns(cfgSim.pagePath)
-          simLog(s"${"%016x".format(addr)}:BRAM:${bram}:MISSED:${FA_QflexCmds.cmd_toString(tag)}:${tag}")
+          simLog(s"${"%016x".format(addr)}:BRAM:${tlbIdx}:MISSED:${FA_QflexCmds.cmd_toString(tag)}:${tag}")
           for(insn <- insns) {
-            cProcAxi.writeMem(insn._2, insn._1, bram)
+            cProcAxi.writeMem(insn._2, insn._1, tlbIdx)
           }
-          cProcAxi.writeFillTLB(addr, cmd._2 == FA_QflexCmds.DATA_STORE, bram)
+          cProcAxi.fireFillTLB(addr: BigInt, cmd._2 == FA_QflexCmds.DATA_STORE: Boolean, tlbIdx: BigInt)
         } else {
           clock.step(1)
         }
