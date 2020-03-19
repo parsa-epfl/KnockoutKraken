@@ -30,6 +30,10 @@ object DEC_LITS {
   val OP_ADD = 0
   val OP_SUB = 1
 
+  // 3 Sources
+  val OP_MADD = 0
+  val OP_MSUB = 1
+
   // Unconditonal branch (immediate)
   val OP_B = 0
   val OP_BL = 1
@@ -159,22 +163,20 @@ object DEC_LITS {
   val I_X = 0
   val I_LogSR = 1  // Logical (shifted register)
   val I_LogI  = 2  // Logical (immediate)
-  val I_BitF  = 3  // Bitfield
+  val I_PCRel = 3  // PC-Relative
 
-  val I_DP1S  = 4  // Data-processing (1 source)
-  val I_DP2S  = 5  // Data-processing (2 source)
-  val I_CCImm = 6  // Conditional compare (immediate)
-  val I_CCReg = 7  // Conditional compare (register)
+  val I_CCImm = 4  // Conditional compare (immediate)
+  val I_CCReg = 5  // Conditional compare (register)
+  val I_CSel  = 6  // Conditional select
 
   val I_ASImm = 8  // Add/Subtract (Immediate)
   val I_ASSR  = 9  // Add/subtract (shifted register)
   val I_MovI  = 10 // Move wide (immediate)
-  val I_CSel  = 11 // Conditional select
+  val I_BitF  = 11 // Bitfield
 
-  val I_BImm  = 12 // Unconditional branch (immediate)
-  val I_BCImm = 13 // Conditional branch (immediate)
-  val I_BReg  = 14 // Conditional branch (register)
-  val I_CBImm = 15 // Branch and Compare (immediate)
+  val I_DP1S  = 12 // Data-processing (1 source)
+  val I_DP2S  = 13 // Data-processing (2 source)
+  val I_DP3S  = 14 // Data-processing (3 source)
 
   val I_LSUReg  = 16 // Load/store register (unscaled immediate)
   val I_LSRegPo = 17 // Load/store register (post-indexed)

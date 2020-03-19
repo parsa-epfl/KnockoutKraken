@@ -37,6 +37,10 @@ object DECODE_CONTROL_SIGNALS
   val OP_ADD = DEC_LITS.OP_ADD.U(OP_W)
   val OP_SUB = DEC_LITS.OP_SUB.U(OP_W)
 
+  // 3 Sources
+  val OP_MADD = DEC_LITS.OP_MADD.U(OP_W)
+  val OP_MSUB = DEC_LITS.OP_MSUB.U(OP_W)
+
   // Unconditonal branch (immediate)
   val OP_B = DEC_LITS.OP_B.U(OP_W)
   val OP_BL = DEC_LITS.OP_BL.U(OP_W)
@@ -165,22 +169,20 @@ object DECODE_CONTROL_SIGNALS
   val I_X = DEC_LITS.I_X.U(TYPE_W)
   val I_LogSR =  DEC_LITS.I_LogSR.U(TYPE_W) // Logical (shifted register)
   val I_LogI  =  DEC_LITS.I_LogI.U(TYPE_W) // Logical (immediate)
-  val I_BitF  =  DEC_LITS.I_BitF.U(TYPE_W) // Logical (shifted register)
+  val I_PCRel =  DEC_LITS.I_PCRel.U(TYPE_W) // PC-Relative
 
-  val I_DP1S  =  DEC_LITS.I_DP1S.U(TYPE_W) // Data-processing (1 source)
-  val I_DP2S  =  DEC_LITS.I_DP2S.U(TYPE_W) // Data-processing (2 source)
   val I_CCImm =  DEC_LITS.I_CCImm.U(TYPE_W) // Conditional compare (immediate)
   val I_CCReg =  DEC_LITS.I_CCReg.U(TYPE_W) // Conditional compare (register)
+  val I_CSel  =  DEC_LITS.I_CSel.U(TYPE_W) // Conditional select
 
   val I_ASImm =  DEC_LITS.I_ASImm.U(TYPE_W) // Add/Subtract (Immediate)
   val I_ASSR  =  DEC_LITS.I_ASSR.U(TYPE_W) // Add/subtract (shifted register)
   val I_MovI  =  DEC_LITS.I_MovI.U(TYPE_W) // Move wide (immediate)
-  val I_CSel  =  DEC_LITS.I_CSel.U(TYPE_W) // Conditional select
+  val I_BitF  =  DEC_LITS.I_BitF.U(TYPE_W) // Logical (shifted register)
 
-  val I_BImm  =  DEC_LITS.I_BImm.U(TYPE_W)  // Unconditional branch (immediate)
-  val I_BCImm =  DEC_LITS.I_BCImm.U(TYPE_W) // Conditional branch (immediate)
-  val I_BReg  =  DEC_LITS.I_BReg.U(TYPE_W)  // Conditional branch (register)
-  val I_CBImm =  DEC_LITS.I_CBImm.U(TYPE_W) // Branch and Compare (immediate)
+  val I_DP1S  =  DEC_LITS.I_DP1S.U(TYPE_W) // Data-processing (1 source)
+  val I_DP2S  =  DEC_LITS.I_DP2S.U(TYPE_W) // Data-processing (2 source)
+  val I_DP3S  =  DEC_LITS.I_DP3S.U(TYPE_W) // Data-processing (3 source)
 
   val I_LSUReg  = DEC_LITS.I_LSUReg.U(TYPE_W)  // Load/store register (unscaled immediate)
   val I_LSRegPo = DEC_LITS.I_LSRegPo.U(TYPE_W) // Load/store register (post-indexed)
@@ -192,8 +194,12 @@ object DECODE_CONTROL_SIGNALS
   val I_LSPair   = DEC_LITS.I_LSPair.U(TYPE_W)  // Load/store pair register (signed offset)
   val I_LSPairPr = DEC_LITS.I_LSPairPr.U(TYPE_W) // Load/store pair register (pre-indexed)
 
+  val I_BImm  =  DEC_LITS.I_BImm.U(TYPE_W)  // Unconditional branch (immediate)
+  val I_BCImm =  DEC_LITS.I_BCImm.U(TYPE_W) // Conditional branch (immediate)
   val I_TBImm =  DEC_LITS.I_TBImm.U(TYPE_W) // Test and branch (immediate)
-  val I_PCRel =  DEC_LITS.I_PCRel.U(TYPE_W) // PC-Relative
+  val I_CBImm =  DEC_LITS.I_CBImm.U(TYPE_W) // Branch and Compare (immediate)
+
+  val I_BReg  =  DEC_LITS.I_BReg.U(TYPE_W)  // Conditional branch (register)
 }
 
 object DECODE_MATCHING_TABLES
@@ -343,6 +349,8 @@ object DECODE_MATCHING_TABLES
       DP2S_LSRV    -> List(I_DP2S,  LSR,      Y, Y, N, N, N),
       DP2S_ASRV    -> List(I_DP2S,  ASR,      Y, Y, N, N, N),
       DP2S_RORV    -> List(I_DP2S,  ROR,      Y, Y, N, N, N),
+      // Data-processing (3 sources)
+      DP3S_MADD32  -> List(I_DP3S,  OP_MADD,  Y, N, N, N, Y),
       // Unconditional branch (immediate)
       BImm_B       -> List(I_BImm,  OP_B,     N, N, N, N, N),
       BImm_BL      -> List(I_BImm,  OP_BL,    N, N, N, N, N),

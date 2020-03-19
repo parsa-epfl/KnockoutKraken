@@ -59,7 +59,7 @@ class MemArbiterData(implicit val cfg: ProcConfig) extends MultiIOModule
 
   io.rfile <> DontCare
   io.rfile.w1_en := false.B
-  io.rfile.w2_en := false.B
+  io.rfile.rw_wen := false.B
 
   io.busy := !(commitingStage === s_Commiting)
 
@@ -114,9 +114,9 @@ class MemArbiterData(implicit val cfg: ProcConfig) extends MultiIOModule
       io.tlbPort.vaddr.valid := minst.isPair
 
       // WriteBack
-      io.rfile.w2_addr := minst.rd.bits
-      io.rfile.w2_data := minst.rd_res
-      io.rfile.w2_en := minst.rd.valid
+      io.rfile.rw_addr := minst.rd.bits
+      io.rfile.rw_di := minst.rd_res
+      io.rfile.rw_wen := minst.rd.valid
 
       // Load
       io.rfile.w1_addr := minst.memReq(0).reg
@@ -143,7 +143,7 @@ class MemArbiterData(implicit val cfg: ProcConfig) extends MultiIOModule
       // ABORT Commit: Pair instruction missed
       when(io.tlbPort.miss.valid) {
         io.rfile.w1_en := false.B
-        io.rfile.w2_en := false.B
+        io.rfile.rw_wen := false.B
         io.memPort.WE := 0.U
         missTLB := io.tlbPort.miss.bits
         commitingStage := s_GettingPage

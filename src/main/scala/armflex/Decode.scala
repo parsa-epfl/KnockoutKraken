@@ -41,6 +41,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
       I_BitF  -> inst( 4, 0),
       I_DP1S  -> inst( 4, 0),
       I_DP2S  -> inst( 4, 0),
+      I_DP3S  -> inst( 4, 0),
       I_LogSR -> inst( 4, 0),
       I_LogI  -> inst( 4, 0),
       I_MovI  -> inst( 4, 0),
@@ -63,6 +64,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
       I_BitF  -> inst( 9, 5),
       I_DP1S  -> inst( 9, 5),
       I_DP2S  -> inst( 9, 5),
+      I_DP3S  -> inst( 9, 5),
       I_LogSR -> inst( 9, 5),
       I_LogI  -> inst( 9, 5),
       I_ASSR  -> inst( 9, 5),
@@ -71,7 +73,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
       I_CCReg -> inst( 9, 5),
       I_CSel  -> inst( 9, 5),
       I_LSRegPo -> inst( 9, 5),
-      I_LSReg  -> inst( 9, 5),
+      I_LSReg   -> inst( 9, 5),
       I_LSRegPr -> inst( 9, 5),
       I_LSUReg  -> inst( 9, 5),
       I_LSPairPo-> inst( 9, 5),
@@ -89,12 +91,13 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
       I_TBImm -> inst( 4, 0),
       I_BitF  -> inst( 4, 0),
       I_DP2S  -> inst(20,16),
+      I_DP3S  -> inst(20,16),
       I_MovI  -> inst( 4, 0),
       I_CBImm -> inst( 4, 0),
       I_LSPairPo-> inst(14,10), // Rt2 as Rd2
       I_LSPair  -> inst(14,10), // Rt2 as Rd2
       I_LSPairPr-> inst(14,10), // Rt2 as Rd2
-      I_LSReg-> inst(20,16),
+      I_LSReg -> inst(20,16),
       I_LSUImm-> inst( 4, 0)
     ))
 
@@ -104,6 +107,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
       I_MovI  -> inst(22, 5), // hw(22,21), imm16(20:5)
       I_TBImm -> inst(23, 5), // b40(23,19), imm14(18,5)
       I_CCImm -> inst(21,16), // zero(21), imm5(20,16)
+      I_DP3S  -> inst(14,10), // Ra(14,10) -> THIRD REGISTER
 
       I_BImm  -> inst(25, 0),
       I_PCRel -> Cat(inst(23,5), inst(30,29)), // immlo(30,29), immhi(23,5)

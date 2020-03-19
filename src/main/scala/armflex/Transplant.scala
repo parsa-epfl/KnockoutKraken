@@ -186,9 +186,9 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   io.rfile.w1_addr := RegNext(regAddr)
   io.rfile.w1_data := bramOut
 
-  io.rfile.w2_en   := false.B
-  io.rfile.w2_addr := DontCare
-  io.rfile.w2_data := DontCare
+  io.rfile.rw_wen := false.B
+  io.rfile.rw_addr := DontCare
+  io.rfile.rw_di := DontCare
 
   io.tpu2cpuState.PC := bramOut
   io.tpu2cpuState.SP := bramOut

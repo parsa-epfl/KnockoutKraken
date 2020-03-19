@@ -67,9 +67,12 @@ class RFileIO(implicit val cfg : ProcConfig) extends Bundle
   val w1_addr = Input(REG_T)
   val w1_data = Input(DATA_T)
   val w1_en   = Input(Bool())
-  val w2_addr = Input(REG_T)
-  val w2_data = Input(DATA_T)
-  val w2_en   = Input(Bool())
+
+  // ReadWritePort
+  val rw_addr = Input(REG_T)
+  val rw_di = Input(DATA_T)
+  val rw_wen = Input(Bool())
+  val rw_do = Output(DATA_T)
 
   val rfileVec = if(cfg.DebugSignals) Some(Output(Vec(REG_N, DATA_T))) else None
 }
@@ -84,15 +87,18 @@ class RFile(implicit val cfg : ProcConfig) extends Module
 
   val regfile = Mem(REG_N, DATA_T)
 
+  io.rs1_data := regfile(io.rs1_addr)
+  io.rs2_data := regfile(io.rs2_addr)
+
   when (io.w1_en) {
     regfile(io.w1_addr) := io.w1_data
   }
-  when (io.w2_en) {
-    regfile(io.w2_addr) := io.w2_data
-  }
 
-  io.rs1_data := regfile(io.rs1_addr)
-  io.rs2_data := regfile(io.rs2_addr)
+  // ReadWirePort
+  when (io.rw_wen) {
+    regfile(io.rw_addr) := io.rw_di
+  }
+  io.rw_do := regfile(io.rw_addr)
 
   // DEBUG Signals ------------------------------------------------------------
   if(cfg.DebugSignals) {

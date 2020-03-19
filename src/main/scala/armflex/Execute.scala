@@ -6,6 +6,7 @@ import chisel3.util._
 
 import arm.DECODE_CONTROL_SIGNALS._
 import arm.PROCESSOR_TYPES._
+import util.MACC
 import treadle.executable.MuxLongs
 
 class EInst(implicit val cfg: ProcConfig) extends Bundle {
@@ -377,12 +378,32 @@ class DataProcessing(implicit val cfg: ProcConfig) extends Module
   }
 }
 
+class DataProc3S(implicit val cfg: ProcConfig) extends Module
+{
+  val io = IO(new Bundle {
+    val op = Input(OP_T)
+    val rVal1 = Input(DATA_T)
+    val rVal2 = Input(DATA_T)
+    val rVal3 = Input(DATA_T)
+    val res = Output(DATA_T)
+    val is32bit = Input(Bool())
+  })
+
+  // NOTE MACC does Signed operations, but because we only support 32 bit it'll be treated as unsigned
+  val macc32 = Module(new MACC(64, true))
+  macc32.io.mult1 := Cat(0.U(32.W), io.rVal1(31,0)).asSInt
+  macc32.io.mult2 := Cat(0.U(32.W), io.rVal2(31,0)).asSInt
+  macc32.io.add := Cat(0.U(32.W), io.rVal3(31,0)).asSInt
+  io.res := Mux(io.is32bit, macc32.io.res.asUInt, 0.U) // 64 bit not supported yet
+}
+
 class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
 {
   val io = IO(new Bundle {
     val dinst = Input(new DInst)
     val rVal1 = Input(DATA_T)
     val rVal2 = Input(DATA_T)
+    val rVal3 = Input(DATA_T)
     val nzcv = Input(NZCV_T)
 
     val condRes = Output(Bool())
@@ -392,6 +413,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
 
   val rVal1 = WireInit(Mux(io.dinst.rs1 === 31.U, 0.U, io.rVal1))
   val rVal2 = WireInit(Mux(io.dinst.rs2 === 31.U, 0.U, io.rVal2))
+  val rVal3 = WireInit(Mux(io.dinst.imm(4,0) === 31.U, 0.U, io.rVal3))
   // R[31] can be SP or Zero depending on instructions
   when(io.dinst.itype === I_ASImm && io.dinst.op === OP_ADD && io.dinst.rs1 === 31.U) {
     rVal1 := io.rVal1
@@ -490,6 +512,14 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   dataProcessing.io.op := io.dinst.op
   dataProcessing.io.is32bit := io.dinst.is32bit
 
+  // Data-Processing 3
+  val dataProc3S = Module(new DataProc3S)
+  dataProc3S.io.op := io.dinst.op
+  dataProc3S.io.rVal1 := rVal1
+  dataProc3S.io.rVal2 := rVal2
+  dataProc3S.io.rVal3 := rVal3
+  dataProc3S.io.is32bit := io.dinst.is32bit
+
   val addWithCarry = Module(new AddWithCarry)
   // I_ASSR || I_ASImm
   addWithCarry.io.is32bit := io.dinst.is32bit
@@ -512,16 +542,17 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   val einst = Wire(new EInst)
   val res = Wire(DATA_T)
   res := MuxLookup(io.dinst.itype, logicALU.io.res, Array(
-                 I_BitF  -> bitfield.io.res,
-                 I_LogSR -> logicALU.io.res,
-                 I_LogI  -> logicALU.io.res,
-                 I_DP2S  -> shiftALU.io.res,
-                 I_ASSR  -> addWithCarry.io.res,
-                 I_ASImm -> addWithCarry.io.res,
-                 I_DP1S  -> dataProcessing.io.res,
-                 I_MovI  -> move.io.res,
-                 I_CSel  -> Mux(condHolds.io.res, rVal1, addWithCarry.io.res)
-                 ))
+    I_BitF  -> bitfield.io.res,
+    I_LogSR -> logicALU.io.res,
+    I_LogI  -> logicALU.io.res,
+    I_DP1S  -> dataProcessing.io.res,
+    I_DP2S  -> shiftALU.io.res,
+    I_DP3S  -> dataProc3S.io.res,
+    I_ASSR  -> addWithCarry.io.res,
+    I_ASImm -> addWithCarry.io.res,
+    I_MovI  -> move.io.res,
+    I_CSel  -> Mux(condHolds.io.res, rVal1, addWithCarry.io.res)
+  ))
   einst.res := Mux(io.dinst.is32bit, Cat(0.U, res(31,0)), res)
   einst.rd := io.dinst.rd
   when(io.dinst.itype === I_LogSR || io.dinst.itype === I_LogI) {
@@ -542,6 +573,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
     I_BitF  -> true.B,
     I_DP1S  -> true.B,
     I_DP2S  -> true.B,
+    I_DP3S  -> true.B,
     I_CCImm -> true.B,
     I_CCReg -> true.B,
     I_ASImm -> true.B,

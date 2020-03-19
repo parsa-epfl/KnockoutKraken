@@ -201,6 +201,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   executer.io.dinst := issued_dinst
   executer.io.rVal1 := rVal1
   executer.io.rVal2 := rVal2
+  executer.io.rVal3 := rfileVec(issued_dinst.tag).rw_do
   executer.io.nzcv := pregsVec(issued_tag).NZCV
 
   // connect BranchUnit interface
@@ -239,6 +240,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   memArbiterData.io.rfile.rfileVec foreach(_ := DontCare)
   memArbiterData.io.rfile.rs1_data := rfileVec(commitTag).rs1_data
   memArbiterData.io.rfile.rs2_data := rfileVec(commitTag).rs2_data
+  memArbiterData.io.rfile.rw_do := DontCare
   // -- Transplant cases --
   val commitUndef = WireInit(commitReg.io.deq.valid && commitReg.io.deq.bits.undef)
   // - Exceptions -
@@ -269,16 +271,20 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
     }
     rfileVec(cpu).w1_en := false.B
 
-    rfileVec(cpu).w2_addr := memArbiterData.io.rfile.w2_addr
-    rfileVec(cpu).w2_data := memArbiterData.io.rfile.w2_data
-    rfileVec(cpu).w2_en := false.B
+    // Write when memory instruction
+    rfileVec(cpu).rw_addr := Mux(memArbiterData.io.rfileWr,
+      memArbiterData.io.rfile.rw_addr, // Write port when MemoryInst
+      issued_dinst.imm(4,0)             // Read port when 3 sources (encoded in imm)
+    )
+    rfileVec(cpu).rw_di   := memArbiterData.io.rfile.rw_di
+    rfileVec(cpu).rw_wen := false.B
   }
 
   nextPC := pregsVec(commitTag).PC
   nextSP := pregsVec(commitTag).SP // X[31] == SP
   when(commited && !exception && !commitUndef) {
     rfileVec(commitTag).w1_en := (commitExec.valid && commitExec.bits.rd.valid) || (commitPcRel.valid)
-    rfileVec(commitTag).w2_en := false.B
+    rfileVec(commitTag).rw_wen := false.B
 
     when(commitExec.valid && commitExec.bits.nzcv.valid) {
       pregsVec(commitTag).NZCV := commitExec.bits.nzcv.bits
@@ -295,7 +301,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
 
   when(memArbiterData.io.rfileWr && !exception) {
     rfileVec(commitTag).w1_en := memArbiterData.io.rfile.w1_en
-    rfileVec(commitTag).w2_en := memArbiterData.io.rfile.w2_en
+    rfileVec(commitTag).rw_wen := memArbiterData.io.rfile.rw_wen
   }
 
   // Memory Data Port
@@ -344,6 +350,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   tpu.io.cpu2tpuState := pregsVec(tpu.io.tpu2cpu.freeze.tag)
   tpu.io.rfile.rs1_data := DontCare
   tpu.io.rfile.rs2_data := DontCare
+  tpu.io.rfile.rw_do := DontCare
   // When working
   when(tpu.io.tpu2cpu.freeze.valid) {
     // Redirect freezed cpu to tpu

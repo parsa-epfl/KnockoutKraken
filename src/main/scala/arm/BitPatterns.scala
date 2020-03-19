@@ -217,6 +217,16 @@ object INSTRUCTIONS
   def DP2S_ASRV = BitPat("b10011010110?????001010??????????")
   def DP2S_RORV = BitPat("b10011010110?????001011??????????")
 
+  // Data-processing (3 sources)
+  // 31 | 30 29 | 28 27 26 25 24 | 23 22 21 | 20 19 18 17 16 | 15 | 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
+  // sf |  op54 |  1  1  0  1  1 |   op31   |       Rm       | o0 |       Ra       |       Rn       |       Rd       |                  |
+  //  0 |  0  0 |  1  1  0  1  1 |  0  0  0 |       Rm       |  0 |       Ra       |       Rn       |       Rd       | MADD             | 32-bit
+  //  0 |  0  0 |  1  1  0  1  1 |  0  0  0 |       Rm       |  1 |       Ra       |       Rn       |       Rd       | MSUB             | 32-bit
+  //  1 |  0  0 |  1  1  0  1  1 |  0  0  0 |       Rm       |  0 |       Ra       |       Rn       |       Rd       | MADD             | 64-bit
+  //  1 |  0  0 |  1  1  0  1  1 |  0  0  0 |       Rm       |  1 |       Ra       |       Rn       |       Rd       | MSUB             | 64-bit
+  def DP3S = BitPat("b?0011011000?????????????????????")
+  def DP3S_MADD32 = BitPat("b00011011000?????0???????????????")
+
   // Add/subtract (shifted register)
   // 31 | 30 | 29 | 28 27 26 25 24 | 23 22 | 21 | 20 19 18 17 16 | 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
   // sf | op |  S |  0  1  0  1  1 | shift |  0 |      Rm        |       imm6        |       Rn       |       Rd       |                  |
