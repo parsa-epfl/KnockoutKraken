@@ -5,6 +5,7 @@ import chisel3.util.{Valid, Cat}
 
 import arm.PROCESSOR_TYPES._
 import util.PseudoLRU
+import util.PseudoBitmapLRU
 
 object TLBEntry {
   def getTLBtag(bits: UInt)(implicit cfg: ProcConfig): UInt =
@@ -77,7 +78,7 @@ class TLBUnit(implicit val cfg: ProcConfig) extends Module {
     }
   }
 
-  val lru = Module(new PseudoLRU(cfg.TLB_NB_ENTRY, cfg.TLB_NB_ENTRY_W))
+  val lru = Module(new PseudoBitmapLRU(cfg.TLB_NB_ENTRY, cfg.TLB_NB_ENTRY_W))
   lru.io.idx_1.bits := iPortIdx
   lru.io.idx_2.bits := dPortIdx
   lru.io.idx_1.valid := iPortHit && io.iPort.vaddr.valid

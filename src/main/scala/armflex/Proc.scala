@@ -9,7 +9,7 @@ import arm.DECODE_CONTROL_SIGNALS._
 
 import util._
 
-class ProcConfig(val NB_THREADS : Int = 2, val DebugSignals : Boolean = false, EntriesTLB: Int = 128) {
+class ProcConfig(val NB_THREADS : Int = 2, val DebugSignals : Boolean = false, EntriesTLB: Int = 32) {
 
   // Threads
   val NB_THREAD_W = log2Ceil(NB_THREADS) // 4 Threads
