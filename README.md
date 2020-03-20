@@ -14,12 +14,89 @@ In the following sections, we will describe how to simulate, synthesize, and run
 
 The first step is to download and build QEMU. The QEMU repository is located [here](https://github.com/parsa-epfl/qemu/tree/knockoutkraken). Please refer to that repository for instructions on how to build QEMU.
 
+Now start QEMU. We assume that `QFLEX_DIR` is the root folder where the QEMU folder is located.
+```
+$ $QFLEX_DIR/qemu/aarch64-softmmu/qemu-system-aarch64 --machine virt -cpu cortex-a57\
+    -smp 1 -m 1G -global virtio-blk-device.scsi=off -device virtio-scsi-device,id=scsi\
+    -nographic -rtc clock=vm -icount shift=0,sleep=off\
+    -drive if=none,file=$QFLEX_DIR/images/ubuntu16/ubuntu.qcow2,id=hd0\
+    -pflash $QFLEX_DIR/images/ubuntu16/flash0.img\
+    -pflash $QFLEX_DIR/images/ubuntu16/flash1.img\
+    -device scsi-hd,drive=hd0 -device virtio-scsi-device\
+    -netdev user,id=net1,hostfwd=tcp::2230-:22\
+    -device virtio-net-device,mac=52:54:00:00:00:00,netdev=net1\
+    -exton -D /dev/shm/output\
+    -singlestep -qflex_d gen,magic_insn\
+    -qflex ff=on -fa_qflex enable=on,mode=magic,sim=on -loadext testbench
+```
+
+In the command above, most options are default QEMU options, but a few are specific to KnockoutKraken.
+```
+-singlestep: This option is required to force QEMU to translate instructions individually, 
+             as opposed to translating basic blocks. This modification enables us to transplant
+             execution to QEMU at a particular step
+     
+-qflex_d gen,magic_insn: This option enables magic instructions, enabling QEMU to identify instrumented
+                         code.
+
+-qflex ff=on : This option enables the QFlex modifications.
+-fa_qflex enable=on,mode=magic,sim=on: This option enalbles the modifications for FPGA accelerated execution.
+                                       Here we are specifying magic mode and simulation mode which means that 
+                                       (magic mode meaning here) and that QEMU will try to communicate with a 
+                                       simulator instead of with an FPGA.
+-drive if=none,file=$QFLEX_DIR/images/ubuntu16/ubuntu.qcow2,id=hd0 : This is a regular QEMU option that specifies
+                                                                     the image. You will have to modify it if you use another
+                                                                     image.
+-loadext testbench: This is a regular QEMU option that loads a checkpoint. "testbench" is the name of the checkpoint.
+```
+
+This command will start QEMU, and lead the user to a shell in the target machine. Any commands send to this shell will be executed in the target machine.
+
+To start the instrumented test, run:
+```
+$ ./matmul
+```
+
+## Simulate KnockoutKraken
+Open another therminal and, on the same machine, go to the KnockoutKraken repository and start the test using `sbt`.
+
+```
+$ cd armflex
+$ sbt # start SBT Shell
+$(in sbt shell) test:runMain armflex.SimulatorMain SIM_STATE SIM_LOCK SIM_CMD QEMU_STATE QEMU_LOCK QEMU_CMD PROGRAM_PAGE 4096 /dev/shm/qflex
+
+```
+
+This will start the simulation. The simulator generates a lot of output, so we recomend you keep track of the output in 
+different terminals. To do so, open three terminals. To observe the output from QEMU, run:
+```
+$ tail -f /dev/shm/output
+```
+
+On the second, to observe the output of the Chisel simulation run:
+```
+$ tail -f /dev/shm/outputSim
+```
+
+And on the third to see the output of all the simulations, run:
+```
+$ tail -f /dev/shm/output >> /dev/merged $
+$ tail -f /dev/shm/outputSim >> /dev/merged $
+$ tail -f /dev/merged # pretty output
+```
 
 ## Generate Verilog
 
-## Simulate KnockoutKraken
-
 ## Synthesize ARMFlex
+Once your simulation works fine, you can synthesize ARMFlex. You will have to do it on a machine that has all the tools required by AMS F1. See above for a description.
+
+After generating verilog files in the `<armflex repo>/Verilog` folder you can synthesize the design to create design check-point and AFI image. Go to the directory `<armflex repo>/aws`
+
+```
+$ cd <armflex repo>/aws
+$ ./aws_build_dcp.sh
+```
+This will take some time (several hours) and generate a design checkpoint in the `<armflex repo>/aws/armflex.runs/faas_1/build/checkpoints/to_aws/` folder.
 
 # Run KnockoutKraken
 
