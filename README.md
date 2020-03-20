@@ -41,9 +41,13 @@ In the command above, most options are default QEMU options, but a few are speci
 
 -qflex ff=on : This option enables the QFlex modifications.
 -fa_qflex enable=on,mode=magic,sim=on: This option enalbles the modifications for FPGA accelerated execution.
-                                       Here we are specifying magic mode and simulation mode which means that 
-                                       (magic mode meaning here) and that QEMU will try to communicate with a 
-                                       simulator instead of with an FPGA.
+                                       Here we are specifying magic mode and simulation mode, which means that 
+                                       and that QEMU will try to communicate with a simulator instead of with an FPGA.
+                                       You can run simulation in both magic and full mode. In magic mode, QEMU will wait
+                                       for at least one magic instruction to transfer execution to the simulator. This mode
+                                       is useful when there is some setup code that does not need to be instrumented, as simulation
+                                       can be slow. Full mode transfers execution to the FPGA immediatelly as QEMU starts. This mode
+                                       is useful if your checkpoint is already set up in the code you wish to simulate.
 -drive if=none,file=$QFLEX_DIR/images/ubuntu16/ubuntu.qcow2,id=hd0 : This is a regular QEMU option that specifies
                                                                      the image. You will have to modify it if you use another
                                                                      image.
@@ -123,6 +127,13 @@ from QEMU and the first `RTL:` message indicates the page that missed on Chisel.
 Overall, simulation speed in this mode is very slow, we are activelly working to improve simulation speed.
 
 ## Generate Verilog
+To generate verilog, run, from `sbt`:
+
+```
+$ runMain armflex.AxiDriver
+```
+
+This command will generate the verilog files inside the `Verilog` folder.
 
 ## Synthesize ARMFlex
 Once your simulation works fine, you can synthesize ARMFlex. You will have to do it on a machine that has all the tools required by AMS F1. See above for a description.
