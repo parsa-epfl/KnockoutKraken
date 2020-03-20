@@ -268,7 +268,7 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
 class TestSimulatorAxi(cfgSim : SimulatorConfig, val cfgProc : ProcConfig)
     extends FlatSpec with ChiselScalatestTester {
 
-  val annos = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/Axi"), WriteVcdAnnotation)
+  val annos = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/ProcAxi"), WriteVcdAnnotation)
 
   behavior of "Armflex Simulator AXI interface"
 

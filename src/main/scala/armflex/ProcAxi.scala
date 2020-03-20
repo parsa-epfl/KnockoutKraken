@@ -8,8 +8,8 @@ import util._
 import arm.PROCESSOR_TYPES._
 
 object AxiDriver extends App {
-  chisel3.Driver.execute(Array("-tn", "ProcAxi", "-td", "Verilog", "-fsm"), () =>
-    new ProcAxiWrap()(new ProcConfig(2, false)))
+  chisel3.Driver.execute(Array("-tn", "ProcAxi", "-td", "verilog", "-fsm"), () =>
+    new ProcAxiWrap()(new ProcConfig(2, false, 64)))
 }
 
 class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
