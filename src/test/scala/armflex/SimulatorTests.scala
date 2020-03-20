@@ -176,7 +176,9 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
     val matched = currState.matches(pstate)
     if(!matched._1) {
       clock.step(13)
-      Context().backend.finish()
+      // NOTE Required chisel-testers2 modifications
+      //      Closes verilator so that the vcd file is fully updated
+      //Context().backend.finish() 
       assert(matched._1)
     }
 
