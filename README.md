@@ -2,7 +2,7 @@
 
 KnockoutKraken brings FPGA-accelerated simulation to the QFlex family.
 
-KnockoutKraken is composed of three main components: a modified version of QEMU, an instrumented ARM softcore (ARMFlex), and a driver that handles the communication between QEMU and ARMFlex. The vast majority of developers will work on QEMU and/or ARMFlex. QEMU is written in C and can be developed in most Linux machines. ARMFlex is written in Chisel, and while basic testing can be done in most Linux machines, fully simulating and synthesizing the softcore requires an extensive toolchain.
+KnockoutKraken is composed of three main components: a modified version of QEMU, an instrumented ARM softcore (ARMFlex), and a driver that handles the communication between QEMU and ARMFlex. QEMU is written in C and can be developed on most Linux machines. ARMFlex is written in Chisel, and while basic testing can be done on most Linux machines, fully simulating and synthesizing the softcore requires an extensive toolchain.
 
 As such, the easiest way to simulate and synthesize KnockoutKraken is by using the [Amazon FPGA Developer AMI](https://aws.amazon.com/marketplace/pp/B06VVYBLZZ). This image has all the software necessary to synthesize and simulate a bitstream for an AWS F1 node. You can also develop on-premise. Please look [here](https://github.com/aws/aws-fpga) for a discussion on how to develop for AWS F1 nodes on-premise.
 
@@ -10,11 +10,25 @@ In the following sections, we will describe how to simulate, synthesize, and run
 
 # Develop KnockoutKraken
 
+## Installing Chisel
+
+We are using [Chisel3](https://github.com/freechipsproject/chisel3) for development and [chisel-testers2](https://github.com/ucb-bar/chisel-testers2) for testing. `chisel-testers2` is still in alpha mode, and it is a little rough around the edges, but it makes testing so much easier that we believe it is worth the effort to work with it. Our current workflow requires `chisel-testers2` to be built locally. First, install `sbt`. You can find instructions [here](https://www.scala-sbt.org/1.x/docs/Setup.html). Then, download and build `chisel-testers2` locally.
+
+```
+$ git clone https://github.com/ucb-bar/chisel-testers2.git
+$ cd chisel-testers2
+$ sbt publishLocal
+```
+
+That is it. You are ready to test ARMFlex. `sbt` will download the correct version of Chisel3 when you build it later in this tutorial. 
+
 ## Run the QEMU+Chisel testbench
 
 The first step is to download and build QEMU. The QEMU repository is located [here](https://github.com/parsa-epfl/qemu/tree/knockoutkraken). Please refer to that repository for instructions on how to build QEMU.
+You will also need an image to run, we suggest you download the image from [here](https://github.com/parsa-epfl/images/tree/matmul-knockoutkraken). You can find instructions on how to unpack the image in the image repository.
 
-Now start QEMU. We assume that `QFLEX_DIR` is the root folder where the QEMU folder is located.
+Now start QEMU. We assume that `QFLEX_DIR` is the root folder where the QEMU folder is located and that you already have 
+an image in `$QFLEX_DIR/images/ubuntu16/ubuntu.qcow2` with a snapshot named `testbench`.
 ```
 $ $QFLEX_DIR/qemu/aarch64-softmmu/qemu-system-aarch64 --machine virt -cpu cortex-a57\
     -smp 1 -m 1G -global virtio-blk-device.scsi=off -device virtio-scsi-device,id=scsi\
@@ -35,10 +49,8 @@ In the command above, most options are default QEMU options, but a few are speci
 -singlestep: This option is required to force QEMU to translate instructions individually, 
              as opposed to translating basic blocks. This modification enables us to transplant
              execution to QEMU at a particular step
-     
 -qflex_d gen,magic_insn: This option enables magic instructions, enabling QEMU to identify instrumented
                          code.
-
 -qflex ff=on : This option enables the QFlex modifications.
 -fa_qflex enable=on,mode=magic,sim=on: This option enalbles the modifications for FPGA accelerated execution.
                                        Here we are specifying magic mode and simulation mode, which means that 
@@ -48,10 +60,10 @@ In the command above, most options are default QEMU options, but a few are speci
                                        is useful when there is some setup code that does not need to be instrumented, as simulation
                                        can be slow. Full mode transfers execution to the FPGA immediatelly as QEMU starts. This mode
                                        is useful if your checkpoint is already set up in the code you wish to simulate.
+-loadext testbench: This is an option that loads a QFlex checkpoint. "testbench" is the name of the checkpoint.
 -drive if=none,file=$QFLEX_DIR/images/ubuntu16/ubuntu.qcow2,id=hd0 : This is a regular QEMU option that specifies
                                                                      the image. You will have to modify it if you use another
                                                                      image.
--loadext testbench: This is a regular QEMU option that loads a checkpoint. "testbench" is the name of the checkpoint.
 ```
 
 This command will start QEMU, and lead the user to a shell in the target machine. Any commands send to this shell will be executed in the target machine.
@@ -61,11 +73,16 @@ To start the instrumented test, run:
 $ ./matmul
 ```
 
+If QEMU started with FPGA simulation support correctly, you should see:
+```
+QEMU: START: PC: 0xCURRPCADRR
+```
+
 ## Simulate KnockoutKraken
 Open another therminal and, on the same machine, go to the KnockoutKraken repository and start the test using `sbt`.
 
 ```
-$ cd armflex
+$ cd knockoutkraken
 $ sbt # start SBT Shell
 $(in sbt shell) test:runMain armflex.SimulatorMain SIM_STATE SIM_LOCK SIM_CMD QEMU_STATE QEMU_LOCK QEMU_CMD PROGRAM_PAGE 4096 /dev/shm/qflex
 
@@ -138,13 +155,13 @@ This command will generate the verilog files inside the `Verilog` folder.
 ## Synthesize ARMFlex
 Once your simulation works fine, you can synthesize ARMFlex. You will have to do it on a machine that has all the tools required by AMS F1. See above for a description.
 
-After generating verilog files in the `<armflex repo>/Verilog` folder you can synthesize the design to create design check-point and AFI image. Go to the directory `<armflex repo>/aws`
+After generating verilog files in the `<knockoutkraken repo>/Verilog` folder you can synthesize the design to create design check-point and AFI image. Go to the directory `<knockoutkraken repo>/aws`
 
 ```
-$ cd <armflex repo>/aws
+$ cd <knockoutkraken repo>/aws
 $ ./aws_build_dcp.sh
 ```
-This will take some time (several hours) and generate a design checkpoint in the `<armflex repo>/aws/armflex.runs/faas_1/build/checkpoints/to_aws/` folder.
+This will take some time (several hours) and generate a design checkpoint in the `<knockoutkraken repo>/aws/armflex.runs/faas_1/build/checkpoints/to_aws/` folder.
 
 # Run KnockoutKraken
 
@@ -153,9 +170,12 @@ The easiest way to run KnockoutKraken is to get it through our Amazon AMI image,
 ## Start an FPGA instance
 Once you received a confirmation from us, go to the AWS EC2 service, then to the AMI image section and choose a private image. You should be able to see the shared AMI (i.e. <armflex_dev_v1 ami-0891cda4dca10d171> in the figure below).
 
-IMAGE GOES HERE
+![AMI image selection screen](https://github.com/parsa-epfl/armflex/blob/master/docs/ami.png)
+
 
 Launch the AMI image and select f1.2xlarge as the instance type. This instance type is only available in some regions. Also, sometimes AWS requires additional information before allowing users to launch f1.XX nodes. While the process is quick, you might not get immediate access to the nodes the first time you try. Please plan accordingly.
+
+![AMI instance type selection screen](https://github.com/parsa-epfl/armflex/blob/master/docs/instance_type.png)
 
 While configuring your image, do not forget to choose or create a key pair for login. See [here](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html) for further instructions on AWS key pairs.
 
@@ -199,6 +219,9 @@ Check whether the image is properly loaded.
 $ sudo fpga-describe-local-image -S 0 -H
 ```
 
+You should see an output like the figure below.
+![fpga-describe-local-image output](https://github.com/parsa-epfl/armflex/blob/master/docs/image_loaded.png)
+
 ## Launch the driver/ARMFlex shell
 Open a terminal in your AWS F1 node and source the AWS SDK.
 ```
@@ -224,7 +247,7 @@ This script starts the instrumented QEMU on a pre-copied image. You can run your
 
 We provide a sample program that is already instrumented for KnockoutKraken. You can run it from the target machine terminal.
 ```
-$ ./a.out
+$ ./matmul
 ```
 
 To abort QEMU execution, run the following command on another terminal on the AWS F1 node.
