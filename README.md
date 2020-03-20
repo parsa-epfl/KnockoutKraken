@@ -85,6 +85,43 @@ $ tail -f /dev/shm/outputSim >> /dev/merged $
 $ tail -f /dev/merged # pretty output
 ```
 
+The output will show all the events in the simulation. The simulation runs every instruction on both QEMU and 
+the softcore, and reports on inconsistencies. Here is a guide on the output format:
+```
+RLT:OUT: Shows the commited PC and Instruction code of an instruction commited in Chisel
+IN[0] : Shows the commited instruction in QEMU
+```
+
+Here is an example of an instruction executed correctly. In the example below, `tbz` executed
+and the result of the RTL and QEMU matched.
+
+```
+RTL:OUT:0x0000ffffac213aa4:  36180062
+IN[0]  :0x0000ffffac213aa4:  36180062      tbz w2, #3, #+0xc (addr 0xffffac213ab0)
+```
+
+Whenever there is a mismatch, you will see a message with the following format:
+```
+RTL:PState didn't match, differences FPGA - QEMU:
+ X1:0x0000000029650aa0 != 0x0000ffffabf12028
+```
+
+This message indicates which register did not match, and the values found in Chisel and in QEMU. 
+
+In the example below, we have a load that misses in the FPGA memory, and fetches data from QEMU. After
+the data is fetched, there is still a mismatch. The `QEMU:REQ:` message shows the page that was fetched
+from QEMU and the first `RTL:` message indicates the page that missed on Chisel.
+```
+ QEMU:REQ:    PAGE:0x0000ffffabf12020
+ RTL:0000ffffabf12020:BRAM:104:MISSED:DATA_LOAD :0
+ RTL:OUT:0x0000ffffac213aa8:  f8408423
+ IN[0]  :0x0000ffffac213aa8:  f8408423      ldr x3, [x1], #8
+      LDST:0x0000ffffabf12020
+ RTL:PState didn't match, differences FPGA - QEMU:
+ X1:0x0000000029650aa0 != 0x0000ffffabf12028
+ ```
+Overall, simulation speed in this mode is very slow, we are activelly working to improve simulation speed.
+
 ## Generate Verilog
 
 ## Synthesize ARMFlex
