@@ -178,7 +178,8 @@ class BRAMConfig(
   val isRegistered: Boolean = false, // True => 2 Cycles
   val isAXI: Boolean = false // AXI is byte addressed
 ) {
-  val RAM_DEPTH = if(isAXI) (I_RAM_DEPTH << 2) else I_RAM_DEPTH
+  assert(I_RAM_DEPTH % 1024 == 0)
+  val RAM_DEPTH = if(isAXI) (I_RAM_DEPTH << log2Ceil(NB_COL)) else I_RAM_DEPTH
   val RAM_PERFORMANCE = if(isRegistered) "HIGH_PERFORMANCE" else "LOW_LATENCY"
   // Clone function with set AXI ports
   def apply(isAXI: Boolean): BRAMConfig =
@@ -203,8 +204,8 @@ class BRAMPort(implicit val cfg: BRAMConfig) extends Bundle {
     DI <> other.DI
     DO <> other.DO
       (cfg.isAXI, other.cfg.isAXI) match {
-      case (true,false) => (ADDR >> 2.U) <> other.ADDR
-      case (false,true) => ADDR <> (other.ADDR >> 2.U)
+      case (true,false) => (ADDR >> log2Ceil(cfg.NB_COL).U) <> other.ADDR
+      case (false,true) => ADDR <> (other.ADDR >> log2Ceil(cfg.NB_COL))
       case (true,true)  => ADDR <> other.ADDR
       case (false,false) => ADDR <> other.ADDR
     }
