@@ -22,7 +22,7 @@ class ProcConfig(val NB_THREADS : Int = 2, val DebugSignals : Boolean = false, E
   val TLB_NB_ENTRY = EntriesTLB
   val TLB_NB_ENTRY_W = log2Ceil(TLB_NB_ENTRY)
 
-  val bramConfigState = new BRAMConfig(8, 8, 512, "", false, false)
+  val bramConfigState = new BRAMConfig(8, 8, 1024, "", false, false)
   val bramConfigMem = new BRAMConfig(8, 8, 1 << (9+TLB_NB_ENTRY_W), "", false, false)
 }
 
