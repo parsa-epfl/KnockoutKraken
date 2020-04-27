@@ -7,7 +7,7 @@ import chisel3.util._
 import arm.PROCESSOR_TYPES._
 import arm.DECODE_CONTROL_SIGNALS._
 
-import util._
+import armflex.util._
 
 class ProcConfig(val NB_THREADS : Int = 2, val DebugSignals : Boolean = false, EntriesTLB: Int = 32) {
 
@@ -43,6 +43,17 @@ class ProcStateDBG(implicit val cfg : ProcConfig) extends Bundle {
   val missTLB = Output(ValidTag(MISS_T, new TLBMiss))
 }
 
+class PerfStats(implicit val cfg : ProcConfig) extends Bundle {
+  val cntCommit = UInt(32.W)
+  val cntInstStall = UInt(32.W)
+  val cntMemStall  = UInt(32.W)
+  val cntBranch = UInt(32.W)
+  val cntFlush  = UInt(32.W)
+  val cntTransplants = UInt(32.W)
+  val cntUndefInsts = UInt(32.W)
+  val cntException = UInt(32.W)
+}
+
 /** Processor
   *
   */
@@ -55,6 +66,8 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
 
     // AXI Host Communication
     val host2tpu = new TransplantUnitHostIO
+    val perfStats = Output(new PerfStats)
+    val resetStats = Input(UInt(8.W))
 
     // Debug
     val procStateDBG = if(cfg.DebugSignals) Some(new ProcStateDBG) else None
@@ -69,6 +82,17 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   val state = Module(new BRAM()(cfg.bramConfigState))
   // Transplant Unit
   val tpu = Module(new TransplantUnit())
+  // Performance Counters
+  val cntRunning = RegInit(false.B)
+  val isTransplanting = RegInit(false.B)
+  val cntCommit = Module(new PerfCounter)
+  val cntInstStall = Module(new PerfCounter)
+  val cntMemStall = Module(new PerfCounter)
+  val cntBranch = Module(new PerfCounter)
+  val cntFlush = Module(new PerfCounter)
+  val cntTransplants = Module(new PerfCounter)
+  val cntUndefInsts = Module(new PerfCounter)
+  val cntException = Module(new PerfCounter)
 
   // Internal State -----------------------------------------
   // PState
@@ -328,6 +352,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
   tpu.io.tpu2cpu.done.tag := commitReg.io.deq.bits.tag
 
   // Flushing ----------------------------------------------------------------
+  val commitedBranch = WireInit(commited && commitBr.valid)
   issuer.io.flush := tpu.io.tpu2cpu.flush
   fetch.io.flush := tpu.io.tpu2cpu.flush
   decReg.io.flush := false.B
@@ -337,7 +362,7 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
     fetch.io.flush := tpu.io.tpu2cpu.flush
     decReg.io.flush := decReg.io.deq.bits.tag === tpu.io.tpu2cpu.flush.tag
     commitReg.io.flush := commitReg.io.deq.bits.tag === tpu.io.tpu2cpu.flush.tag
-  }.elsewhen(commited && commitBr.valid ) { // Branching, clean pipeline
+  }.elsewhen(commitedBranch) { // Branching, clean pipeline
     fetch.io.flush.valid := fetch.io.deq.bits.tag === commitTag
     fetch.io.flush.tag := commitTag
     issuer.io.flush.valid := true.B
@@ -367,6 +392,42 @@ class Proc(implicit val cfg: ProcConfig) extends MultiIOModule
       }
     }
   }
+
+  // Performance Counters -----------------------------------------------------
+  when(io.host2tpu.done.valid) {
+    cntRunning := false.B
+    isTransplanting := true.B
+  }.elsewhen(io.host2tpu.fire.valid) {
+    cntRunning := true.B
+    isTransplanting := false.B
+  }
+
+  cntCommit.io.incr := commitReg.io.deq.fire
+  cntInstStall.io.incr := memArbiterInst.io.reqMiss.valid
+  cntMemStall.io.incr := memArbiterData.io.reqMiss.valid
+  cntBranch.io.incr := commitedBranch
+  cntFlush.io.incr := tpu.io.tpu2cpu.flush.valid
+  cntTransplants.io.incr := tpu.io.tpu2cpu.fire.valid
+  cntUndefInsts.io.incr := commitUndef
+  cntException.io.incr := exception
+
+  cntCommit.io.flush := io.resetStats(0)
+  cntInstStall.io.flush := io.resetStats(1)
+  cntMemStall.io.flush := io.resetStats(2)
+  cntBranch.io.flush := io.resetStats(3)
+  cntFlush.io.flush := io.resetStats(4)
+  cntTransplants.io.flush := io.resetStats(5)
+  cntUndefInsts.io.flush := io.resetStats(6)
+  cntException.io.flush := io.resetStats(7)
+
+  io.perfStats.cntCommit      := cntCommit.io.count
+  io.perfStats.cntInstStall   := cntInstStall.io.count
+  io.perfStats.cntMemStall    := cntMemStall.io.count
+  io.perfStats.cntBranch      := cntBranch.io.count
+  io.perfStats.cntFlush       := cntFlush.io.count
+  io.perfStats.cntTransplants := cntTransplants.io.count
+  io.perfStats.cntUndefInsts  := cntUndefInsts.io.count
+  io.perfStats.cntException   := cntException.io.count
 
   // DEBUG Signals ------------------------------------------------------------
   if(cfg.DebugSignals) {
