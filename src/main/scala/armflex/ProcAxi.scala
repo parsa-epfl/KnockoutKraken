@@ -9,7 +9,7 @@ import arm.PROCESSOR_TYPES._
 
 object AxiDriver extends App {
   chisel3.Driver.execute(Array("-tn", "ProcAxi", "-td", "verilog", "-fsm"), () =>
-    new ProcAxiWrap()(new ProcConfig(2, false, 64)))
+    new ProcAxiWrap()(new ProcConfig(2, false, 16)))
 }
 
 class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
@@ -25,8 +25,12 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
   }
 
   // Register file
-  // 1 Pulse Reg, 7 ReadOnly regs, 8 Rd-Write Regs, 16 ReadOnly Regs
-  val cfgAxiMM = new AxiMemoryMappedRegFileConfig(16, readOnly, pulseOnly)
+  // 1 Pulse Reg, 7 ReadOnly regs, 8 Rd-Write Regs, 
+  // 16 ReadOnly Regs, 1 Pulse reg
+  // 
+  val readOnly  = "011111110000000011111111111111110".map(str2bool)
+  val pulseOnly = "100000000000000000000000000000000".map(str2bool)
+  val cfgAxiMM = new AxiMemoryMappedRegFileConfig(33, readOnly, pulseOnly)
   val regFile  = Module(new AxiMemoryMappedRegFile()(cfgAxiMM))
 
   val proc = Module(new Proc())
@@ -209,10 +213,46 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
 
   proc.io.host2tpu.fillTLB := fillTLB
 
+  // Performance Counters
+  /**     Reg 16        Reg 17         Reg 18       Reg 19    
+    * +------------++------------++------------++------------+
+    * |   Commit   || Inst Stall ||  Mem Stall ||   Branch   |
+    * +------------++------------++------------++------------+
+    * |31         0||31         0||31         0||31         0|
+    * +------------++------------++------------++------------+
+    *
+    */ 
+  /**     Reg 20        Reg 21         Reg 22       Reg 23    
+    * +------------++------------++------------++------------+
+    * |   Commit   || Inst Stall ||  Mem Stall ||   Branch   |
+    * +------------++------------++------------++------------+
+    * |31         0||31         0||31         0||31         0|
+    * +------------++------------++------------++------------+
+    *
+    */ 
+   
+   val perfStats = Reg(new PerfStats)
+   perfStats := proc.io.perfStats
+   regIn(16) := perfStats.cntCommit      
+   regIn(17) := perfStats.cntInstStall   
+   regIn(18) := perfStats.cntMemStall    
+   regIn(19) := perfStats.cntBranch      
+   regIn(20) := perfStats.cntFlush       
+   regIn(21) := perfStats.cntTransplants 
+   regIn(22) := perfStats.cntUndefInsts  
+   regIn(23) := perfStats.cntException   
+
+   /**     Reg 32
+    *  +------------+
+    *  |   Reset    |
+    *  +----+-------+
+    *  |31  |7     0|
+    *  +----+-------+
+    */
+   proc.io.resetStats := regOut(24)(7,0)
+
   // DEBUG Signals ------------------------------------------------------------
   if(cfg.DebugSignals) {
     proc.io.procStateDBG.get <> io.procStateDBG.get
-    //proc.io.host2tpu.fillTLB <> io.procStateDBG.get.fillTLB
-    //proc.io.host2tpu.missTLB <> io.procStateDBG.get.missTLB
   }
 }
