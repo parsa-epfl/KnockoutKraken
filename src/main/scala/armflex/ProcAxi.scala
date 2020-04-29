@@ -1,7 +1,7 @@
 package armflex
 
 import chisel3._
-import chisel3.util.{Cat}
+import chisel3.util.{Cat, Valid}
 
 import util._
 
@@ -25,11 +25,7 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
   }
 
   // Register file
-  //val readOnly  = "0100".map(str2bool)
-  //val pulseOnly = "1000".map(str2bool)
-  // 1 Pulse Reg, 7 ReadOnly regs, 8 Rd-Write Regs
-  val readOnly  = "0111111100000000".map(str2bool)
-  val pulseOnly = "1000000000000000".map(str2bool)
+  // 1 Pulse Reg, 7 ReadOnly regs, 8 Rd-Write Regs, 16 ReadOnly Regs
   val cfgAxiMM = new AxiMemoryMappedRegFileConfig(16, readOnly, pulseOnly)
   val regFile  = Module(new AxiMemoryMappedRegFile()(cfgAxiMM))
 
@@ -87,7 +83,7 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
 
   // 0 -> PulseOnly, 1-7 -> ReadOnly, 8-16->Rd/Wr
   val regValues = WireInit(VecInit(Seq.fill(cfgAxiMM.nbrReg)(0.U(AxiLiteConsts.dataWidth.W))))
-  def regOut(reg:Int, offst:Int, size:Int) = regFile.io.regsOutput(reg)(offst+(size-1),offst)
+  def regOut(reg:Int)(msb:Int, lsb:Int) = regFile.io.regsOutput(reg)(msb,lsb)
   def regIn(reg:Int) = regValues(reg)
   regFile.io.regsInput := regValues
 
@@ -97,21 +93,21 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
     * |-----------+-----------+---------------+-------------+-------------------+
     * |   fire    | getState  |   fillTLB     |   TLB.isWr  |        Tag        |
     * +-----------+-----------+---------------+-------------+-------------------+
-    * |31       31|30       30|29           29|28         28| NB_THREADS-1      0|
+    * |31       31|30       30|29           29|28         28| NB_THREADS-1     0|
     * +-----------+-----------+---------------+-------------+-------------------+
     *
     */
-  val tagReg = regOut(0, 0, cfg.NB_THREADS)
-  val fireReg = regOut(0, 31, 1).asBool
+  val tagReg = RegNext(regOut(0)(cfg.NB_THREADS, 0))
+  val fireReg = RegNext(regOut(0)(31, 31).asBool)
   proc.io.host2tpu.fire.valid := fireReg
   proc.io.host2tpu.fire.tag := tagReg
 
-  val getState = regOut(0, 30, 1).asBool
+  val getState = RegNext(regOut(0)(30, 30).asBool)
   proc.io.host2tpu.getState.valid := getState
   proc.io.host2tpu.getState.tag := tagReg
 
-  val fillTLB = regOut(0, 29, 1).asBool
-  val fillTLB_isWr = regOut(0, 29, 1).asBool
+  val fillTLB_fire = regOut(0)(29, 29).asBool
+  val fillTLB_isWr = regOut(0)(28, 28).asBool
 
   /** Register 1 (Read-Only)
     * +---------------------------------+
@@ -199,15 +195,19 @@ class ProcAxiWrap(implicit val cfg: ProcConfig) extends MultiIOModule {
     * +----------------------------+
     *
     */
-  val fillTLB_valid = fillTLB // Check Reg 0 Pulse Only
-  val fillTLB_vaddr = WireInit(Cat(regOut(9, 0, 32), regOut(8, 0, 32)))
-  val fillTLB_tlbIdx = WireInit(regOut(10, 0, 32))
-  proc.io.host2tpu.fillTLB.valid := fillTLB
-  proc.io.host2tpu.fillTLB.bits.vaddr := fillTLB_vaddr.asUInt
-  proc.io.host2tpu.fillTLB.bits.tlbIdx := fillTLB_tlbIdx
-  proc.io.host2tpu.fillTLB.bits.tlbEntry.valid := true.B
-  proc.io.host2tpu.fillTLB.bits.tlbEntry.wrEn := fillTLB_isWr
-  proc.io.host2tpu.fillTLB.bits.tlbEntry.tag := TLBEntry.getTLBtag(fillTLB_vaddr)
+  val fillTLB_valid = fillTLB_fire // Check Reg 0 Pulse Only
+  val fillTLB_vaddr = WireInit(Cat(regOut(9)(31, 0), regOut(8)(31,0)))
+  val fillTLB_tlbIdx = WireInit(regOut(10)(31,0))
+  val fillTLB_wire = Wire(Valid(new TLBFill))
+  fillTLB_wire.valid := fillTLB_valid
+  fillTLB_wire.bits.vaddr := fillTLB_vaddr.asUInt
+  fillTLB_wire.bits.tlbIdx := fillTLB_tlbIdx
+  fillTLB_wire.bits.tlbEntry.valid := true.B
+  fillTLB_wire.bits.tlbEntry.wrEn := fillTLB_isWr
+  fillTLB_wire.bits.tlbEntry.tag := TLBEntry.getTLBtag(fillTLB_vaddr)
+  val fillTLB = RegNext(fillTLB_wire)
+
+  proc.io.host2tpu.fillTLB := fillTLB
 
   // DEBUG Signals ------------------------------------------------------------
   if(cfg.DebugSignals) {
