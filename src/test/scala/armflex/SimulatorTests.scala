@@ -61,7 +61,7 @@ object FA_QflexCmds {
 /* sim : Chisel3 simulation
  * qemu: QEMU    simulation
  */
-class SimulatorConfig (
+class PathConfig (
   simStateFilename: String,
   simLockFilename: String,
   simCmdFilename : String,
@@ -83,8 +83,7 @@ class SimulatorConfig (
   val pagePath      = rootPath + "/" + pageFilename
 }
 
-class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : SimulatorConfig)
-  (implicit val cfgProc : ProcConfig) {
+class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgPath: PathConfig)(implicit val cfgProc: ProcConfig) {
 
   val file = new PrintWriter(new BufferedWriter(new FileWriter("/dev/shm/outputSim", true)), true)
 
@@ -100,7 +99,7 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
 
   var currState : PState = cProcAxi.getPStateInternal(0)
 
-  def pageSize = cfgSim.pageSizeBytes/WORD_SIZE
+  def pageSize = cfgPath.pageSizeBytes/WORD_SIZE
 
   def exit: Unit = {
     file.close()
@@ -205,12 +204,12 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
             currState = cProcAxi.getPStateInternal(0)
 
             // Ask QEMU to step and write state back to compare
-            writePState2File(cfgSim.simStatePath, currState)
+            writePState2File(cfgPath.simStatePath, currState)
             simLog(s"OUT:0x${"%016x".format(pc)}:  ${"%08x".format(inst)}") // Executed instruction
-            writeCmd((FA_QflexCmds.CHECK_N_STEP, 0), cfgSim.qemuCmdPath)
-            waitForCmd(cfgSim.simCmdPath)
+            writeCmd((FA_QflexCmds.CHECK_N_STEP, 0), cfgPath.qemuCmdPath)
+            waitForCmd(cfgPath.simCmdPath)
 
-            val qemuPState = ArmflexJson.json2state(readFile(cfgSim.qemuStatePath))
+            val qemuPState = ArmflexJson.json2state(readFile(cfgPath.qemuStatePath))
             val (hasMatched, diffLog) = currState.matches(qemuPState)
             if (!hasMatched) simLog(diffLog)
           }
@@ -218,8 +217,8 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
           clock.step(1)
         }
       } while(!cProcAxi.tpuIsWorking);
-      writePState2File(cfgSim.simStatePath, cProcAxi.rdBRAM2PSTATE(0))
-      writeCmd((FA_QflexCmds.INST_UNDEF, 0), cfgSim.qemuCmdPath)
+      writePState2File(cfgPath.simStatePath, cProcAxi.rdBRAM2PSTATE(0))
+      writeCmd((FA_QflexCmds.INST_UNDEF, 0), cfgPath.qemuCmdPath)
     }.fork {
       val bramMask = cfgProc.TLB_NB_ENTRY - 1 //for (i <- 0 until cfgProc.TLB_NB_ENTRY_W) yield '1'
       do {
@@ -227,9 +226,9 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
         if(isMiss) {
           val tag = FA_QflexCmds.DATA_STORE // Assume highest right possible
           //val (tag, addr, tlbIdx): (Int, BigInt, BigInt) = cProcAxi.getMissTLB
-          writeCmd((tag, addr), cfgSim.qemuCmdPath)
-          val cmd = waitForCmd(cfgSim.simCmdPath)
-          val insns: Seq[(Int, BigInt)] = getProgramPageInsns(cfgSim.pagePath)
+          writeCmd((tag, addr), cfgPath.qemuCmdPath)
+          val cmd = waitForCmd(cfgPath.simCmdPath)
+          val insns: Seq[(Int, BigInt)] = getProgramPageInsns(cfgPath.pagePath)
           simLog(s"${"%016x".format(addr)}:BRAM:${tlbIdx}:MISSED:${FA_QflexCmds.cmd_toString(tag)}:${tag}")
           for(insn <- insns) {
             cProcAxi.writeMem(insn._2, insn._1, tlbIdx)
@@ -249,11 +248,11 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
   def runSimulator: Unit = {
     simLog("RUN SIMULATOR")
     while(true) {
-      val cmd = waitForCmd(cfgSim.simCmdPath)._1
+      val cmd = waitForCmd(cfgPath.simCmdPath)._1
       cmd match {
         case FA_QflexCmds.SIM_START =>
-          updatePState(readFile(cfgSim.qemuStatePath), 0)
-          val pstate: PState = ArmflexJson.json2state(readFile(cfgSim.qemuStatePath))
+          updatePState(readFile(cfgPath.qemuStatePath), 0)
+          val pstate: PState = ArmflexJson.json2state(readFile(cfgPath.qemuStatePath))
           run(pstate)
         case FA_QflexCmds.SIM_STOP =>
           simLog("SIMULATION STOP")
@@ -265,7 +264,7 @@ class SimulatorTestsBaseDriver(val cProcAxi : ProcAxiWrap, val cfgSim : Simulato
 
 // sim : Chisel3 simulation
 // qemu: QEMU    simulation
-class TestSimulatorAxi(cfgSim : SimulatorConfig, val cfgProc : ProcConfig)
+class TestSimulatorAxi(cfgPath : PathConfig, val cfgProc: ProcConfig)
     extends FlatSpec with ChiselScalatestTester {
 
   val annos = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/ProcAxi"), WriteVcdAnnotation)
@@ -277,7 +276,7 @@ class TestSimulatorAxi(cfgSim : SimulatorConfig, val cfgProc : ProcConfig)
     test(new ProcAxiWrap()(cfgProc))
       .withAnnotations(annos) { proc =>
 
-      val drv = new SimulatorTestsBaseDriver(proc, cfgSim)(cfgProc)
+      val drv = new SimulatorTestsBaseDriver(proc, cfgPath)(cfgProc)
 
       drv.runSimulator
     }
@@ -286,12 +285,12 @@ class TestSimulatorAxi(cfgSim : SimulatorConfig, val cfgProc : ProcConfig)
 
 object SimulatorMain extends App {
   assert(args.length == 9)
-  val cfgSim = new SimulatorConfig(
+  val cfgPath = new PathConfig(
     args(0), args(1), args(2),
     args(3), args(4), args(5),
     args(6), args(7).toInt,
     args(8)
   )
-  implicit val cfgProc = new ProcConfig(2, true)
-  new TestSimulatorAxi(cfgSim: SimulatorConfig, cfgProc).execute()
+  implicit val cfgProc = new ProcConfig(NB_THREADS = 2, DebugSignals = true)
+  new TestSimulatorAxi(cfgPath, cfgProc).execute()
 }
