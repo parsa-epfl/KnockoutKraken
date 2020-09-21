@@ -188,11 +188,12 @@ class BRAMConfig(
 
 
 class BRAMPort(implicit val cfg: BRAMConfig) extends Bundle {
+  val WE_W = cfg.NB_COL
 
   val CLK = if(cfg.isAXI) Some(Input(Bool())) else None
   val RST = if(cfg.isAXI) Some(Input(Bool())) else None
   val EN = Input(Bool())
-  val WE = Input(UInt(cfg.NB_COL.W))
+  val WE = Input(UInt(WE_W.W))
   val ADDR = Input(UInt(log2Ceil(cfg.RAM_DEPTH).W))
   val DI = Input(UInt((cfg.NB_COL*cfg.COL_WIDTH).W))
   val DO = Output(UInt((cfg.NB_COL*cfg.COL_WIDTH).W))
@@ -203,7 +204,7 @@ class BRAMPort(implicit val cfg: BRAMConfig) extends Bundle {
     WE <> other.WE
     DI <> other.DI
     DO <> other.DO
-      (cfg.isAXI, other.cfg.isAXI) match {
+    (cfg.isAXI, other.cfg.isAXI) match {
       case (true,false) => (ADDR >> log2Ceil(cfg.NB_COL).U) <> other.ADDR
       case (false,true) => ADDR <> (other.ADDR >> log2Ceil(cfg.NB_COL))
       case (true,true)  => ADDR <> other.ADDR
@@ -235,3 +236,110 @@ class BRAM(implicit cfg: BRAMConfig) extends MultiIOModule {
   bramTDP.io.doutb <> portB.DO
 }
 
+
+class FIFOIO(implicit val cfg: BRAMConfig) extends Bundle
+{
+  val enq = Flipped(Decoupled(UInt((cfg.NB_COL*cfg.COL_WIDTH).W)))
+  val deq = Decoupled(UInt((cfg.NB_COL*cfg.COL_WIDTH).W))
+  val flush = Input(Bool())
+}
+
+class FIFO(implicit val cfg: BRAMConfig) extends Module {
+  val bram = Module(new BRAM())
+
+  val io = IO(new FIFOIO)
+
+
+  val enq_ptr = RegInit(0.U(log2Ceil(cfg.RAM_DEPTH).W))
+  val deq_ptr = RegInit(0.U(log2Ceil(cfg.RAM_DEPTH).W))
+
+  val maybe_full = RegInit(false.B)
+
+  val ptr_match = WireInit(enq_ptr === deq_ptr)
+  val empty = WireInit(ptr_match && !maybe_full)
+  val full = WireInit(ptr_match && maybe_full)
+
+  val do_enq = WireInit(io.enq.valid && !full)
+  val do_deq = WireInit(io.deq.ready && !empty)
+
+  when (do_enq) { enq_ptr := enq_ptr + 1.U }
+  when (do_deq) { deq_ptr := deq_ptr + 1.U }
+  when(do_enq =/= do_deq) {
+    maybe_full := do_enq
+  }
+
+  bram.portA.EN := true.B
+  bram.portA.WE := Fill(cfg.NB_COL, do_enq.asUInt)
+  bram.portA.ADDR := enq_ptr
+  bram.portA.DI := io.enq.bits
+
+  bram.portB.EN := do_deq.asUInt
+  bram.portB.WE := 0.U
+  bram.portB.ADDR := deq_ptr 
+  bram.portB.DI := DontCare
+  val bitsOut = bram.portB.DO
+
+  io.enq.ready := !full
+  io.deq.valid := !empty
+  io.deq.bits := bitsOut
+  when(io.flush) {
+    enq_ptr := 0.U
+    deq_ptr := 0.U
+    maybe_full := false.B
+
+    io.deq.valid := false.B
+    io.enq.ready := false.B
+  }
+}
+
+
+// This FIFO has output ready before dequing
+class FIFOReady(implicit val cfg: BRAMConfig) extends Module {
+  val bram = Module(new BRAM())
+
+  val io = IO(new FIFOIO)
+
+
+  val enq_ptr = RegInit(0.U(log2Ceil(cfg.RAM_DEPTH).W))
+  val deq_ptr = RegInit(0.U(log2Ceil(cfg.RAM_DEPTH).W))
+
+  val maybe_full = RegInit(false.B)
+
+  val ptr_match = WireInit(enq_ptr === deq_ptr)
+  val empty = WireInit(ptr_match && !maybe_full)
+  val full = WireInit(ptr_match && maybe_full)
+
+  // Rising edge empty
+  val firstRead = RegNext(empty) && !empty
+  val do_enq = WireInit(io.enq.valid && !full)
+  val do_deq = WireInit((io.deq.ready && !empty) || firstRead)
+
+  when (do_enq) { enq_ptr := enq_ptr + 1.U }
+  when (do_deq) { deq_ptr := deq_ptr + 1.U }
+  when(do_enq =/= do_deq) {
+    maybe_full := do_enq
+  }
+
+  bram.portA.EN := true.B
+  bram.portA.WE := Fill(cfg.NB_COL, do_enq.asUInt)
+  bram.portA.ADDR := enq_ptr
+  bram.portA.DI := io.enq.bits
+
+  bram.portB.EN := do_deq.asUInt
+  bram.portB.WE := 0.U
+  bram.portB.ADDR := deq_ptr 
+  bram.portB.DI := DontCare
+  val bitsOut = bram.portB.DO
+
+  io.enq.ready := !full
+  io.deq.valid := !empty
+  io.deq.bits := bitsOut
+  when(io.flush) {
+    enq_ptr := 0.U
+    deq_ptr := 0.U
+    maybe_full := false.B
+
+    io.deq.valid := false.B
+    io.enq.ready := false.B
+  }
+}
