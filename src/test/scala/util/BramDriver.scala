@@ -9,6 +9,13 @@ import armflex.util._
 
 object BRAMPortDriver {
   implicit class BRAMPortDriver(target: BRAMPort)(implicit clock: Clock) {
+    def init: Unit = {
+      target.EN.poke(false.B)
+      target.WE.poke(0.U)
+      target.ADDR.poke(0.U)
+      target.DI.poke(0.U)
+    }
+
     def wrBRAM(bits:BigInt, offst: BigInt) = {
       target.EN.poke(true.B)
       target.WE.poke("b11111111".U) // Assumes 64bit
