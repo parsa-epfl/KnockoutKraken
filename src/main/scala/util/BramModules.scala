@@ -173,17 +173,31 @@ class BRAMTDP(implicit cfg: BRAMConfig) extends BlackBox(Map(
 class BRAMConfig(
   val NB_COL: Int = 4,
   val COL_WIDTH: Int = 9,
-  I_RAM_DEPTH: Int = 1024,
+  val NB_ELE: Int = 1024,
   val INIT_FILE: String = "",
   val isRegistered: Boolean = false, // True => 2 Cycles
-  val isAXI: Boolean = false // AXI is byte addressed
+  val isAXI: Boolean = false, // AXI is byte addressed
+  val isWriteFirst : Boolean = true
 ) {
+
+  private val NB_ELE_PER_BRAM = 1024*4/NB_COL
+  private val nbBlocks = {
+    val size = NB_ELE/NB_ELE_PER_BRAM
+    if(size == 0) 1 else size
+  }
+  private val sizeBRAM = java.lang.Math.ceil(nbBlocks)
+  private val I_RAM_DEPTH = sizeBRAM.toInt * NB_ELE_PER_BRAM
+
+  assert(isWriteFirst, "BRAM Blackbox currently supports WriteFirst policy only.")
   assert(I_RAM_DEPTH % 1024 == 0)
+  assert(I_RAM_DEPTH > 0)
+
   val RAM_DEPTH = if(isAXI) (I_RAM_DEPTH << log2Ceil(NB_COL)) else I_RAM_DEPTH
   val RAM_PERFORMANCE = if(isRegistered) "HIGH_PERFORMANCE" else "LOW_LATENCY"
+
   // Clone function with set AXI ports
   def apply(isAXI: Boolean): BRAMConfig =
-    new BRAMConfig(NB_COL, COL_WIDTH, I_RAM_DEPTH, INIT_FILE, isRegistered, isAXI)
+    new BRAMConfig(NB_COL, COL_WIDTH, NB_ELE, INIT_FILE, isRegistered, isAXI)
 }
 
 
