@@ -20,12 +20,7 @@ class MemArbiterData(implicit val cfg: ProcConfig) extends MultiIOModule
 
     val fillTLB = Input(Valid(new TLBFill))
     val memPort = Flipped(new BRAMPort()(cfg.bramConfigMem))
-    val tlbPort = Flipped(new Bundle {
-      val isWr = Input(Bool())
-      val vaddr = Input(Valid(DATA_T))
-      val paddr = Output(DATA_T)
-      val miss = Output(Valid(new TLBMiss))
-    })
+    val tlbPort = Flipped(new TLBPort)
 
     val rfile = Flipped(new RFileIO)
     val rfileWr = Output(Bool())
@@ -215,12 +210,7 @@ class MemArbiterInst(implicit val cfg: ProcConfig) extends MultiIOModule
 
     val fillTLB = Input(Valid(new TLBFill))
     val memPort = Flipped(new BRAMPort()(cfg.bramConfigMem))
-    val tlbPort = Flipped(new Bundle {
-      val isWr = Input(Bool())
-      val vaddr = Input(Valid(DATA_T))
-      val paddr = Output(DATA_T)
-      val miss = Output(Valid(new TLBMiss))
-    })
+    val tlbPort = Flipped(new TLBPort)
 
     val busy = Output(Bool())
     val reqMiss = Output(Valid(new TLBMiss))

@@ -22,10 +22,18 @@ class TLBMiss(implicit val cfg: ProcConfig) extends Bundle {
   val vaddr = DATA_T
   val tlbIdx = UInt(cfg.TLB_NB_ENTRY_W.W)
 }
+
 class TLBFill(implicit val cfg: ProcConfig) extends Bundle {
   val tlbEntry = new TLBEntry
   val vaddr = DATA_T
   val tlbIdx = UInt(cfg.TLB_NB_ENTRY_W.W)
+}
+
+class TLBPort(implicit val cfg: ProcConfig) extends Bundle {
+  val isWr = Input(Bool())
+  val vaddr = Input(Valid(DATA_T))
+  val paddr = Output(DATA_T)
+  val miss = Output(Valid(new TLBMiss))
 }
 
 /* Full Associative - Least Recently Used policy
@@ -35,18 +43,8 @@ class TLBUnit(implicit val cfg: ProcConfig) extends Module {
   val io = IO(new Bundle {
     val fillTLB = Input(Valid(new TLBFill))
 
-    val iPort = new Bundle {
-      val isWr = Input(Bool())
-      val vaddr = Input(Valid(DATA_T))
-      val paddr = Output(DATA_T)
-      val miss = Output(Valid(new TLBMiss))
-    }
-    val dPort = new Bundle {
-      val isWr = Input(Bool())
-      val vaddr = Input(Valid(DATA_T))
-      val paddr = Output(DATA_T)
-      val miss = Output(Valid(new TLBMiss))
-    }
+    val iPort = new TLBPort
+    val dPort = new TLBPort
     val excpWrProt = Output(Bool())
   })
 
