@@ -9,19 +9,34 @@ import arm.DECODE_CONTROL_SIGNALS._
 
 import armflex.util._
 
-class ProcConfig(val NB_THREADS : Int = 2, val DebugSignals : Boolean = false, EntriesTLB: Int = 32) {
+class ProcConfig(
+  // Chisel Generator configs
+  val NB_THREADS : Int = 2,
+  val TLB_NB_ENTRY: Int = 32,
+
+  // Simulation settings 
+  val DebugSignals : Boolean = false, 
+  val rtlVerbose: Boolean = false,
+  val simVerbose: Boolean = false
+) {
+  // Global Clock
+  // Should be assigned simulation start
+  // Used to step in drivers during simulation
+  var clock: Clock = null 
 
   // Threads
-  val NB_THREAD_W = log2Ceil(NB_THREADS) // 4 Threads
-  def TAG_T = UInt(NB_THREAD_W.W)
-  val TAG_X = 0.U(NB_THREAD_W.W)
+  // val NB_THREADS
+  val NB_THREADS_W = log2Ceil(NB_THREADS) // 4 Threads
+  def TAG_T = UInt(NB_THREADS_W.W)
+  val TAG_X = 0.U(NB_THREADS_W.W)
   val TAG_VEC_X = 0.U(NB_THREADS.W)
   def TAG_VEC_T = UInt(NB_THREADS.W)
 
   // Memory
-  val TLB_NB_ENTRY = EntriesTLB
+  // val TLB_NB_ENTRY
   val TLB_NB_ENTRY_W = log2Ceil(TLB_NB_ENTRY)
 
+  // BRAM Generator configs
   val bramConfigState = new BRAMConfig(8, 8, 1024, "", false, false)
   val bramConfigMem = new BRAMConfig(8, 8, 1 << (9+TLB_NB_ENTRY_W), "", false, false)
 }
