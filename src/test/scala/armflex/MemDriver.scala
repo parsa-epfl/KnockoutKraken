@@ -23,6 +23,7 @@ import util._
 import util.AxiLite.AxiLiteSlaveDriver
 import util.BRAMPortDriver.BRAMPortDriver
 import util.SoftwareStructs._
+import util.SimTools._
 
 import armflex.MemoryDrivers.MemPortDriver
 
@@ -30,7 +31,7 @@ object MemoryDrivers {
   implicit class MemPortDriver(target: MemPort)(implicit val cfgProc: ProcConfig) {
     implicit val clock: Clock = cfgProc.clock
     val transCount = new AtomicInteger
-
+    
     def init: this.type = {
       target.port.init
       this
@@ -45,13 +46,11 @@ object MemoryDrivers {
       target.port.DI.poke(data)
       fork.withRegion(Monitor) {
         while (target.busy.peek().litToBoolean == true) {
+          log("WR:${addr.litValue}|${data.litValue}\n  - BUSYPORT")
           clock.step()
         }
       }.joinAndStep(clock)
-      if(cfgProc.simVerbose) {
-        val cycle = Context().backend.getClockCycle()
-        println(s"${"%3d".format((cycle-1)*2)}ns:WR:${addr.litValue}|${data.litValue}")
-      }
+      log(s"WR:${addr.litValue}|${data.litValue}")
     }
 
     def rd(addr:UInt): UInt = {
@@ -64,14 +63,12 @@ object MemoryDrivers {
         fork.withRegion(Monitor) {
           while (target.busy.peek().litToBoolean == true) {
             clock.step()
+            log(s"RD:${addr.litValue}|${data.litValue}\n  -BUSY")
           }
         }.joinAndStep(clock)
         data = target.port.DO.peek()
       }
-      if(cfgProc.simVerbose) {
-        val cycle = Context().backend.getClockCycle()
-        println(s"${"%3d".format((cycle-1)*2)}ns:RD:${addr.litValue}|${data.litValue}")
-      }
+      log(s"RD:${addr.litValue}|${data.litValue}")
       return data
     }
   }
