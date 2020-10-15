@@ -29,63 +29,6 @@ abstract class LRUCore(wayNumber: Int) extends Module{
 }
 
 /**
- *  base class of LRU module.
- *  @param lru_core the LRU updating logic
- *  @param param Cache parameters
- *  @param implemented_with_register use register as the buffer to store the encoding if true.
- */ 
-class LRU[T <: LRUCore](
-  param: CacheParameter,
-  lru_core: T,
-  implemented_with_register: Boolean
-) extends Module{
-  val io = IO(new Bundle {
-    // First cycle: give me the address for me to fetch the LRU
-    val addr_i = Input(UInt(param.addressWidth.W))
-    val addr_vi = Input(Bool())
-    // Second cycle: give me whether or not you hits a specific position
-    val index_i = Input(UInt(param.wayWidth().W))
-    val index_vi = Input(Bool())
-    // I will also tell you which position is available for replacement.
-    val lru_o = Output(UInt(param.wayWidth().W))
-    // The update of lru_o is valid in the third cycle.
-  })
-  // add an extra stage to store the addr. They will be used for the LRU bits writing back.
-  val addr_s1_r = RegNext(io.addr_i)
-  val addr_s1_vr = RegNext(io.addr_vi)
-
-  implicit val bram_config = new BRAMConfig(
-    1,
-    lru_core.encodingWidth(),
-    param.setNumber,
-    "",
-    implemented_with_register
-  )
-
-  val bram = Module(new BRAM())
-
-  bram.portA.EN := io.addr_vi
-  bram.portA.ADDR := io.addr_i
-  bram.portA.WE := false.B
-
-  // Connected to the LRU Core
-  val core = Module(lru_core)
-
-  core.io.encoding_i := bram.portA.DO
-
-  core.io.index_i := io.index_i
-  core.io.index_vi := io.index_vi
-  core.io.vi := addr_s1_vr // if true, there is a request.
-  io.lru_o := core.io.lru_o
-
-  // write back
-  bram.portB.EN := addr_s1_vr
-  bram.portB.ADDR := addr_s1_r
-  bram.portB.WE := addr_s1_vr
-  bram.portB.DI := core.io.encoding_o
-}
-
-/**
  *  Pseudo tree LRU updating logic. Implemented in recursive function instead of module.
  * 
  *  Tree LRU is appreciated when the associativity greater than 4, which can be normal in L1 TLB.
