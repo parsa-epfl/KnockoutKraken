@@ -21,6 +21,8 @@ case class CacheParameter(
   threadNumber: Int = 4,
   // Permission recordings. A D cache needs one bit to record the permission of the data.
   writable: Boolean = false,
+  // Permission checking. 
+  permissionIsChecked: Boolean = false
 ){
   assert (isPow2(setNumber))
   assert (isPow2(associativity))
@@ -46,10 +48,9 @@ class BRAMorRegister(implemented_with_register: Boolean = true)(implicit cfg: BR
   val portA = IO(new BRAMPort)
   val portB = IO(new BRAMPort)
 
-  val pAdo = Wire(Vec(cfg.NB_COL, UInt(cfg.COL_WIDTH.W)))
-  val pBdo = Wire(Vec(cfg.NB_COL, UInt(cfg.COL_WIDTH.W)))
-
   if(implemented_with_register){
+    val pAdo = Wire(Vec(cfg.NB_COL, UInt(cfg.COL_WIDTH.W)))
+    val pBdo = Wire(Vec(cfg.NB_COL, UInt(cfg.COL_WIDTH.W)))
     for(col <- 0 until cfg.NB_COL){
       val reg_bank_r = RegInit(VecInit(Seq.fill(cfg.NB_ELE)(0.U(cfg.COL_WIDTH.W))))
       when(portA.EN && portA.WE(col)){
@@ -118,6 +119,7 @@ class DataBank[T <: DataBankEntry](
         val w_v = if(param.writable) Some(Bool()) else None // write valid?
         val w_data = if(param.writable) Some(UInt(param.blockBit.W)) else None
         val w_mask = if(param.writable) Some(UInt(param.blockBit.W)) else None
+        val permission = if(param.writable) Some(Bool()) else None // 0 is read, 1 is read and write.
       }))
       val rep_o = Decoupled(new Bundle{
         val data = UInt(param.blockBit.W)
@@ -158,10 +160,12 @@ class DataBank[T <: DataBankEntry](
   )
   val mem = Module(new BRAMorRegister(implemented_with_register))
 
+  mem.portA.DI := 0.U
+
   /**
    * Helper function to correctly add register or directly bypass to union reading from the register and block memory.
    */ 
-  def regOrNor[T <: Data](t: T): T = {
+  def regOrNot[T <: Data](t: T): T = {
     if(implemented_with_register) t else RegNext(t)
   }
 
@@ -169,13 +173,14 @@ class DataBank[T <: DataBankEntry](
   val setWidth = log2Ceil(param.setNumber)
   val f_addr = io.frontend.req_i.bits.addr
   val f_thread = io.frontend.req_i.bits.thread_id
-  val f_v_s0 =  regOrNor(io.frontend.req_i.valid)
-  val f_addr_s0 = regOrNor(f_addr)
-  val f_thread_s0 = regOrNor(f_thread)
+  val f_v_s0 =  regOrNot(io.frontend.req_i.valid)
+  val f_addr_s0 = regOrNot(f_addr)
+  val f_thread_s0 = regOrNot(f_thread)
   val wv_r = if(param.writable){
     val d_value = io.frontend.req_i.valid && io.frontend.req_i.bits.w_v.get
-    regOrNor(d_value)
+    regOrNot(d_value)
    } else false.B
+  val permission_r = if(param.permissionIsChecked) regOrNot(io.frontend.req_i.bits.permission.get) else false.B
 
   mem.portA.ADDR := f_addr(setWidth-1, 0)
   mem.portA.EN := io.frontend.req_i.valid
@@ -195,7 +200,7 @@ class DataBank[T <: DataBankEntry](
   val is_hit: Bool = PopCount(match_bits) === 1.U // this value should only be 1 or zero.
 
   //! TBD here for how to handle the permission check of bits.
-  val is_valid = true.B
+  val is_valid = f_acc(hits_which).valid(permission_r)
 
   io.frontend.rep_o.valid := f_v_s0 && is_hit && is_valid
   io.frontend.rep_o.bits.data := f_acc(hits_which).read() // read
@@ -215,8 +220,8 @@ class DataBank[T <: DataBankEntry](
   val frontend_wb_port = Wire(Decoupled(new WritebackPacket))
 
   if(param.writable){
-    val w_data_r = regOrNor(io.frontend.req_i.bits.w_data.get)
-    val w_mask_r = regOrNor(io.frontend.req_i.bits.w_mask.get)
+    val w_data_r = regOrNot(io.frontend.req_i.bits.w_data.get)
+    val w_mask_r = regOrNot(io.frontend.req_i.bits.w_mask.get)
     frontend_wb_port.valid := wv_r && is_hit && is_valid
     frontend_wb_port.bits.addr := f_addr_s0
     frontend_wb_port.bits.data_pack := w_data_r
@@ -252,9 +257,12 @@ class DataBank[T <: DataBankEntry](
   val backend_state_r = RegInit(eB_IDLE)
   val backend_ready = backend_state_r === eB_IDLE && io.backend.r_addr_o.ready
 
-  val backend_accept_data = backend_state_r === eB_WAIT // the backend is ready to receive the data from the DRAM
+  io.backend.r_addr_o.valid := backend_state_r === eB_IDLE && f2b_fifo.valid
+  io.backend.r_addr_o.bits := f2b_fifo.bits.addr
+  f2b_fifo.ready := backend_ready // when backend is ready, eject one term from the f2b_fifo.
 
-  f2b_fifo.ready := backend_accept_data
+  val backend_accept_data = backend_state_r === eB_WAIT // the backend is ready to receive the data from the DRAM
+  io.backend.r_data_i.ready := backend_accept_data
 
   // val backend_context_t =  // the bundle of the working context of the backend.
   val backend_wb_r = Reg(new WritebackPacket)
@@ -286,9 +294,11 @@ class DataBank[T <: DataBankEntry](
   }
 
   // diverter the frontend_wb_port. It should point to both the data block as well as the DRAM.
-  var diversion = Diverter(1, frontend_wb_port)
+  var diversion: Vec[DecoupledIO[WritebackPacket]] = null
   if(param.writable){
     diversion = Diverter(2, frontend_wb_port)
+  } else {
+    diversion = Diverter(1, frontend_wb_port)
   }
 
   // Write port arbiter 
@@ -328,6 +338,8 @@ class DataBank[T <: DataBankEntry](
   io.t_notify.sleep_o.bits := f2b_missing_req.bits.thread_id
   io.t_notify.sleep_o.valid := f2b_missing_req.valid && f2b_missing_req.ready // when the miss request is committed.
 
+  io.t_notify.kill_o.bits := f_thread_s0
+  io.t_notify.kill_o.valid := !is_valid
 }
 
 
@@ -339,7 +351,7 @@ class DataBank[T <: DataBankEntry](
  */ 
 class LRU[T <: LRUCore](
   param: CacheParameter,
-  lru_core: T,
+  lru_core: () => T,
   implemented_with_register: Boolean
 ) extends Module{
   val io = IO(new Bundle {
@@ -357,9 +369,12 @@ class LRU[T <: LRUCore](
   val addr_s1_r = RegNext(io.addr_i)
   val addr_s1_vr = RegNext(io.addr_vi)
 
+  // Connected to the LRU Core
+  val core = Module(lru_core())
+
   implicit val bram_config = new BRAMConfig(
     1,
-    lru_core.encodingWidth(),
+    core.encodingWidth(),
     param.setNumber
   )
 
@@ -368,10 +383,8 @@ class LRU[T <: LRUCore](
   bram.portA.EN := io.addr_vi
   bram.portA.ADDR := io.addr_i
   bram.portA.WE := false.B
+  bram.portA.DI := 0.U
 
-  // Connected to the LRU Core
-  val core = Module(lru_core)
-  //val core = lru_core
 
   core.io.encoding_i := bram.portA.DO
 
@@ -401,10 +414,11 @@ class LRU[T <: LRUCore](
 class BaseCache[T_ENTRY <: DataBankEntry, T_LRU_CORE <: LRUCore](
   param: CacheParameter,
   entry_t: T_ENTRY,
-  lru_core_t: LRUCore,
+  lru_core_t: () => LRUCore,
+  implemented_with_register: Boolean = false
 ) extends Module{
-  val data_bank = Module(new DataBank(param, entry_t))
-  val lru = Module(new LRU(param, lru_core_t, false))
+  val data_bank = Module(new DataBank(param, entry_t, implemented_with_register))
+  val lru = Module(new LRU(param, lru_core_t, implemented_with_register))
   val io = IO(new Bundle{
     val frontend = data_bank.io.frontend.cloneType
     val backend = data_bank.io.backend.cloneType
@@ -415,17 +429,61 @@ class BaseCache[T_ENTRY <: DataBankEntry, T_LRU_CORE <: LRUCore](
   io.backend <> data_bank.io.backend
   io.t_notify <> data_bank.io.t_notify
 
-  data_bank.io.lru <> lru.io
+  lru.io.addr_i := data_bank.io.lru.addr_o
+  lru.io.addr_vi := data_bank.io.lru.addr_vo
+  lru.io.index_i := data_bank.io.lru.index_o
+  lru.io.index_vi := data_bank.io.lru.index_vo
+  data_bank.io.lru.lru_i := lru.io.lru_o
 }
 
 class ICache extends Module{
   val cache_param = new CacheParameter(
-    1024, 2, 512, 55, 4, true
+    1024, 2, 512, 27, 4, false // 36 - 9 = 27
   )
   val entry_type = new CacheEntry(cache_param)
-  val lru_core = new PseudoTreeLRUCore(2) //?
-  val base = Module(new BaseCache(cache_param, entry_type, lru_core))
+  val base = Module(new BaseCache(cache_param, entry_type, () => new PseudoTreeLRUCore(2)))
   val io = IO(base.io.cloneType)
+  base.io <> io
+}
+
+class DCache extends Module{
+  val cache_param = new CacheParameter(
+    1024, 2, 512, 27, 4, true // 36 - 9 = 27
+  )
+  val entry_type = new CacheEntry(cache_param)
+  val base = Module(new BaseCache(cache_param, entry_type, () => new PseudoTreeLRUCore(2)))
+  val io = IO(base.io.cloneType)
+  base.io <> io
+}
+
+class L1ITLB extends Module{
+  val cache_param = new CacheParameter(
+    16, 8, 24, 52, 4, false, true
+  )
+  val entry_type = new CacheEntry(cache_param)
+  val base = Module(new BaseCache(cache_param, entry_type, () => new PseudoTreeLRUCore(2), true))
+  val io = IO(base.io.cloneType)
+  base.io <> io
+}
+
+class L1DTLB extends Module{
+  val cache_param = new CacheParameter(
+    16, 4, 24, 52, 4, false, true
+  )
+  val entry_type = new CacheEntry(cache_param)
+  val base = Module(new BaseCache(cache_param, entry_type, () => new PseudoTreeLRUCore(2), true))
+  val io = IO(base.io.cloneType)
+  base.io <> io
+}
+
+class L2TLB extends Module{
+  val cache_param = new CacheParameter(
+    1024, 2, 24, 52, 4, false, true
+  )
+  val entry_type = new CacheEntry(cache_param)
+  val base = Module(new BaseCache(cache_param, entry_type, () => new PseudoTreeLRUCore(2)))
+  val io = IO(base.io.cloneType)
+  base.io <> io
 }
 
 object CacheVerilogEmitter extends App{

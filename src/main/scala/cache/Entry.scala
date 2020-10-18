@@ -47,6 +47,7 @@ case class CacheEntry(param: CacheParameter) extends DataBankEntry{
   val data = UInt(param.blockBit.W)
   def update(address: UInt, threadID: UInt, data: UInt, mask: UInt): DataBankEntry  = {
     val res = Wire(new CacheEntry(param))
+    res.v := true.B
     res.tag := DataBankEntry.getTagFromAddress(address, param.tagWidth())
     res.data := VecInit(Seq.tabulate(param.blockBit)({ i => Mux(mask(i), data(i), this.data(i))})).asUInt()
     res
@@ -68,16 +69,17 @@ case class TLBEntry(param: CacheParameter, physicalAddressWidth: Int) extends Da
   val phy_addr = UInt(physicalAddressWidth.W)
   val tag = UInt(param.tagWidth().W)
   val thread_id = UInt(param.threadIDWidth().W)
-  val writable = if(param.writable) Some(Bool()) else None // how to update the writable?
+  val permission = if(param.permissionIsChecked) Some(Bool()) else None // how to update the permission?
 
   def update(address: UInt, threadID: UInt, data: UInt, mask: UInt): DataBankEntry = {
     val res = Wire(new TLBEntry(param, physicalAddressWidth))
     res.tag := DataBankEntry.getTagFromAddress(address, param.tagWidth())
     res.thread_id := threadID
     res.phy_addr := data
-    //! writable?
-    if(param.writable)
-      res.writable.get := this.writable.get
+    res.v := true.B
+    //! permission?
+    if(param.permissionIsChecked)
+      res.permission.get := this.permission.get
     res
   }
 
@@ -90,8 +92,8 @@ case class TLBEntry(param: CacheParameter, physicalAddressWidth: Int) extends Da
   }
 
   def valid(is_write: Bool): Bool = {
-    if(param.writable){
-      is_write === writable.get
+    if(param.permissionIsChecked){
+      is_write === permission.get
     }
     false.B 
   }
