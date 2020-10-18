@@ -24,6 +24,7 @@ class Diverter[T <: Data](wayNumber: Int, t: T) extends Module{
     io.o(i).valid := Mux(pushed_r(i), false.B, latch.valid)
     pushed_b(i) := io.o(i).valid && io.o(i).ready
     pushed_r(i) := Mux(ack, false.B, pushed_b(i))
+    io.o(i).bits <> latch.bits
   }
 
   ack := pushed_r.zip(pushed_b).map({y =>
@@ -33,6 +34,7 @@ class Diverter[T <: Data](wayNumber: Int, t: T) extends Module{
   })
 
   latch.ready := ack
+  
 }
 
 // grammar surger for initializing a Diverter.

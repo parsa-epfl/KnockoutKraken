@@ -345,3 +345,5 @@ hs_err_pid*
 .metals
 .vscode
 project
+*.v
+*.fir
