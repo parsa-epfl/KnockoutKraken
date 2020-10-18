@@ -34,7 +34,7 @@ abstract class LRUCore(wayNumber: Int) extends Module{
  *  Tree LRU is appreciated when the associativity greater than 4, which can be normal in L1 TLB.
  */ 
 class PseudoTreeLRUCore(wayNumber: Int) extends LRUCore(wayNumber){
-  require(isPow2(wayNumber))
+  //assert(isPow2(wayNumber))
   override def encodingWidth(): Int = wayNumber - 1
   // lru_o, encoding_o
   def getLRU(start_index: Int, wayNumber: Int): UInt = {

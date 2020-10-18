@@ -14,7 +14,7 @@ abstract class DataBankEntry extends Bundle{
    * Build a new entry from given parameters.
    * This method is called when a entry in the bank is selected to be replaced with a new one.
   */ 
-  def buildFrom(address:UInt, threadID: UInt, data: UInt)
+  def update(address:UInt, threadID: UInt, data: UInt, mask: UInt): DataBankEntry
 
   /**
    * Check whether this entry matches the given address and threadID
@@ -42,12 +42,14 @@ object DataBankEntry{
 /**
  * Data bank entry for a simple cache.
  */ 
-class CacheEntry(param: CacheParameter) extends DataBankEntry{
+case class CacheEntry(param: CacheParameter) extends DataBankEntry{
   val tag = UInt(param.tagWidth().W)
   val data = UInt(param.blockBit.W)
-  def buildFrom(address: UInt, threadID: UInt, data: UInt) = {
-    this.tag := DataBankEntry.getTagFromAddress(address, param.tagWidth())
-    this.data := data
+  def update(address: UInt, threadID: UInt, data: UInt, mask: UInt): DataBankEntry  = {
+    val res = Wire(new CacheEntry(param))
+    res.tag := DataBankEntry.getTagFromAddress(address, param.tagWidth())
+    res.data := VecInit(Seq.tabulate(param.blockBit)({ i => Mux(mask(i), data(i), this.data(i))})).asUInt()
+    res
   }
 
   def checkHit(address: UInt, threadID: UInt): Bool = this.tag === DataBankEntry.getTagFromAddress(address, param.tagWidth()) 
@@ -61,18 +63,22 @@ class CacheEntry(param: CacheParameter) extends DataBankEntry{
  * Data bank entry for a TLB. 
  */ 
 
-class TLBEntry(param: CacheParameter, physicalAddressWidth: Int) extends DataBankEntry{
+case class TLBEntry(param: CacheParameter, physicalAddressWidth: Int) extends DataBankEntry{
   // Note that the data of TLBEntry is physical address.
   val phy_addr = UInt(physicalAddressWidth.W)
   val tag = UInt(param.tagWidth().W)
   val thread_id = UInt(param.threadIDWidth().W)
   val writable = if(param.writable) Some(Bool()) else None // how to update the writable?
 
-  def buildFrom(address: UInt, threadID: UInt, data: UInt): Unit = {
-    tag := DataBankEntry.getTagFromAddress(address, param.tagWidth())
-    thread_id := threadID
-    phy_addr := data
+  def update(address: UInt, threadID: UInt, data: UInt, mask: UInt): DataBankEntry = {
+    val res = Wire(new TLBEntry(param, physicalAddressWidth))
+    res.tag := DataBankEntry.getTagFromAddress(address, param.tagWidth())
+    res.thread_id := threadID
+    res.phy_addr := data
     //! writable?
+    if(param.writable)
+      res.writable.get := this.writable.get
+    res
   }
 
   def checkHit(address: UInt, threadID: UInt): Bool = {
