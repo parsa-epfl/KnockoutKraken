@@ -3,8 +3,11 @@ package armflex.cache
 import chisel3._
 import chisel3.util._
 
+import chisel3.stage.ChiselStage
+
 import armflex.util.Diverter
 import armflex.util.BRAMConfig
+import armflex.util.BRAMPort
 import armflex.util.BRAM
 
 case class CacheParameter(
@@ -18,8 +21,6 @@ case class CacheParameter(
   threadNumber: Int = 4,
   // Permission recordings. A D cache needs one bit to record the permission of the data.
   writable: Boolean = false,
-  // operation port width
-  operandWidth: Int = 32, // 32 for ICache, 128 usually for DCache?
 ){
   assert (isPow2(setNumber))
   assert (isPow2(associativity))
@@ -40,6 +41,38 @@ case class CacheParameter(
   }
   
 }
+
+class BRAMorRegister(implemented_with_register: Boolean = true)(implicit cfg: BRAMConfig) extends MultiIOModule{
+  val portA = IO(new BRAMPort)
+  val portB = IO(new BRAMPort)
+
+  val pAdo = Wire(Vec(cfg.NB_COL, UInt(cfg.COL_WIDTH.W)))
+  val pBdo = Wire(Vec(cfg.NB_COL, UInt(cfg.COL_WIDTH.W)))
+
+  if(implemented_with_register){
+    for(col <- 0 until cfg.NB_COL){
+      val reg_bank_r = RegInit(VecInit(Seq.fill(cfg.NB_ELE)(0.U(cfg.COL_WIDTH.W))))
+      when(portA.EN && portA.WE(col)){
+        reg_bank_r(portA.ADDR) := portA.DI((col+1)*cfg.COL_WIDTH-1, col*cfg.COL_WIDTH)
+      }
+      pAdo(col) := reg_bank_r(portA.ADDR)
+
+      when(portB.EN && portB.WE(col)){
+        reg_bank_r(portA.ADDR) := portB.DI((col+1)*cfg.COL_WIDTH-1, col*cfg.COL_WIDTH)
+      }
+      pBdo(col) := reg_bank_r(portB.ADDR)
+    }
+    portA.DO := pAdo.asUInt()
+    portB.DO := pBdo.asUInt()
+
+  } else {
+    val bram = Module(new BRAM())
+    bram.portA <> portA
+    bram.portB <> portB
+  }
+}
+
+
 /**
  * The memory and its controlling logic in a cache to store all data entries.
  * 
@@ -74,7 +107,7 @@ case class CacheParameter(
 class DataBank[T <: DataBankEntry](
   param: CacheParameter, 
   t: T,
-  implemented_with_register: Boolean = false //! If implemented in register, how to handle the rhythm of dataflow?
+  implemented_with_register: Boolean = false
 ) extends Module{
   val io = IO(new Bundle{
     // two ports, one for the frontend and one for the backend.
@@ -84,6 +117,7 @@ class DataBank[T <: DataBankEntry](
         val thread_id = UInt(log2Ceil(param.threadNumber).W)
         val w_v = if(param.writable) Some(Bool()) else None // write valid?
         val w_data = if(param.writable) Some(UInt(param.blockBit.W)) else None
+        val w_mask = if(param.writable) Some(UInt(param.blockBit.W)) else None
       }))
       val rep_o = Decoupled(new Bundle{
         val data = UInt(param.blockBit.W)
@@ -122,16 +156,26 @@ class DataBank[T <: DataBankEntry](
     t.getWidth,
     param.setNumber
   )
-  val mem = Module(new BRAM())
+  val mem = Module(new BRAMorRegister(implemented_with_register))
+
+  /**
+   * Helper function to correctly add register or directly bypass to union reading from the register and block memory.
+   */ 
+  def regOrNor[T <: Data](t: T): T = {
+    if(implemented_with_register) t else RegNext(t)
+  }
 
   // ######## FRONTEND ########
   val setWidth = log2Ceil(param.setNumber)
   val f_addr = io.frontend.req_i.bits.addr
   val f_thread = io.frontend.req_i.bits.thread_id
-  val f_v_s0 = RegNext(io.frontend.req_i.valid)
-  val f_addr_s0 = RegNext(f_addr)
-  val f_thread_s0 = RegNext(f_thread)
-  val wv_r = if(param.writable) RegNext(io.frontend.req_i.valid && io.frontend.req_i.bits.w_v.get) else false.B
+  val f_v_s0 =  regOrNor(io.frontend.req_i.valid)
+  val f_addr_s0 = regOrNor(f_addr)
+  val f_thread_s0 = regOrNor(f_thread)
+  val wv_r = if(param.writable){
+    val d_value = io.frontend.req_i.valid && io.frontend.req_i.bits.w_v.get
+    regOrNor(d_value)
+   } else false.B
 
   mem.portA.ADDR := f_addr(setWidth-1, 0)
   mem.portA.EN := io.frontend.req_i.valid
@@ -164,18 +208,21 @@ class DataBank[T <: DataBankEntry](
     val t_id = UInt(param.threadIDWidth().W) // tid
     val lru_position = UInt(param.wayWidth().W) // which position to replace
     val data_pack = UInt(param.blockBit.W)
+    val mask = UInt(param.blockBit.W)
   }
 
   // Write request from the frontend
   val frontend_wb_port = Wire(Decoupled(new WritebackPacket))
 
   if(param.writable){
-    val w_data_r = RegNext(io.frontend.req_i.bits.w_data.get)
+    val w_data_r = regOrNor(io.frontend.req_i.bits.w_data.get)
+    val w_mask_r = regOrNor(io.frontend.req_i.bits.w_mask.get)
     frontend_wb_port.valid := wv_r && is_hit && is_valid
     frontend_wb_port.bits.addr := f_addr_s0
     frontend_wb_port.bits.data_pack := w_data_r
     frontend_wb_port.bits.t_id := f_thread_s0
     frontend_wb_port.bits.lru_position := Mux(is_hit, hits_which, io.lru.lru_i) 
+    frontend_wb_port.bits.mask := w_mask_r
     io.frontend.req_i.ready := Mux(io.frontend.req_i.bits.w_v.get, frontend_wb_port.ready, true.B) // new write request will not be handled until the writing back is processed.
   } else {
     frontend_wb_port.bits := DontCare
@@ -219,8 +266,10 @@ class DataBank[T <: DataBankEntry](
     backend_wb_r.lru_position := f2b_fifo.bits.lru
   }.elsewhen(io.backend.r_data_i.valid && backend_accept_data){
     backend_wb_r.data_pack := io.backend.r_data_i.bits
+    backend_wb_r.mask := Fill(param.blockBit, 1.U(1.W)) // update from the backend is undoubtedly a replacement.
   }
-  val backend_wb_port = Wire(Decoupled(backend_wb_r))
+  val backend_wb_port = Wire(Decoupled(new WritebackPacket))
+  backend_wb_port.bits := backend_wb_r
   backend_wb_port.valid := backend_state_r === eB_WRITE
 
   // State machine of the backend logic
@@ -251,17 +300,17 @@ class DataBank[T <: DataBankEntry](
   wb_pkt.ready := true.B
 
   // full write back data. We only modify the relevant part.
-  val mem_wb_data = WireInit(0.U.asTypeOf(bram_row_type_t))
-  mem_wb_data(wb_pkt.bits.lru_position).buildFrom(wb_pkt.bits.addr, wb_pkt.bits.t_id, wb_pkt.bits.data_pack)
+  val mem_wb_data = 0.U.asTypeOf(bram_row_type_t)
+  val updated_mem_wb = mem_wb_data(wb_pkt.bits.lru_position).update(wb_pkt.bits.addr, wb_pkt.bits.t_id, wb_pkt.bits.data_pack, wb_pkt.bits.mask)
 
   mem.portB.EN := wb_pkt.valid
   mem.portB.WE := UIntToOH(wb_pkt.bits.lru_position)
   mem.portB.ADDR := wb_pkt.bits.addr
-  mem.portB.DI := mem_wb_data.asUInt()
+  mem.portB.DI := updated_mem_wb.asUInt()
 
   // ######## BACKEND Write ########
   if(param.writable){
-    val b2mem_if = Decoupled(new WritebackPacket)
+    val b2mem_if = Wire(Decoupled(new WritebackPacket))
     b2mem_if <> diversion(1)
     val b2mem_fifo = Queue(b2mem_if, 4*param.threadNumber)
     val w_req = io.backend.w_req_o.get
@@ -314,7 +363,7 @@ class LRU[T <: LRUCore](
     param.setNumber
   )
 
-  val bram = Module(new BRAM())
+  val bram = Module(new BRAMorRegister(implemented_with_register))
 
   bram.portA.EN := io.addr_vi
   bram.portA.ADDR := io.addr_i
@@ -322,6 +371,7 @@ class LRU[T <: LRUCore](
 
   // Connected to the LRU Core
   val core = Module(lru_core)
+  //val core = lru_core
 
   core.io.encoding_i := bram.portA.DO
 
@@ -366,4 +416,18 @@ class BaseCache[T_ENTRY <: DataBankEntry, T_LRU_CORE <: LRUCore](
   io.t_notify <> data_bank.io.t_notify
 
   data_bank.io.lru <> lru.io
+}
+
+class ICache extends Module{
+  val cache_param = new CacheParameter(
+    1024, 2, 512, 55, 4, true
+  )
+  val entry_type = new CacheEntry(cache_param)
+  val lru_core = new PseudoTreeLRUCore(2) //?
+  val base = Module(new BaseCache(cache_param, entry_type, lru_core))
+  val io = IO(base.io.cloneType)
+}
+
+object CacheVerilogEmitter extends App{
+  println((new ChiselStage).emitVerilog(new ICache))
 }
