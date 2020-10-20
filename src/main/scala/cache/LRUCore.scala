@@ -37,36 +37,36 @@ class PseudoTreeLRUCore(wayNumber: Int) extends LRUCore(wayNumber){
   //assert(isPow2(wayNumber))
   override def encodingWidth(): Int = wayNumber - 1
   // lru_o, encoding_o
-  def getLRU(start_index: Int, wayNumber: Int): UInt = {
-    val start_bit = io.encoding_i(start_index)
+  def getLRU(startIndex: Int, wayNumber: Int): UInt = {
+    val startBit = io.encoding_i(startIndex)
     if(wayNumber == 2){
-      return start_bit
+      return startBit
     } else {
-      val sub_encoding = Mux(start_bit, getLRU(start_index + wayNumber/2, wayNumber/2), getLRU(start_index + 1, wayNumber/2))
-      return Cat(start_bit, sub_encoding)
+      val sub_encoding = Mux(startBit, getLRU(startIndex + wayNumber/2, wayNumber/2), getLRU(startIndex + 1, wayNumber/2))
+      return Cat(startBit, sub_encoding)
     }
   }
 
   io.lru_o := getLRU(0, wayNumber)
 
-  val update_term = Mux(io.index_vi, io.index_i, io.lru_o)
-  val update_encoding = WireInit(io.encoding_i)
-  def updateEncoding(start_index: Int, wayNumber: Int): Unit = {
+  val updateTerm = Mux(io.index_vi, io.index_i, io.lru_o)
+  val updatedEncoding = WireInit(io.encoding_i)
+  def updateEncoding(startIndex: Int, wayNumber: Int): Unit = {
     val wayWidth = log2Ceil(wayNumber)
-    val start_bit = update_encoding(start_index)
-    val judge_bit = update_term(wayWidth-1)
+    val startBit = updatedEncoding(startIndex)
+    val judgeBit = updateTerm(wayWidth-1)
     if(wayNumber == 2){
-      start_bit := Mux(start_bit === judge_bit, ~start_bit, start_bit)
+      startBit := Mux(startBit === judgeBit, ~startBit, startBit)
     } else {
-      when(judge_bit){
-        updateEncoding(start_index + wayNumber / 2, wayNumber / 2)
+      when(judgeBit){
+        updateEncoding(startIndex + wayNumber / 2, wayNumber / 2)
       }.otherwise{
-        updateEncoding(start_index + 1, wayNumber / 2)
+        updateEncoding(startIndex + 1, wayNumber / 2)
       }
     }
   }
 
-  io.encoding_o := Mux(io.vi, update_encoding, io.encoding_i)
+  io.encoding_o := Mux(io.vi, updatedEncoding, io.encoding_i)
 }
 
 /**
@@ -76,54 +76,54 @@ class MatrixLRUCore(wayNumber: Int) extends LRUCore(wayNumber){
   override def encodingWidth(): Int = wayNumber * (wayNumber - 1)
   // 1. recover the matrix structure.
   val matrix = WireInit(VecInit(Seq.fill(wayNumber)(VecInit(Seq.fill(wayNumber)(false.B)))))
-  var encoding_cnt = 0
+  var encodingCnt = 0
   for(i <- 0 until wayNumber){
     for(j <- 0 until wayNumber){
       if(i == j){
         matrix(i)(j) := false.B
       } else {
-        matrix(i)(j) := io.encoding_i(encoding_cnt)
-        encoding_cnt += 1
+        matrix(i)(j) := io.encoding_i(encodingCnt)
+        encodingCnt += 1
       }
     }
   }
 
   // 2. update the bits accordingly.
-  val update_term = Mux(io.index_vi, io.index_i, io.lru_o)
-  val update_matrix = WireInit(VecInit(Seq.fill(wayNumber)(VecInit(Seq.fill(wayNumber)(false.B)))))
+  val updateTerm = Mux(io.index_vi, io.index_i, io.lru_o)
+  val updatedMatrix = WireInit(VecInit(Seq.fill(wayNumber)(VecInit(Seq.fill(wayNumber)(false.B)))))
   for(i <- 0 until wayNumber){
     for(j <- 0 until wayNumber){
       if(i == j){
-        update_matrix(i)(j) := false.B
+        updatedMatrix(i)(j) := false.B
       } else {
-        when(i.U === update_term) {
-          update_matrix(i)(j) := true.B
-        }.elsewhen(j.U === update_term) {
-          update_matrix(i)(j) := false.B
+        when(i.U === updateTerm) {
+          updatedMatrix(i)(j) := true.B
+        }.elsewhen(j.U === updateTerm) {
+          updatedMatrix(i)(j) := false.B
         }.otherwise{
-          update_matrix(i)(j) := matrix(i)(j)
+          updatedMatrix(i)(j) := matrix(i)(j)
         }
       }
     }
   }
   
   // 3. output & flatten
-  val all_zero = VecInit(matrix.map({x =>
+  val allZeroRow = VecInit(matrix.map({x =>
     x.asUInt() === 0.U
   }))
-  io.lru_o := PriorityEncoder(all_zero)
+  io.lru_o := PriorityEncoder(allZeroRow)
 
-  val flattened_matrix = WireInit(VecInit(Seq.fill(encodingWidth())(false.B)))
-  encoding_cnt = 0
+  val flattenedMatrix = WireInit(VecInit(Seq.fill(encodingWidth())(false.B)))
+  encodingCnt = 0
   
   for(i <- 0 until wayNumber){
     for(j <- 0 until wayNumber){
       if(i != j){
-        flattened_matrix(encoding_cnt) := update_matrix(i)(j)
-        encoding_cnt += 1
+        flattenedMatrix(encodingCnt) := updatedMatrix(i)(j)
+        encodingCnt += 1
       }
     }
   }
 
-  io.encoding_o := Mux(io.vi, flattened_matrix.asUInt(), io.encoding_i)
+  io.encoding_o := Mux(io.vi, flattenedMatrix.asUInt(), io.encoding_i)
 }

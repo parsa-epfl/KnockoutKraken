@@ -14,7 +14,7 @@ abstract class DataBankEntry extends Bundle{
    * Build a new entry from given parameters.
    * This method is called when a entry in the bank is selected to be replaced with a new one.
   */ 
-  def update(address:UInt, threadID: UInt, data: UInt, mask: UInt): DataBankEntry
+  def buildFrom(address:UInt, threadID: UInt, data: UInt): DataBankEntry
 
   /**
    * Check whether this entry matches the given address and threadID
@@ -29,7 +29,7 @@ abstract class DataBankEntry extends Bundle{
   /**
    * Whether this operation is valid
    */
-  def valid(is_write: Bool): Bool
+  def valid(isWrite: Bool): Bool
 }
 
 object DataBankEntry{
@@ -45,11 +45,11 @@ object DataBankEntry{
 case class CacheEntry(param: CacheParameter) extends DataBankEntry{
   val tag = UInt(param.tagWidth().W)
   val data = UInt(param.blockBit.W)
-  def update(address: UInt, threadID: UInt, data: UInt, mask: UInt): DataBankEntry  = {
+  def buildFrom(address: UInt, threadID: UInt, data: UInt): DataBankEntry  = {
     val res = Wire(new CacheEntry(param))
     res.v := true.B
     res.tag := DataBankEntry.getTagFromAddress(address, param.tagWidth())
-    res.data := VecInit(Seq.tabulate(param.blockBit)({ i => Mux(mask(i), data(i), this.data(i))})).asUInt()
+    res.data := data
     res
   }
 
@@ -57,7 +57,7 @@ case class CacheEntry(param: CacheParameter) extends DataBankEntry{
 
   def read(): UInt = data
 
-  def valid(is_write: Bool): Bool = true.B
+  def valid(isWrite: Bool): Bool = true.B
 }
 
 /**
@@ -66,16 +66,16 @@ case class CacheEntry(param: CacheParameter) extends DataBankEntry{
 
 case class TLBEntry(param: CacheParameter, physicalAddressWidth: Int) extends DataBankEntry{
   // Note that the data of TLBEntry is physical address.
-  val phy_addr = UInt(physicalAddressWidth.W)
+  val phyAddr = UInt(physicalAddressWidth.W)
   val tag = UInt(param.tagWidth().W)
-  val thread_id = UInt(param.threadIDWidth().W)
+  val threadID = UInt(param.threadIDWidth().W)
   val permission = if(param.permissionIsChecked) Some(Bool()) else None // how to update the permission?
 
-  def update(address: UInt, threadID: UInt, data: UInt, mask: UInt): DataBankEntry = {
+  def buildFrom(address: UInt, threadID: UInt, data: UInt): DataBankEntry = {
     val res = Wire(new TLBEntry(param, physicalAddressWidth))
     res.tag := DataBankEntry.getTagFromAddress(address, param.tagWidth())
-    res.thread_id := threadID
-    res.phy_addr := data
+    res.threadID := threadID
+    res.phyAddr := data
     res.v := true.B
     //! permission?
     if(param.permissionIsChecked)
@@ -84,16 +84,16 @@ case class TLBEntry(param: CacheParameter, physicalAddressWidth: Int) extends Da
   }
 
   def checkHit(address: UInt, threadID: UInt): Bool = {
-    this.tag === DataBankEntry.getTagFromAddress(address, param.tagWidth()) && this.thread_id === threadID
+    this.tag === DataBankEntry.getTagFromAddress(address, param.tagWidth()) && this.threadID === threadID
   }
 
   def read(): UInt = {
-    phy_addr
+    phyAddr
   }
 
-  def valid(is_write: Bool): Bool = {
+  def valid(isWrite: Bool): Bool = {
     if(param.permissionIsChecked){
-      is_write === permission.get
+      isWrite === permission.get
     }
     false.B 
   }
