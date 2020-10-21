@@ -212,7 +212,6 @@ class DataBank[T <: DataBankEntry](
     val addr = UInt(param.addressWidth.W)  // address
     val threadID = UInt(param.threadIDWidth().W) // tid
     val wayIndex = UInt(param.wayWidth().W) // which position to replace
-    val oldDataBlock = UInt(param.blockBit.W)
     val dataBlock = UInt(param.blockBit.W)
     val mask = UInt(param.blockBit.W)
   }
@@ -225,11 +224,12 @@ class DataBank[T <: DataBankEntry](
     val wMask_r = regOrNot(io.frontend.req_i.bits.wMask.get)
     frontendWBPort.valid := wv_r && isHit && isValid
     frontendWBPort.bits.addr := fAddr_s0
-    frontendWBPort.bits.dataBlock := wData_r
+    frontendWBPort.bits.dataBlock := VecInit(Seq.tabulate(param.blockBit)({ i =>
+      Mux(wMask_r(i), wData_r(i), fAccess(hitsWhich).read()(i))
+    })).asUInt()
     frontendWBPort.bits.threadID := fThread_s0
     frontendWBPort.bits.wayIndex := Mux(isHit, hitsWhich, io.lru.lru_i) 
     frontendWBPort.bits.mask := wMask_r
-    frontendWBPort.bits.oldDataBlock := fAccess(hitsWhich).read()
     io.frontend.req_i.ready := Mux(io.frontend.req_i.bits.w_v.get, frontendWBPort.ready, true.B) // new write request will not be handled until the writing back is processed.
   } else {
     frontendWBPort.bits := DontCare
@@ -255,20 +255,19 @@ class DataBank[T <: DataBankEntry](
 
   // ######## BACKEND ########
   // ---- Read from the DRAM ----
-  val eB_IDLE :: eB_WAIT :: eB_WRITE :: Nil = Enum(3)
-  val backendState_r = RegInit(eB_IDLE)
-  val backendReady = backendState_r === eB_IDLE && io.backend.rAddr_o.ready
+  val sB_IDLE :: sB_WAIT :: sB_WRITE :: Nil = Enum(3)
+  val backendState_r = RegInit(sB_IDLE)
+  val backendReady = backendState_r === sB_IDLE && io.backend.rAddr_o.ready
 
-  io.backend.rAddr_o.valid := backendState_r === eB_IDLE && frontToBackFIFO.valid
+  io.backend.rAddr_o.valid := backendState_r === sB_IDLE && frontToBackFIFO.valid
   io.backend.rAddr_o.bits := frontToBackFIFO.bits.addr
   frontToBackFIFO.ready := backendReady // when backend is ready, eject one term from the frontToBackFIFO.
 
-  val backendAcceptData = backendState_r === eB_WAIT // the backend is ready to receive the data from the DRAM
+  val backendAcceptData = backendState_r === sB_WAIT // the backend is ready to receive the data from the DRAM
   io.backend.rData_i.ready := backendAcceptData
 
   // val backend_context_t =  // the bundle of the working context of the backend.
   val backendWB_r = Reg(new WritebackPacket) 
-  backendWB_r.oldDataBlock := 0.U
   // update logic of backend_context
   when(frontToBackFIFO.valid && backendReady){
     // save address and thread from the FIFO
@@ -281,18 +280,18 @@ class DataBank[T <: DataBankEntry](
   }
   val backendWBPort = Wire(Decoupled(new WritebackPacket)) // from DRAM to Data bank.
   backendWBPort.bits := backendWB_r
-  backendWBPort.valid := backendState_r === eB_WRITE
+  backendWBPort.valid := backendState_r === sB_WRITE
 
   // State machine of the backend logic
   switch(backendState_r){
-    is(eB_IDLE){
-      backendState_r := Mux(frontToBackFIFO.valid && backendReady, eB_WAIT, eB_IDLE)
+    is(sB_IDLE){
+      backendState_r := Mux(frontToBackFIFO.valid && backendReady, sB_WAIT, sB_IDLE)
     }
-    is(eB_WAIT){ // wait the data response from the backend port
-      backendState_r := Mux(io.backend.rData_i.valid && backendAcceptData, eB_WRITE, eB_WAIT)
+    is(sB_WAIT){ // wait the data response from the backend port
+      backendState_r := Mux(io.backend.rData_i.valid && backendAcceptData, sB_WRITE, sB_WAIT)
     }
-    is(eB_WRITE){ // Wait write to complete.
-      backendState_r := Mux(backendWBPort.ready, eB_IDLE, eB_WRITE)
+    is(sB_WRITE){ // Wait write to complete.
+      backendState_r := Mux(backendWBPort.ready, sB_IDLE, sB_WRITE)
     }
   }
 
@@ -314,10 +313,7 @@ class DataBank[T <: DataBankEntry](
 
   // full write back data. We only modify the relevant part.
   val memWBEntry = 0.U.asTypeOf(bramRowType) // if update, we need to read it out first?
-  val memWBUpdatedDataBlock = VecInit(Seq.tabulate(param.blockBit)({ i =>
-    Mux(writeBackPacket.bits.mask(i), writeBackPacket.bits.dataBlock(i), writeBackPacket.bits.oldDataBlock(i))
-  })).asUInt()
-  val updaterMemWBEntry = memWBEntry(writeBackPacket.bits.wayIndex).buildFrom(writeBackPacket.bits.addr, writeBackPacket.bits.threadID, memWBUpdatedDataBlock)
+  val updaterMemWBEntry = memWBEntry(writeBackPacket.bits.wayIndex).buildFrom(writeBackPacket.bits.addr, writeBackPacket.bits.threadID, writeBackPacket.bits.dataBlock)
 
   mem.portB.EN := writeBackPacket.valid
   mem.portB.WE := UIntToOH(writeBackPacket.bits.wayIndex)
@@ -415,11 +411,11 @@ class LRU[T <: LRUCore](
  * 
  * @param param the parameters of the cache
  * @param entry the entry Chisel Type. See Entry.scala for all options.
- * @param lruCore the LRU updating logic. See LRUCore.scala for all options.
+ * @param lruCore an generator of the LRU updating logic. See LRUCore.scala for all options.
  */ 
-class BaseCache[T_ENTRY <: DataBankEntry, T_LRU_CORE <: LRUCore](
+class BaseCache[EntryType <: DataBankEntry](
   param: CacheParameter,
-  entry: T_ENTRY,
+  entry: EntryType,
   lruCore: () => LRUCore,
   implementedWithRegister: Boolean = false
 ) extends Module{
@@ -495,3 +491,4 @@ class L2TLB extends Module{
 object CacheVerilogEmitter extends App{
   println((new ChiselStage).emitVerilog(new ICache))
 }
+

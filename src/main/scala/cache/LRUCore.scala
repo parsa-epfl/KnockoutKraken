@@ -50,14 +50,13 @@ class PseudoTreeLRUCore(wayNumber: Int) extends LRUCore(wayNumber){
   io.lru_o := getLRU(0, wayNumber)
 
   val updateTerm = Mux(io.index_vi, io.index_i, io.lru_o)
-  val updatedEncoding = WireInit(io.encoding_i)
+  val updatedEncoding = WireInit(VecInit(io.encoding_i.asBools()))
   def updateEncoding(startIndex: Int, wayNumber: Int): Unit = {
     val wayWidth = log2Ceil(wayNumber)
-    val startBit = updatedEncoding(startIndex)
+    val startBit = io.encoding_i(startIndex)
     val judgeBit = updateTerm(wayWidth-1)
-    if(wayNumber == 2){
-      startBit := Mux(startBit === judgeBit, ~startBit, startBit)
-    } else {
+    updatedEncoding(startIndex) := Mux(startBit === judgeBit, ~startBit, startBit)
+    if(wayNumber > 2){
       when(judgeBit){
         updateEncoding(startIndex + wayNumber / 2, wayNumber / 2)
       }.otherwise{
@@ -66,7 +65,9 @@ class PseudoTreeLRUCore(wayNumber: Int) extends LRUCore(wayNumber){
     }
   }
 
-  io.encoding_o := Mux(io.vi, updatedEncoding, io.encoding_i)
+  updateEncoding(0, wayNumber)
+
+  io.encoding_o := Mux(io.vi, updatedEncoding.asUInt(), io.encoding_i)
 }
 
 /**
