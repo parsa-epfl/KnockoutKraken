@@ -14,27 +14,30 @@ class Diverter[T <: Data](wayNumber: Int, t: T) extends Module{
     val o = Vec(wayNumber, Decoupled(t)) // v & r
   })
 
-  val latch = Queue(io.i, 1)
+  if(wayNumber == 1){
+    io.o(0) := io.i
+  } else {
+    val latch = Queue(io.i, 1)
 
-  val ack = Wire(Bool())
+    val ack = Wire(Bool())
 
-  val pushed_b = WireInit(VecInit(Seq.fill(wayNumber)(false.B))) // whether this channel can be pushed.
-  val pushed_r = RegInit(VecInit(Seq.fill(wayNumber)(false.B))) // whether this channel is pushed.
-  for(i <- 0 until wayNumber){
-    io.o(i).valid := Mux(pushed_r(i), false.B, latch.valid)
-    pushed_b(i) := io.o(i).valid && io.o(i).ready
-    pushed_r(i) := Mux(ack, false.B, pushed_b(i))
-    io.o(i).bits <> latch.bits
-  }
+    val pushed_b = WireInit(VecInit(Seq.fill(wayNumber)(false.B))) // whether this channel can be pushed.
+    val pushed_r = RegInit(VecInit(Seq.fill(wayNumber)(false.B))) // whether this channel is pushed.
+    for(i <- 0 until wayNumber){
+      io.o(i).valid := Mux(pushed_r(i), false.B, latch.valid)
+      pushed_b(i) := io.o(i).valid && io.o(i).ready
+      pushed_r(i) := Mux(ack, false.B, pushed_b(i))
+      io.o(i).bits <> latch.bits
+    }
 
-  ack := pushed_r.zip(pushed_b).map({y =>
-    y._1 || y._2
-  }).reduce({(x, y) =>
-    x && y
-  })
+    ack := pushed_r.zip(pushed_b).map({y =>
+      y._1 || y._2
+    }).reduce({(x, y) =>
+      x && y
+    })
 
-  latch.ready := ack
-  
+    latch.ready := ack
+  }  
 }
 
 // grammar surger for initializing a Diverter.
