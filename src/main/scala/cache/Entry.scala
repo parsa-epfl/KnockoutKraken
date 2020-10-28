@@ -9,27 +9,39 @@ import chisel3.stage.{ChiselStage}
  */ 
 abstract class DataBankEntry extends Bundle{
   val v = Bool() // valid bit
-
+  val threadID: UInt
   /**
    * Build a new entry from given parameters.
    * This method is called when a entry in the bank is selected to be replaced with a new one.
+   * @return a new packet.
   */ 
   def buildFrom(address:UInt, threadID: UInt, data: UInt): DataBankEntry
 
   /**
    * Check whether this entry matches the given address and threadID
+   * @return true if match.
    */ 
   def checkHit(address: UInt, threadID: UInt): Bool
 
   /**
-   * Read data out from the entry.
+   * @return the data out from the entry.
    */ 
   def read(): UInt
 
   /**
-   * Whether this operation is valid
+   * @return whether this operation is valid
    */
   def valid(isWrite: Bool): Bool
+
+  /**
+   * Invalid this term according to the selected thread.
+   * @return the flushed term
+   */
+  def flush(threadMask: UInt): DataBankEntry = {
+    val res = WireInit(this)
+    res.v := !threadMask(threadID)
+    res
+  }
 }
 
 object DataBankEntry{
@@ -45,6 +57,7 @@ object DataBankEntry{
 case class CacheEntry(param: CacheParameter) extends DataBankEntry{
   val tag = UInt(param.tagWidth().W)
   val data = UInt(param.blockBit.W)
+  val threadID = UInt(param.threadIDWidth().W)
   def buildFrom(address: UInt, threadID: UInt, data: UInt): DataBankEntry  = {
     val res = Wire(new CacheEntry(param))
     res.v := true.B
@@ -58,6 +71,7 @@ case class CacheEntry(param: CacheParameter) extends DataBankEntry{
   def read(): UInt = data
 
   def valid(isWrite: Bool): Bool = true.B
+
 }
 
 /**
