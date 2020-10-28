@@ -89,11 +89,12 @@ class DataBankFrontendPort(
   // overload constructor to quickly build a frontend port from the cache parameter.
   def this(param: CacheParameter) = this(
     param.addressWidth,
-    param.threadNumber,
+    param.threadIDWidth(),
     param.blockBit,
     param.writable
   )
 
+  override def cloneType(): this.type = new DataBankFrontendPort(addressWidth, threadIDWidth, blockSize, writable).asInstanceOf[this.type]
 }
 
 
@@ -139,6 +140,7 @@ class DataBank[T <: DataBankEntry](
       val req_i = Flipped(Decoupled(new DataBankFrontendPort(param)))
       val rep_o = Decoupled(new Bundle{
         val data = UInt(param.blockBit.W)
+        val hit = Bool()
       })
     }
 
@@ -169,6 +171,9 @@ class DataBank[T <: DataBankEntry](
 
     // flush the cache.
     val flush_i = Flipped(Decoupled(UInt(param.threadNumber.W)))
+
+    // we have a flag to indicate that there're pending writing request.
+    val writing_is_busy_vo = if(param.writable) Some(Output(Bool())) else None
   })
 
   val bramRowType = Vec(param.associativity, t)
@@ -184,7 +189,7 @@ class DataBank[T <: DataBankEntry](
   // Flushing logic
   val flushing_r = RegInit(false.B)
   val flush_cnt = Counter(param.setNumber)
-  val flush_mask_r = RegInit(io.flush_i.bits, 0.U)
+  val flush_mask_r = RegNext(io.flush_i.bits)
 
   when(io.flush_i.fire()){
     flush_cnt.reset()
@@ -241,8 +246,9 @@ class DataBank[T <: DataBankEntry](
   //! TBD here for how to handle the permission check of bits.
   val isValid = fAccess(hitsWhich).valid(permission_r)
 
-  io.frontend.rep_o.valid := f_v_s0 && isHit && isValid
+  io.frontend.rep_o.valid := f_v_s0 && isValid
   io.frontend.rep_o.bits.data := fAccess(hitsWhich).read() // read
+  io.frontend.rep_o.bits.hit := isHit // if not head, also return.
 
   io.lru.index_o := hitsWhich
   io.lru.index_vo := isHit
@@ -337,7 +343,7 @@ class DataBank[T <: DataBankEntry](
   // diverter the frontendWBPort. It should point to both the data block as well as the DRAM.
   var diversion: Vec[DecoupledIO[WritebackPacket]] = null
   if(param.writable){
-    diversion = Diverter(2, frontendWBPort)
+    diversion = Diverter(2, frontendWBPort, param.threadNumber)
   } else {
     diversion = Diverter(1, frontendWBPort)
   }
@@ -378,6 +384,7 @@ class DataBank[T <: DataBankEntry](
 
   //! Some points regarding the flushing: Diverter, FIFO(Request FIFO, Write-Through FIFO), and write back buffer.
   
+  io.flush_i.ready := !frontToBackFIFO.ready // wait for the fetching to be complete.
 
   // ######## BACKEND Write ########
   if(param.writable){
@@ -389,6 +396,10 @@ class DataBank[T <: DataBankEntry](
     b2mem_fifo.ready := w_req.ready
     w_req.bits.addr := b2mem_fifo.bits.addr
     w_req.bits.data := b2mem_fifo.bits.dataBlock
+
+    // wait for all the queues to be empty.
+    io.writing_is_busy_vo.get := !diversion(0).valid && diversion(1).valid && !b2mem_fifo.valid && !frontToBackFIFO.ready
+    io.flush_i.ready := io.writing_is_busy_vo.get
   }
 
   // ######## Notify ########
@@ -491,11 +502,17 @@ class BaseCache[EntryType <: DataBankEntry](
     val frontend = dataBank.io.frontend.cloneType
     val backend = dataBank.io.backend.cloneType
     val threadNotify = dataBank.io.threadNotify.cloneType
+    val flush_i = Flipped(dataBank.io.flush_i.cloneType)
+    val writing_is_busy_vo = if(param.writable) Some(dataBank.io.writing_is_busy_vo.get.cloneType) else None
   })
 
   io.frontend <> dataBank.io.frontend
   io.backend <> dataBank.io.backend
   io.threadNotify <> dataBank.io.threadNotify
+  dataBank.io.flush_i <> io.flush_i
+  if(param.writable){
+    io.writing_is_busy_vo.get <> dataBank.io.writing_is_busy_vo.get
+  }
 
   lru.io.addr_i := dataBank.io.lru.addr_o
   lru.io.addr_vi := dataBank.io.lru.addr_vo

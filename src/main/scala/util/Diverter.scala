@@ -8,16 +8,16 @@ import chisel3.util._
  *  
  *  Use this module to connect multiple ports to one without considering duplicated pushing problem. 
  */ 
-class Diverter[T <: Data](wayNumber: Int, t: T) extends Module{
+class Diverter[T <: Data](wayNumber: Int, t: T, fifoDepth: Int = 1) extends Module{
   val io = IO(new Bundle{
     val i = Flipped(Decoupled(t)) // keep v until ack is given.
     val o = Vec(wayNumber, Decoupled(t)) // v & r
   })
 
   if(wayNumber == 1){
-    io.o(0) := io.i
+    io.o(0) <> io.i
   } else {
-    val latch = Queue(io.i, 1)
+    val latch = Queue(io.i, fifoDepth)
 
     val ack = Wire(Bool())
 
@@ -55,8 +55,8 @@ object Diverter{
    *  p2 <> output(1)
    * }}}
    */ 
-  def apply[T <: Data](wayNumber: Int, input: DecoupledIO[T]): Vec[DecoupledIO[T]]  = {
-    val res = Module(new Diverter(wayNumber, input.bits.cloneType))
+  def apply[T <: Data](wayNumber: Int, input: DecoupledIO[T], fifoDepth: Int = 1): Vec[DecoupledIO[T]]  = {
+    val res = Module(new Diverter(wayNumber, input.bits.cloneType, fifoDepth))
     res.io.i <> input
     res.io.o
   }
