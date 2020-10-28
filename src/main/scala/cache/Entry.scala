@@ -61,6 +61,7 @@ case class CacheEntry(param: CacheParameter) extends DataBankEntry{
   def buildFrom(address: UInt, threadID: UInt, data: UInt): DataBankEntry  = {
     val res = Wire(new CacheEntry(param))
     res.v := true.B
+    res.threadID := this.threadID
     res.tag := DataBankEntry.getTagFromAddress(address, param.tagWidth())
     res.data := data
     res
