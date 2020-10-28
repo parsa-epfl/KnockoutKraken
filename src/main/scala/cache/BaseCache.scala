@@ -73,6 +73,29 @@ class BRAMorRegister(implementedWithRegister: Boolean = true)(implicit cfg: BRAM
   }
 }
 
+class DataBankFrontendPort(
+  addressWidth: Int,
+  threadIDWidth: Int,
+  blockSize: Int,
+  writable: Boolean,
+) extends Bundle{
+  val addr = UInt(addressWidth.W) // access address.
+  val threadID = UInt(threadIDWidth.W)
+  val w_v = if(writable) Some(Bool()) else None // write valid?
+  val wData = if(writable) Some(UInt(blockSize.W)) else None
+  val wMask = if(writable) Some(UInt(blockSize.W)) else None
+  val permission = if(writable) Some(Bool()) else None // 0 is read-only and 1 is read-write.
+
+  // overload constructor to quickly build a frontend port from the cache parameter.
+  def this(param: CacheParameter) = this(
+    param.addressWidth,
+    param.threadNumber,
+    param.blockBit,
+    param.writable
+  )
+
+}
+
 
 /**
  * The memory and its controlling logic in a cache to store all data entries.
@@ -113,14 +136,7 @@ class DataBank[T <: DataBankEntry](
   val io = IO(new Bundle{
     // two ports, one for the frontend and one for the backend.
     val frontend = new Bundle{
-      val req_i = Flipped(Decoupled(new Bundle{
-        val addr = UInt(param.addressWidth.W) // access address.
-        val threadID = UInt(log2Ceil(param.threadNumber).W)
-        val w_v = if(param.writable) Some(Bool()) else None // write valid?
-        val wData = if(param.writable) Some(UInt(param.blockBit.W)) else None
-        val wMask = if(param.writable) Some(UInt(param.blockBit.W)) else None
-        val permission = if(param.writable) Some(Bool()) else None // 0 is read, 1 is read and write.
-      }))
+      val req_i = Flipped(Decoupled(new DataBankFrontendPort(param)))
       val rep_o = Decoupled(new Bundle{
         val data = UInt(param.blockBit.W)
       })
@@ -150,6 +166,9 @@ class DataBank[T <: DataBankEntry](
       val sleep_o = ValidIO(UInt(param.threadIDWidth().W))
       val kill_o = ValidIO(UInt(param.threadIDWidth().W))
     }
+
+    // flush the cache.
+    val flush_i = Flipped(Decoupled(UInt(param.threadNumber.W)))
   })
 
   val bramRowType = Vec(param.associativity, t)
@@ -162,10 +181,23 @@ class DataBank[T <: DataBankEntry](
 
   mem.portA.DI := 0.U
 
+  // Flushing logic
+  val flushing_r = RegInit(false.B)
+  val flush_cnt = Counter(param.setNumber)
+  val flush_mask_r = RegInit(io.flush_i.bits, 0.U)
+
+  when(io.flush_i.fire()){
+    flush_cnt.reset()
+    flushing_r := true.B // start to flush
+    flush_mask_r := io.flush_i.bits
+  }.elsewhen(flushing_r){
+    flushing_r := !(flush_cnt.inc())
+  }
+
   /**
    * Helper function to correctly add register or directly bypass to union reading from the register and block memory.
    */ 
-  def regOrNot[T <: Data](t: T): T = {
+  private def regOrNot[T <: Data](t: T): T = {
     if(implementedWithRegister) t else RegNext(t)
   }
 
@@ -182,10 +214,17 @@ class DataBank[T <: DataBankEntry](
    } else false.B
   val permission_r = if(param.permissionIsChecked) regOrNot(io.frontend.req_i.bits.permission.get) else false.B
 
-  mem.portA.ADDR := fAddr(setWidth-1, 0)
-  mem.portA.EN := io.frontend.req_i.valid
-  mem.portA.WE := 0.U
-
+  // priority arbiter. Flushing is the highest priority.
+  when(!flushing_r){ 
+    mem.portA.ADDR := fAddr(setWidth-1, 0)
+    mem.portA.EN := io.frontend.req_i.valid
+    mem.portA.WE := 0.U
+  }.otherwise{
+    mem.portA.ADDR := flush_cnt.value
+    mem.portA.EN := flushing_r
+    mem.portA.WE := 0.U
+  }
+  
   // ----- CYCLE 0: Access BRAM & store the request information -----
   val fAccess = mem.portA.DO.asTypeOf(bramRowType)
   
@@ -230,11 +269,11 @@ class DataBank[T <: DataBankEntry](
     frontendWBPort.bits.threadID := fThread_s0
     frontendWBPort.bits.wayIndex := Mux(isHit, hitsWhich, io.lru.lru_i) 
     frontendWBPort.bits.mask := wMask_r
-    io.frontend.req_i.ready := Mux(io.frontend.req_i.bits.w_v.get, frontendWBPort.ready, true.B) // new write request will not be handled until the writing back is processed.
+    io.frontend.req_i.ready := Mux(io.frontend.req_i.bits.w_v.get, frontendWBPort.ready, !flushing_r) // new write request will not be handled until the writing back is processed.
   } else {
     frontendWBPort.bits := DontCare
     frontendWBPort.valid := false.B
-    io.frontend.req_i.ready := true.B
+    io.frontend.req_i.ready := !flushing_r
   }
 
   // -------- Push missing request to the backend --------
@@ -309,16 +348,36 @@ class DataBank[T <: DataBankEntry](
   arb.io.in(1) <> diversion(0)
 
   val writeBackPacket = arb.io.out // arbiter result.
-  writeBackPacket.ready := true.B
+  
 
   // full write back data. We only modify the relevant part.
   val memWBEntry = 0.U.asTypeOf(bramRowType) // if update, we need to read it out first?
   val updaterMemWBEntry = memWBEntry(writeBackPacket.bits.wayIndex).buildFrom(writeBackPacket.bits.addr, writeBackPacket.bits.threadID, writeBackPacket.bits.dataBlock)
 
-  mem.portB.EN := writeBackPacket.valid
-  mem.portB.WE := UIntToOH(writeBackPacket.bits.wayIndex)
-  mem.portB.ADDR := writeBackPacket.bits.addr
-  mem.portB.DI := updaterMemWBEntry.asUInt()
+  // flushing logic in the write port.
+  val flushing_s1_r = regOrNot(flushing_r)
+  val flushing_s1_addr_r = regOrNot(flush_cnt.value)
+
+  val flushed_data = VecInit(fAccess.map({x => 
+    x.flush(flush_mask_r)
+  }))
+
+  when(!flushing_s1_r){
+    writeBackPacket.ready := true.B
+    mem.portB.EN := writeBackPacket.valid
+    mem.portB.WE := UIntToOH(writeBackPacket.bits.wayIndex)
+    mem.portB.ADDR := writeBackPacket.bits.addr
+    mem.portB.DI := updaterMemWBEntry.asUInt()
+  }.otherwise{
+    writeBackPacket.ready := false.B
+    mem.portB.EN := true.B
+    mem.portB.WE := Fill(param.associativity, true.B)
+    mem.portB.ADDR := flushing_s1_addr_r
+    mem.portB.DI := flushed_data.asUInt()
+  }
+
+  //! Some points regarding the flushing: Diverter, FIFO(Request FIFO, Write-Through FIFO), and write back buffer.
+  
 
   // ######## BACKEND Write ########
   if(param.writable){
@@ -343,6 +402,13 @@ class DataBank[T <: DataBankEntry](
   io.threadNotify.kill_o.bits := fThread_s0
   io.threadNotify.kill_o.valid := !isValid
 }
+
+// Separation plan for the DataBank.
+// Break into three modules:
+//  - Frontend. (frontend request, miss & hit)
+//  - BRAM (store and flushing)
+//  - Backend: write-through and fetch data
+//  - Thread management. (wake up, kill, and sleep)
 
 
 /**
