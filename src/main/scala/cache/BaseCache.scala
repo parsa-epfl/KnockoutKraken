@@ -81,10 +81,11 @@ class DataBankFrontendPort(
 ) extends Bundle{
   val addr = UInt(addressWidth.W) // access address.
   val threadID = UInt(threadIDWidth.W)
+  val groupedFlag = Bool()
   val w_v = if(writable) Some(Bool()) else None // write valid?
   val wData = if(writable) Some(UInt(blockSize.W)) else None
   val wMask = if(writable) Some(UInt(blockSize.W)) else None
-  val permission = if(writable) Some(Bool()) else None // 0 is read-only and 1 is read-write.
+  val wpermission = Bool() // 0 is read-only and 1 is read-write.
 
   // overload constructor to quickly build a frontend port from the cache parameter.
   def this(param: CacheParameter) = this(
@@ -140,17 +141,20 @@ class DataBank[T <: DataBankEntry](
       val req_i = Flipped(Decoupled(new DataBankFrontendPort(param)))
       val rep_o = Decoupled(new Bundle{
         val data = UInt(param.blockBit.W)
+        val threadID = UInt(param.threadIDWidth().W)
         val hit = Bool()
       })
     }
 
     val backend = new Bundle{
-      val rAddr_o = Decoupled(UInt(param.addressWidth.W))
-      val rData_i = Flipped(Decoupled(UInt(param.blockBit.W)))
-      val wReq_o = if(param.writable) Some(Decoupled(new Bundle{
+      val req_o = Decoupled(new Bundle{
         val addr = UInt(param.addressWidth.W)
-        val data = UInt(param.blockBit.W)
-      })) else None
+        val wreq = if(param.writable) Some(new Bundle{
+          val data = UInt(param.blockBit.W)
+          val v = Bool()
+        }) else None
+      })
+      val reply_i = Flipped(Decoupled(UInt(param.blockBit.W)))
     }
 
     val lru = new Bundle{
@@ -163,11 +167,11 @@ class DataBank[T <: DataBankEntry](
       val lru_i = Input(UInt(param.wayWidth().W))
     }
 
-    val threadNotify = new Bundle{
-      val wakeup_o = ValidIO(UInt(param.threadIDWidth().W))
-      val sleep_o = ValidIO(UInt(param.threadIDWidth().W))
-      val kill_o = ValidIO(UInt(param.threadIDWidth().W))
-    }
+    val packet_arrive_o = Valid(new Bundle{
+      val threadID = UInt(param.threadIDWidth().W)
+      val groupedFlag = Bool()
+    }) // a data block from the cache
+    val thread_permission_violated_o = ValidIO(UInt(param.threadIDWidth().W))
 
     // flush the cache.
     val flush_i = Flipped(Decoupled(UInt(param.threadNumber.W)))
@@ -203,25 +207,27 @@ class DataBank[T <: DataBankEntry](
    * Helper function to correctly add register or directly bypass to union reading from the register and block memory.
    */ 
   private def regOrNot[T <: Data](t: T): T = {
-    if(implementedWithRegister) t else RegNext(t)
+    if(implementedWithRegister) WireInit(t) else RegNext(t)
   }
 
   // ######## FRONTEND ########
   val setWidth = log2Ceil(param.setNumber)
-  val fAddr = io.frontend.req_i.bits.addr
-  val fThread = io.frontend.req_i.bits.threadID
-  val f_v_s0 =  regOrNot(io.frontend.req_i.valid)
-  val fAddr_s0 = regOrNot(fAddr)
-  val fThread_s0 = regOrNot(fThread)
-  val wv_r = if(param.writable){
-    val d_value = io.frontend.req_i.valid && io.frontend.req_i.bits.w_v.get
-    regOrNot(d_value)
-   } else false.B
-  val permission_r = if(param.permissionIsChecked) regOrNot(io.frontend.req_i.bits.permission.get) else false.B
+  val s0_context_n = Wire(Valid(new DataBankFrontendPort(param)))
+  val s0_context_r = regOrNot(s0_context_n) // Why s0: state zero
+
+  s0_context_n.bits.addr := io.frontend.req_i.bits.addr
+  s0_context_n.bits.threadID := io.frontend.req_i.bits.threadID
+  s0_context_n.bits.wpermission := io.frontend.req_i.bits.wpermission
+  if(param.writable){
+    s0_context_n.bits.wData.get := io.frontend.req_i.bits.wData.get
+    s0_context_n.bits.wMask.get := io.frontend.req_i.bits.wMask.get
+    s0_context_n.bits.w_v.get := io.frontend.req_i.bits.w_v.get
+  }
+  s0_context_n.valid := io.frontend.req_i.fire()
 
   // priority arbiter. Flushing is the highest priority.
   when(!flushing_r){ 
-    mem.portA.ADDR := fAddr(setWidth-1, 0)
+    mem.portA.ADDR := io.frontend.req_i.bits.addr(setWidth-1, 0)
     mem.portA.EN := io.frontend.req_i.valid
     mem.portA.WE := 0.U
   }.otherwise{
@@ -233,21 +239,22 @@ class DataBank[T <: DataBankEntry](
   // ----- CYCLE 0: Access BRAM & store the request information -----
   val fAccess = mem.portA.DO.asTypeOf(bramRowType)
   
-  io.lru.addr_o := fAddr // forward to LRU
+  io.lru.addr_o := io.frontend.req_i.bits.addr // forward to LRU
   io.lru.addr_vo := io.frontend.req_i.valid
 
   // ----- CYCLE 1: Read out or trigger state machine -----
   val matchBits = fAccess.map({ x=>
-    x.checkHit(fAddr, fThread) && x.v
+    x.checkHit(s0_context_r.bits.addr, s0_context_r.bits.threadID) && x.v
   }) // get all the comparison results
   val hitsWhich = OHToUInt(matchBits) // encode from the comparison
   val isHit: Bool = PopCount(matchBits) === 1.U // this value should only be 1 or zero.
 
   //! TBD here for how to handle the permission check of bits.
-  val isValid = fAccess(hitsWhich).valid(permission_r)
+  val isValid = fAccess(hitsWhich).valid(s0_context_r.bits.wpermission)
 
-  io.frontend.rep_o.valid := f_v_s0 && isValid
+  io.frontend.rep_o.valid := s0_context_r.valid && isValid
   io.frontend.rep_o.bits.data := fAccess(hitsWhich).read() // read
+  io.frontend.rep_o.bits.threadID := s0_context_r.bits.threadID
   io.frontend.rep_o.bits.hit := isHit // if not head, also return.
 
   io.lru.index_o := hitsWhich
@@ -258,100 +265,88 @@ class DataBank[T <: DataBankEntry](
     val threadID = UInt(param.threadIDWidth().W) // tid
     val wayIndex = UInt(param.wayWidth().W) // which position to replace
     val dataBlock = UInt(param.blockBit.W)
-    val mask = UInt(param.blockBit.W)
+    val groupedFlag = Bool()
   }
 
   // Write request from the frontend
   val frontendWBPort = Wire(Decoupled(new WritebackPacket))
 
+  val s1_wlatch_r = Reg(new Bundle{ // forward latch of writing request
+    val addr = UInt(param.addressWidth.W) 
+    val dataBlock = UInt(param.blockBit.W)
+    val v = Bool()
+  })
+
   if(param.writable){
-    val wData_r = regOrNot(io.frontend.req_i.bits.wData.get)
-    val wMask_r = regOrNot(io.frontend.req_i.bits.wMask.get)
-    frontendWBPort.valid := wv_r && isHit && isValid
-    frontendWBPort.bits.addr := fAddr_s0
+    frontendWBPort.valid := s0_context_r.bits.w_v.get && isHit && isValid && s0_context_r.valid
+    frontendWBPort.bits.addr := s0_context_r.bits.addr
     frontendWBPort.bits.dataBlock := VecInit(Seq.tabulate(param.blockBit)({ i =>
-      Mux(wMask_r(i), wData_r(i), fAccess(hitsWhich).read()(i))
+      Mux(s0_context_r.bits.wMask.get(i), s0_context_r.bits.wData.get(i), fAccess(hitsWhich).read()(i))
     })).asUInt()
-    frontendWBPort.bits.threadID := fThread_s0
+    frontendWBPort.bits.threadID := s0_context_r.bits.threadID
+    frontendWBPort.bits.groupedFlag := s0_context_r.bits.groupedFlag
     frontendWBPort.bits.wayIndex := Mux(isHit, hitsWhich, io.lru.lru_i) 
-    frontendWBPort.bits.mask := wMask_r
-    io.frontend.req_i.ready := Mux(io.frontend.req_i.bits.w_v.get, frontendWBPort.ready, !flushing_r) // new write request will not be handled until the writing back is processed.
+    io.frontend.req_i.ready := Mux(
+      io.frontend.req_i.bits.w_v.get,
+      frontendWBPort.ready,
+      !flushing_r
+    ) // new write request will not be handled until the writing back is processed.
+    // we need to forward the result back to the reading part for RAW
+
+    s1_wlatch_r.addr := frontendWBPort.bits.addr
+    s1_wlatch_r.dataBlock := frontendWBPort.bits.dataBlock
+    s1_wlatch_r.v := frontendWBPort.fire()
+
+    io.frontend.rep_o.bits.data := Mux(
+      s1_wlatch_r.v && s1_wlatch_r.addr === s0_context_r.bits.addr && isHit, // when the last writing result is valid, shares same address, and has not been evicted
+      s1_wlatch_r.dataBlock,
+      fAccess(hitsWhich).read() // read
+    ) 
+    io.frontend.rep_o.bits.hit := isHit // if not head, also return.
   } else {
     frontendWBPort.bits := DontCare
     frontendWBPort.valid := false.B
     io.frontend.req_i.ready := !flushing_r
+    s1_wlatch_r := DontCare
   }
 
   // -------- Push missing request to the backend --------
-  class F2BData extends Bundle{
+  class MissRequestPacket extends Bundle{
     val addr = UInt(param.addressWidth.W)
     val threadID = UInt(param.threadIDWidth().W)
     val lru = UInt(param.wayWidth().W)
+    val groupedFlag = Bool()
   }
 
-  val frontFetchRequest = Wire(Decoupled(new F2BData))
-  frontFetchRequest.bits.addr := fAddr_s0
-  frontFetchRequest.bits.threadID := fThread_s0
+  val frontFetchRequest = Wire(Decoupled(new MissRequestPacket))
+  frontFetchRequest.bits.addr := s0_context_r.bits.addr
+  frontFetchRequest.bits.threadID := s0_context_r.bits.threadID
+  frontFetchRequest.bits.groupedFlag := s0_context_r.bits.groupedFlag
   frontFetchRequest.bits.lru := io.lru.lru_i
-  frontFetchRequest.valid := !isHit && f_v_s0 && isValid // when miss occurs, push request to the backend.
+  frontFetchRequest.valid := !isHit && s0_context_r.valid && isValid // when miss occurs, push request to the backend.
 
-  val frontToBackFIFO = Queue(frontFetchRequest, param.threadNumber) // FIFO to transmit the missing request from front to back.
+  val missQueue = Queue(frontFetchRequest, param.threadNumber * 2) // FIFO to transmit the missing request from front to back.
+
+  val s1_miss_r = Reg(Valid(new MissRequestPacket))
+  s1_miss_r.bits := frontFetchRequest.bits
+  s1_miss_r.valid := frontFetchRequest.valid
+
+  val backendWBPort = Wire(Decoupled(new WritebackPacket))
+  backendWBPort.bits.addr := missQueue.bits.addr
+  backendWBPort.bits.dataBlock := io.backend.reply_i.bits
+  backendWBPort.bits.threadID := missQueue.bits.threadID
+  backendWBPort.bits.wayIndex := missQueue.bits.lru
+  backendWBPort.bits.groupedFlag := missQueue.bits.groupedFlag
+  backendWBPort.valid := missQueue.valid && io.backend.reply_i.valid
+
+  missQueue.ready := backendWBPort.ready
+  io.backend.reply_i.ready := backendWBPort.ready
 
 
-  // ######## BACKEND ########
-  // ---- Read from the DRAM ----
-  val sB_IDLE :: sB_WAIT :: sB_WRITE :: Nil = Enum(3)
-  val backendState_r = RegInit(sB_IDLE)
-  val backendReady = backendState_r === sB_IDLE && io.backend.rAddr_o.ready
-
-  io.backend.rAddr_o.valid := backendState_r === sB_IDLE && frontToBackFIFO.valid
-  io.backend.rAddr_o.bits := frontToBackFIFO.bits.addr
-  frontToBackFIFO.ready := backendReady // when backend is ready, eject one term from the frontToBackFIFO.
-
-  val backendAcceptData = backendState_r === sB_WAIT // the backend is ready to receive the data from the DRAM
-  io.backend.rData_i.ready := backendAcceptData
-
-  // val backend_context_t =  // the bundle of the working context of the backend.
-  val backendWB_r = Reg(new WritebackPacket) 
-  // update logic of backend_context
-  when(frontToBackFIFO.valid && backendReady){
-    // save address and thread from the FIFO
-    backendWB_r.addr := frontToBackFIFO.bits.addr
-    backendWB_r.threadID := frontToBackFIFO.bits.threadID
-    backendWB_r.wayIndex := frontToBackFIFO.bits.lru
-  }.elsewhen(io.backend.rData_i.valid && backendAcceptData){
-    backendWB_r.dataBlock := io.backend.rData_i.bits
-    backendWB_r.mask := Fill(param.blockBit, 1.U(1.W)) // update from the backend is undoubtedly a replacement.
-  }
-  val backendWBPort = Wire(Decoupled(new WritebackPacket)) // from DRAM to Data bank.
-  backendWBPort.bits := backendWB_r
-  backendWBPort.valid := backendState_r === sB_WRITE
-
-  // State machine of the backend logic
-  switch(backendState_r){
-    is(sB_IDLE){
-      backendState_r := Mux(frontToBackFIFO.valid && backendReady, sB_WAIT, sB_IDLE)
-    }
-    is(sB_WAIT){ // wait the data response from the backend port
-      backendState_r := Mux(io.backend.rData_i.valid && backendAcceptData, sB_WRITE, sB_WAIT)
-    }
-    is(sB_WRITE){ // Wait write to complete.
-      backendState_r := Mux(backendWBPort.ready, sB_IDLE, sB_WRITE)
-    }
-  }
-
-  // diverter the frontendWBPort. It should point to both the data block as well as the DRAM.
-  var diversion: Vec[DecoupledIO[WritebackPacket]] = null
-  if(param.writable){
-    diversion = Diverter(2, frontendWBPort, param.threadNumber)
-  } else {
-    diversion = Diverter(1, frontendWBPort)
-  }
-
-  // Write port arbiter 
-  val arb = Module(new RRArbiter(new WritebackPacket, 2))
-  arb.io.in(0) <> backendWBPort
-  arb.io.in(1) <> diversion(0)
+  // BRAM Write port arbiter 
+  val arb = Module(new Arbiter(new WritebackPacket, 2))
+  arb.io.in(0) <> frontendWBPort
+  arb.io.in(1) <> backendWBPort
 
   val writeBackPacket = arb.io.out // arbiter result.
   
@@ -382,36 +377,46 @@ class DataBank[T <: DataBankEntry](
     mem.portB.DI := flushed_data.asUInt()
   }
 
-  //! Some points regarding the flushing: Diverter, FIFO(Request FIFO, Write-Through FIFO), and write back buffer.
-  
-  io.flush_i.ready := !frontToBackFIFO.ready // wait for the fetching to be complete.
+  io.flush_i.ready := !missQueue.valid // wait for the missing handling to be complete.
 
-  // ######## BACKEND Write ########
+  val fetchMissFromDRAM = Wire(Decoupled(io.backend.req_o.bits.cloneType))
+  val writeThroughToDRAM = Wire(Decoupled(io.backend.req_o.bits.cloneType))
+  fetchMissFromDRAM.bits.addr := s1_miss_r.bits.addr
+  fetchMissFromDRAM.valid := s1_miss_r.valid
   if(param.writable){
-    val backendWriteThrough = Wire(Decoupled(new WritebackPacket))
-    backendWriteThrough <> diversion(1)
-    val b2mem_fifo = Queue(backendWriteThrough, 4*param.threadNumber)
-    val w_req = io.backend.wReq_o.get
-    w_req.valid := b2mem_fifo.valid
-    b2mem_fifo.ready := w_req.ready
-    w_req.bits.addr := b2mem_fifo.bits.addr
-    w_req.bits.data := b2mem_fifo.bits.dataBlock
-
-    // wait for all the queues to be empty.
-    io.writing_is_busy_vo.get := !diversion(0).valid && diversion(1).valid && !b2mem_fifo.valid && !frontToBackFIFO.ready
-    io.flush_i.ready := io.writing_is_busy_vo.get
+    writeThroughToDRAM.bits.addr := s1_wlatch_r.addr
+    fetchMissFromDRAM.bits.wreq.get := DontCare
+    writeThroughToDRAM.bits.wreq.get.data := s1_wlatch_r.dataBlock
+    writeThroughToDRAM.bits.wreq.get.v := s1_wlatch_r.v
+    writeThroughToDRAM.valid := s1_wlatch_r.v
+  } else {
+    writeThroughToDRAM.bits := DontCare
+    writeThroughToDRAM.valid := false.B
   }
 
-  // ######## Notify ########
-  // Wake up
-  io.threadNotify.wakeup_o.bits := backendWB_r.threadID
-  io.threadNotify.wakeup_o.valid := backendWBPort.valid && backendWBPort.ready // when the write back is committed, wake up the thread.
-  // Sleep
-  io.threadNotify.sleep_o.bits := frontFetchRequest.bits.threadID
-  io.threadNotify.sleep_o.valid := frontFetchRequest.valid && frontFetchRequest.ready // when the miss request is committed.
+  // Arbiter
+  assert(fetchMissFromDRAM.valid && writeThroughToDRAM.valid === 0.B, "Come on. Do you think for one isntruction missing and writing-through could happen at the same time?")
 
-  io.threadNotify.kill_o.bits := fThread_s0
-  io.threadNotify.kill_o.valid := !isValid
+  val writeThroughArb = Module(new Arbiter(io.backend.req_o.bits.cloneType, 2))
+  writeThroughArb.io.in(0) <> fetchMissFromDRAM
+  writeThroughArb.io.in(1) <> writeThroughToDRAM
+
+  val writeThroughQueue = Queue(writeThroughArb.io.out, 4 * param.threadNumber)
+  io.backend.req_o <> writeThroughQueue
+  
+  // to be determined:
+  // - io.frontend.req_i.ready
+  // - io.flush_i.ready 
+  // - io.writing_is_busy_vo.get
+
+  // kill
+  io.thread_permission_violated_o.bits := !isValid && s0_context_r.valid
+  io.thread_permission_violated_o.valid := !isValid
+
+  // wake up
+  io.packet_arrive_o.valid := backendWBPort.fire() // when the write back is committed, wake up the thread.
+  io.packet_arrive_o.bits.threadID := backendWBPort.bits.threadID
+  io.packet_arrive_o.bits.groupedFlag := backendWBPort.bits.groupedFlag
 }
 
 // Separation plan for the DataBank.
@@ -501,14 +506,17 @@ class BaseCache[EntryType <: DataBankEntry](
   val io = IO(new Bundle{
     val frontend = dataBank.io.frontend.cloneType
     val backend = dataBank.io.backend.cloneType
-    val threadNotify = dataBank.io.threadNotify.cloneType
+    val packet_arrive_o = dataBank.io.packet_arrive_o.cloneType
+    val thread_permission_violated_o = dataBank.io.thread_permission_violated_o.cloneType
     val flush_i = Flipped(dataBank.io.flush_i.cloneType)
     val writing_is_busy_vo = if(param.writable) Some(dataBank.io.writing_is_busy_vo.get.cloneType) else None
   })
 
   io.frontend <> dataBank.io.frontend
   io.backend <> dataBank.io.backend
-  io.threadNotify <> dataBank.io.threadNotify
+  //io. <> dataBank.io.threadNotify
+  io.packet_arrive_o <> dataBank.io.packet_arrive_o
+  io.thread_permission_violated_o <> dataBank.io.thread_permission_violated_o
   dataBank.io.flush_i <> io.flush_i
   if(param.writable){
     io.writing_is_busy_vo.get <> dataBank.io.writing_is_busy_vo.get

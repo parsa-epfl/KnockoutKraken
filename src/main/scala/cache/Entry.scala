@@ -7,7 +7,7 @@ import chisel3.stage.{ChiselStage}
 /**
  * Base class of data entry.
  */ 
-abstract class DataBankEntry extends Bundle{
+sealed abstract class DataBankEntry extends Bundle{
   val v = Bool() // valid bit
   val threadID: UInt
   /**
