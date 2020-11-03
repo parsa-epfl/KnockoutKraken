@@ -10,7 +10,7 @@ import chisel3.util._
  *  the interface of LRU updating logic. Pure combinational logic.
  *  @param wayNumber how many ways this LRU could handle.
  */ 
-abstract class LRUCore(wayNumber: Int) extends Module{
+sealed abstract class LRUCore(wayNumber: Int) extends Module{
   def encodingWidth(): Int  // how many bits are needed to store the encoding bits.
   val wayWidth = log2Ceil(wayNumber)
   final val io = IO(new Bundle{
