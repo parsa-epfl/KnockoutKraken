@@ -347,3 +347,4 @@ hs_err_pid*
 project
 *.v
 *.fir
+.test
