@@ -31,9 +31,9 @@ name := "protoflex"
 
 version := "0.1"
 
-scalaVersion := "2.12.10"
+scalaVersion := "2.12.12"
 
-crossScalaVersions := Seq("2.11.12", "2.12.10")
+crossScalaVersions := Seq("2.11.12", "2.12.12")
 
 resolvers ++= Seq(
   Resolver.sonatypeRepo("snapshots"),
@@ -41,7 +41,7 @@ resolvers ++= Seq(
 )
 
 // Provide a managed dependency on X if -DXVersion="" is supplied on the command line.
-libraryDependencies += "edu.berkeley.cs" %% "chisel3" % "3.2-SNAPSHOT"
+libraryDependencies += "edu.berkeley.cs" %% "chisel3" % "3.4-SNAPSHOT"
 libraryDependencies += "edu.berkeley.cs" %% "chiseltest" % "0.3-SNAPSHOT"
 libraryDependencies += "com.github.tototoshi" %% "scala-csv" % "1.3.6"
 
