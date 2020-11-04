@@ -175,9 +175,7 @@ class DataBank[T <: DataBankEntry](
 
     // flush the cache.
     val flush_i = Flipped(Decoupled(UInt(param.threadNumber.W)))
-
-    // we have a flag to indicate that there're pending writing request.
-    val writing_is_busy_vo = if(param.writable) Some(Output(Bool())) else None
+    // we have a flag to indicate that there're pending backend request. Please directly use flush_i.ready
   })
 
   val bramRowType = Vec(param.associativity, t)
@@ -203,21 +201,26 @@ class DataBank[T <: DataBankEntry](
     flushing_r := !(flush_cnt.inc())
   }
 
-  /**
-   * Helper function to correctly add register or directly bypass to union reading from the register and block memory.
-   */ 
-  private def regOrNot[T <: Data](t: T): T = {
-    if(implementedWithRegister) WireInit(t) else RegNext(t)
-  }
-
   // ######## FRONTEND ########
   val setWidth = log2Ceil(param.setNumber)
   val s0_context_n = Wire(Valid(new DataBankFrontendPort(param)))
-  val s0_context_r = regOrNot(s0_context_n) // Why s0: state zero
+  var s0_context_r = Reg(Valid(new DataBankFrontendPort(param)))
+  val s1_ready = Wire(Bool())
+  if(!implementedWithRegister){
+    s0_context_r := Mux(
+      flushing_r && flush_mask_r(s0_context_r.bits.threadID), // flush current register.
+      0.U.asTypeOf(s0_context_n.cloneType),
+      Mux(s1_ready, s0_context_n, s0_context_r)
+    )
+
+  } else {
+    s0_context_r = s0_context_n
+  }
 
   s0_context_n.bits.addr := io.frontend.req_i.bits.addr
   s0_context_n.bits.threadID := io.frontend.req_i.bits.threadID
   s0_context_n.bits.wpermission := io.frontend.req_i.bits.wpermission
+  s0_context_n.bits.groupedFlag := io.frontend.req_i.bits.groupedFlag
   if(param.writable){
     s0_context_n.bits.wData.get := io.frontend.req_i.bits.wData.get
     s0_context_n.bits.wMask.get := io.frontend.req_i.bits.wMask.get
@@ -270,9 +273,10 @@ class DataBank[T <: DataBankEntry](
 
   // Write request from the frontend
   val frontendWBPort = Wire(Decoupled(new WritebackPacket))
-
+  val s2_ready = Wire(Bool()) // whether you can update s1_*_r
   val s1_wlatch_r = Reg(new Bundle{ // forward latch of writing request
-    val addr = UInt(param.addressWidth.W) 
+    val addr = UInt(param.addressWidth.W)
+    val threadID = UInt(param.threadIDWidth().W)
     val dataBlock = UInt(param.blockBit.W)
     val v = Bool()
   })
@@ -292,22 +296,27 @@ class DataBank[T <: DataBankEntry](
       !flushing_r
     ) // new write request will not be handled until the writing back is processed.
     // we need to forward the result back to the reading part for RAW
+    when(flushing_r && flush_mask_r(s1_wlatch_r.threadID)){
+      s1_wlatch_r := 0.U
+    }.elsewhen(s2_ready){
+      s1_wlatch_r.addr := frontendWBPort.bits.addr
+      s1_wlatch_r.dataBlock := frontendWBPort.bits.dataBlock
+      s1_wlatch_r.v := frontendWBPort.fire()
+      s1_wlatch_r.threadID := frontendWBPort.bits.threadID
 
-    s1_wlatch_r.addr := frontendWBPort.bits.addr
-    s1_wlatch_r.dataBlock := frontendWBPort.bits.dataBlock
-    s1_wlatch_r.v := frontendWBPort.fire()
-
-    io.frontend.rep_o.bits.data := Mux(
-      s1_wlatch_r.v && s1_wlatch_r.addr === s0_context_r.bits.addr && isHit, // when the last writing result is valid, shares same address, and has not been evicted
-      s1_wlatch_r.dataBlock,
-      fAccess(hitsWhich).read() // read
-    ) 
+      io.frontend.rep_o.bits.data := Mux(
+        s1_wlatch_r.v && s1_wlatch_r.addr === s0_context_r.bits.addr && isHit, // when the last writing result is valid, shares same address, and has not been evicted
+        s1_wlatch_r.dataBlock,
+        fAccess(hitsWhich).read() // read
+      ) 
+    }
     io.frontend.rep_o.bits.hit := isHit // if not head, also return.
   } else {
     frontendWBPort.bits := DontCare
     frontendWBPort.valid := false.B
     io.frontend.req_i.ready := !flushing_r
     s1_wlatch_r := DontCare
+    s1_wlatch_r.v := false.B
   }
 
   // -------- Push missing request to the backend --------
@@ -323,13 +332,19 @@ class DataBank[T <: DataBankEntry](
   frontFetchRequest.bits.threadID := s0_context_r.bits.threadID
   frontFetchRequest.bits.groupedFlag := s0_context_r.bits.groupedFlag
   frontFetchRequest.bits.lru := io.lru.lru_i
-  frontFetchRequest.valid := !isHit && s0_context_r.valid && isValid // when miss occurs, push request to the backend.
+  frontFetchRequest.valid := !isHit && s0_context_r.valid && isValid && s1_ready // when miss occurs, push request to the backend.
 
   val missQueue = Queue(frontFetchRequest, param.threadNumber * 2) // FIFO to transmit the missing request from front to back.
+  // question: Do we need to clear missQueue when flushing? It's sync with io.backend_reply_i
 
   val s1_miss_r = Reg(Valid(new MissRequestPacket))
-  s1_miss_r.bits := frontFetchRequest.bits
-  s1_miss_r.valid := frontFetchRequest.valid
+  when(flushing_r && flush_mask_r(s1_miss_r.bits.threadID)){
+    s1_miss_r := 0.U.asTypeOf(s1_miss_r.cloneType)
+  }.elsewhen(s2_ready){
+    s1_miss_r.bits := frontFetchRequest.bits
+    s1_miss_r.valid := frontFetchRequest.valid
+  }
+  
 
   val backendWBPort = Wire(Decoupled(new WritebackPacket))
   backendWBPort.bits.addr := missQueue.bits.addr
@@ -356,8 +371,8 @@ class DataBank[T <: DataBankEntry](
   val updaterMemWBEntry = memWBEntry(writeBackPacket.bits.wayIndex).buildFrom(writeBackPacket.bits.addr, writeBackPacket.bits.threadID, writeBackPacket.bits.dataBlock)
 
   // flushing logic in the write port.
-  val flushing_s1_r = regOrNot(flushing_r)
-  val flushing_s1_addr_r = regOrNot(flush_cnt.value)
+  val flushing_s1_r = if(implementedWithRegister) RegNext(flushing_r) else flushing_r
+  val flushing_s1_addr_r = if(implementedWithRegister) RegNext(flush_cnt.value) else flush_cnt.value
 
   val flushed_data = VecInit(fAccess.map({x => 
     x.flush(flush_mask_r)
@@ -406,7 +421,13 @@ class DataBank[T <: DataBankEntry](
   
   // to be determined:
   // - io.frontend.req_i.ready
+  s2_ready := writeThroughArb.io.out.ready // the backend Q must be ready
+  s1_ready := missQueue.ready && s2_ready && !flushing_s1_r // s2_ready and missQ ready and flushing WB is not busy
+  io.frontend.req_i.ready := s1_ready && !flushing_r // s1 ready and flush RD is not busy
+
   // - io.flush_i.ready 
+  io.flush_i.ready := !writeThroughQueue.valid // queue must be empty when flushing
+
   // - io.writing_is_busy_vo.get
 
   // kill
@@ -509,7 +530,6 @@ class BaseCache[EntryType <: DataBankEntry](
     val packet_arrive_o = dataBank.io.packet_arrive_o.cloneType
     val thread_permission_violated_o = dataBank.io.thread_permission_violated_o.cloneType
     val flush_i = Flipped(dataBank.io.flush_i.cloneType)
-    val writing_is_busy_vo = if(param.writable) Some(dataBank.io.writing_is_busy_vo.get.cloneType) else None
   })
 
   io.frontend <> dataBank.io.frontend
@@ -518,10 +538,6 @@ class BaseCache[EntryType <: DataBankEntry](
   io.packet_arrive_o <> dataBank.io.packet_arrive_o
   io.thread_permission_violated_o <> dataBank.io.thread_permission_violated_o
   dataBank.io.flush_i <> io.flush_i
-  if(param.writable){
-    io.writing_is_busy_vo.get <> dataBank.io.writing_is_busy_vo.get
-  }
-
   lru.io.addr_i := dataBank.io.lru.addr_o
   lru.io.addr_vi := dataBank.io.lru.addr_vo
   lru.io.index_i := dataBank.io.lru.index_o
