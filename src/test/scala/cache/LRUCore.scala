@@ -18,7 +18,7 @@ class TestPseudoTreeLRU extends FreeSpec with ChiselScalatestTester{
       1, wayNumber
     )
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/Pseudo"), WriteVcdAnnotation)
-    test(new LRU(cacheParam, () => new PseudoTreeLRUCore(wayNumber), true)).withAnnotations(anno){ dut =>
+    test(new LRU(cacheParam, () => new PseudoTreeLRUCore(wayNumber))).withAnnotations(anno){ dut =>
       // fix one term
       dut.io.addr_i.poke(0.U)
       dut.io.addr_vi.poke(true.B)

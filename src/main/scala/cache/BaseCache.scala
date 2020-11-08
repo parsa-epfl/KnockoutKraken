@@ -9,6 +9,12 @@ import armflex.util.Diverter
 import armflex.util.BRAMConfig
 import armflex.util.BRAMPort
 import armflex.util.BRAM
+import armflex.util.FlushQueue
+//import firrtl.PrimOps.Mul
+
+import scala.collection.mutable
+import treadle.executable.DataType
+import scala.xml.dtd.impl.Base
 
 case class CacheParameter(
   // Cache properties
@@ -21,8 +27,10 @@ case class CacheParameter(
   threadNumber: Int = 4,
   // Permission recordings. A D cache needs one bit to record the permission of the data.
   writable: Boolean = false,
-  // Permission checking. 
-  permissionIsChecked: Boolean = false
+  // backend data width. Sometimes this is not equal to the block size, for instance, TLB.
+  backendPortSize: Int = 512,
+  // the data bank is implemented in register?
+  implementedWithRegister: Boolean = false
 ){
   assert (isPow2(setNumber))
   assert (isPow2(associativity))
@@ -41,7 +49,64 @@ case class CacheParameter(
   def wayWidth(): Int = {
     log2Ceil(associativity)
   }
+
+  def setWidth(): Int = {
+    log2Ceil(setNumber)
+  }
   
+}
+
+object DataBankManager{
+class FrontendRequestPacket(
+  addressWidth: Int,
+  threadIDWidth: Int,
+  blockSize: Int,
+  writable: Boolean,
+) extends Bundle{
+  val addr = UInt(addressWidth.W) // access address.
+  val threadID = UInt(threadIDWidth.W)
+  val groupedFlag = Bool()
+  val w_v = if(writable) Some(Bool()) else None // write valid?
+  val wData = if(writable) Some(UInt(blockSize.W)) else None
+  val wMask = if(writable) Some(UInt(blockSize.W)) else None
+  val wpermission = Bool() // 0 is read-only and 1 is read-write.
+
+  // overload constructor to quickly build a frontend port from the cache parameter.
+  def this(param: CacheParameter) = this(
+    param.addressWidth,
+    param.threadIDWidth(),
+    param.blockBit,
+    param.writable
+  )
+
+  override def cloneType(): this.type = new FrontendRequestPacket(addressWidth, threadIDWidth, blockSize, writable).asInstanceOf[this.type]
+}
+
+class FrontendReplyPacket(param: CacheParameter) extends Bundle{
+  val data = UInt(param.blockBit.W)
+  val threadID = UInt(param.threadIDWidth().W)
+  val hit = Bool()
+
+  override def cloneType(): this.type = new FrontendReplyPacket(param).asInstanceOf[this.type]
+}
+
+class MissQueuePacket(param: CacheParameter) extends Bundle{
+  val addr = UInt(param.addressWidth.W)
+  val threadID = UInt(param.threadIDWidth().W)
+  val lru = UInt(param.wayWidth().W)
+  val grouped_v = Bool()
+
+  override def cloneType(): this.type = new MissQueuePacket(param).asInstanceOf[this.type]
+}
+
+class BackendRequestPacket(param: CacheParameter) extends Bundle{
+  val addr = UInt(param.addressWidth.W)
+  val wreq = if(param.writable) Some(new Bundle{
+    val data = UInt(param.backendPortSize.W)
+    val v = Bool()
+  }) else None
+
+  override def cloneType(): this.type = new BackendRequestPacket(param).asInstanceOf[this.type]
 }
 
 class BRAMorRegister(implementedWithRegister: Boolean = true)(implicit cfg: BRAMConfig) extends MultiIOModule{
@@ -73,29 +138,255 @@ class BRAMorRegister(implementedWithRegister: Boolean = true)(implicit cfg: BRAM
   }
 }
 
-class DataBankFrontendPort(
-  addressWidth: Int,
-  threadIDWidth: Int,
-  blockSize: Int,
-  writable: Boolean,
+class BankWriteRequestPacket[ENTRY <: DataBankEntry](
+  param: CacheParameter,
+  tEntryGenerator: ENTRY
 ) extends Bundle{
-  val addr = UInt(addressWidth.W) // access address.
-  val threadID = UInt(threadIDWidth.W)
-  val groupedFlag = Bool()
-  val w_v = if(writable) Some(Bool()) else None // write valid?
-  val wData = if(writable) Some(UInt(blockSize.W)) else None
-  val wMask = if(writable) Some(UInt(blockSize.W)) else None
-  val wpermission = Bool() // 0 is read-only and 1 is read-write.
+  val addr = UInt(param.setWidth().W)
+  val which = UInt(param.wayWidth().W)
+  val data = tEntryGenerator.cloneType
 
-  // overload constructor to quickly build a frontend port from the cache parameter.
-  def this(param: CacheParameter) = this(
-    param.addressWidth,
-    param.threadIDWidth(),
-    param.blockBit,
-    param.writable
+  override def cloneType: this.type = new BankWriteRequestPacket(param, tEntryGenerator).asInstanceOf[this.type]
+}
+
+class BRAMPortAdapter[ENTRY <: DataBankEntry](
+  param: CacheParameter,
+  tEntryGenerator: ENTRY,
+) extends MultiIOModule{
+  val set_t = Vec(param.associativity, tEntryGenerator.cloneType)
+
+  val frontendReadRequest_i = IO(Flipped(Decoupled(UInt(param.setWidth().W))))
+  val frontendReadReplyData_o = IO(Decoupled(set_t.cloneType))
+
+  implicit val bramCfg = new BRAMConfig(
+    param.associativity, tEntryGenerator.getWidth, param.setNumber
   )
 
-  override def cloneType(): this.type = new DataBankFrontendPort(addressWidth, threadIDWidth, blockSize, writable).asInstanceOf[this.type]
+  val bramPortA = IO(Flipped(new BRAMPort()))
+  bramPortA.ADDR := frontendReadRequest_i.bits
+  bramPortA.EN := true.B
+  bramPortA.WE := 0.U
+  bramPortA.DI := 0.U
+  frontendReadReplyData_o.bits := bramPortA.DO.asTypeOf(set_t.cloneType)
+  if(param.implementedWithRegister){
+    frontendReadReplyData_o.valid := frontendReadRequest_i.valid
+    frontendReadRequest_i.ready := true.B
+  } else {
+    frontendReadReplyData_o.valid := RegNext(frontendReadRequest_i.valid)
+    frontendReadRequest_i.ready := true.B
+  }
+
+  val frontendWriteRequest_i = IO(Flipped(Decoupled(new BankWriteRequestPacket(param, tEntryGenerator))))
+  val bramPortB = IO(Flipped(new BRAMPort()))
+  bramPortB.ADDR := frontendWriteRequest_i.bits.addr
+
+  val writeValue = Wire(set_t.cloneType)
+  writeValue := 0.U.asTypeOf(set_t.cloneType)
+  writeValue(frontendWriteRequest_i.bits.which) := frontendWriteRequest_i.bits.data
+
+  bramPortB.DI := writeValue.asUInt()
+  bramPortB.EN := frontendWriteRequest_i.valid
+  bramPortB.WE := UIntToOH(frontendWriteRequest_i.bits.which) & Fill(param.associativity, frontendWriteRequest_i.valid)
+  frontendWriteRequest_i.ready := true.B
+}
+
+class DataBankFrontend[ENTRY <: DataBankEntry](
+  param: CacheParameter,
+  tEntryGenerator: ENTRY
+) extends MultiIOModule{
+  // Ports to frontend
+  val frontendRequest_i = IO(Flipped(Decoupled(new FrontendRequestPacket(param))))
+  val frontendReply_o = IO(Valid(new FrontendReplyPacket(param)))
+
+  // Ports to Bank RAM (Read port)
+  val set_t = Vec(param.associativity, tEntryGenerator.cloneType)
+
+  val bankRamRequestAddr_o = IO(Decoupled(UInt(param.setWidth().W)))
+  val bankRamReplyData_i = IO(Flipped(Decoupled(set_t.cloneType)))
+
+  val bankRamWriteRequest_o = IO(Decoupled(new BankWriteRequestPacket(param, tEntryGenerator)))
+
+  // Port to Backend (Read Request)
+  val backendRequest_o = IO(Decoupled(new BackendRequestPacket(param)))
+  val backendReadReply_i = IO(Flipped(Decoupled(UInt(param.backendPortSize.W))))
+
+  // Port to LRU
+  val lruPort = IO(new Bundle{
+    val addr_o = Output(UInt(param.addressWidth.W))
+    val addr_vo = Output(Bool())
+
+    val index_o = Output(UInt(param.wayWidth().W))
+    val index_vo = Output(Bool())
+
+    val lru_i = Input(UInt(param.wayWidth().W))
+  })
+
+  val pipelineStateReady = Wire(Vec(3, Bool()))
+
+  frontendRequest_i.ready := pipelineStateReady(0)
+
+  // Store request
+  val s1_frontendRequest_n = Wire(Decoupled(new FrontendRequestPacket(param)))
+  s1_frontendRequest_n.bits := frontendRequest_i.bits
+  s1_frontendRequest_n.valid := frontendRequest_i.fire()
+  val s1_frontendRequest_r = if(param.implementedWithRegister) FlushQueue(s1_frontendRequest_n, 0, true)
+  else FlushQueue(s1_frontendRequest_n, 1, true) 
+  s1_frontendRequest_r.ready := pipelineStateReady(1)
+
+  // pass to the bram
+  bankRamRequestAddr_o.bits := frontendRequest_i.bits.addr(param.setWidth-1, 0)
+  bankRamRequestAddr_o.valid := frontendRequest_i.fire()
+
+  // pass to the LRU
+  lruPort.addr_o := frontendRequest_i.bits.addr(param.setWidth-1, 0)
+  lruPort.addr_vo := bankRamRequestAddr_o.fire()
+
+  // fetch data from the bram
+  bankRamReplyData_i.ready := s1_frontendRequest_r.valid // If transaction is valid, then we accept the result.
+  
+  val matchBits = bankRamReplyData_i.bits.map({ x=>
+    x.checkHit(s1_frontendRequest_r.bits.addr, s1_frontendRequest_r.bits.threadID) && x.v
+  }) // get all the comparison results
+  val hitsWhich = OHToUInt(matchBits) // encode from the comparison
+  val isHit: Bool = PopCount(matchBits) === 1.U // this value should only be 1 or zero.
+  val hitEntry = bankRamReplyData_i.bits(hitsWhich)
+  
+  val isValid = hitEntry.valid(s1_frontendRequest_r.bits.wpermission)
+
+  frontendReply_o.valid := s1_frontendRequest_r.fire() && isValid
+  frontendReply_o.bits.data := hitEntry.read() // read
+  frontendReply_o.bits.threadID := s1_frontendRequest_r.bits.threadID
+  frontendReply_o.bits.hit := isHit // if not head, also return.
+
+  lruPort.index_o := hitsWhich
+  lruPort.index_vo := isHit
+
+  // forwarding path from last writing to this read. (RAW)
+
+  class WritingContext extends Bundle{
+    val addr = UInt(param.addressWidth.W)
+    val threadID = UInt(param.threadIDWidth().W)
+    val dataBlock = UInt(param.backendPortSize.W)
+    def toEntry(): DataBankEntry = {
+      tEntryGenerator.buildFrom(addr, threadID, dataBlock)
+    }
+  }
+  val s2_writing_n = Wire(Decoupled(new WritingContext))
+  val s2_writing_r = FlushQueue(s2_writing_n, 1, true)
+  s2_writing_r.ready := pipelineStateReady(2)
+  val frontendWriteToBank = Wire(Decoupled(new BankWriteRequestPacket(param, tEntryGenerator)))
+  if(param.writable){
+    val forwardHitEntry = Mux(
+      s2_writing_r.valid &&  // valid
+      s2_writing_r.bits.addr === s1_frontendRequest_r.bits.addr && // hit
+      isHit, // the entry could be found in the BRAM
+      s2_writing_r.bits.toEntry(),
+      hitEntry
+    )
+
+    val updatedEntry = forwardHitEntry.updateData(
+      s1_frontendRequest_r.bits.wData.get, 
+      s1_frontendRequest_r.bits.wMask.get
+    )
+
+    frontendReply_o.bits.data := forwardHitEntry.read()
+
+    frontendWriteToBank.bits.data := updatedEntry
+    frontendWriteToBank.bits.addr := s1_frontendRequest_r.bits.addr(param.setWidth()-1, 0)
+    frontendWriteToBank.bits.which := hitsWhich
+    frontendWriteToBank.valid := s1_frontendRequest_r.valid && isHit && isValid && s1_frontendRequest_r.bits.w_v.get
+    assert(
+      frontendWriteToBank.valid === frontendWriteToBank.ready,
+      "frontend write back request must be put in the first priority."
+    )
+
+    s2_writing_n.bits.addr := s1_frontendRequest_r.bits.addr
+    s2_writing_n.bits.threadID := s1_frontendRequest_r.bits.threadID
+    s2_writing_n.bits.dataBlock := updatedEntry.read()
+    s2_writing_n.valid := frontendWriteToBank.valid
+  } else {
+    frontendWriteToBank.bits := DontCare
+    frontendWriteToBank.valid := false.B
+    s2_writing_n.bits := DontCare
+    s2_writing_n.valid := false.B
+  }
+  
+  // Missed request will also be pushed to the miss queue for sync with backend reply
+
+  class MissRequestPacket extends Bundle{
+    val addr = UInt(param.addressWidth.W)
+    val threadID = UInt(param.threadIDWidth().W)
+    val lru = UInt(param.wayWidth().W)
+    val groupedFlag = Bool()
+  }
+
+  val frontFetchRequest = Wire(Decoupled(new MissRequestPacket))
+  frontFetchRequest.bits.addr := s1_frontendRequest_r.bits.addr
+  frontFetchRequest.bits.threadID := s1_frontendRequest_r.bits.threadID
+  frontFetchRequest.bits.groupedFlag := s1_frontendRequest_r.bits.groupedFlag
+  frontFetchRequest.bits.lru := lruPort.lru_i
+  frontFetchRequest.valid := !isHit && s1_frontendRequest_r.valid && isValid && pipelineStateReady(2) //! listen to the s1_ready
+  assert(frontFetchRequest.ready, "missQueue should never be full. ")
+
+  val missQueue = Queue(frontFetchRequest, param.threadNumber * 2) // FIFO to transmit the missing request from front to back.
+  val backendUpdateBankRequest = Wire(Decoupled(new BankWriteRequestPacket(param, tEntryGenerator)))
+  backendUpdateBankRequest.bits.addr := missQueue.bits.addr(param.setWidth()-1, 0)
+  backendUpdateBankRequest.bits.which := missQueue.bits.lru
+  backendUpdateBankRequest.bits.data := tEntryGenerator.buildFrom(
+    missQueue.bits.addr,
+    missQueue.bits.threadID,
+    backendReadReply_i.bits
+  )
+  backendUpdateBankRequest.valid := missQueue.valid && backendReadReply_i.valid
+  missQueue.ready := backendUpdateBankRequest.ready
+  backendReadReply_i.ready := backendUpdateBankRequest.ready
+
+  val u_writeToBankArb = Module(new Arbiter(new BankWriteRequestPacket(param, tEntryGenerator), 2))
+  u_writeToBankArb.io.in(0) <> frontendWriteToBank
+  u_writeToBankArb.io.in(1) <> backendUpdateBankRequest
+  bankRamWriteRequest_o <> u_writeToBankArb.io.out
+
+  //missRequest_o <> missQueue
+
+  // If Miss, then push the request to backend
+  val s2_miss_n = Wire(Decoupled(new BackendRequestPacket(param)))
+  s2_miss_n.bits.addr := s1_frontendRequest_r.bits.addr
+  if(param.writable){
+    s2_miss_n.bits.wreq.get.data := 0.U;
+    s2_miss_n.bits.wreq.get.v := 0.U
+  }
+  s2_miss_n.valid := frontFetchRequest.valid
+  val s2_miss_r = FlushQueue(s2_miss_n, 1, true)
+  s2_miss_r.ready := pipelineStateReady(2)
+  val backendReadRequest = Wire(Decoupled(new BackendRequestPacket(param)))
+  backendReadRequest.bits := s2_miss_r.bits
+  backendReadRequest.valid := s2_miss_r.valid
+  val backendWriteRequest = Wire(Decoupled(new BackendRequestPacket(param)))
+  backendWriteRequest.bits.addr := s2_writing_r.bits.addr
+  backendWriteRequest.valid := s2_writing_r.fire()
+  if(param.writable){
+    backendReadRequest.bits.wreq.get.data := 0.U
+    backendReadRequest.bits.wreq.get.v := false.B
+    backendWriteRequest.bits.wreq.get.data := s2_writing_r.bits.dataBlock
+    backendWriteRequest.bits.wreq.get.v := true.B
+  }
+
+  val u_backendArb = Module(new Arbiter(new BackendRequestPacket(param), 2))
+  u_backendArb.io.in(0) <> backendReadRequest
+  u_backendArb.io.in(1) <> backendWriteRequest
+  assert(backendReadRequest.valid && backendWriteRequest.valid, "It's impossible for one transaction hit and miss at the same time.")
+  backendRequest_o <> u_backendArb.io.out  
+
+  pipelineStateReady(2) := backendRequest_o.ready
+  pipelineStateReady(1) := s2_miss_n.ready && s2_writing_n.ready &&
+  bankRamReplyData_i.valid === s1_frontendRequest_r.valid // BRAM response arrives.
+  pipelineStateReady(0) := s1_frontendRequest_n.ready && bankRamRequestAddr_o.ready
+}
+
+class DataBankReseter extends MultiIOModule{
+  
+}
+
 }
 
 
@@ -138,7 +429,7 @@ class DataBank[T <: DataBankEntry](
   val io = IO(new Bundle{
     // two ports, one for the frontend and one for the backend.
     val frontend = new Bundle{
-      val req_i = Flipped(Decoupled(new DataBankFrontendPort(param)))
+      val req_i = Flipped(Decoupled(new DataBankManager.FrontendRequestPacket(param)))
       val rep_o = Decoupled(new Bundle{
         val data = UInt(param.blockBit.W)
         val threadID = UInt(param.threadIDWidth().W)
@@ -150,11 +441,11 @@ class DataBank[T <: DataBankEntry](
       val req_o = Decoupled(new Bundle{
         val addr = UInt(param.addressWidth.W)
         val wreq = if(param.writable) Some(new Bundle{
-          val data = UInt(param.blockBit.W)
+          val data = UInt(param.backendPortSize.W)
           val v = Bool()
         }) else None
       })
-      val reply_i = Flipped(Decoupled(UInt(param.blockBit.W)))
+      val reply_i = Flipped(Decoupled(UInt(param.backendPortSize.W)))
     }
 
     val lru = new Bundle{
@@ -184,7 +475,7 @@ class DataBank[T <: DataBankEntry](
     t.getWidth,
     param.setNumber
   )
-  val mem = Module(new BRAMorRegister(implementedWithRegister))
+  val mem = Module(new DataBankManager.BRAMorRegister(implementedWithRegister))
 
   mem.portA.DI := 0.U
 
@@ -203,8 +494,8 @@ class DataBank[T <: DataBankEntry](
 
   // ######## FRONTEND ########
   val setWidth = log2Ceil(param.setNumber)
-  val s0_context_n = Wire(Valid(new DataBankFrontendPort(param)))
-  var s0_context_r = Reg(Valid(new DataBankFrontendPort(param)))
+  val s0_context_n = Wire(Valid(new DataBankManager.FrontendRequestPacket(param)))
+  var s0_context_r = Reg(Valid(new DataBankManager.FrontendRequestPacket(param)))
   val s1_ready = Wire(Bool())
   if(!implementedWithRegister){
     s0_context_r := Mux(
@@ -267,7 +558,7 @@ class DataBank[T <: DataBankEntry](
     val addr = UInt(param.addressWidth.W)  // address
     val threadID = UInt(param.threadIDWidth().W) // tid
     val wayIndex = UInt(param.wayWidth().W) // which position to replace
-    val dataBlock = UInt(param.blockBit.W)
+    val dataBlock = UInt(param.backendPortSize.W)
     val groupedFlag = Bool()
   }
 
@@ -277,7 +568,7 @@ class DataBank[T <: DataBankEntry](
   val s1_wlatch_r = Reg(new Bundle{ // forward latch of writing request
     val addr = UInt(param.addressWidth.W)
     val threadID = UInt(param.threadIDWidth().W)
-    val dataBlock = UInt(param.blockBit.W)
+    val dataBlock = UInt(param.backendPortSize.W)
     val v = Bool()
   })
 
@@ -308,7 +599,7 @@ class DataBank[T <: DataBankEntry](
         s1_wlatch_r.v && s1_wlatch_r.addr === s0_context_r.bits.addr && isHit, // when the last writing result is valid, shares same address, and has not been evicted
         s1_wlatch_r.dataBlock,
         fAccess(hitsWhich).read() // read
-      ) 
+      )
     }
     io.frontend.rep_o.bits.hit := isHit // if not head, also return.
   } else {
@@ -337,12 +628,12 @@ class DataBank[T <: DataBankEntry](
   val missQueue = Queue(frontFetchRequest, param.threadNumber * 2) // FIFO to transmit the missing request from front to back.
   // question: Do we need to clear missQueue when flushing? It's sync with io.backend_reply_i
 
-  val s1_miss_r = Reg(Valid(new MissRequestPacket))
-  when(flushing_r && flush_mask_r(s1_miss_r.bits.threadID)){
-    s1_miss_r := 0.U.asTypeOf(s1_miss_r.cloneType)
+  val s2_miss_r = Reg(Valid(new MissRequestPacket))
+  when(flushing_r && flush_mask_r(s2_miss_r.bits.threadID)){
+    s2_miss_r := 0.U.asTypeOf(s2_miss_r.cloneType)
   }.elsewhen(s2_ready){
-    s1_miss_r.bits := frontFetchRequest.bits
-    s1_miss_r.valid := frontFetchRequest.valid
+    s2_miss_r.bits := frontFetchRequest.bits
+    s2_miss_r.valid := frontFetchRequest.valid
   }
   
 
@@ -396,8 +687,8 @@ class DataBank[T <: DataBankEntry](
 
   val fetchMissFromDRAM = Wire(Decoupled(io.backend.req_o.bits.cloneType))
   val writeThroughToDRAM = Wire(Decoupled(io.backend.req_o.bits.cloneType))
-  fetchMissFromDRAM.bits.addr := s1_miss_r.bits.addr
-  fetchMissFromDRAM.valid := s1_miss_r.valid
+  fetchMissFromDRAM.bits.addr := s2_miss_r.bits.addr
+  fetchMissFromDRAM.valid := s2_miss_r.valid
   if(param.writable){
     writeThroughToDRAM.bits.addr := s1_wlatch_r.addr
     fetchMissFromDRAM.bits.wreq.get := DontCare
@@ -410,7 +701,7 @@ class DataBank[T <: DataBankEntry](
   }
 
   // Arbiter
-  assert(fetchMissFromDRAM.valid && writeThroughToDRAM.valid === 0.B, "Come on. Do you think for one isntruction missing and writing-through could happen at the same time?")
+  assert(fetchMissFromDRAM.valid && writeThroughToDRAM.valid === 0.B, "Come on. Do you think for one instruction missing and writing-through could happen at the same time?")
 
   val writeThroughArb = Module(new Arbiter(io.backend.req_o.bits.cloneType, 2))
   writeThroughArb.io.in(0) <> fetchMissFromDRAM
@@ -452,12 +743,10 @@ class DataBank[T <: DataBankEntry](
  *  base class of LRU module.
  *  @param lruCore the LRU updating logic
  *  @param param Cache parameters
- *  @param implementedWithRegister use register as the buffer to store the encoding if true.
  */ 
 class LRU[T <: LRUCore](
   param: CacheParameter,
-  lruCore: () => T,
-  implementedWithRegister: Boolean
+  lruCore: () => T
 ) extends Module{
   val io = IO(new Bundle {
     // First cycle: give me the address for me to fetch the LRU
@@ -483,7 +772,7 @@ class LRU[T <: LRUCore](
     param.setNumber
   )
 
-  val bram = Module(new BRAMorRegister(implementedWithRegister))
+  val bram = Module(new DataBankManager.BRAMorRegister(param.implementedWithRegister))
 
   bram.portA.EN := io.addr_vi
   bram.portA.ADDR := io.addr_i
@@ -516,86 +805,62 @@ class LRU[T <: LRUCore](
  * @param entry the entry Chisel Type. See Entry.scala for all options.
  * @param lruCore an generator of the LRU updating logic. See LRUCore.scala for all options.
  */ 
-class BaseCache[EntryType <: DataBankEntry](
-  param: CacheParameter,
-  entry: EntryType,
+class BaseCache[ENTRY <: DataBankEntry](
+  val param: CacheParameter,
+  entry: ENTRY,
   lruCore: () => LRUCore,
-  implementedWithRegister: Boolean = false
-) extends Module{
-  val dataBank = Module(new DataBank(param, entry, implementedWithRegister))
-  val lru = Module(new LRU(param, lruCore, implementedWithRegister))
-  val io = IO(new Bundle{
-    val frontend = dataBank.io.frontend.cloneType
-    val backend = dataBank.io.backend.cloneType
-    val packet_arrive_o = dataBank.io.packet_arrive_o.cloneType
-    val thread_permission_violated_o = dataBank.io.thread_permission_violated_o.cloneType
-    val flush_i = Flipped(dataBank.io.flush_i.cloneType)
-  })
+) extends MultiIOModule{
+  val bankFrontend = Module(new DataBankManager.DataBankFrontend(param, entry))
+  val bramAdapter = Module(new DataBankManager.BRAMPortAdapter(param, entry))
 
-  io.frontend <> dataBank.io.frontend
-  io.backend <> dataBank.io.backend
-  //io. <> dataBank.io.threadNotify
-  io.packet_arrive_o <> dataBank.io.packet_arrive_o
-  io.thread_permission_violated_o <> dataBank.io.thread_permission_violated_o
-  dataBank.io.flush_i <> io.flush_i
-  lru.io.addr_i := dataBank.io.lru.addr_o
-  lru.io.addr_vi := dataBank.io.lru.addr_vo
-  lru.io.index_i := dataBank.io.lru.index_o
-  lru.io.index_vi := dataBank.io.lru.index_vo
-  dataBank.io.lru.lru_i := lru.io.lru_o
+  implicit val cfg = bramAdapter.bramCfg
+  val bram = Module(new DataBankManager.BRAMorRegister(param.implementedWithRegister))
+  bramAdapter.bramPortA <> bram.portA
+  bramAdapter.bramPortB <> bram.portB
+
+  bramAdapter.frontendReadReplyData_o <> bankFrontend.bankRamReplyData_i
+  bramAdapter.frontendReadRequest_i <> bankFrontend.bankRamRequestAddr_o
+  bramAdapter.frontendWriteRequest_i <> bankFrontend.bankRamWriteRequest_o
+
+  val frontendRequest_i = IO(Flipped(bankFrontend.frontendRequest_i.cloneType))
+  frontendRequest_i <> bankFrontend.frontendRequest_i
+  val frontendReply_o = IO(bankFrontend.frontendReply_o.cloneType)
+  frontendReply_o <> bankFrontend.frontendReply_o
+
+  val u_lruCore = Module(new LRU(param, lruCore))
+  u_lruCore.io.addr_i := bankFrontend.lruPort.addr_o
+  u_lruCore.io.addr_vi := bankFrontend.lruPort.addr_vo
+
+  u_lruCore.io.index_i := bankFrontend.lruPort.index_o
+  u_lruCore.io.index_vi := bankFrontend.lruPort.index_vo
+  bankFrontend.lruPort.lru_i := u_lruCore.io.lru_o
+
+  // Backend Queue
+  val backendRequest_o = IO(bankFrontend.backendRequest_o.cloneType)
+  backendRequest_o <> bankFrontend.backendRequest_o
+
+  val backendReadReply_i = IO(Flipped(bankFrontend.backendReadReply_i.cloneType)) //! When clone a Flipped Decoupled type, remember to use Flipped to make it correct direction
+  backendReadReply_i <> bankFrontend.backendReadReply_i
 }
 
-class ICache extends Module{
-  val cacheParam = new CacheParameter(
-    1024, 2, 512, 27, 4, false // 36 - 9 = 27
-  )
-  val entryType = new CacheEntry(cacheParam)
-  val base = Module(new BaseCache(cacheParam, entryType, () => new PseudoTreeLRUCore(2)))
-  val io = IO(base.io.cloneType)
-  base.io <> io
+object BaseCache {
+  def generateCache(param: CacheParameter, lruCore: () => LRUCore): BaseCache[CacheEntry] = {
+    return new BaseCache(param, new CacheEntry(param), lruCore)
+  }
+  def generateL1TLB(param: CacheParameter, lruCore: () => LRUCore): BaseCache[TLBEntry] = {
+    assert(!param.writable, "You're forbidden to create a writable TLB.")
+    assert(!param.implementedWithRegister, "L1 TLB is implemented with registers.")
+    return new BaseCache(param, new TLBEntry(param), lruCore)
+  }
+  def generateL2TLB(param: CacheParameter, lruCore: () => LRUCore): BaseCache[TLBEntry] = {
+    assert(!param.writable, "You're forbidden to create a writable TLB.")
+    return new BaseCache(param, new TLBEntry(param), lruCore)
+  }
 }
 
-class DCache extends Module{
-  val cacheParam = new CacheParameter(
-    1024, 2, 512, 27, 4, true // 36 - 9 = 27
-  )
-  val entryType = new CacheEntry(cacheParam)
-  val base = Module(new BaseCache(cacheParam, entryType, () => new PseudoTreeLRUCore(2)))
-  val io = IO(base.io.cloneType)
-  base.io <> io
+object BaseCacheVerilogGenerator extends App{
+  println((new ChiselStage).emitVerilog(BaseCache.generateCache(
+    new CacheParameter(64, 2, 512, 24, 4, true, 512, false),
+    () => new PseudoTreeLRUCore(4)
+  )))
 }
-
-class L1ITLB extends Module{
-  val cacheParam = new CacheParameter(
-    16, 8, 24, 52, 4, false, true
-  )
-  val entryType = new CacheEntry(cacheParam)
-  val base = Module(new BaseCache(cacheParam, entryType, () => new PseudoTreeLRUCore(2), true))
-  val io = IO(base.io.cloneType)
-  base.io <> io
-}
-
-class L1DTLB extends Module{
-  val cacheParam = new CacheParameter(
-    16, 4, 24, 52, 4, false, true
-  )
-  val entryType = new CacheEntry(cacheParam)
-  val base = Module(new BaseCache(cacheParam, entryType, () => new PseudoTreeLRUCore(2), true))
-  val io = IO(base.io.cloneType)
-  base.io <> io
-}
-
-class L2TLB extends Module{
-  val cacheParam = new CacheParameter(
-    1024, 2, 24, 52, 4, false, true
-  )
-  val entryType = new CacheEntry(cacheParam)
-  val base = Module(new BaseCache(cacheParam, entryType, () => new PseudoTreeLRUCore(2)))
-  val io = IO(base.io.cloneType)
-  base.io <> io
-}
-
-object CacheVerilogEmitter extends App{
-  println((new ChiselStage).emitVerilog(new ICache))
-}
-
