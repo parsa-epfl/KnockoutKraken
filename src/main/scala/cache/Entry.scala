@@ -9,7 +9,14 @@ import chisel3.stage.{ChiselStage}
  */ 
 sealed abstract class DataBankEntry extends Bundle{
   val v = Bool() // valid bit
-  val threadID: UInt
+  val p = Bool() // pending bit. Cache is currently handle this entry.
+  /**
+   * Build a pending entry from given @param address and @param threadID 
+   * The pending flag is raised.
+   * @return a new packet.
+   */ 
+  def buildFrom(address:UInt, threadID: UInt): DataBankEntry
+
   /**
    * Build a new entry from given parameters.
    * This method is called when a entry in the bank is selected to be replaced with a new one.
@@ -20,7 +27,7 @@ sealed abstract class DataBankEntry extends Bundle{
   /**
    * @brief @return a copy of this entry with its data updated by @param data and the @param mask . 
    */ 
-  def updateData( data:UInt, mask:UInt): DataBankEntry
+  def updateData(data:UInt, mask:UInt): DataBankEntry
 
   /**
    * Check whether this entry matches the given address and threadID
@@ -37,20 +44,6 @@ sealed abstract class DataBankEntry extends Bundle{
    * @return whether this operation is valid
    */
   def valid(isWrite: Bool): Bool
-
-  /**
-   * Invalid this term according to the selected thread.
-   * @return the flushed term
-   */
-  def flush(threadMask: UInt): DataBankEntry = {
-    val res = WireInit(this)
-    res.v := !threadMask(threadID)
-    res
-  }
-  /**
-   * @return bits to write back to the high-level cache / DRAM accepted by the backend
-   */
-  def writeBits(): UInt 
 }
 
 object DataBankEntry{
@@ -66,21 +59,31 @@ object DataBankEntry{
 case class CacheEntry(param: CacheParameter) extends DataBankEntry{
   val tag = UInt(param.tagWidth().W)
   val data = UInt(param.blockBit.W)
-  val threadID = UInt(param.threadIDWidth().W)
-  def buildFrom(address: UInt, threadID: UInt, data: UInt): DataBankEntry  = {
+
+
+  override def buildFrom(address: UInt, threadID: UInt): DataBankEntry = {
     val res = Wire(new CacheEntry(param))
     res.v := true.B
-    res.threadID := threadID
+    res.p := true.B
+    res.tag := DataBankEntry.getTagFromAddress(address, param.tagWidth())
+    res.data := 0.B
+    res
+  }
+
+  override def buildFrom(address: UInt, threadID: UInt, data: UInt): DataBankEntry  = {
+    val res = Wire(new CacheEntry(param))
+    res.v := true.B
+    res.p := false.B
     res.tag := DataBankEntry.getTagFromAddress(address, param.tagWidth())
     res.data := data
     res
   }
 
-  def updateData(data: UInt, mask: UInt): DataBankEntry = {
+  override def updateData(data: UInt, mask: UInt): DataBankEntry = {
     val res = Wire(new CacheEntry(param))
     res.v := true.B
-    res.threadID := this.threadID
     res.tag := this.tag
+    res.p := false.B
     val newdata = VecInit(0.U(param.blockBit.W).asBools())
     for(i <- 0 until param.blockBit){
       newdata(i) := Mux(mask(i), data(i), this.data(i))
@@ -90,13 +93,11 @@ case class CacheEntry(param: CacheParameter) extends DataBankEntry{
     res
   }
 
-  def checkHit(address: UInt, threadID: UInt): Bool = this.tag === DataBankEntry.getTagFromAddress(address, param.tagWidth()) 
+  override def checkHit(address: UInt, threadID: UInt): Bool = this.tag === DataBankEntry.getTagFromAddress(address, param.tagWidth()) 
 
-  def read(): UInt = data
+  override def read(): UInt = data
 
-  def valid(isWrite: Bool): Bool = true.B
-
-  def writeBits(): UInt = data
+  override def valid(isWrite: Bool): Bool = true.B
 }
 
 /**
@@ -110,10 +111,22 @@ case class TLBEntry(param: CacheParameter) extends DataBankEntry{
   val threadID = UInt(param.threadIDWidth().W)
   val protection = UInt(2.W) // how to update the permission?
 
+  override def buildFrom(address: UInt, threadID: UInt): DataBankEntry = {
+    val res = Wire(new TLBEntry(param))
+    res.tag := DataBankEntry.getTagFromAddress(address, param.tagWidth())
+    res.threadID := threadID
+    res.v := true.B
+    res.p := true.B
+    res.protection := false.B
+    res.phyAddr := 0.U
+    res
+  }
+
   def buildFrom(address: UInt, threadID: UInt, data: UInt): DataBankEntry = {
     val res = Wire(new TLBEntry(param))
     res.tag := DataBankEntry.getTagFromAddress(address, param.tagWidth())
     res.threadID := threadID
+    res.p := false.B
     class TLBDataParser extends Bundle{
       val phyAddr = UInt(param.blockBit.W)
       val permission = UInt(2.W)
@@ -121,7 +134,6 @@ case class TLBEntry(param: CacheParameter) extends DataBankEntry{
     val converted = data.asTypeOf(new TLBDataParser())
     res.phyAddr := converted.phyAddr
     res.v := true.B
-    //! permission?
     res.protection := converted.permission
     res
   }
@@ -129,6 +141,7 @@ case class TLBEntry(param: CacheParameter) extends DataBankEntry{
   def updateData(data: UInt, mask: UInt): DataBankEntry = {
     val res = Wire(new TLBEntry(param))
     res.v := true.B
+    res.p := false.B
     res.threadID := this.threadID
     res.tag := this.tag
     res.protection := this.protection
@@ -151,10 +164,5 @@ case class TLBEntry(param: CacheParameter) extends DataBankEntry{
 
   def valid(isWrite: Bool): Bool = {
     isWrite === protection
-  }
-
-  def writeBits(): UInt = {
-    assert(false, "At present we don't support writing back in TLB.")
-    0.U
   }
 }

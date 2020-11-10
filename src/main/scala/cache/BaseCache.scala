@@ -65,7 +65,7 @@ class FrontendRequestPacket(
 ) extends Bundle{
   val addr = UInt(addressWidth.W) // access address.
   val threadID = UInt(threadIDWidth.W)
-  val groupedFlag = Bool()
+  val groupedFlag = Bool() //! Used by the Adapter and should be propagated.
   val w_v = if(writable) Some(Bool()) else None // write valid?
   val wData = if(writable) Some(UInt(blockSize.W)) else None
   val wMask = if(writable) Some(UInt(blockSize.W)) else None
@@ -92,7 +92,7 @@ class FrontendReplyPacket(param: CacheParameter) extends Bundle{
 
 class MissQueuePacket(param: CacheParameter) extends Bundle{
   val addr = UInt(param.addressWidth.W)
-  val threadID = UInt(param.threadIDWidth().W)
+  val threadMask = UInt(param.threadIDWidth().W)
   val lru = UInt(param.wayWidth().W)
   val grouped_v = Bool()
 
@@ -176,6 +176,13 @@ class BRAMPortAdapter[ENTRY <: DataBankEntry](
     frontendReadRequest_i.ready := true.B
   }
 
+  when(frontendReadRequest_i.valid){
+    printf(p"BRAM: Accept Read Transaction: Address: ${frontendReadRequest_i.bits}\n")
+  }
+  when(frontendReadReplyData_o.valid){
+    printf(p"BRAM: Reply Read Transaction: Data: ${frontendReadReplyData_o.bits}\n")
+  }
+
   val frontendWriteRequest_i = IO(Flipped(Decoupled(new BankWriteRequestPacket(param, tEntryGenerator))))
   val bramPortB = IO(Flipped(new BRAMPort()))
   bramPortB.ADDR := frontendWriteRequest_i.bits.addr
@@ -188,6 +195,11 @@ class BRAMPortAdapter[ENTRY <: DataBankEntry](
   bramPortB.EN := frontendWriteRequest_i.valid
   bramPortB.WE := UIntToOH(frontendWriteRequest_i.bits.which) & Fill(param.associativity, frontendWriteRequest_i.valid)
   frontendWriteRequest_i.ready := true.B
+
+  when(frontendWriteRequest_i.valid){
+    printf(p"BRAM: Accept Write Transaction: Address: ${frontendWriteRequest_i.bits.addr}, Entry: ${frontendWriteRequest_i.bits.which}, Data: ${writeValue}\n")
+  }
+
 }
 
 class DataBankFrontend[ENTRY <: DataBankEntry](
@@ -223,14 +235,21 @@ class DataBankFrontend[ENTRY <: DataBankEntry](
 
   val pipelineStateReady = Wire(Vec(3, Bool()))
 
+  class DataArrivalPacket extends Bundle{
+    val threadID = UInt(param.threadIDWidth().W)
+    val groupedFlag = Bool()
+  }
+
+  val packetArrive_o = IO(Output(Valid(new DataArrivalPacket)))
+
   frontendRequest_i.ready := pipelineStateReady(0)
 
   // Store request
   val s1_frontendRequest_n = Wire(Decoupled(new FrontendRequestPacket(param)))
   s1_frontendRequest_n.bits := frontendRequest_i.bits
   s1_frontendRequest_n.valid := frontendRequest_i.fire()
-  val s1_frontendRequest_r = if(param.implementedWithRegister) FlushQueue(s1_frontendRequest_n, 0, true)
-  else FlushQueue(s1_frontendRequest_n, 1, true) 
+  val s1_frontendRequest_r = (if(param.implementedWithRegister) FlushQueue(s1_frontendRequest_n, 0, true)("s1_frontendRequest_r")
+  else FlushQueue(s1_frontendRequest_n, 1, true)("s1_frontendRequest_r"))
   s1_frontendRequest_r.ready := pipelineStateReady(1)
 
   // pass to the bram
@@ -247,85 +266,102 @@ class DataBankFrontend[ENTRY <: DataBankEntry](
   val matchBits = bankRamReplyData_i.bits.map({ x=>
     x.checkHit(s1_frontendRequest_r.bits.addr, s1_frontendRequest_r.bits.threadID) && x.v
   }) // get all the comparison results
-  val hitsWhich = OHToUInt(matchBits) // encode from the comparison
-  val isHit: Bool = PopCount(matchBits) === 1.U // this value should only be 1 or zero.
-  val hitEntry = bankRamReplyData_i.bits(hitsWhich)
-  
-  val isValid = hitEntry.valid(s1_frontendRequest_r.bits.wpermission)
-
-  frontendReply_o.valid := s1_frontendRequest_r.fire() && isValid
-  frontendReply_o.bits.data := hitEntry.read() // read
-  frontendReply_o.bits.threadID := s1_frontendRequest_r.bits.threadID
-  frontendReply_o.bits.hit := isHit // if not head, also return.
-
-  lruPort.index_o := hitsWhich
-  lruPort.index_vo := isHit
-
-  // forwarding path from last writing to this read. (RAW)
+  assert(PopCount(matchBits) === 1.U || PopCount(matchBits) === 0.U, "It's impossible to hit multiple entries.")
+  val mapWhich = OHToUInt(matchBits) // encode from the comparison
 
   class WritingContext extends Bundle{
     val addr = UInt(param.addressWidth.W)
     val threadID = UInt(param.threadIDWidth().W)
     val dataBlock = UInt(param.backendPortSize.W)
+    val pending_v = Bool()
     def toEntry(): DataBankEntry = {
-      tEntryGenerator.buildFrom(addr, threadID, dataBlock)
+      Mux(pending_v, tEntryGenerator.buildFrom(addr, threadID), tEntryGenerator.buildFrom(addr, threadID, dataBlock))
     }
   }
+
   val s2_writing_n = Wire(Decoupled(new WritingContext))
-  val s2_writing_r = FlushQueue(s2_writing_n, 1, true)
+  val s2_writing_r = FlushQueue(s2_writing_n, 1, true)("s2_writing_r")
   s2_writing_r.ready := pipelineStateReady(2)
+
+  val s2_writing_matched = s2_writing_r.valid && s2_writing_r.bits.addr === s1_frontendRequest_r.bits.addr
+
+  val hitEntry = Mux(
+    s2_writing_matched,
+    s2_writing_r.bits.toEntry(),
+    bankRamReplyData_i.bits(mapWhich)
+  )
+
+  val isHit: Bool = Mux(
+    s2_writing_matched,
+    !s2_writing_r.bits.pending_v,
+    PopCount(matchBits) === 1.U && hitEntry.p === false.B
+  )
+
+  val isPending: Bool = Mux(
+    s2_writing_matched,
+    s2_writing_r.bits.pending_v,
+    PopCount(matchBits) === 1.U && hitEntry.p
+  )
+  
+  val isValid = hitEntry.valid(s1_frontendRequest_r.bits.wpermission)
+
+  s2_writing_n.bits.addr := s1_frontendRequest_r.bits.addr
+  s2_writing_n.bits.threadID := s1_frontendRequest_r.bits.threadID
+  s2_writing_n.bits.pending_v := isPending || (!isHit)
+  s2_writing_n.valid := s1_frontendRequest_r.valid && isValid
+
+  frontendReply_o.valid := s1_frontendRequest_r.fire() && isValid
+  frontendReply_o.bits.threadID := s1_frontendRequest_r.bits.threadID
+  frontendReply_o.bits.hit := isHit // if not head, also return.
+  frontendReply_o.bits.data := hitEntry.read()
+
+  lruPort.index_o := mapWhich
+  lruPort.index_vo := isHit
+
   val frontendWriteToBank = Wire(Decoupled(new BankWriteRequestPacket(param, tEntryGenerator)))
   if(param.writable){
-    val forwardHitEntry = Mux(
-      s2_writing_r.valid &&  // valid
-      s2_writing_r.bits.addr === s1_frontendRequest_r.bits.addr && // hit
-      isHit, // the entry could be found in the BRAM
-      s2_writing_r.bits.toEntry(),
-      hitEntry
-    )
-
-    val updatedEntry = forwardHitEntry.updateData(
+    val updatedEntry = hitEntry.updateData(
       s1_frontendRequest_r.bits.wData.get, 
-      s1_frontendRequest_r.bits.wMask.get
+      s1_frontendRequest_r.bits.wMask.get & Fill(param.blockBit, s1_frontendRequest_r.bits.w_v.get)
     )
-
-    frontendReply_o.bits.data := forwardHitEntry.read()
 
     frontendWriteToBank.bits.data := updatedEntry
     frontendWriteToBank.bits.addr := s1_frontendRequest_r.bits.addr(param.setWidth()-1, 0)
-    frontendWriteToBank.bits.which := hitsWhich
-    frontendWriteToBank.valid := s1_frontendRequest_r.valid && isHit && isValid && s1_frontendRequest_r.bits.w_v.get
-    assert(
-      frontendWriteToBank.valid === frontendWriteToBank.ready,
-      "frontend write back request must be put in the first priority."
-    )
+    frontendWriteToBank.bits.which := mapWhich
+    frontendWriteToBank.valid := s1_frontendRequest_r.valid && isValid && isHit && s1_frontendRequest_r.bits.w_v.get
 
-    s2_writing_n.bits.addr := s1_frontendRequest_r.bits.addr
-    s2_writing_n.bits.threadID := s1_frontendRequest_r.bits.threadID
     s2_writing_n.bits.dataBlock := updatedEntry.read()
-    s2_writing_n.valid := frontendWriteToBank.valid
   } else {
     frontendWriteToBank.bits := DontCare
     frontendWriteToBank.valid := false.B
-    s2_writing_n.bits := DontCare
-    s2_writing_n.valid := false.B
+
+    s2_writing_n.bits.dataBlock := hitEntry.read()
   }
-  
-  // Missed request will also be pushed to the miss queue for sync with backend reply
+
+  val frontendPendingMissEntry = Wire(Decoupled(new BankWriteRequestPacket(param, tEntryGenerator)))
+  frontendPendingMissEntry.bits.addr := s1_frontendRequest_r.bits.addr(param.setWidth()-1, 0)
+  frontendPendingMissEntry.bits.data := tEntryGenerator.buildFrom(s1_frontendRequest_r.bits.addr, s1_frontendRequest_r.bits.threadID)
+  frontendPendingMissEntry.bits.which := lruPort.lru_i
+  frontendPendingMissEntry.valid := s1_frontendRequest_r.valid && isValid && !isPending && !isHit
+  assert(!(frontendPendingMissEntry.valid && frontendWriteToBank.valid), "It's impossible that a request is 'missing' and 'writing' at the same time.")
 
   class MissRequestPacket extends Bundle{
     val addr = UInt(param.addressWidth.W)
     val threadID = UInt(param.threadIDWidth().W)
     val lru = UInt(param.wayWidth().W)
     val groupedFlag = Bool()
+    val pending = Bool()
   }
 
+  //! Warning: We need to check whether this missing has been handled.
   val frontFetchRequest = Wire(Decoupled(new MissRequestPacket))
   frontFetchRequest.bits.addr := s1_frontendRequest_r.bits.addr
   frontFetchRequest.bits.threadID := s1_frontendRequest_r.bits.threadID
   frontFetchRequest.bits.groupedFlag := s1_frontendRequest_r.bits.groupedFlag
   frontFetchRequest.bits.lru := lruPort.lru_i
-  frontFetchRequest.valid := !isHit && s1_frontendRequest_r.valid && isValid && pipelineStateReady(2) //! listen to the s1_ready
+  frontFetchRequest.bits.pending := isPending
+  frontFetchRequest.valid := !isHit && s1_frontendRequest_r.fire() && isValid
+  
   assert(frontFetchRequest.ready, "missQueue should never be full. ")
 
   val missQueue = Queue(frontFetchRequest, param.threadNumber * 2) // FIFO to transmit the missing request from front to back.
@@ -337,13 +373,20 @@ class DataBankFrontend[ENTRY <: DataBankEntry](
     missQueue.bits.threadID,
     backendReadReply_i.bits
   )
-  backendUpdateBankRequest.valid := missQueue.valid && backendReadReply_i.valid
-  missQueue.ready := backendUpdateBankRequest.ready
-  backendReadReply_i.ready := backendUpdateBankRequest.ready
+  backendUpdateBankRequest.valid := missQueue.valid && backendReadReply_i.valid && !missQueue.bits.pending // no pending here.
+  missQueue.ready := 
+    (backendUpdateBankRequest.ready && backendReadReply_i.valid) || // normal case
+    (missQueue.bits.pending && missQueue.valid) // pending case.
+  backendReadReply_i.ready := backendUpdateBankRequest.ready && missQueue.valid && !missQueue.bits.pending // no pending here.
 
-  val u_writeToBankArb = Module(new Arbiter(new BankWriteRequestPacket(param, tEntryGenerator), 2))
-  u_writeToBankArb.io.in(0) <> frontendWriteToBank
-  u_writeToBankArb.io.in(1) <> backendUpdateBankRequest
+  packetArrive_o.bits.groupedFlag := missQueue.bits.groupedFlag
+  packetArrive_o.bits.threadID := missQueue.bits.threadID
+  packetArrive_o.valid := missQueue.fire()
+
+  val u_writeToBankArb = Module(new Arbiter(new BankWriteRequestPacket(param, tEntryGenerator), 3))
+  u_writeToBankArb.io.in(0) <> frontendPendingMissEntry
+  u_writeToBankArb.io.in(1) <> frontendWriteToBank
+  u_writeToBankArb.io.in(2) <> backendUpdateBankRequest
   bankRamWriteRequest_o <> u_writeToBankArb.io.out
 
   //missRequest_o <> missQueue
@@ -356,14 +399,14 @@ class DataBankFrontend[ENTRY <: DataBankEntry](
     s2_miss_n.bits.wreq.get.v := 0.U
   }
   s2_miss_n.valid := frontFetchRequest.valid
-  val s2_miss_r = FlushQueue(s2_miss_n, 1, true)
+  val s2_miss_r = FlushQueue(s2_miss_n, 1, true)("s2_miss_r")
   s2_miss_r.ready := pipelineStateReady(2)
   val backendReadRequest = Wire(Decoupled(new BackendRequestPacket(param)))
   backendReadRequest.bits := s2_miss_r.bits
   backendReadRequest.valid := s2_miss_r.valid
   val backendWriteRequest = Wire(Decoupled(new BackendRequestPacket(param)))
   backendWriteRequest.bits.addr := s2_writing_r.bits.addr
-  backendWriteRequest.valid := s2_writing_r.fire()
+  backendWriteRequest.valid := s2_writing_r.fire() && !s2_writing_r.bits.pending_v
   if(param.writable){
     backendReadRequest.bits.wreq.get.data := 0.U
     backendReadRequest.bits.wreq.get.v := false.B
@@ -371,10 +414,15 @@ class DataBankFrontend[ENTRY <: DataBankEntry](
     backendWriteRequest.bits.wreq.get.v := true.B
   }
 
+  /**
+   * ! There will be problem if switching to the write-back policy.
+   * ! How to set the priority of these module?
+   * 
+   */ 
   val u_backendArb = Module(new Arbiter(new BackendRequestPacket(param), 2))
   u_backendArb.io.in(0) <> backendReadRequest
   u_backendArb.io.in(1) <> backendWriteRequest
-  assert(backendReadRequest.valid && backendWriteRequest.valid, "It's impossible for one transaction hit and miss at the same time.")
+  assert(!(backendReadRequest.valid && backendWriteRequest.valid), "It's impossible for one transaction hit and miss at the same time.")
   backendRequest_o <> u_backendArb.io.out  
 
   pipelineStateReady(2) := backendRequest_o.ready
@@ -665,9 +713,9 @@ class DataBank[T <: DataBankEntry](
   val flushing_s1_r = if(implementedWithRegister) RegNext(flushing_r) else flushing_r
   val flushing_s1_addr_r = if(implementedWithRegister) RegNext(flush_cnt.value) else flush_cnt.value
 
-  val flushed_data = VecInit(fAccess.map({x => 
-    x.flush(flush_mask_r)
-  }))
+  //val flushed_data = VecInit(fAccess.map({x => 
+    //x.flush(flush_mask_r)
+  //}))
 
   when(!flushing_s1_r){
     writeBackPacket.ready := true.B
@@ -680,7 +728,7 @@ class DataBank[T <: DataBankEntry](
     mem.portB.EN := true.B
     mem.portB.WE := Fill(param.associativity, true.B)
     mem.portB.ADDR := flushing_s1_addr_r
-    mem.portB.DI := flushed_data.asUInt()
+    mem.portB.DI := 0.U //flushed_data.asUInt()
   }
 
   io.flush_i.ready := !missQueue.valid // wait for the missing handling to be complete.
@@ -826,6 +874,8 @@ class BaseCache[ENTRY <: DataBankEntry](
   frontendRequest_i <> bankFrontend.frontendRequest_i
   val frontendReply_o = IO(bankFrontend.frontendReply_o.cloneType)
   frontendReply_o <> bankFrontend.frontendReply_o
+  val packetArrive_o = IO(bankFrontend.packetArrive_o.cloneType)
+  packetArrive_o <> bankFrontend.packetArrive_o
 
   val u_lruCore = Module(new LRU(param, lruCore))
   u_lruCore.io.addr_i := bankFrontend.lruPort.addr_o

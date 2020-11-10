@@ -95,7 +95,7 @@ class FlushQueue[T <: Data](
 
 object FlushQueue {
   def apply[T <: Data](genTag: T, entries: Int): FlushQueue[T] = new FlushQueue(genTag, entries)
-  def apply[T <: Data](in: DecoupledIO[T], entries: Int = 2, pipe: Boolean = false, flow: Boolean = false, flush: Bool = false.B): DecoupledIO[T] = {
+  def apply[T <: Data](in: DecoupledIO[T], entries: Int = 2, pipe: Boolean = false, flow: Boolean = false, flush: Bool = false.B)(name: String): DecoupledIO[T] = {
     if(entries == 0){
       val res = Wire(Decoupled(in.bits))
       res <> in
@@ -105,7 +105,8 @@ object FlushQueue {
       }
       res
     } else {
-      val u_queue = Module(new FlushQueue(in.bits.cloneType, entries, pipe, flow))
+      val m = Module(new FlushQueue(in.bits.cloneType, entries, pipe, flow))
+      val u_queue = if(name.nonEmpty) m.suggestName(name) else m
       u_queue.io.enq <> in
       u_queue.io.flush := flush
       u_queue.io.deq
