@@ -6,6 +6,7 @@ package armflex.cache
  * ! 2. Backend RAW Hazard. (Fetch a block that in the WB queue)
  * ! 3. Synonyms. (Duplicated entries in the same set.)
  * ! 4. Permission check
+ * ! 5. Back pressure
  * 
  */ 
 
@@ -19,6 +20,8 @@ import chiseltest.internal.VerilatorBackendAnnotation
 import firrtl.options.TargetDirAnnotation
 import chiseltest.internal.WriteVcdAnnotation
 
+import armflex.util.SimTools._
+
 /**
  * Useful testing functions and prototypes for testing a cache.
  */ 
@@ -29,7 +32,7 @@ class BackendMemorySimulator(
   srcFile: String = ""
 ) extends MultiIOModule{
   val mem = SyncReadMem((1 << param.addressWidth), UInt(param.backendPortSize.W))
-  val request_i = IO(Flipped(Decoupled(new DataBankManager.BackendRequestPacket(param))))
+  val request_i = IO(Flipped(Decoupled(new MergedBackendRequestPacket(param))))
   val reply_o = IO(Decoupled(UInt(param.backendPortSize.W)))
   if(srcFile.nonEmpty) loadMemoryFromFile(mem, srcFile)
 
@@ -37,25 +40,20 @@ class BackendMemorySimulator(
 
   val port = mem(request_i.bits.addr)
   var shouldReply_v = Wire(Bool())
-  if(param.writable){
-    val wreq = request_i.bits.wreq.get
-    when(request_i.valid && wreq.v){
-      port := wreq.data
-    }
-    shouldReply_v := !wreq.v && request_i.valid
-  } else {
-    shouldReply_v := request_i.valid
+  when(request_i.valid && request_i.bits.w_v){
+    port := request_i.bits.data
   }
+  shouldReply_v := !request_i.bits.w_v && request_i.valid
   val reply_vr = RegNext(shouldReply_v)
   reply_o.valid := reply_vr
   reply_o.bits := port
 }
 
 class DelayChain(param: CacheParameter, n: Int) extends MultiIOModule{
-  val cacheRequest_i = IO(Flipped(Decoupled(new DataBankManager.BackendRequestPacket(param))))
+  val cacheRequest_i = IO(Flipped(Decoupled(new MergedBackendRequestPacket(param))))
   val cacheReply_o = IO(Decoupled(UInt(param.backendPortSize.W)))
 
-  val backendRequest_o = IO(Decoupled(new DataBankManager.BackendRequestPacket(param)))
+  val backendRequest_o = IO(Decoupled(new MergedBackendRequestPacket(param)))
   val backendReply_i = IO(Flipped(Decoupled(UInt(param.backendPortSize.W))))
 
   val requestChain = Wire(Vec(n+1, cacheRequest_i.cloneType))
@@ -71,8 +69,8 @@ class DelayChain(param: CacheParameter, n: Int) extends MultiIOModule{
   backendRequest_o <> requestChain(n)
 }
 
-class DTUCache[T <: DataBankEntry](
-  parent: () => BaseCache[T],
+class DTUCache(
+  parent: () => BaseCache,
   initialFile: String = ""
 ) extends MultiIOModule{
   val u_cache = Module(parent())
@@ -95,28 +93,30 @@ class DTUCache[T <: DataBankEntry](
   packetArrive_o <> u_cache.packetArrive_o
 }
 
-implicit class CacheDriver[T <: DataBankEntry](target: DTUCache[T]){
+implicit class CacheDriver(target: DTUCache){
   def setReadRequest(addr: UInt, threadID: UInt, groupedFlag: Bool = false.B):Unit = {
     target.frontendRequest_i.bits.addr.poke(addr)
     target.frontendRequest_i.bits.threadID.poke(threadID)
     target.frontendRequest_i.bits.wpermission.poke(false.B)
     target.frontendRequest_i.bits.groupedFlag.poke(groupedFlag)
-    if(target.u_cache.param.writable){
-      target.frontendRequest_i.bits.w_v.get.poke(false.B)
-    }
+    target.frontendRequest_i.bits.w_v.poke(false.B)
     target.frontendRequest_i.valid.poke(true.B)
   }
 
   def setWriteRequest(addr: UInt, threadID: UInt, data: UInt, mask: UInt, groupedFlag: Bool = false.B): Unit = {
-    assert(target.u_cache.param.writable, "Can not set a write request to a read-only cache")
+    //assert(target.u_cache.param.writable, "Can not set a write request to a read-only cache")
     target.frontendRequest_i.bits.addr.poke(addr)
     target.frontendRequest_i.bits.threadID.poke(threadID)
     target.frontendRequest_i.bits.wpermission.poke(true.B)
     target.frontendRequest_i.bits.groupedFlag.poke(groupedFlag)
-    target.frontendRequest_i.bits.w_v.get.poke(true.B)
-    target.frontendRequest_i.bits.wData.get.poke(data)
-    target.frontendRequest_i.bits.wMask.get.poke(mask)
+    target.frontendRequest_i.bits.w_v.poke(true.B)
+    target.frontendRequest_i.bits.wData.poke(data)
+    target.frontendRequest_i.bits.wMask.poke(mask)
     target.frontendRequest_i.valid.poke(true.B)
+  }
+
+  def clearRequest() = {
+    target.frontendRequest_i.valid.poke(false.B)
   }
 
   def waitForArrive() = {
@@ -135,7 +135,7 @@ implicit class CacheDriver[T <: DataBankEntry](target: DTUCache[T]){
   }
 
   def tick(step: Int = 1){
-    println("Tick.")
+    logWithCycle("Tick.")
     target.clock.step(step)
   }
 }
@@ -155,12 +155,12 @@ import TestOptionBuilder._
 
 class CacheTester extends FreeSpec with ChiselScalatestTester {
   val param = new CacheParameter(
-    64, 2, 32, 10, 2, true
+    64, 2, 32, 10, 2
   )
 
   import CacheTestUtility._
 
-  "Normal Access" ignore {
+  "Normal Access" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/cache/normal_read"), WriteVcdAnnotation)
     test(new DTUCache(
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
@@ -182,7 +182,7 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
       dut.frontendRequest_i.valid.poke(false.B)
     }
   }
-  "Synonyms" ignore {
+  "Synonyms" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/cache/synonyms"), WriteVcdAnnotation)
     test(new DTUCache(
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
@@ -203,11 +203,11 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
         dut.tick()
       } while(!dut.packetArrive_o.valid.peek.litToBoolean)
       // The first thread wakes up.
-      dut.packetArrive_o.bits.threadID.expect(0.U)
+      dut.packetArrive_o.bits.thread_id.expect(0.U)
       dut.tick()
       // Then the second thread should wake up.
       dut.packetArrive_o.valid.expect(true.B)
-      dut.packetArrive_o.bits.threadID.expect(1.U)
+      dut.packetArrive_o.bits.thread_id.expect(1.U)
       dut.tick()
       
       dut.setReadRequest(108.U, 0.U, false.B)
@@ -217,7 +217,7 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
     }
   }
 
-  "RAW" ignore {
+  "RAW" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/cache/RAW"), WriteVcdAnnotation)
     test(new DTUCache(
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
@@ -231,7 +231,7 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
       dut.frontendRequest_i.valid.poke(false.B)
 
       dut.waitForArrive()
-      dut.packetArrive_o.bits.threadID.expect(0.U)
+      dut.packetArrive_o.bits.thread_id.expect(0.U)
       dut.tick()
 
       dut.setWriteRequest(108.U, 0.U, 112.U, ((1l << 32) - 1).U)
@@ -242,5 +242,63 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
       dut.frontendRequest_i.valid.poke(false.B)
       dut.expectReply(true, 0.U, 112.U)
     }
+  }
+}
+
+class CacheLRUTester extends FreeSpec with ChiselScalatestTester {
+  val param = new CacheParameter(
+    64, 2, 32, 10, 2
+  )
+  import CacheTestUtility._
+
+  "LRU Replacement" in {
+    val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/cache/LRU"), WriteVcdAnnotation)
+    test(new DTUCache(
+      () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
+      "test/cache/normal_read/memory.txt"
+    )).withAnnotations(anno){ dut =>
+      // set number is 64, associativity is 2.
+      dut.setReadRequest(0.U, 0.U)
+      dut.tick()
+      dut.clearRequest()
+      dut.waitForArrive()
+      dut.tick()
+
+      dut.setReadRequest(64.U, 0.U)
+      dut.tick()
+      dut.clearRequest()
+      dut.waitForArrive()
+      dut.tick()
+
+      dut.setReadRequest(0.U, 0.U)
+      dut.tick()
+      dut.clearRequest()
+      dut.expectReply(true, 0.U, 0.U)
+
+      dut.setReadRequest(128.U, 0.U)
+      dut.tick()
+      dut.clearRequest()
+      dut.waitForArrive()
+      dut.tick()
+
+      dut.setReadRequest(128.U, 0.U)
+      dut.tick()
+      dut.clearRequest()
+      dut.expectReply(true, 0.U, 128.U)
+
+      dut.setReadRequest(256.U, 0.U)
+      dut.tick()
+      dut.clearRequest()
+      dut.waitForArrive()
+      dut.tick()
+
+      dut.setReadRequest(128.U, 0.U)
+      dut.tick()
+      dut.clearRequest()
+      dut.expectReply(true, 0.U, 128.U)
+    }
+  }
+  "Replacement restricted by the Pending" in {
+    
   }
 }

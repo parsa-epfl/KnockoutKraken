@@ -72,8 +72,8 @@ class MemoryInterfaceAdaptor(
       val threadID = UInt(cfg.NB_THREADS_W.W)
       val pair_v = Bool()
       // write part.
-      val w_v = if(param.writable) Some(Bool()) else None
-      val wdata = if(param.writable) Some(Vec(2, PROCESSOR_TYPES.DATA_T)) else None
+      val w_v = Bool()
+      val wdata = Vec(2, PROCESSOR_TYPES.DATA_T)
     }))
     val reply_o = Decoupled(new Bundle{
       val pair_v = Output(Bool())
@@ -83,11 +83,10 @@ class MemoryInterfaceAdaptor(
   })
 
   val toCache = IO(new Bundle{
-    val req_o = Decoupled(new DataBankFrontendPort(
+    val req_o = Decoupled(new FrontendRequestPacket(
       (PROCESSOR_TYPES.VADDR - blockAddrWidth),
       cfg.NB_THREADS_W,
-      param.blockBit,
-      param.writable
+      param.blockBit
     ))
     val reply_i = Flipped(Decoupled(new Bundle{
       val data = UInt(param.blockBit.W)
@@ -157,9 +156,9 @@ class MemoryInterfaceAdaptor(
     val pair_v = Bool()
     val v = Bool()
 
-    val w_v = if(param.writable) Some(Bool()) else None
-    val wdata = if(param.writable) Some(PROCESSOR_TYPES.DATA_T.cloneType) else None
-    val wmask = if(param.writable) Some(UInt((PROCESSOR_TYPES.DATA_SZ / 8).W)) else None
+    val w_v = Bool()
+    val wdata = PROCESSOR_TYPES.DATA_T.cloneType
+    val wmask = UInt((PROCESSOR_TYPES.DATA_SZ / 8).W)
   })
 
   secondTrans_r.vaddr := frontend.req_i.bits.vaddr + vaddrPairBias
@@ -167,13 +166,10 @@ class MemoryInterfaceAdaptor(
   secondTrans_r.threadID := frontend.req_i.bits.threadID
   secondTrans_r.pair_v := frontend.req_i.bits.pair_v
   secondTrans_r.v := frontend.req_i.fire() && pairDisassemble_v && !unalignedException_o
-
-  if(param.writable){
-    secondTrans_r.w_v.get := frontend.req_i.bits.w_v.get
-    val wplacement_result = placeData(frontend.req_i.bits.wdata.get(1), frontend.req_i.bits.size, vaddrOfPair(blockAddrWidth-1, 0))
-    secondTrans_r.wdata.get := wplacement_result._1
-    secondTrans_r.wmask.get := wplacement_result._2
-  }
+  secondTrans_r.w_v := frontend.req_i.bits.w_v
+  val wplacement_result_1 = placeData(frontend.req_i.bits.wdata(1), frontend.req_i.bits.size, vaddrOfPair(blockAddrWidth-1, 0))
+  secondTrans_r.wdata := wplacement_result_1._1
+  secondTrans_r.wmask := wplacement_result_1._2
 
   // To handle reply, we need a bridge that could forward the incoming information from the request part to the reply part.
   class Requester2ReceiverPacket extends Bundle{
@@ -217,15 +213,11 @@ class MemoryInterfaceAdaptor(
   toCache.req_o.bits.addr := Mux(secondTrans_r.v, secondTrans_r.vaddr, frontend.req_i.bits.vaddr) //! ADDRESS TRANSLATION!!!
   toCache.req_o.bits.threadID := Mux(secondTrans_r.v, secondTrans_r.threadID, frontend.req_i.bits.threadID)
   toCache.req_o.valid := arb.io.out.valid
-  if(param.writable){
-    toCache.req_o.bits.wpermission := Mux(secondTrans_r.v, secondTrans_r.w_v.get, frontend.req_i.bits.w_v.get)
-    val wplacement_result = placeData(frontend.req_i.bits.wdata.get(0), frontend.req_i.bits.size, vaddrOfBlock)
-    toCache.req_o.bits.wData.get := wplacement_result._1
-    toCache.req_o.bits.wMask.get := wplacement_result._2
-    toCache.req_o.bits.w_v.get := Mux(secondTrans_r.v, secondTrans_r.w_v.get, frontend.req_i.bits.w_v.get)
-  } else {
-    toCache.req_o.bits.wpermission := false.B
-  }
+  toCache.req_o.bits.wpermission := Mux(secondTrans_r.v, secondTrans_r.w_v, frontend.req_i.bits.w_v)
+  val wplacement_result_0 = placeData(frontend.req_i.bits.wdata(0), frontend.req_i.bits.size, vaddrOfBlock)
+  toCache.req_o.bits.wData := wplacement_result_0._1
+  toCache.req_o.bits.wMask := wplacement_result_0._2
+  toCache.req_o.bits.w_v := Mux(secondTrans_r.v, secondTrans_r.w_v, frontend.req_i.bits.w_v)
   //toCache.req_o.bits.permission :
 
   val receiverPartPacket = Queue(arb.io.out, 2)
@@ -281,12 +273,13 @@ class MemoryInterfaceAdaptor(
 
   
   val frontendReplyArb = Module(new Arbiter(frontend.reply_o.bits.cloneType, 2))
+  // two branches should exclude with each other. Only one signal could be true
   frontendReplyArb.io.in(0) <> directlyHitResultPass
   frontendReplyArb.io.in(1) <> groupedResultPass
 
   frontend.reply_o <> frontendReplyArb.io.out
   when(frontend.reply_o.valid){
-    assert(frontend.reply_o.ready === true.B, "The frontend should always ready to accept the requests from the memory subsystem.")
+    assert(frontend.reply_o.ready === true.B, "The frontend should be always ready to accept the requests from the memory subsystem.")
   }
 
   // wake up: directed transaction
