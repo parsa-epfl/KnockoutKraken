@@ -211,7 +211,7 @@ class MemoryInterfaceAdaptor(
    * TODO: Add the logic to access TLB.
    */
   toCache.req_o.bits.addr := Mux(secondTrans_r.v, secondTrans_r.vaddr, frontend.req_i.bits.vaddr) //! ADDRESS TRANSLATION!!!
-  toCache.req_o.bits.threadID := Mux(secondTrans_r.v, secondTrans_r.threadID, frontend.req_i.bits.threadID)
+  toCache.req_o.bits.thread_id := Mux(secondTrans_r.v, secondTrans_r.threadID, frontend.req_i.bits.threadID)
   toCache.req_o.valid := arb.io.out.valid
   toCache.req_o.bits.wpermission := Mux(secondTrans_r.v, secondTrans_r.w_v, frontend.req_i.bits.w_v)
   val wplacement_result_0 = placeData(frontend.req_i.bits.wdata(0), frontend.req_i.bits.size, vaddrOfBlock)
