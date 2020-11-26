@@ -192,44 +192,44 @@ class BaseCache(
   entry: Entry,
   lruCore: () => LRUCore,
 ) extends MultiIOModule{
-  val bankFrontend = Module(new DataBankFrontend(entry, param))
-  val bramAdapter = Module(new BRAMPortAdapter(entry, param))
+  val u_bank_frontend = Module(new DataBankFrontend(entry, param))
+  val u_bram_adapter = Module(new BRAMPortAdapter(entry, param))
 
-  implicit val cfg = bramAdapter.bramCfg
+  implicit val cfg = u_bram_adapter.bramCfg
   val bram = Module(new BRAMorRegister(param.implementedWithRegister))
-  bramAdapter.bramPortA <> bram.portA
-  bramAdapter.bramPortB <> bram.portB
+  u_bram_adapter.bram_ports(0) <> bram.portA
+  u_bram_adapter.bram_ports(1) <> bram.portB
 
-  bramAdapter.frontendReadReplyData_o <> bankFrontend.bankRamReplyData_i
-  bramAdapter.frontendReadRequest_i <> bankFrontend.bankRamRequestAddr_o
-  bramAdapter.frontendWriteRequest_i <> bankFrontend.bankRamWriteRequest_o
+  u_bram_adapter.frontend_read_reply_data_o <> u_bank_frontend.bank_ram_reply_data_i
+  u_bram_adapter.frontend_read_request_i <> u_bank_frontend.bank_ram_request_addr_o
+  u_bram_adapter.frontend_write_request_i <> u_bank_frontend.bank_ram_write_request_o
 
-  val frontendRequest_i = IO(Flipped(bankFrontend.frontendRequest_i.cloneType))
-  frontendRequest_i <> bankFrontend.frontendRequest_i
-  val frontendReply_o = IO(bankFrontend.frontendReply_o.cloneType)
-  frontendReply_o <> bankFrontend.frontendReply_o
-  val packetArrive_o = IO(bankFrontend.packetArrive_o.cloneType)
-  packetArrive_o <> bankFrontend.packetArrive_o
+  val frontendRequest_i = IO(Flipped(u_bank_frontend.frontend_request_i.cloneType))
+  frontendRequest_i <> u_bank_frontend.frontend_request_i
+  val frontendReply_o = IO(u_bank_frontend.frontend_reply_o.cloneType)
+  frontendReply_o <> u_bank_frontend.frontend_reply_o
+  val packet_arrive_o = IO(u_bank_frontend.packet_arrive_o.cloneType)
+  packet_arrive_o <> u_bank_frontend.packet_arrive_o
 
   val u_lruCore = Module(new LRU(param, lruCore))
-  u_lruCore.io.addr_i := bankFrontend.lruPort.addr_o
-  u_lruCore.io.addr_vi := bankFrontend.lruPort.addr_vo
+  u_lruCore.io.addr_i := u_bank_frontend.lru_port.addr_o
+  u_lruCore.io.addr_vi := u_bank_frontend.lru_port.addr_vo
 
-  u_lruCore.io.index_i := bankFrontend.lruPort.index_o
-  u_lruCore.io.index_vi := bankFrontend.lruPort.index_vo
-  bankFrontend.lruPort.lru_i := u_lruCore.io.lru_o
+  u_lruCore.io.index_i := u_bank_frontend.lru_port.index_o
+  u_lruCore.io.index_vi := u_bank_frontend.lru_port.index_vo
+  u_bank_frontend.lru_port.lru_i := u_lruCore.io.lru_o
 
   // Connect to the Refill Queue
   val u_refill_queue = Module(new RefillingQueue(entry, param))
-  u_refill_queue.miss_request_i <> bankFrontend.miss_request_o
-  u_refill_queue.refill_o <> bankFrontend.refill_request_i
+  u_refill_queue.miss_request_i <> u_bank_frontend.miss_request_o
+  u_refill_queue.refill_o <> u_bank_frontend.refill_request_i
   val backendReadReply_i = IO(Flipped(u_refill_queue.backend_reply_i.cloneType)) //! When clone a Flipped Decoupled type, remember to use Flipped to make it correct direction
   backendReadReply_i <> u_refill_queue.backend_reply_i
 
   // Connect to the backend merger
   val u_backend_merger = Module(new BackendRequestMerger(param))
-  u_backend_merger.read_request_i <> bankFrontend.miss_request_o
-  u_backend_merger.write_request_i <> bankFrontend.writeback_request_o
+  u_backend_merger.read_request_i <> u_bank_frontend.miss_request_o
+  u_backend_merger.write_request_i <> u_bank_frontend.writeback_request_o
   
   // Backend Queue
   val backendRequest_o = IO(u_backend_merger.backend_request_o.cloneType)

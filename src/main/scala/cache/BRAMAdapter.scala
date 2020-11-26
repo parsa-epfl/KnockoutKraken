@@ -24,16 +24,16 @@ class BRAMorRegister(implementedWithRegister: Boolean = true)(implicit cfg: BRAM
     val pAdo = Wire(Vec(cfg.NB_COL, UInt(cfg.COL_WIDTH.W)))
     val pBdo = Wire(Vec(cfg.NB_COL, UInt(cfg.COL_WIDTH.W)))
     for(col <- 0 until cfg.NB_COL){
-      val regBank_r = RegInit(VecInit(Seq.fill(cfg.NB_ELE)(0.U(cfg.COL_WIDTH.W))))
+      val reg_bank_r = RegInit(VecInit(Seq.fill(cfg.NB_ELE)(0.U(cfg.COL_WIDTH.W))))
       when(portA.EN && portA.WE(col)){
-        regBank_r(portA.ADDR) := portA.DI((col+1)*cfg.COL_WIDTH-1, col*cfg.COL_WIDTH)
+        reg_bank_r(portA.ADDR) := portA.DI((col+1)*cfg.COL_WIDTH-1, col*cfg.COL_WIDTH)
       }
-      pAdo(col) := regBank_r(portA.ADDR)
+      pAdo(col) := reg_bank_r(portA.ADDR)
 
       when(portB.EN && portB.WE(col)){
-        regBank_r(portA.ADDR) := portB.DI((col+1)*cfg.COL_WIDTH-1, col*cfg.COL_WIDTH)
+        reg_bank_r(portA.ADDR) := portB.DI((col+1)*cfg.COL_WIDTH-1, col*cfg.COL_WIDTH)
       }
-      pBdo(col) := regBank_r(portB.ADDR)
+      pBdo(col) := reg_bank_r(portB.ADDR)
     }
     portA.DO := pAdo.asUInt()
     portB.DO := pBdo.asUInt()
@@ -62,49 +62,49 @@ class BRAMPortAdapter(
 ) extends MultiIOModule{
   val set_t = Vec(param.associativity, new CacheEntry(param))
 
-  val frontendReadRequest_i = IO(Flipped(Decoupled(UInt(param.setWidth().W))))
-  val frontendReadReplyData_o = IO(Decoupled(set_t.cloneType))
+  val frontend_read_request_i = IO(Flipped(Decoupled(UInt(param.setWidth().W))))
+  val frontend_read_reply_data_o = IO(Decoupled(set_t.cloneType))
 
   implicit val bramCfg = new BRAMConfig(
     param.associativity, new CacheEntry(param).getWidth, param.setNumber
   )
 
-  val bramPortA = IO(Flipped(new BRAMPort()))
-  bramPortA.ADDR := frontendReadRequest_i.bits
-  bramPortA.EN := true.B
-  bramPortA.WE := 0.U
-  bramPortA.DI := 0.U
-  frontendReadReplyData_o.bits := bramPortA.DO.asTypeOf(set_t.cloneType)
+  val bram_ports = IO(Flipped(Vec(2, new BRAMPort())))
+  
+  bram_ports(0).ADDR := frontend_read_request_i.bits
+  bram_ports(0).EN := true.B
+  bram_ports(0).WE := 0.U
+  bram_ports(0).DI := 0.U
+  frontend_read_reply_data_o.bits := bram_ports(0).DO.asTypeOf(set_t.cloneType)
   if(param.implementedWithRegister){
-    frontendReadReplyData_o.valid := frontendReadRequest_i.valid
-    frontendReadRequest_i.ready := true.B
+    frontend_read_reply_data_o.valid := frontend_read_request_i.valid
+    frontend_read_request_i.ready := true.B
   } else {
-    frontendReadReplyData_o.valid := RegNext(frontendReadRequest_i.valid)
-    frontendReadRequest_i.ready := true.B
+    frontend_read_reply_data_o.valid := RegNext(frontend_read_request_i.valid)
+    frontend_read_request_i.ready := true.B
   }
 
-  when(frontendReadRequest_i.valid){
-    printf(p"BRAM: Accept Read Transaction: Address: ${frontendReadRequest_i.bits}\n")
+  when(frontend_read_request_i.valid){
+    printf(p"BRAM: Accept Read Transaction: Address: ${frontend_read_request_i.bits}\n")
   }
-  when(frontendReadReplyData_o.valid){
-    printf(p"BRAM: Reply Read Transaction: Data: ${frontendReadReplyData_o.bits}\n")
+  when(frontend_read_reply_data_o.valid){
+    printf(p"BRAM: Reply Read Transaction: Data: ${frontend_read_reply_data_o.bits}\n")
   }
 
-  val frontendWriteRequest_i = IO(Flipped(Decoupled(new BankWriteRequestPacket(t, param))))
-  val bramPortB = IO(Flipped(new BRAMPort()))
-  bramPortB.ADDR := frontendWriteRequest_i.bits.addr
+  val frontend_write_request_i = IO(Flipped(Decoupled(new BankWriteRequestPacket(t, param))))
+  bram_ports(1).ADDR := frontend_write_request_i.bits.addr
 
   val writeValue = Wire(set_t.cloneType)
   writeValue := 0.U.asTypeOf(set_t.cloneType)
-  writeValue(frontendWriteRequest_i.bits.which) := frontendWriteRequest_i.bits.data
+  writeValue(frontend_write_request_i.bits.which) := frontend_write_request_i.bits.data
 
-  bramPortB.DI := writeValue.asUInt()
-  bramPortB.EN := frontendWriteRequest_i.valid
-  bramPortB.WE := UIntToOH(frontendWriteRequest_i.bits.which) & Fill(param.associativity, frontendWriteRequest_i.valid)
-  frontendWriteRequest_i.ready := true.B
+  bram_ports(1).DI := writeValue.asUInt()
+  bram_ports(1).EN := frontend_write_request_i.valid
+  bram_ports(1).WE := UIntToOH(frontend_write_request_i.bits.which) & Fill(param.associativity, frontend_write_request_i.valid)
+  frontend_write_request_i.ready := true.B
 
-  when(frontendWriteRequest_i.valid){
-    printf(p"BRAM: Accept Write Transaction: Address: ${frontendWriteRequest_i.bits.addr}, Entry: ${frontendWriteRequest_i.bits.which}, Data: ${writeValue}\n")
+  when(frontend_write_request_i.valid){
+    printf(p"BRAM: Accept Write Transaction: Address: ${frontend_write_request_i.bits.addr}, Entry: ${frontend_write_request_i.bits.which}, Data: ${writeValue}\n")
   }
 
 }
