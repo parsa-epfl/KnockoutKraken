@@ -117,15 +117,9 @@ class DataBankFrontend(
   val refill_request_i = IO(Flipped(Decoupled(new MissResolveReplyPacket(t, param))))
 
   // Port to LRU
-  val lru_port = IO(new Bundle{
-    val addr_o = Output(UInt(param.addressWidth.W))
-    val addr_vo = Output(Bool())
-
-    val index_o = Output(UInt(param.wayWidth().W))
-    val index_vo = Output(Bool())
-
-    val lru_i = Input(UInt(param.wayWidth().W))
-  })
+  val lru_addr_o = IO(ValidIO(UInt(param.setWidth.W)))
+  val lru_index_o = IO(ValidIO(UInt(param.wayWidth().W)))
+  val lru_which_i = IO(Input(UInt(param.wayWidth().W)))
 
   val pipeline_state_ready = Wire(Vec(2, Bool())) // this variables keeps all the back-pressure caused by the pipeline stall
 
@@ -151,8 +145,8 @@ class DataBankFrontend(
   bank_ram_request_addr_o.valid := frontend_request_i.fire()
 
   // pass to the LRU
-  lru_port.addr_o := frontend_request_i.bits.addr(param.setWidth-1, 0)
-  lru_port.addr_vo := bank_ram_request_addr_o.fire()
+  lru_addr_o.bits := frontend_request_i.bits.addr(param.setWidth-1, 0)
+  lru_addr_o.valid := bank_ram_request_addr_o.fire()
 
   // fetch data from the bram
   bank_ram_reply_data_i.ready := s1_frontend_request_r.valid // If transaction is valid, then we accept the result.
@@ -212,8 +206,8 @@ class DataBankFrontend(
   frontend_reply_o.bits.hit := hit_v || full_writing_v // this term is related to the wake up. A full-writing should be viewed as a hit to the frontend and a miss to the LRU and eviction.
   frontend_reply_o.bits.data := Mux(hit_v, hit_entry.read(), s1_frontend_request_r.bits.wData)
 
-  lru_port.index_o := match_which
-  lru_port.index_vo := hit_v
+  lru_index_o.bits := match_which
+  lru_index_o.valid := hit_v
 
   val frontend_write_to_bank = Wire(Decoupled(new BankWriteRequestPacket(t, param))) // normal writing
   val updated_entry = Mux(s1_frontend_request_r.bits.w_v, 
@@ -234,13 +228,13 @@ class DataBankFrontend(
   val frontend_pending_miss_entry = Wire(Decoupled(new BankWriteRequestPacket(t, param))) // make the entry pending.
   frontend_pending_miss_entry.bits.addr := s1_frontend_request_r.bits.addr(param.setWidth()-1, 0)
   frontend_pending_miss_entry.bits.data := t.makePending(s1_frontend_request_r.bits.addr, s1_frontend_request_r.bits.thread_id)
-  frontend_pending_miss_entry.bits.which := lru_port.lru_i
+  frontend_pending_miss_entry.bits.which := lru_which_i
   frontend_pending_miss_entry.valid := s1_frontend_request_r.valid && !entry_is_pending_v && (!hit_v && !full_writing_v)
 
   val full_writing_request = Wire(Decoupled(new BankWriteRequestPacket(t, param))) // A full writing, which means a complete override to the block, so no original data needed.
   full_writing_request.bits.addr := s1_frontend_request_r.bits.addr(param.setWidth()-1, 0)
   full_writing_request.bits.data := t.refill(s1_frontend_request_r.bits.addr, s1_frontend_request_r.bits.thread_id, s1_frontend_request_r.bits.wData)
-  full_writing_request.bits.which := lru_port.lru_i
+  full_writing_request.bits.which := lru_which_i
   full_writing_request.valid := s1_frontend_request_r.valid && !entry_is_pending_v && (!hit_v && full_writing_v)
   
 
@@ -269,7 +263,7 @@ class DataBankFrontend(
   s2_miss_request_n.bits.addr := s1_frontend_request_r.bits.addr
   s2_miss_request_n.bits.thread_id := s1_frontend_request_r.bits.thread_id
   s2_miss_request_n.bits.grouped_v := s1_frontend_request_r.bits.groupedFlag
-  s2_miss_request_n.bits.lru := lru_port.lru_i
+  s2_miss_request_n.bits.lru := lru_which_i
   s2_miss_request_n.bits.not_sync_with_data_v := entry_is_pending_v
   s2_miss_request_n.valid := !hit_v && s1_frontend_request_r.fire() && 
     !full_writing_v // full writing is not a miss
@@ -278,7 +272,7 @@ class DataBankFrontend(
   miss_request_o <> s2_miss_request_r
 
 
-  val replaced_entry = bank_ram_reply_data_i.bits(lru_port.lru_i)
+  val replaced_entry = bank_ram_reply_data_i.bits(lru_which_i)
 
   val s2_writeback_request_n = Wire(Decoupled(new WriteBackRequestPacket(param))) // write back the evicted block
   s2_writeback_request_n.bits.addr := replaced_entry.address(s1_frontend_request_r.bits.addr(param.setWidth-1, 0))

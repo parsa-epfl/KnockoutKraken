@@ -115,12 +115,6 @@ class BackendRequestMerger(param: CacheParameter) extends MultiIOModule{
   backend_request_o <> merger_rr.io.out
 }
 
-
-class DataBankReseter extends MultiIOModule{
-  
-}
-
-
 /**
  *  base class of LRU module.
  *  @param lruCore the LRU updating logic
@@ -129,21 +123,13 @@ class DataBankReseter extends MultiIOModule{
 class LRU[T <: LRUCore](
   param: CacheParameter,
   lruCore: () => T
-) extends Module{
-  val io = IO(new Bundle {
-    // First cycle: give me the address for me to fetch the LRU
-    val addr_i = Input(UInt(param.addressWidth.W))
-    val addr_vi = Input(Bool())
-    // Second cycle: give me whether or not you hits a specific position
-    val index_i = Input(UInt(param.wayWidth().W))
-    val index_vi = Input(Bool())
-    // I will also tell you which position is available for replacement.
-    val lru_o = Output(UInt(param.wayWidth().W))
-    // The update of lru_o is valid in the third cycle.
-  })
+) extends MultiIOModule{
+  val addr_i = IO(Flipped(ValidIO(UInt(param.setWidth.W))))
+  val index_i = IO(Flipped(ValidIO(UInt(param.wayWidth().W))))
+  val lru_o = IO(Output(UInt(param.wayWidth().W)))
   // add an extra stage to store the addr. They will be used for the LRU bits writing back.
-  val addr_s1_r = RegNext(io.addr_i)
-  val addr_s1_vr = RegNext(io.addr_vi)
+  val addr_s1_r = RegNext(addr_i.bits)
+  val addr_s1_vr = RegNext(addr_i.valid)
 
   // Connected to the LRU Core
   val core = Module(lruCore())
@@ -156,18 +142,18 @@ class LRU[T <: LRUCore](
 
   val bram = Module(new BRAMorRegister(param.implementedWithRegister))
 
-  bram.portA.EN := io.addr_vi
-  bram.portA.ADDR := io.addr_i
+  bram.portA.EN := addr_i.valid
+  bram.portA.ADDR := addr_i.bits
   bram.portA.WE := false.B
   bram.portA.DI := 0.U
 
 
   core.io.encoding_i := bram.portA.DO
 
-  core.io.index_i := io.index_i
-  core.io.index_vi := io.index_vi
+  core.io.index_i := index_i.bits
+  core.io.index_vi := index_i.valid
   core.io.vi := addr_s1_vr // if true, there is a request.
-  io.lru_o := core.io.lru_o
+  lru_o := core.io.lru_o
 
   // write back
   bram.portB.EN := addr_s1_vr
@@ -212,12 +198,9 @@ class BaseCache(
   packet_arrive_o <> u_bank_frontend.packet_arrive_o
 
   val u_lruCore = Module(new LRU(param, lruCore))
-  u_lruCore.io.addr_i := u_bank_frontend.lru_port.addr_o
-  u_lruCore.io.addr_vi := u_bank_frontend.lru_port.addr_vo
-
-  u_lruCore.io.index_i := u_bank_frontend.lru_port.index_o
-  u_lruCore.io.index_vi := u_bank_frontend.lru_port.index_vo
-  u_bank_frontend.lru_port.lru_i := u_lruCore.io.lru_o
+  u_lruCore.addr_i <> u_bank_frontend.lru_addr_o
+  u_lruCore.index_i <> u_bank_frontend.lru_index_o
+  u_bank_frontend.lru_which_i := u_lruCore.lru_o
 
   // Connect to the Refill Queue
   val u_refill_queue = Module(new RefillingQueue(entry, param))
