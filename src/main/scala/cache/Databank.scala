@@ -23,11 +23,12 @@ class FrontendRequestPacket(
 ) extends Bundle{
   val addr = UInt(addressWidth.W) // access address.
   val thread_id = UInt(threadIDWidth.W)
-  val groupedFlag = Bool() //! Used by the Adapter and should be propagated.
+  val grouped_v = Bool() //! Used by the Adapter and should be propagated.
   val w_v = Bool()// write valid?
   val wData = UInt(blockSize.W)
   val wMask = UInt(blockSize.W)
-  val wpermission = Bool() // 0 is read-only and 1 is read-write.
+
+  val flush_v = Bool() // Flushing signal
 
   // overload constructor to quickly build a frontend port from the cache parameter.
   def this(param: CacheParameter) = this(
@@ -38,6 +39,8 @@ class FrontendRequestPacket(
 
   override def cloneType(): this.type = new FrontendRequestPacket(addressWidth, threadIDWidth, blockSize).asInstanceOf[this.type]
 }
+
+
 
 class FrontendReplyPacket(param: CacheParameter) extends Bundle{
   val data = UInt(param.blockBit.W)
@@ -168,8 +171,11 @@ class DataBankFrontend(
     val thread_id = UInt(param.threadIDWidth().W)
     val dataBlock = UInt(param.backendPortSize.W)
     val pending_v = Bool()
+    val flush_v = Bool()
     def toEntry(): Entry = {
-      Mux(pending_v, t.makePending(addr, thread_id), t.refill(addr, thread_id, dataBlock))
+      val res = WireInit(Mux(pending_v, t.makePending(addr, thread_id), t.refill(addr, thread_id, dataBlock)))
+      res.v := Mux(flush_v, false.B, true.B)
+      res
     }
   }
 
@@ -186,20 +192,21 @@ class DataBankFrontend(
 
   val hit_v: Bool = Mux(
     s2_writing_matched,
-    !s2_bank_writing_r.bits.pending_v,
+    !s2_bank_writing_r.bits.pending_v && !s2_bank_writing_r.bits.flush_v,
     PopCount(match_bits) === 1.U && hit_entry.p === false.B
   )
 
   val entry_is_pending_v: Bool = Mux(
     s2_writing_matched,
-    s2_bank_writing_r.bits.pending_v,
+    s2_bank_writing_r.bits.pending_v && !s2_bank_writing_r.bits.flush_v,
     PopCount(match_bits) === 1.U && hit_entry.p
   )
 
   s2_bank_writing_n.bits.addr := s1_frontend_request_r.bits.addr
   s2_bank_writing_n.bits.thread_id := s1_frontend_request_r.bits.thread_id
   s2_bank_writing_n.bits.pending_v := entry_is_pending_v || (!hit_v)
-  s2_bank_writing_n.valid := s1_frontend_request_r.valid
+  s2_bank_writing_n.bits.flush_v := s1_frontend_request_r.bits.flush_v
+  s2_bank_writing_n.valid := s1_frontend_request_r.valid //! No fire() required here because this register is in a branch instead of the main stream.
 
   frontend_reply_o.valid := s1_frontend_request_r.fire() // Also return if miss
   frontend_reply_o.bits.thread_id := s1_frontend_request_r.bits.thread_id
@@ -219,9 +226,10 @@ class DataBankFrontend(
   )
 
   frontend_write_to_bank.bits.data := updated_entry
+  frontend_write_to_bank.bits.data.v := Mux(s1_frontend_request_r.bits.flush_v, false.B, true.B)
   frontend_write_to_bank.bits.addr := s1_frontend_request_r.bits.addr(param.setWidth()-1, 0)
   frontend_write_to_bank.bits.which := match_which
-  frontend_write_to_bank.valid := s1_frontend_request_r.valid && hit_v && s1_frontend_request_r.bits.w_v
+  frontend_write_to_bank.valid := s1_frontend_request_r.valid && hit_v && (s1_frontend_request_r.bits.w_v || s1_frontend_request_r.bits.flush_v) // When flushing, write to bank.
 
   s2_bank_writing_n.bits.dataBlock := updated_entry.read() //! Problem: writing a pending position
 
@@ -238,19 +246,19 @@ class DataBankFrontend(
   full_writing_request.valid := s1_frontend_request_r.valid && !entry_is_pending_v && (!hit_v && full_writing_v)
   
 
-  val backend_update_bank_request = Wire(Decoupled(new BankWriteRequestPacket(t, param))) // refilling.
-  backend_update_bank_request.bits.addr := refill_request_i.bits.set_number
-  backend_update_bank_request.bits.data := refill_request_i.bits.data
-  backend_update_bank_request.bits.which := refill_request_i.bits.lru
-  backend_update_bank_request.valid := refill_request_i.valid
-  refill_request_i.ready := backend_update_bank_request.ready || (refill_request_i.bits.not_sync_with_data_v && refill_request_i.valid)
+  val refill_to_bank_req = Wire(Decoupled(new BankWriteRequestPacket(t, param))) // refilling.
+  refill_to_bank_req.bits.addr := refill_request_i.bits.set_number
+  refill_to_bank_req.bits.data := refill_request_i.bits.data
+  refill_to_bank_req.bits.which := refill_request_i.bits.lru
+  refill_to_bank_req.valid := refill_request_i.valid
+  refill_request_i.ready := refill_to_bank_req.ready || (refill_request_i.bits.not_sync_with_data_v && refill_request_i.valid)
 
 
   val u_bank_writing_arb = Module(new Arbiter(new BankWriteRequestPacket(t, param), 4))
   u_bank_writing_arb.io.in(0) <> full_writing_request
   u_bank_writing_arb.io.in(1) <> frontend_pending_miss_entry
   u_bank_writing_arb.io.in(2) <> frontend_write_to_bank
-  u_bank_writing_arb.io.in(3) <> backend_update_bank_request
+  u_bank_writing_arb.io.in(3) <> refill_to_bank_req
   bank_ram_write_request_o <> u_bank_writing_arb.io.out
 
   assert(
@@ -262,7 +270,7 @@ class DataBankFrontend(
   val s2_miss_request_n = Wire(Decoupled(new MissRequestPacket(param)))
   s2_miss_request_n.bits.addr := s1_frontend_request_r.bits.addr
   s2_miss_request_n.bits.thread_id := s1_frontend_request_r.bits.thread_id
-  s2_miss_request_n.bits.grouped_v := s1_frontend_request_r.bits.groupedFlag
+  s2_miss_request_n.bits.grouped_v := s1_frontend_request_r.bits.grouped_v
   s2_miss_request_n.bits.lru := lru_which_i
   s2_miss_request_n.bits.not_sync_with_data_v := entry_is_pending_v
   s2_miss_request_n.valid := !hit_v && s1_frontend_request_r.fire() && 
@@ -273,15 +281,31 @@ class DataBankFrontend(
 
 
   val replaced_entry = bank_ram_reply_data_i.bits(lru_which_i)
-
-  val s2_writeback_request_n = Wire(Decoupled(new WriteBackRequestPacket(param))) // write back the evicted block
-  s2_writeback_request_n.bits.addr := replaced_entry.address(s1_frontend_request_r.bits.addr(param.setWidth-1, 0))
-  s2_writeback_request_n.bits.data := replaced_entry.read()
-  s2_writeback_request_n.valid := 
+  val eviction_wb_req = Wire(Decoupled(new WriteBackRequestPacket(param))) // write back due to the eviction.
+  eviction_wb_req.bits.addr := replaced_entry.address(s1_frontend_request_r.bits.addr(param.setWidth-1, 0))
+  eviction_wb_req.bits.data := replaced_entry.read()
+  eviction_wb_req.valid := 
     replaced_entry.d && // evicted entry is dirty
     !hit_v && // miss occurs
     s1_frontend_request_r.fire()
 
+  val flush_wb_req = Wire(Decoupled(new WriteBackRequestPacket(param))) // write back due to the flushing
+  flush_wb_req.bits.addr := s1_frontend_request_r.bits.addr
+  flush_wb_req.bits.data := hit_entry.read()
+  flush_wb_req.valid :=
+    hit_entry.d && // flushed is dirty
+    hit_v && s1_frontend_request_r.bits.flush_v && // flush confirmed.
+    s1_frontend_request_r.fire()
+
+  assert(!(flush_wb_req.valid && eviction_wb_req.valid),
+    "It's impossible to write back due to eviction and miss at the same time!"
+  )
+
+  val u_wb_req_arb = Module(new Arbiter(new WriteBackRequestPacket(param), 2))
+  u_wb_req_arb.io.in(0) <> eviction_wb_req
+  u_wb_req_arb.io.in(1) <> flush_wb_req
+
+  val s2_writeback_request_n = u_wb_req_arb.io.out
   val s2_writeback_request_r = FlushQueue(s2_writeback_request_n, 2, true)("s2_writeback_request_r")
   writeback_request_o <> s2_writeback_request_r
 
