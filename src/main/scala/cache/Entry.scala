@@ -9,15 +9,7 @@ import chisel3.stage.{ChiselStage}
  */ 
 abstract class Entry extends Bundle{
   val v = Bool() // valid bit
-  val p: Bool    // pending bit
   val d = Bool() // dirty bit.
-  /**
-   * Build a pending entry from given @param address and @param threadID 
-   * The pending flag is raised.
-   * @return a new packet.
-   */ 
-  def makePending(address:UInt, threadID: UInt): Entry
-
   /**
    * Build a new entry from given parameters. (Expected to be called when refilling)
    * This method is called when a entry in the bank is selected to be replaced with a new one.
@@ -73,22 +65,10 @@ abstract class Entry extends Bundle{
 case class CacheEntry(param: CacheParameter) extends Entry{
   val tag = UInt(param.tagWidth().W)
   val data = UInt(param.blockBit.W)
-  val p = Bool()
-
-  override def makePending(address: UInt, threadID: UInt): Entry = {
-    val res = Wire(new CacheEntry(param))
-    res.v := true.B
-    res.p := true.B
-    res.tag := getTagFromAddress(address, param.tagWidth())
-    res.data := 0.B
-    res.d := false.B
-    res
-  }
 
   override def refill(address: UInt, threadID: UInt, data: UInt): Entry  = {
     val res = Wire(new CacheEntry(param))
     res.v := true.B
-    res.p := false.B
     res.tag := getTagFromAddress(address, param.tagWidth())
     res.d := false.B 
     res.data := data
@@ -99,7 +79,6 @@ case class CacheEntry(param: CacheParameter) extends Entry{
     val res = Wire(new CacheEntry(param))
     res.v := true.B
     res.tag := this.tag
-    res.p := false.B
     res.d := true.B
     val newdata = VecInit(0.U(param.blockBit.W).asBools())
     for(i <- 0 until param.blockBit){
@@ -135,25 +114,11 @@ case class TLBEntry(param: CacheParameter) extends Entry{
   val tag = UInt(param.tagWidth().W)
   val threadID = UInt(param.threadIDWidth().W)
   val protection = UInt(2.W) // how to update the permission?
-  val p = false.B
-
-  override def makePending(address: UInt, threadID: UInt): Entry = {
-    val res = Wire(new TLBEntry(param))
-    res.tag := getTagFromAddress(address, param.tagWidth())
-    res.threadID := threadID
-    res.v := true.B
-    res.p := false.B // no pending bit for TLB
-    res.d := false.B
-    res.protection := false.B
-    res.phyAddr := 0.U
-    res
-  }
 
   def refill(address: UInt, threadID: UInt, data: UInt): Entry = {
     val res = Wire(new TLBEntry(param))
     res.tag := getTagFromAddress(address, param.tagWidth())
     res.threadID := threadID
-    res.p := false.B
     res.d := false.B
     class TLBDataParser extends Bundle{
       val phyAddr = UInt(param.blockBit.W)
@@ -169,7 +134,6 @@ case class TLBEntry(param: CacheParameter) extends Entry{
   def write(data: UInt, mask: UInt): Entry = {
     val res = Wire(new TLBEntry(param))
     res.v := true.B
-    res.p := false.B
     res.d := true.B
     res.threadID := this.threadID
     res.tag := this.tag
