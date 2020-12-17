@@ -83,7 +83,7 @@ class MemoryInterfaceAdaptor(
   })
 
   val toCache = IO(new Bundle{
-    val req_o = Decoupled(new FrontendRequestPacket(
+    val req_o = Decoupled(new CacheFrontendRequestPacket(
       (PROCESSOR_TYPES.VADDR - blockAddrWidth),
       cfg.NB_THREADS_W,
       param.blockBit
@@ -213,7 +213,7 @@ class MemoryInterfaceAdaptor(
   toCache.req_o.bits.addr := Mux(secondTrans_r.v, secondTrans_r.vaddr, frontend.req_i.bits.vaddr) //! ADDRESS TRANSLATION!!!
   toCache.req_o.bits.thread_id := Mux(secondTrans_r.v, secondTrans_r.threadID, frontend.req_i.bits.threadID)
   toCache.req_o.valid := arb.io.out.valid
-  toCache.req_o.bits.wpermission := Mux(secondTrans_r.v, secondTrans_r.w_v, frontend.req_i.bits.w_v)
+  //toCache.req_o.bits.wpermission := Mux(secondTrans_r.v, secondTrans_r.w_v, frontend.req_i.bits.w_v)
   val wplacement_result_0 = placeData(frontend.req_i.bits.wdata(0), frontend.req_i.bits.size, vaddrOfBlock)
   toCache.req_o.bits.wData := wplacement_result_0._1
   toCache.req_o.bits.wMask := wplacement_result_0._2
