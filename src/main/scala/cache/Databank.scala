@@ -158,7 +158,7 @@ class DataBankManager(
   class writing_context_t extends Bundle{
     val addr = UInt(param.addressWidth.W)
     val thread_id = UInt(param.threadIDWidth().W)
-    val dataBlock = UInt(param.backendPortSize.W)
+    val dataBlock = UInt(param.blockBit.W)
     val flush_v = Bool()
     def toEntry(): Entry = {
       val res = WireInit(t.refill(addr, thread_id, dataBlock))
@@ -187,18 +187,22 @@ class DataBankManager(
   s2_bank_writing_n.bits.addr := s1_frontend_request_r.bits.addr
   s2_bank_writing_n.bits.thread_id := s1_frontend_request_r.bits.thread_id
   s2_bank_writing_n.bits.flush_v := s1_frontend_request_r.bits.flush_v
-  s2_bank_writing_n.valid := s1_frontend_request_r.valid && s1_frontend_request_r.bits.w_v && hit_v //! No fire() required here because this register is in a branch instead of the main stream.
+  s2_bank_writing_n.valid := s1_frontend_request_r.valid && s1_frontend_request_r.bits.w_v && (hit_v || full_writing_v) //! No fire() required here because this register is in a branch instead of the main stream.
 
   frontend_reply_o.valid := s1_frontend_request_r.fire() // Also return if miss
   frontend_reply_o.bits.thread_id := s1_frontend_request_r.bits.thread_id
   frontend_reply_o.bits.hit := hit_v || full_writing_v // this term is related to the wake up. A full-writing should be viewed as a hit to the frontend and a miss to the LRU and eviction.
-  frontend_reply_o.bits.data := Mux(hit_v, hit_entry.read(), s1_frontend_request_r.bits.wData)
+  frontend_reply_o.bits.data := Mux(s1_frontend_request_r.bits.w_v, s1_frontend_request_r.bits.wData, hit_entry.read())
 
   lru_index_o.bits := match_which
   lru_index_o.valid := hit_v
 
   val frontend_write_to_bank = Wire(Decoupled(new BankWriteRequestPacket(t, param))) // normal writing
-  val updated_entry = Mux(s1_frontend_request_r.bits.w_v, 
+  val updated_entry = Mux(s1_frontend_request_r.bits.w_v || (s1_frontend_request_r.bits.refill_v && !hit_v),
+    // how to determine the updated entry?
+    // - if normal write, update
+    // - if refill, keep original value if hit
+    // - otherwise, keep original value
     hit_entry.write(
       s1_frontend_request_r.bits.wData, 
       s1_frontend_request_r.bits.wMask

@@ -120,11 +120,11 @@ class CacheFrontendFlushRequest(
 
     res.addr := this.addr
     res.flush_v := true.B
-    res.refill_v := false.B
+    res.refill_v := true.B
     res.thread_id := this.thread_id
     res.wData := DontCare
     res.wMask := 0.U
-    res.w_v := false.B
+    res.w_v := true.B
 
     res
   }
