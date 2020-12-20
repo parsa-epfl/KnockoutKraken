@@ -170,7 +170,7 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
 
   import CacheTestUtility._
 
-  "Normal Access" ignore {
+  "Normal Access" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/cache/normal_read"), WriteVcdAnnotation)
     test(new DTUCache(
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
@@ -200,6 +200,8 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
       dut.setReadRequest(108.U, 0.U)
       dut.tick()
       dut.expectReply(false, 0.U, 0.U)
+      dut.clearRequest()
+      dut.tick(4)
 
       dut.setReadRequest(108.U, 1.U)
       dut.tick()
@@ -207,7 +209,8 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
       dut.clearRequest()
 
       dut.waitForArrive(0.U)
-      dut.setWriteRequest(108.U, 0.U, 110.U, ((1l << 32) - 1).U)
+      dut.tick()
+      dut.setWriteRequest(108.U, 0.U, 110.U, ((1l << 8) - 1).U)
       dut.tick()
       dut.clearRequest()
       dut.expectReply(true, 0.U, 110.U)
@@ -221,7 +224,7 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
     }
   }
 
-  "RAW" ignore {
+  "RAW" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/cache/RAW"), WriteVcdAnnotation)
     test(new DTUCache(
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
@@ -239,7 +242,7 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
 
       dut.setWriteRequest(108.U, 0.U, 112.U, ((1l << 32) - 1).U)
       dut.tick()
-      dut.expectReply(true, 0.U, 108.U) // reply its previous value?
+      dut.expectReply(true, 0.U, 112.U) // reply its previous value?
       dut.setReadRequest(108.U, 0.U)
       dut.tick()
       dut.frontendRequest_i.valid.poke(false.B)
@@ -247,7 +250,7 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
     }
   }
 
-  "Full write must hit" ignore {
+  "Full write must hit" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/cache/full_writing"), WriteVcdAnnotation)
     test(new DTUCache(
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
@@ -262,10 +265,17 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
       dut.tick()
       dut.expectReply(true, 0.U, 10.U)
       dut.clearRequest()
+
+      dut.setWriteRequest(122.U, 0.U, 133.U, ((1l << 32) - 1).U)
+      dut.tick()
+      dut.setReadRequest(122.U, 0.U)
+      dut.tick()
+      dut.clearRequest()
+      dut.expectReply(true, 0.U, 133.U)
     }
   }
 
-  "Flush" ignore {
+  "Flush" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/cache/flushing"), WriteVcdAnnotation)
     test(new DTUCache(
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
@@ -285,7 +295,7 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
 
       dut.setFlushRequest(101.U, 0.U)
       dut.tick()
-      dut.expectReply(true, 0.U, 101.U)
+      dut.expectReply(true, 0.U, 0.U)
       dut.clearRequest()
 
       dut.setReadRequest(101.U, 0.U)
