@@ -61,6 +61,7 @@ abstract class Entry extends Bundle{
 
 /**
  * Data bank entry for a simple cache.
+ * TODO: remove all parameter entry since we only have one type of entry now.
  */ 
 case class CacheEntry(param: CacheParameter) extends Entry{
   val tag = UInt(param.tagWidth().W)
@@ -101,65 +102,5 @@ case class CacheEntry(param: CacheParameter) extends Entry{
 
   def threadID(): UInt = {
     0.U(param.threadIDWidth().W)
-  }
-}
-
-/**
- * Data bank entry for a TLB. 
- */ 
-
-case class TLBEntry(param: CacheParameter) extends Entry{
-  // Note that the data of TLBEntry is physical address, so data block Size is the size of physical address.
-  val phyAddr = UInt(param.blockBit.W) 
-  val tag = UInt(param.tagWidth().W)
-  val threadID = UInt(param.threadIDWidth().W)
-  val protection = UInt(2.W) // how to update the permission?
-
-  def refill(address: UInt, threadID: UInt, data: UInt): Entry = {
-    val res = Wire(new TLBEntry(param))
-    res.tag := getTagFromAddress(address, param.tagWidth())
-    res.threadID := threadID
-    res.d := false.B
-    class TLBDataParser extends Bundle{
-      val phyAddr = UInt(param.blockBit.W)
-      val permission = UInt(2.W)
-    }
-    val converted = data.asTypeOf(new TLBDataParser())
-    res.phyAddr := converted.phyAddr
-    res.v := true.B
-    res.protection := converted.permission
-    res
-  }
-
-  def write(data: UInt, mask: UInt): Entry = {
-    val res = Wire(new TLBEntry(param))
-    res.v := true.B
-    res.d := true.B
-    res.threadID := this.threadID
-    res.tag := this.tag
-    res.protection := this.protection
-    val newdata = WireInit(this.phyAddr).asBools()
-    for(i <- 0 until param.blockBit){
-      newdata(i) := Mux(mask(i), data(i), this.phyAddr(i))
-    }
-    res.phyAddr := VecInit(newdata).asUInt()
-    
-    res
-  }
-
-  def checkHit(address: UInt, threadID: UInt): Bool = {
-    this.tag === getTagFromAddress(address, param.tagWidth()) && this.threadID === threadID
-  }
-
-  def read(): UInt = {
-    phyAddr
-  }
-
-  def valid(isWrite: Bool): Bool = {
-    isWrite === protection
-  }
-
-  def address(setNumber: UInt): UInt = {
-    Cat(this.tag, setNumber)
   }
 }

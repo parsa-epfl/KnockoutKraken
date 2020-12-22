@@ -31,9 +31,9 @@ class BackendMemorySimulator(
   param: CacheParameter,
   srcFile: String = ""
 ) extends MultiIOModule{
-  val mem = SyncReadMem((1 << param.addressWidth), UInt(param.backendPortSize.W))
+  val mem = SyncReadMem((1 << param.addressWidth), UInt(param.blockBit.W))
   val request_i = IO(Flipped(Decoupled(new MergedBackendRequestPacket(param))))
-  val reply_o = IO(Decoupled(UInt(param.backendPortSize.W)))
+  val reply_o = IO(Decoupled(UInt(param.blockBit.W)))
   if(srcFile.nonEmpty) loadMemoryFromFile(mem, srcFile)
 
   request_i.ready := true.B
@@ -51,10 +51,10 @@ class BackendMemorySimulator(
 
 class DelayChain(param: CacheParameter, n: Int) extends MultiIOModule{
   val cacheRequest_i = IO(Flipped(Decoupled(new MergedBackendRequestPacket(param))))
-  val cacheReply_o = IO(Decoupled(UInt(param.backendPortSize.W)))
+  val cacheReply_o = IO(Decoupled(UInt(param.blockBit.W)))
 
   val backendRequest_o = IO(Decoupled(new MergedBackendRequestPacket(param)))
-  val backendReply_i = IO(Flipped(Decoupled(UInt(param.backendPortSize.W))))
+  val backendReply_i = IO(Flipped(Decoupled(UInt(param.blockBit.W))))
 
   val requestChain = Wire(Vec(n+1, cacheRequest_i.cloneType))
   requestChain(0) <> cacheRequest_i
@@ -135,11 +135,11 @@ implicit class CacheDriver(target: DTUCache){
     target.tick()
   }
 
-  def expectReply(hit: Boolean, threadID: UInt, data: UInt) = {
+  def expectReply(hit: Boolean, threadID: UInt, data: UInt, dataDontCare: Boolean = false) = {
     target.frontendReply_o.valid.expect(true.B)
     target.frontendReply_o.bits.hit.expect(hit.B)
     target.frontendReply_o.bits.thread_id.expect(threadID)
-    if(hit){
+    if(hit && !dataDontCare){
       target.frontendReply_o.bits.data.expect(data)
     }
   }
@@ -213,7 +213,7 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
       dut.setWriteRequest(108.U, 0.U, 110.U, ((1l << 8) - 1).U)
       dut.tick()
       dut.clearRequest()
-      dut.expectReply(true, 0.U, 110.U)
+      dut.expectReply(true, 0.U, 110.U, true)
 
       dut.waitForArrive(1.U)
       dut.tick()
@@ -234,7 +234,7 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
         108.U, 0.U, 114.U, ((1l << 8) - 1).U // no full mask here in order not to trigger the full write.
       )
       dut.tick()
-      dut.expectReply(false, 0.U, 0.U)
+      dut.expectReply(false, 0.U, 0.U, true)
       dut.frontendRequest_i.valid.poke(false.B)
 
       dut.waitForArrive(0.U)
@@ -242,7 +242,7 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
 
       dut.setWriteRequest(108.U, 0.U, 112.U, ((1l << 32) - 1).U)
       dut.tick()
-      dut.expectReply(true, 0.U, 112.U) // reply its previous value?
+      dut.expectReply(true, 0.U, 112.U, true) // reply its previous value?
       dut.setReadRequest(108.U, 0.U)
       dut.tick()
       dut.frontendRequest_i.valid.poke(false.B)
@@ -258,7 +258,7 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
     )).withAnnotations(anno){ dut =>
       dut.setWriteRequest(111.U, 0.U, 10.U, ((1l << 32) - 1).U)
       dut.tick()
-      dut.expectReply(true, 0.U, 10.U)
+      dut.expectReply(true, 0.U, 10.U, true)
       dut.clearRequest()
       dut.tick()
       dut.setReadRequest(111.U, 0.U)
@@ -295,13 +295,25 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
 
       dut.setFlushRequest(101.U, 0.U)
       dut.tick()
-      dut.expectReply(true, 0.U, 0.U)
+      dut.expectReply(true, 0.U, 0.U, true)
       dut.clearRequest()
 
       dut.setReadRequest(101.U, 0.U)
       dut.tick()
       dut.expectReply(false, 0.U, 101.U)
       dut.clearRequest()
+      dut.waitForArrive(0.U)
+      dut.tick()
+
+      // What if we flush an entry which is not in the cache?
+      dut.setFlushRequest(99.U, 0.U)
+      dut.tick()
+      // There should be no backend request
+      for(i <- 0 until 30){
+        dut.expectReply(false, 0.U, 0.U, true)
+        dut.tick() // keep flushing and never hit
+      }
+      
     }
   }
 }
@@ -358,13 +370,5 @@ class CacheLRUTester extends FreeSpec with ChiselScalatestTester {
       dut.clearRequest()
       dut.expectReply(true, 0.U, 128.U)
     }
-  }
-
-  "Replacement restricted by the Pending" in {
-    
-  }
-
-  "Invalid position must be available" in {
-
   }
 }

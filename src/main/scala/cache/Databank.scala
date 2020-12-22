@@ -116,7 +116,7 @@ class DataBankManager(
   val writeback_request_o = IO(Decoupled(new WriteBackRequestPacket(param)))
 
   // Port to LRU
-  val lru_addr_o = IO(ValidIO(UInt(param.setWidth.W)))
+  val lru_addr_o = IO(Output(UInt(param.setWidth.W)))
   val lru_index_o = IO(ValidIO(UInt(param.wayWidth().W)))
   val lru_which_i = IO(Input(UInt(param.wayWidth().W)))
 
@@ -137,8 +137,7 @@ class DataBankManager(
   bank_ram_request_addr_o.valid := frontend_request_i.fire()
 
   // pass to the LRU
-  lru_addr_o.bits := frontend_request_i.bits.addr(param.setWidth-1, 0)
-  lru_addr_o.valid := bank_ram_request_addr_o.fire()
+  lru_addr_o := frontend_request_i.bits.addr(param.setWidth-1, 0)
 
   // fetch data from the bram
   bank_ram_reply_data_i.ready := s1_frontend_request_r.valid // If transaction is valid, then we accept the result.
@@ -149,6 +148,10 @@ class DataBankManager(
   assert(PopCount(match_bits) === 1.U || PopCount(match_bits) === 0.U, "It's impossible to hit multiple entries.")
 
   val full_writing_v = s1_frontend_request_r.bits.w_v && s1_frontend_request_r.bits.wMask.andR()
+  when(s1_frontend_request_r.bits.refill_v && s1_frontend_request_r.valid){
+    assert(full_writing_v, "Refill must be a full writing. (Full mask!)")
+  }
+    
 
   val match_which = OHToUInt(match_bits) // encode from the comparison
 
@@ -192,10 +195,11 @@ class DataBankManager(
   frontend_reply_o.valid := s1_frontend_request_r.fire() // Also return if miss
   frontend_reply_o.bits.thread_id := s1_frontend_request_r.bits.thread_id
   frontend_reply_o.bits.hit := hit_v || full_writing_v // this term is related to the wake up. A full-writing should be viewed as a hit to the frontend and a miss to the LRU and eviction.
-  frontend_reply_o.bits.data := Mux(s1_frontend_request_r.bits.w_v, s1_frontend_request_r.bits.wData, hit_entry.read())
+  frontend_reply_o.bits.data := hit_entry.read()
 
-  lru_index_o.bits := match_which
-  lru_index_o.valid := hit_v
+  lru_index_o.bits := Mux(hit_v, match_which, lru_which_i)
+  // Hit, refill, and full writing will update the LRU bits. But flush won't update it.
+  lru_index_o.valid := s1_frontend_request_r.valid && (hit_v || full_writing_v) && !s1_frontend_request_r.bits.flush_v
 
   val frontend_write_to_bank = Wire(Decoupled(new BankWriteRequestPacket(t, param))) // normal writing
   val updated_entry = Mux(s1_frontend_request_r.bits.w_v || (s1_frontend_request_r.bits.refill_v && !hit_v),
@@ -214,11 +218,11 @@ class DataBankManager(
   frontend_write_to_bank.bits.data.v := Mux(s1_frontend_request_r.bits.flush_v, false.B, true.B)
   frontend_write_to_bank.bits.addr := s1_frontend_request_r.bits.addr(param.setWidth()-1, 0)
   frontend_write_to_bank.bits.which := match_which
-  frontend_write_to_bank.valid := s1_frontend_request_r.valid && hit_v && !s1_frontend_request_r.bits.refill_v && (s1_frontend_request_r.bits.w_v || s1_frontend_request_r.bits.flush_v) // When flushing, write to bank.
+  frontend_write_to_bank.valid := s1_frontend_request_r.valid && hit_v && !s1_frontend_request_r.bits.refill_v && s1_frontend_request_r.bits.w_v // When flushing, write to bank.
 
   s2_bank_writing_n.bits.dataBlock := updated_entry.read()
 
-  val full_writing_request = Wire(Decoupled(new BankWriteRequestPacket(t, param))) // A full writing, which means a complete override to the block, so no original data needed.
+  val full_writing_request = Wire(Decoupled(new BankWriteRequestPacket(t, param))) // A full writing, which means a complete override to the block, so no original data needed. (refill should follow this path)
   full_writing_request.bits.addr := s1_frontend_request_r.bits.addr(param.setWidth()-1, 0)
   full_writing_request.bits.data := t.refill(s1_frontend_request_r.bits.addr, s1_frontend_request_r.bits.thread_id, s1_frontend_request_r.bits.wData)
   full_writing_request.bits.which := lru_which_i
@@ -243,7 +247,8 @@ class DataBankManager(
   s2_miss_request_n.bits.lru := lru_which_i
   s2_miss_request_n.bits.not_sync_with_data_v := false.B
   s2_miss_request_n.valid := !hit_v && s1_frontend_request_r.fire() && 
-    !full_writing_v // full writing is not a miss
+    !full_writing_v &&  // full writing is not a miss
+    !s1_frontend_request_r.bits.flush_v // flush is not a miss
 
   val s2_miss_request_r = FlushQueue(s2_miss_request_n, 2, true)("s2_miss_request_r")
   miss_request_o <> s2_miss_request_r

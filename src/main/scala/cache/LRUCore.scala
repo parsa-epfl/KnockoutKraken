@@ -15,10 +15,7 @@ sealed abstract class LRUCore(wayNumber: Int) extends Module{
   val wayWidth = log2Ceil(wayNumber)
   final val io = IO(new Bundle{
     // the request
-    val index_i = Input(UInt(wayWidth.W))
-    val index_vi = Input(Bool()) // a given index suggests that this is a hit and we'll update lru accordingly. 
-    val vi = Input(Bool()) // if request is valid but index is not valid, we think this request as an allocation of the new place so we take lru_o as index.
-
+    val lru_i = Input(UInt(wayWidth.W))
     // lru out
     val lru_o = Output(UInt(wayWidth.W)) // lru_o should be only determined by encodings_i since it points to the current available place before the request is processed.
 
@@ -49,12 +46,11 @@ class PseudoTreeLRUCore(wayNumber: Int) extends LRUCore(wayNumber){
 
   io.lru_o := getLRU(0, wayNumber)
 
-  val updateTerm = Mux(io.index_vi, io.index_i, io.lru_o)
   val updatedEncoding = WireInit(VecInit(io.encoding_i.asBools()))
   def updateEncoding(startIndex: Int, wayNumber: Int): Unit = {
     val wayWidth = log2Ceil(wayNumber)
     val startBit = io.encoding_i(startIndex)
-    val judgeBit = updateTerm(wayWidth-1)
+    val judgeBit = io.lru_i(wayWidth-1)
     updatedEncoding(startIndex) := Mux(startBit === judgeBit, ~startBit, startBit)
     if(wayNumber > 2){
       when(judgeBit){
@@ -67,7 +63,7 @@ class PseudoTreeLRUCore(wayNumber: Int) extends LRUCore(wayNumber){
 
   updateEncoding(0, wayNumber)
 
-  io.encoding_o := Mux(io.vi, updatedEncoding.asUInt(), io.encoding_i)
+  io.encoding_o := updatedEncoding.asUInt()
 }
 
 /**
@@ -90,16 +86,15 @@ class MatrixLRUCore(wayNumber: Int) extends LRUCore(wayNumber){
   }
 
   // 2. update the bits accordingly.
-  val updateTerm = Mux(io.index_vi, io.index_i, io.lru_o)
   val updatedMatrix = WireInit(VecInit(Seq.fill(wayNumber)(VecInit(Seq.fill(wayNumber)(false.B)))))
   for(i <- 0 until wayNumber){
     for(j <- 0 until wayNumber){
       if(i == j){
         updatedMatrix(i)(j) := false.B
       } else {
-        when(i.U === updateTerm) {
+        when(i.U === io.lru_i) {
           updatedMatrix(i)(j) := true.B
-        }.elsewhen(j.U === updateTerm) {
+        }.elsewhen(j.U === io.lru_i) {
           updatedMatrix(i)(j) := false.B
         }.otherwise{
           updatedMatrix(i)(j) := matrix(i)(j)
@@ -126,5 +121,5 @@ class MatrixLRUCore(wayNumber: Int) extends LRUCore(wayNumber){
     }
   }
 
-  io.encoding_o := Mux(io.vi, flattenedMatrix.asUInt(), io.encoding_i)
+  io.encoding_o := flattenedMatrix.asUInt()
 }

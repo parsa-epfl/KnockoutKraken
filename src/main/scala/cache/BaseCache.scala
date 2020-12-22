@@ -26,8 +26,6 @@ case class CacheParameter(
   addressWidth: Int = 55, // address to access the whole block instead of one byte
   // Thread id
   threadNumber: Int = 4,
-  // backend data width. Sometimes this is not equal to the block size, for instance, TLB.
-  backendPortSize: Int = 512,
   // the data bank is implemented in register?
   implementedWithRegister: Boolean = false
 ){
@@ -120,7 +118,7 @@ class CacheFrontendFlushRequest(
 
     res.addr := this.addr
     res.flush_v := true.B
-    res.refill_v := true.B
+    res.refill_v := false.B
     res.thread_id := this.thread_id
     res.wData := DontCare
     res.wMask := 0.U
@@ -201,12 +199,11 @@ class LRU[T <: LRUCore](
   param: CacheParameter,
   lruCore: () => T
 ) extends MultiIOModule{
-  val addr_i = IO(Flipped(ValidIO(UInt(param.setWidth.W))))
+  val addr_i = IO(Input(UInt(param.setWidth.W)))
   val index_i = IO(Flipped(ValidIO(UInt(param.wayWidth().W))))
   val lru_o = IO(Output(UInt(param.wayWidth().W)))
   // add an extra stage to store the addr. They will be used for the LRU bits writing back.
-  val addr_s1_r = RegNext(addr_i.bits)
-  val addr_s1_vr = RegNext(addr_i.valid)
+  val addr_s1_r = if(param.implementedWithRegister) addr_i else RegNext(addr_i)
 
   // Connected to the LRU Core
   val core = Module(lruCore())
@@ -219,23 +216,20 @@ class LRU[T <: LRUCore](
 
   val bram = Module(new BRAMorRegister(param.implementedWithRegister))
 
-  bram.portA.EN := addr_i.valid
-  bram.portA.ADDR := addr_i.bits
+  bram.portA.EN := true.B
+  bram.portA.ADDR := addr_i
   bram.portA.WE := false.B
   bram.portA.DI := 0.U
 
 
   core.io.encoding_i := bram.portA.DO
-
-  core.io.index_i := index_i.bits
-  core.io.index_vi := index_i.valid
-  core.io.vi := addr_s1_vr // if true, there is a request.
+  core.io.lru_i := index_i.bits
   lru_o := core.io.lru_o
 
   // write back
-  bram.portB.EN := addr_s1_vr
+  bram.portB.EN := index_i.valid
   bram.portB.ADDR := addr_s1_r
-  bram.portB.WE := addr_s1_vr
+  bram.portB.WE := index_i.valid
   bram.portB.DI := core.io.encoding_o
 }
 
@@ -335,8 +329,5 @@ class BaseCache(
 object BaseCache{
   def generateCache(param: CacheParameter, lruCore: () => LRUCore): BaseCache = {
     new BaseCache(param, new CacheEntry(param), lruCore)
-  }
-  def generateTLB(param: CacheParameter, lruCore: () => LRUCore): BaseCache = {
-    new BaseCache(param, new TLBEntry(param), lruCore)
   }
 }
