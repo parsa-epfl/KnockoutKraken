@@ -13,10 +13,9 @@ class TLBParameter(
 ) extends CacheParameter(
   setNumber,
   associativity,
-  pPageWidth + 2, // permission bits + pPageWidth
-  vPageWidth,
+  pPageWidth + 2 + 1, // permission bits + pPageWidth + modifiedBit
+  vPageWidth + log2Ceil(threadNumber) , // VA + TID
   threadNumber,
-  0,
   implementedWithRegister
 ){
   
@@ -31,7 +30,6 @@ class TLBRequest(param: TLBParameter) extends Bundle{
   val thread_id = UInt(param.threadIDWidth().W)
   val permission_v = UInt(2.W) // 00: Read, 01: Write, 10: Execute
 }
-
 
 /**
  * The reply from the backend to a TLB. We assume that the backend is stateless.
@@ -66,9 +64,32 @@ class BaseTLB(
   val packet_arrive_o = IO(Valid(UInt(param.threadIDWidth().W)))
 
   // basically, a cache.
-  val u_cache = Module(BaseCache.generateTLB(param, lruCore))
+  val u_cache = Module(BaseCache.generateCache(param, lruCore))
+
+  class pte_t extends Bundle {
+    val pp = UInt(param.pPageWidth.W)
+    val permission = UInt(2.W)
+    val modified = Bool()
+  }
+
   // bind the input
-  u_cache.frontendRequest_i.bits.addr := frontend_request_i.bits.vpage
+  u_cache.frontendRequest_i.bits.addr := Cat(
+    frontend_request_i.bits.thread_id, 
+    frontend_request_i.bits.vpage
+  )
+  u_cache.frontendRequest_i.bits.thread_id := frontend_request_i.bits.thread_id
+
+  val modified_pte = Wire(new pte_t)
+  modified_pte.modified := true.B
+  modified_pte.permission := 0.U
+  modified_pte.pp := 0.U
+
+  u_cache.frontendRequest_i.bits.wData := modified_pte.asUInt()
+  u_cache.frontendRequest_i.bits.wMask := modified_pte.asUInt()
+  // TODO: If the PTE is already marked as "modified", do not write
+  u_cache.frontendRequest_i.bits.w_v := frontend_request_i.bits.permission_v === 1.U // write operation (01)
+
+  
   // u_cache.
 }
 

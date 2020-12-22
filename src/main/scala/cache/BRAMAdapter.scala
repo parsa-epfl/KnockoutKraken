@@ -31,7 +31,7 @@ class BRAMorRegister(implementedWithRegister: Boolean = true)(implicit cfg: BRAM
       pAdo(col) := reg_bank_r(portA.ADDR)
 
       when(portB.EN && portB.WE(col)){
-        reg_bank_r(portA.ADDR) := portB.DI((col+1)*cfg.COL_WIDTH-1, col*cfg.COL_WIDTH)
+        reg_bank_r(portB.ADDR) := portB.DI((col+1)*cfg.COL_WIDTH-1, col*cfg.COL_WIDTH)
       }
       pBdo(col) := reg_bank_r(portB.ADDR)
     }
