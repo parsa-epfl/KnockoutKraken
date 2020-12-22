@@ -57,7 +57,6 @@ class FrontendReplyPacket(param: CacheParameter) extends Bundle{
 class MissRequestPacket(param: CacheParameter) extends Bundle{
   val addr = UInt(param.addressWidth.W)
   val thread_id = UInt(param.threadIDWidth().W)
-  val lru = UInt(param.wayWidth().W)
 
   val not_sync_with_data_v = Bool()
 
@@ -71,7 +70,6 @@ class MissRequestPacket(param: CacheParameter) extends Bundle{
 class MissResolveReplyPacket(param: CacheParameter) extends Bundle{
   val addr = UInt(param.addressWidth.W)
   val thread_id = UInt(param.threadIDWidth().W)
-  val lru = UInt(param.wayWidth().W)
   
   val not_sync_with_data_v = Bool()
 
@@ -92,24 +90,24 @@ class WriteBackRequestPacket(param: CacheParameter) extends Bundle{
 
 /**
  * The frontend manager.
- * @param t the Chisel type of the entry
  * @param param the Cache parameter
+ * @param writableFunction a function that returns whether to perform writing. The two parameters are original value and new value.
  */ 
 class DataBankManager(
-  t: Entry,
-  param: CacheParameter
-) extends MultiIOModule{
+  param: CacheParameter,
+  writableFunction: (CacheEntry, CacheEntry) => Bool // (CacheParameter: UInt, CacheParameter: UInt) => Bool
+) extends MultiIOModule {
   // Ports to frontend
   val frontend_request_i = IO(Flipped(Decoupled(new DataBankFrontendRequestPacket(param))))
   val frontend_reply_o = IO(Valid(new FrontendReplyPacket(param)))
 
   // Ports to Bank RAM (Read port)
-  val setType = Vec(param.associativity, t.cloneType)
+  val setType = Vec(param.associativity, new CacheEntry(param))
 
   val bank_ram_request_addr_o = IO(Decoupled(UInt(param.setWidth().W)))
   val bank_ram_reply_data_i = IO(Flipped(Decoupled(setType.cloneType)))
 
-  val bank_ram_write_request_o = IO(Decoupled(new BankWriteRequestPacket(t, param)))
+  val bank_ram_write_request_o = IO(Decoupled(new BankWriteRequestPacket(param)))
 
   // Port to Backend (Read Request)
   val miss_request_o = IO(Decoupled(new MissRequestPacket(param)))
@@ -163,9 +161,10 @@ class DataBankManager(
     val thread_id = UInt(param.threadIDWidth().W)
     val dataBlock = UInt(param.blockBit.W)
     val flush_v = Bool()
-    def toEntry(): Entry = {
-      val res = WireInit(t.refill(addr, thread_id, dataBlock))
+    def toEntry(): CacheEntry = {
+      val res = Wire(new CacheEntry(param))
       res.v := Mux(flush_v, false.B, true.B)
+      res.refill(this.addr, this.thread_id, this.dataBlock)
       res
     }
   }
@@ -201,7 +200,8 @@ class DataBankManager(
   // Hit, refill, and full writing will update the LRU bits. But flush won't update it.
   lru_index_o.valid := s1_frontend_request_r.valid && (hit_v || full_writing_v) && !s1_frontend_request_r.bits.flush_v
 
-  val frontend_write_to_bank = Wire(Decoupled(new BankWriteRequestPacket(t, param))) // normal writing
+  val frontend_write_to_bank = Wire(Decoupled(new BankWriteRequestPacket(param))) // normal writing
+
   val updated_entry = Mux(s1_frontend_request_r.bits.w_v || (s1_frontend_request_r.bits.refill_v && !hit_v),
     // how to determine the updated entry?
     // - if normal write, update
@@ -218,19 +218,19 @@ class DataBankManager(
   frontend_write_to_bank.bits.data.v := Mux(s1_frontend_request_r.bits.flush_v, false.B, true.B)
   frontend_write_to_bank.bits.addr := s1_frontend_request_r.bits.addr(param.setWidth()-1, 0)
   frontend_write_to_bank.bits.which := match_which
-  frontend_write_to_bank.valid := s1_frontend_request_r.valid && hit_v && !s1_frontend_request_r.bits.refill_v && s1_frontend_request_r.bits.w_v // When flushing, write to bank.
+  frontend_write_to_bank.valid := s1_frontend_request_r.valid && hit_v && !s1_frontend_request_r.bits.refill_v && s1_frontend_request_r.bits.w_v && writableFunction(hit_entry,updated_entry) // When flushing, write to bank.
 
   s2_bank_writing_n.bits.dataBlock := updated_entry.read()
 
-  val full_writing_request = Wire(Decoupled(new BankWriteRequestPacket(t, param))) // A full writing, which means a complete override to the block, so no original data needed. (refill should follow this path)
+  val full_writing_request = Wire(Decoupled(new BankWriteRequestPacket(param))) // A full writing, which means a complete override to the block, so no original data needed. (refill should follow this path)
   full_writing_request.bits.addr := s1_frontend_request_r.bits.addr(param.setWidth()-1, 0)
-  full_writing_request.bits.data := t.refill(s1_frontend_request_r.bits.addr, s1_frontend_request_r.bits.thread_id, s1_frontend_request_r.bits.wData)
+  full_writing_request.bits.data.refill(s1_frontend_request_r.bits.addr, s1_frontend_request_r.bits.thread_id, s1_frontend_request_r.bits.wData)
   full_writing_request.bits.which := lru_which_i
   full_writing_request.valid := s1_frontend_request_r.valid && (!hit_v && full_writing_v)
 
 
 
-  val u_bank_writing_arb = Module(new Arbiter(new BankWriteRequestPacket(t, param), 2))
+  val u_bank_writing_arb = Module(new Arbiter(new BankWriteRequestPacket(param), 2))
   u_bank_writing_arb.io.in(0) <> full_writing_request
   u_bank_writing_arb.io.in(1) <> frontend_write_to_bank
   bank_ram_write_request_o <> u_bank_writing_arb.io.out
@@ -244,7 +244,6 @@ class DataBankManager(
   val s2_miss_request_n = Wire(Decoupled(new MissRequestPacket(param)))
   s2_miss_request_n.bits.addr := s1_frontend_request_r.bits.addr
   s2_miss_request_n.bits.thread_id := s1_frontend_request_r.bits.thread_id
-  s2_miss_request_n.bits.lru := lru_which_i
   s2_miss_request_n.bits.not_sync_with_data_v := false.B
   s2_miss_request_n.valid := !hit_v && s1_frontend_request_r.fire() && 
     !full_writing_v &&  // full writing is not a miss

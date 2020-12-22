@@ -46,18 +46,16 @@ class BRAMorRegister(implementedWithRegister: Boolean = true)(implicit cfg: BRAM
 }
 
 class BankWriteRequestPacket(
-  t: Entry,
   param: CacheParameter
 ) extends Bundle{
   val addr = UInt(param.setWidth().W)
   val which = UInt(param.wayWidth().W)
-  val data = t.cloneType
+  val data = new CacheEntry(param)
 
-  override def cloneType: this.type = new BankWriteRequestPacket(t, param).asInstanceOf[this.type]
+  override def cloneType: this.type = new BankWriteRequestPacket(param).asInstanceOf[this.type]
 }
 
 class BRAMPortAdapter(
-  t: Entry,
   param: CacheParameter,
 ) extends MultiIOModule{
   val set_t = Vec(param.associativity, new CacheEntry(param))
@@ -91,7 +89,7 @@ class BRAMPortAdapter(
     printf(p"BRAM: Reply Read Transaction: Data: ${frontend_read_reply_data_o.bits}\n")
   }
 
-  val frontend_write_request_i = IO(Flipped(Decoupled(new BankWriteRequestPacket(t, param))))
+  val frontend_write_request_i = IO(Flipped(Decoupled(new BankWriteRequestPacket(param))))
   bram_ports(1).ADDR := frontend_write_request_i.bits.addr
 
   val writeValue = Wire(set_t.cloneType)
