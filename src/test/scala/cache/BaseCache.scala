@@ -77,8 +77,16 @@ class DTUCache(
   //? why delay chain? To simulate the latency of DRAM access.
   val u_delayChain = Module(new DelayChain(u_cache.param, 4))
   val u_backend = Module(new BackendMemorySimulator(u_cache.param, initialFile))
+  
+  val u_refill_queue = Module(new RefillingQueue(u_cache.param))
+  u_refill_queue.miss_request_i.bits.addr := u_cache.backendRequest_o.bits.addr
+  u_refill_queue.miss_request_i.bits.thread_id := u_cache.backendRequest_o.bits.thread_id
+  u_refill_queue.miss_request_i.bits.not_sync_with_data_v := false.B
+  u_refill_queue.miss_request_i.valid := u_cache.backendRequest_o.fire() && !u_cache.backendRequest_o.bits.w_v
 
-  u_cache.backendReadReply_i <> u_delayChain.cacheReply_o
+  u_refill_queue.backend_reply_i <> u_delayChain.cacheReply_o
+
+  u_cache.refillRequest_i <> u_refill_queue.refill_o
   u_cache.backendRequest_o <> u_delayChain.cacheRequest_i
   
   u_backend.request_i <> u_delayChain.backendRequest_o

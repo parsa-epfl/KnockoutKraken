@@ -97,11 +97,14 @@ object FlushQueue {
   def apply[T <: Data](genTag: T, entries: Int): FlushQueue[T] = new FlushQueue(genTag, entries)
   def apply[T <: Data](in: DecoupledIO[T], entries: Int = 2, pipe: Boolean = false, flow: Boolean = false, flush: Bool = false.B)(name: String): DecoupledIO[T] = {
     if(entries == 0){
-      val res = Wire(Decoupled(in.bits))
-      res <> in
+      val res = Wire(Decoupled(in.bits.cloneType))
+      res.bits := in.bits
       when(flush){
         res.valid := false.B
-        res.ready := false.B
+        in.ready := false.B
+      }.otherwise {
+        res.valid := in.valid
+        in.ready := res.ready
       }
       res
     } else {
