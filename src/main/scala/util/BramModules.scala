@@ -177,7 +177,8 @@ class BRAMConfig(
   val INIT_FILE: String = "",
   val isRegistered: Boolean = false, // True => 2 Cycles
   val isAXI: Boolean = false, // AXI is byte addressed
-  val isWriteFirst : Boolean = true
+  val isWriteFirst : Boolean = true,
+  val implementedWithRegister: Boolean = false
 ) {
 
   private val NB_ELE_PER_BRAM = 1024*4/NB_COL
@@ -189,7 +190,7 @@ class BRAMConfig(
   private val I_RAM_DEPTH = sizeBRAM.toInt * NB_ELE_PER_BRAM
 
   assert(isWriteFirst, "BRAM Blackbox currently supports WriteFirst policy only.")
-  assert(I_RAM_DEPTH % 1024 == 0)
+  if(!implementedWithRegister) assert(I_RAM_DEPTH % 1024 == 0)
   assert(I_RAM_DEPTH > 0)
 
   val RAM_DEPTH = if(isAXI) (I_RAM_DEPTH << log2Ceil(NB_COL)) else I_RAM_DEPTH

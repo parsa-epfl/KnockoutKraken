@@ -125,17 +125,32 @@ class DataBankManager(
   // Store request
   val s1_frontend_request_n = Wire(Decoupled(new DataBankFrontendRequestPacket(param)))
   s1_frontend_request_n.bits := frontend_request_i.bits
-  s1_frontend_request_n.valid := frontend_request_i.fire()
+
+  if(param.implementedWithRegister) 
+    s1_frontend_request_n.valid := frontend_request_i.valid // why valid instead of fire()? There will be a combinational loop of frontend_request.
+  else 
+    s1_frontend_request_n.valid := frontend_request_i.fire()
+
   val s1_frontend_request_r = (if(param.implementedWithRegister) FlushQueue(s1_frontend_request_n, 0, true)("s1_frontend_request_r")
   else FlushQueue(s1_frontend_request_n, 1, true)("s1_frontend_request_r"))
   s1_frontend_request_r.ready := pipeline_state_ready(1)
 
   // pass to the bram
-  bank_ram_request_addr_o.bits := frontend_request_i.bits.addr(param.setWidth-1, 0)
-  bank_ram_request_addr_o.valid := frontend_request_i.fire()
+  if(param.setWidth() > 1)
+    bank_ram_request_addr_o.bits := frontend_request_i.bits.addr(param.setWidth-1, 0)
+  else
+    bank_ram_request_addr_o.bits := 0.U
+  
+  if(param.implementedWithRegister)
+    bank_ram_request_addr_o.valid := frontend_request_i.valid
+  else
+    bank_ram_request_addr_o.valid := frontend_request_i.fire() //! Always remember to check the handshake signal when eliminating one level pipeline stage!!!
 
   // pass to the LRU
-  lru_addr_o := frontend_request_i.bits.addr(param.setWidth-1, 0)
+  if(param.setWidth() > 1)
+    lru_addr_o := frontend_request_i.bits.addr(param.setWidth-1, 0)
+  else
+    lru_addr_o := 0.U 
 
   // fetch data from the bram
   bank_ram_reply_data_i.ready := s1_frontend_request_r.valid // If transaction is valid, then we accept the result.
@@ -216,14 +231,20 @@ class DataBankManager(
 
   frontend_write_to_bank.bits.data := updated_entry
   frontend_write_to_bank.bits.data.v := Mux(s1_frontend_request_r.bits.flush_v, false.B, true.B)
-  frontend_write_to_bank.bits.addr := s1_frontend_request_r.bits.addr(param.setWidth()-1, 0)
+  if(param.setWidth() > 1)
+    frontend_write_to_bank.bits.addr := s1_frontend_request_r.bits.addr(param.setWidth()-1, 0)
+  else
+    frontend_write_to_bank.bits.addr := 0.U
   frontend_write_to_bank.bits.which := match_which
   frontend_write_to_bank.valid := s1_frontend_request_r.valid && hit_v && !s1_frontend_request_r.bits.refill_v && s1_frontend_request_r.bits.w_v && writableFunction(hit_entry,updated_entry) // When flushing, write to bank.
 
   s2_bank_writing_n.bits.dataBlock := updated_entry.read()
 
   val full_writing_request = Wire(Decoupled(new BankWriteRequestPacket(param))) // A full writing, which means a complete override to the block, so no original data needed. (refill should follow this path)
-  full_writing_request.bits.addr := s1_frontend_request_r.bits.addr(param.setWidth()-1, 0)
+  if(param.setWidth() > 1)
+    full_writing_request.bits.addr := s1_frontend_request_r.bits.addr(param.setWidth()-1, 0)
+  else
+    full_writing_request.bits.addr := 0.U
   full_writing_request.bits.data.refill(s1_frontend_request_r.bits.addr, s1_frontend_request_r.bits.thread_id, s1_frontend_request_r.bits.wData)
   full_writing_request.bits.which := lru_which_i
   full_writing_request.valid := s1_frontend_request_r.valid && (!hit_v && full_writing_v)
@@ -255,7 +276,10 @@ class DataBankManager(
 
   val replaced_entry = bank_ram_reply_data_i.bits(lru_which_i)
   val eviction_wb_req = Wire(Decoupled(new WriteBackRequestPacket(param))) // write back due to the eviction.
-  eviction_wb_req.bits.addr := replaced_entry.address(s1_frontend_request_r.bits.addr(param.setWidth-1, 0))
+  if(param.setWidth() > 1)
+    eviction_wb_req.bits.addr := replaced_entry.address(s1_frontend_request_r.bits.addr(param.setWidth-1, 0))
+  else
+    eviction_wb_req.bits.addr := replaced_entry.tag
   eviction_wb_req.bits.data := replaced_entry.read()
   eviction_wb_req.valid := 
     replaced_entry.d && // evicted entry is dirty

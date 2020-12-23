@@ -64,7 +64,7 @@ class BRAMPortAdapter(
   val frontend_read_reply_data_o = IO(Decoupled(set_t.cloneType))
 
   implicit val bramCfg = new BRAMConfig(
-    param.associativity, new CacheEntry(param).getWidth, param.setNumber
+    param.associativity, new CacheEntry(param).getWidth, param.setNumber, implementedWithRegister = param.implementedWithRegister
   )
 
   val bram_ports = IO(Flipped(Vec(2, new BRAMPort())))
