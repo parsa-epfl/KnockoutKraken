@@ -101,7 +101,7 @@ class BaseTLB(
   val param: TLBParameter,
   lruCore: () => LRUCore,
   refillEnabled: Boolean = true
-) extends MultiIOModule{
+) extends MultiIOModule {
   // frontend
   val frontend_request_i = IO(Flipped(Decoupled(new TLBAccessRequestPacket(param))))
   val flush_request_i = IO(Flipped(Decoupled(new TLBTagPacket(param))))
