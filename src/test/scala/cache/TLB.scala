@@ -104,6 +104,12 @@ implicit class BaseTLBDriver(target: DTUTLB){
     target.tick()
   }
 
+  def expectReply(violation: Boolean, hit: Boolean) = {
+    target.frontendReply_o.valid.expect(true.B)
+    target.frontendReply_o.bits.violation.expect(violation.B)
+    target.frontendReply_o.bits.hit.expect(hit.B)
+  }
+
   def tick(step: Int = 1){
     import armflex.util.SimTools._
     logWithCycle("Tick.")
@@ -117,7 +123,7 @@ class TLBPlusCache(
   initialMemFile: String = "",
   initialMapping: String = ""
 ) extends MultiIOModule {
-
+  
 }
 
 
@@ -142,6 +148,10 @@ class TLBTester extends FreeSpec with ChiselScalatestTester {
       () => new BaseTLB(param, () => new PseudoTreeLRUCore(param.associativity)), ""
     )).withAnnotations(anno){ dut =>
       dut.setReadRequest(0.U, 0.U)
+      dut.expectReply(false, false)
+      dut.tick()
+      dut.clearRequest()
+      dut.waitForArrive(0.U)
     }
   }
 }
