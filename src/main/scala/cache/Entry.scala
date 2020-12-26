@@ -28,9 +28,12 @@ class CacheEntry(param: CacheParameter) extends Bundle {
    * @brief @return a new entry with its data updated by @param data and the @param mask . 
    * Expected to be called when writing.
    */ 
-  def write(data: UInt, mask: UInt): CacheEntry = {
+  def write(data: UInt, mask: UInt, refill: Bool): CacheEntry = {
+    when(refill){
+      assert(mask.andR(), "Refill is 1 means mask is full 1!");
+    }
     val res = Wire(new CacheEntry(param))
-    res.d := true.B
+    res.d := !refill // refilling should not cause the dirty
     res.tag := this.tag
     res.v := true.B
     val newdata = VecInit(0.U(param.blockBit.W).asBools())
