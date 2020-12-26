@@ -125,54 +125,54 @@ class BaseTLB(
   ))
 
   // bind the frontend_request
-  u_cache.frontendRequest_i.bits.addr := frontend_request_i.bits.asUInt()
-  u_cache.frontendRequest_i.bits.thread_id := frontend_request_i.bits.tag.thread_id
+  u_cache.frontend_request_i.bits.addr := frontend_request_i.bits.asUInt()
+  u_cache.frontend_request_i.bits.thread_id := frontend_request_i.bits.tag.thread_id
   // mark it modified
   val modified_pte = Wire(new TLBEntryPacket(param))
   modified_pte.modified := true.B
   modified_pte.permission := 0.U
   modified_pte.pp := 0.U
   // bind the frontend_request
-  u_cache.frontendRequest_i.bits.wData := modified_pte.asUInt()
-  u_cache.frontendRequest_i.bits.wMask := modified_pte.asUInt()
-  u_cache.frontendRequest_i.bits.w_v := frontend_request_i.bits.w_v
-  u_cache.frontendRequest_i.valid := frontend_request_i.valid
-  frontend_request_i.ready := u_cache.frontendRequest_i.ready
+  u_cache.frontend_request_i.bits.wData := modified_pte.asUInt()
+  u_cache.frontend_request_i.bits.wMask := modified_pte.asUInt()
+  u_cache.frontend_request_i.bits.w_v := frontend_request_i.bits.w_v
+  u_cache.frontend_request_i.valid := frontend_request_i.valid
+  frontend_request_i.ready := u_cache.frontend_request_i.ready
 
   // bind the flush request
-  u_cache.flushRequest_i.bits.addr := flush_request_i.bits.asUInt()
-  u_cache.flushRequest_i.bits.thread_id := frontend_request_i.bits.tag.thread_id
-  u_cache.flushRequest_i.valid := flush_request_i.valid
-  flush_request_i.ready := u_cache.flushRequest_i.ready
+  u_cache.flush_request_i.bits.addr := flush_request_i.bits.asUInt()
+  u_cache.flush_request_i.bits.thread_id := frontend_request_i.bits.tag.thread_id
+  u_cache.flush_request_i.valid := flush_request_i.valid
+  flush_request_i.ready := u_cache.flush_request_i.ready
 
   // store the write permission so that the data flow is aligned
   val s1_wr_v_r = if(param.implementedWithRegister) frontend_request_i.bits.w_v else RegNext(frontend_request_i.bits.w_v)
   
-  val frontend_response =  u_cache.frontendReply_o.bits.data.asTypeOf(new TLBEntryPacket(param))
+  val frontend_response =  u_cache.frontend_reply_o.bits.data.asTypeOf(new TLBEntryPacket(param))
   // after get response, check the permission
-  violation_o.bits := u_cache.frontendReply_o.bits.thread_id
-  violation_o.valid := u_cache.frontendReply_o.valid && s1_wr_v_r && (frontend_response.permission =/= 1.U)
+  violation_o.bits := u_cache.frontend_reply_o.bits.thread_id
+  violation_o.valid := u_cache.frontend_reply_o.valid && s1_wr_v_r && (frontend_response.permission =/= 1.U)
   // assign frontend_reply_o
-  frontend_reply_o.valid := u_cache.frontendReply_o.valid
-  frontend_reply_o.bits.hit := u_cache.frontendReply_o.bits.hit
+  frontend_reply_o.valid := u_cache.frontend_reply_o.valid
+  frontend_reply_o.bits.hit := u_cache.frontend_reply_o.bits.hit
   frontend_reply_o.bits.pp := frontend_response.pp
   frontend_reply_o.bits.violation := violation_o.valid
 
-  backend_request_o.bits.tag := u_cache.backendRequest_o.bits.addr.asTypeOf(new TLBTagPacket(param))
+  backend_request_o.bits.tag := u_cache.backend_request_o.bits.addr.asTypeOf(new TLBTagPacket(param))
 
-  backend_request_o.bits.w_v := u_cache.backendRequest_o.bits.w_v
-  backend_request_o.valid := u_cache.backendRequest_o.valid
-  u_cache.backendRequest_o.ready := backend_request_o.ready
+  backend_request_o.bits.w_v := u_cache.backend_request_o.bits.w_v
+  backend_request_o.valid := u_cache.backend_request_o.valid
+  u_cache.backend_request_o.ready := backend_request_o.ready
 
   //TODO: There should be a queue for the refilling
-  u_cache.refillRequest_i.bits.addr := backend_reply_i.bits.tag.asUInt()
-  u_cache.refillRequest_i.bits.data := backend_reply_i.bits.data.asUInt()
-  u_cache.refillRequest_i.bits.not_sync_with_data_v := false.B
-  u_cache.refillRequest_i.bits.thread_id := backend_reply_i.bits.tag.thread_id
-  u_cache.refillRequest_i.valid := backend_reply_i.valid
-  backend_reply_i.ready := u_cache.refillRequest_i.ready
+  u_cache.refill_request_i.bits.addr := backend_reply_i.bits.tag.asUInt()
+  u_cache.refill_request_i.bits.data := backend_reply_i.bits.data.asUInt()
+  u_cache.refill_request_i.bits.not_sync_with_data_v := false.B
+  u_cache.refill_request_i.bits.thread_id := backend_reply_i.bits.tag.thread_id
+  u_cache.refill_request_i.valid := backend_reply_i.valid
+  backend_reply_i.ready := u_cache.refill_request_i.ready
 
-  packet_arrive_o.bits := u_cache.packetArrive_o.bits.thread_id
-  packet_arrive_o.valid := u_cache.packetArrive_o.valid
+  packet_arrive_o.bits := u_cache.packet_arrive_o.bits.thread_id
+  packet_arrive_o.valid := u_cache.packet_arrive_o.valid
 }
 

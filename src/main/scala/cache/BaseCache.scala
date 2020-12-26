@@ -263,8 +263,8 @@ class BaseCache(
   u_bram_adapter.frontend_read_request_i <> u_bank_frontend.bank_ram_request_addr_o
   u_bram_adapter.frontend_write_request_i <> u_bank_frontend.bank_ram_write_request_o
 
-  val frontendReply_o = IO(u_bank_frontend.frontend_reply_o.cloneType)
-  frontendReply_o <> u_bank_frontend.frontend_reply_o
+  val frontend_reply_o = IO(u_bank_frontend.frontend_reply_o.cloneType)
+  frontend_reply_o <> u_bank_frontend.frontend_reply_o
   // val packet_arrive_o = IO(u_bank_frontend.packet_arrive_o.cloneType)
   // packet_arrive_o <> u_bank_frontend.packet_arrive_o
 
@@ -280,9 +280,9 @@ class BaseCache(
   //val backendReadReply_i = IO(Flipped(u_refill_queue.backend_reply_i.cloneType)) //! When clone a Flipped Decoupled type, remember to use Flipped to make it correct direction
   //backendReadReply_i <> u_refill_queue.backend_reply_i
 
-  val frontendRequest_i = IO(Flipped(Decoupled(new CacheFrontendRequestPacket(param))))
-  val flushRequest_i = IO(Flipped(Decoupled(new CacheFrontendFlushRequest(param))))
-  val refillRequest_i = IO(Flipped(Decoupled(new MissResolveReplyPacket(param))))
+  val frontend_request_i = IO(Flipped(Decoupled(new CacheFrontendRequestPacket(param))))
+  val flush_request_i = IO(Flipped(Decoupled(new CacheFrontendFlushRequest(param))))
+  val refill_request_i = IO(Flipped(Decoupled(new MissResolveReplyPacket(param))))
 
   //val refill_request = Wire(u_bank_frontend.frontend_request_i.cloneType)
   //refill_request.valid := u_refill_queue.refill_o.valid
@@ -296,39 +296,43 @@ class BaseCache(
 
   //u_refill_queue.refill_o.ready := refill_request.ready
 
-  val refill_request = Wire(u_bank_frontend.frontend_request_i.cloneType)
-  refill_request.valid := refillRequest_i.valid
-  refill_request.bits.addr := refillRequest_i.bits.addr
-  refill_request.bits.flush_v := false.B
-  refill_request.bits.thread_id := refillRequest_i.bits.thread_id
-  refill_request.bits.wData := refillRequest_i.bits.data
-  refill_request.bits.wMask := Fill(param.blockBit, true.B)
-  refill_request.bits.w_v := true.B
-  refill_request.bits.refill_v := true.B
+  val refill_request_internal = Wire(u_bank_frontend.frontend_request_i.cloneType)
+  refill_request_internal.valid := refill_request_i.valid
+  refill_request_internal.bits.addr := refill_request_i.bits.addr
+  refill_request_internal.bits.flush_v := false.B
+  refill_request_internal.bits.thread_id := refill_request_i.bits.thread_id
+  refill_request_internal.bits.wData := refill_request_i.bits.data
+  refill_request_internal.bits.wMask := Fill(param.blockBit, true.B)
+  refill_request_internal.bits.w_v := true.B
+  refill_request_internal.bits.refill_v := true.B
 
-  refillRequest_i.ready := refill_request.ready
+  refill_request_i.ready := refill_request_internal.ready
 
 
-  val packetArrive_o = IO(Valid(new Bundle{
+  val packet_arrive_o = IO(Valid(new Bundle{
     val thread_id = UInt(param.threadIDWidth().W)
   }))
 
-  packetArrive_o.valid := refillRequest_i.fire()
-  packetArrive_o.bits.thread_id := refillRequest_i.bits.thread_id
+  packet_arrive_o.valid := refill_request_i.fire()
+  packet_arrive_o.bits.thread_id := refill_request_i.bits.thread_id
 
 
-  val u_frontend_arb = Module(new RRArbiter(u_bank_frontend.frontend_request_i.bits.cloneType(), 3))
+  val u_frontend_arb = Module(new Arbiter(u_bank_frontend.frontend_request_i.bits.cloneType(), 3))
+  // the order:
+  // - 0: Flush
+  // - 1: Refill
+  // - 2: Request
 
   // The normal request from the pipeline
-  u_frontend_arb.io.in(0).valid := frontendRequest_i.valid
-  u_frontend_arb.io.in(0).bits := frontendRequest_i.bits.toInternalRequestPacket()
-  frontendRequest_i.ready := u_frontend_arb.io.in(0).ready
+  u_frontend_arb.io.in(2).valid := frontend_request_i.valid
+  u_frontend_arb.io.in(2).bits := frontend_request_i.bits.toInternalRequestPacket()
+  frontend_request_i.ready := !flush_request_i.valid && !refill_request_i.valid
   // The flush request from other place
-  u_frontend_arb.io.in(1).valid := flushRequest_i.valid
-  u_frontend_arb.io.in(1).bits := flushRequest_i.bits.toInternalRequestPacket(param.blockBit)
-  flushRequest_i.ready := u_frontend_arb.io.in(1).ready
+  u_frontend_arb.io.in(0).valid := flush_request_i.valid
+  u_frontend_arb.io.in(0).bits := flush_request_i.bits.toInternalRequestPacket(param.blockBit)
+  flush_request_i.ready := u_frontend_arb.io.in(0).ready
   // The refilling request from the backend of the cache
-  u_frontend_arb.io.in(2) <> refill_request
+  u_frontend_arb.io.in(1) <> refill_request_internal
 
   u_frontend_arb.io.out <> u_bank_frontend.frontend_request_i
 
@@ -338,8 +342,8 @@ class BaseCache(
   u_backend_merger.write_request_i <> u_bank_frontend.writeback_request_o
   
   // Backend Queue
-  val backendRequest_o = IO(u_backend_merger.backend_request_o.cloneType)
-  backendRequest_o <> u_backend_merger.backend_request_o
+  val backend_request_o = IO(u_backend_merger.backend_request_o.cloneType)
+  backend_request_o <> u_backend_merger.backend_request_o
 }
 
 object BaseCache{

@@ -79,28 +79,28 @@ class DTUCache(
   val u_backend = Module(new BackendMemorySimulator(u_cache.param, initialFile))
   
   val u_refill_queue = Module(new RefillingQueue(u_cache.param))
-  u_refill_queue.miss_request_i.bits.addr := u_cache.backendRequest_o.bits.addr
-  u_refill_queue.miss_request_i.bits.thread_id := u_cache.backendRequest_o.bits.thread_id
+  u_refill_queue.miss_request_i.bits.addr := u_cache.backend_request_o.bits.addr
+  u_refill_queue.miss_request_i.bits.thread_id := u_cache.backend_request_o.bits.thread_id
   u_refill_queue.miss_request_i.bits.not_sync_with_data_v := false.B
-  u_refill_queue.miss_request_i.valid := u_cache.backendRequest_o.fire() && !u_cache.backendRequest_o.bits.w_v
+  u_refill_queue.miss_request_i.valid := u_cache.backend_request_o.fire() && !u_cache.backend_request_o.bits.w_v
 
   u_refill_queue.backend_reply_i <> u_delayChain.cacheReply_o
 
-  u_cache.refillRequest_i <> u_refill_queue.refill_o
-  u_cache.backendRequest_o <> u_delayChain.cacheRequest_i
+  u_cache.refill_request_i <> u_refill_queue.refill_o
+  u_cache.backend_request_o <> u_delayChain.cacheRequest_i
   
   u_backend.request_i <> u_delayChain.backendRequest_o
   u_backend.reply_o <> u_delayChain.backendReply_i
 
   // export the frontend ports of cache
-  val frontendRequest_i = IO(Flipped(u_cache.frontendRequest_i.cloneType))
-  frontendRequest_i <> u_cache.frontendRequest_i
-  val flushRequest_i = IO(Flipped(u_cache.flushRequest_i.cloneType))
-  flushRequest_i <> u_cache.flushRequest_i
-  val frontendReply_o = IO(u_cache.frontendReply_o.cloneType)
-  frontendReply_o <> u_cache.frontendReply_o
-  val packetArrive_o = IO(u_cache.packetArrive_o.cloneType)
-  packetArrive_o <> u_cache.packetArrive_o
+  val frontendRequest_i = IO(Flipped(u_cache.frontend_request_i.cloneType))
+  frontendRequest_i <> u_cache.frontend_request_i
+  val flushRequest_i = IO(Flipped(u_cache.flush_request_i.cloneType))
+  flushRequest_i <> u_cache.flush_request_i
+  val frontendReply_o = IO(u_cache.frontend_reply_o.cloneType)
+  frontendReply_o <> u_cache.frontend_reply_o
+  val packetArrive_o = IO(u_cache.packet_arrive_o.cloneType)
+  packetArrive_o <> u_cache.packet_arrive_o
 }
 
 implicit class CacheDriver(target: DTUCache){
