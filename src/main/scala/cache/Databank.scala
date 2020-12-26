@@ -217,14 +217,15 @@ class DataBankManager(
 
   val frontend_write_to_bank = Wire(Decoupled(new BankWriteRequestPacket(param))) // normal writing
 
-  val updated_entry = Mux(s1_frontend_request_r.bits.w_v || (s1_frontend_request_r.bits.refill_v && !hit_v),
+  val updated_entry = Mux(s1_frontend_request_r.bits.w_v,
     // how to determine the updated entry?
     // - if normal write, update
     // - if refill, keep original value if hit
     // - otherwise, keep original value
     hit_entry.write(
       s1_frontend_request_r.bits.wData, 
-      s1_frontend_request_r.bits.wMask
+      s1_frontend_request_r.bits.wMask,
+      s1_frontend_request_r.bits.refill_v
     ),
     hit_entry
   )

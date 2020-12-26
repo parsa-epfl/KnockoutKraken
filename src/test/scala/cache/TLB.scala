@@ -21,7 +21,7 @@ class DelayChain[T <: Data](in: T, level: Integer) extends MultiIOModule {
   o <> connections(level)
 }
 
-class DTUTLB(
+class DUTTLB(
   parent: () => BaseTLB,
   initialMem: String = ""
 ) extends MultiIOModule {
@@ -67,7 +67,7 @@ class DTUTLB(
   delay_chain_rep.i.bits.data := mem_port
 }
 
-implicit class BaseTLBDriver(target: DTUTLB){
+implicit class BaseTLBDriver(target: DUTTLB){
   def setReadRequest(vpage: UInt, threadID: UInt) = {
     target.frontendRequest_i.bits.tag.vpage.poke(vpage)
     target.frontendRequest_i.bits.tag.thread_id.poke(threadID)
@@ -104,10 +104,12 @@ implicit class BaseTLBDriver(target: DTUTLB){
     target.tick()
   }
 
-  def expectReply(violation: Boolean, hit: Boolean) = {
+  def expectReply(violation: Boolean, hit: Boolean, ppn: UInt) = {
     target.frontendReply_o.valid.expect(true.B)
     target.frontendReply_o.bits.violation.expect(violation.B)
     target.frontendReply_o.bits.hit.expect(hit.B)
+    if(!violation && hit)
+      target.frontendReply_o.bits.pp.expect(ppn)
   }
 
   def tick(step: Int = 1){
@@ -123,7 +125,7 @@ class TLBPlusCache(
   initialMemFile: String = "",
   initialMapping: String = ""
 ) extends MultiIOModule {
-  
+
 }
 
 
@@ -144,14 +146,17 @@ class TLBTester extends FreeSpec with ChiselScalatestTester {
 
   "Normal Access" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/tlb/normal_read"), WriteVcdAnnotation)
-    test(new DTUTLB(
+    test(new DUTTLB(
       () => new BaseTLB(param, () => new PseudoTreeLRUCore(param.associativity)), ""
     )).withAnnotations(anno){ dut =>
       dut.setReadRequest(0.U, 0.U)
-      dut.expectReply(false, false)
+      dut.expectReply(false, false, 0.U)
       dut.tick()
       dut.clearRequest()
       dut.waitForArrive(0.U)
+
+      dut.setReadRequest(0.U, 0.U)
+      dut.expectReply(false, true, 0.U)
     }
   }
 }
