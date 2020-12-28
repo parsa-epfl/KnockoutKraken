@@ -289,9 +289,9 @@ class DataBankManager(
 
   val flush_wb_req = Wire(Decoupled(new WriteBackRequestPacket(param))) // write back due to the flushing
   flush_wb_req.bits.addr := s1_frontend_request_r.bits.addr
-  flush_wb_req.bits.data := hit_entry.read()
+  flush_wb_req.bits.data := updated_entry.read()
   flush_wb_req.valid :=
-    hit_entry.d && // flushed is dirty
+    updated_entry.d && // flushed is dirty
     hit_v && s1_frontend_request_r.bits.flush_v && // flush confirmed.
     s1_frontend_request_r.fire()
 
