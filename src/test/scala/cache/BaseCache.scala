@@ -321,7 +321,44 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
         dut.expectReply(false, 0.U, 0.U, true)
         dut.tick() // keep flushing and never hit
       }
-      
+    }
+  }
+
+  "Flush dirty triggers writing back" in {
+    val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/cache/write_flushing"), WriteVcdAnnotation)
+    test(new DTUCache(
+      () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
+      "test/cache/memory.txt"
+    )).withAnnotations(anno){ dut =>
+      dut.setWriteRequest(10.U, 0.U, 100.U, ((1l << 8) - 1).U)
+      dut.tick()
+      dut.expectReply(false, 0.U, 0.U, true)
+      dut.clearRequest()
+      dut.waitForArrive(0.U)
+      dut.tick()
+      dut.setWriteRequest(10.U, 0.U, 100.U, ((1l << 8) - 1).U)
+      dut.tick()
+      dut.clearRequest()
+      dut.expectReply(true, 0.U, 0.U, true)
+      dut.setFlushRequest(10.U, 0.U)
+      dut.tick()
+      dut.expectReply(true, 0.U, 0.U, true)
+      dut.clearRequest()
+      dut.tick()
+      dut.tick()
+      dut.tick()
+      dut.tick()
+
+      dut.setReadRequest(10.U, 0.U)
+      dut.tick()
+      dut.expectReply(false, 0.U, 0.U, true)
+      dut.clearRequest()
+      dut.waitForArrive(0.U)
+      dut.tick()
+
+      dut.setReadRequest(10.U, 0.U)
+      dut.tick()
+      dut.expectReply(true, 0.U, 100.U)
     }
   }
 }
