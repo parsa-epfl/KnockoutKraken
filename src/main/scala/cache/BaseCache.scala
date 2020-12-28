@@ -263,11 +263,6 @@ class BaseCache(
   u_bram_adapter.frontend_read_request_i <> u_bank_frontend.bank_ram_request_addr_o
   u_bram_adapter.frontend_write_request_i <> u_bank_frontend.bank_ram_write_request_o
 
-  val frontend_reply_o = IO(u_bank_frontend.frontend_reply_o.cloneType)
-  frontend_reply_o <> u_bank_frontend.frontend_reply_o
-  // val packet_arrive_o = IO(u_bank_frontend.packet_arrive_o.cloneType)
-  // packet_arrive_o <> u_bank_frontend.packet_arrive_o
-
   val u_lruCore = Module(new LRU(param, lruCore))
   u_lruCore.addr_i <> u_bank_frontend.lru_addr_o
   u_lruCore.index_i <> u_bank_frontend.lru_index_o
@@ -316,6 +311,7 @@ class BaseCache(
   packet_arrive_o.valid := refill_request_i.fire()
   packet_arrive_o.bits.thread_id := refill_request_i.bits.thread_id
 
+  //val flush_ack_o = IO(Output(Bool()))
 
   val u_frontend_arb = Module(new Arbiter(u_bank_frontend.frontend_request_i.bits.cloneType(), 3))
   // the order:
@@ -336,6 +332,14 @@ class BaseCache(
 
   u_frontend_arb.io.out <> u_bank_frontend.frontend_request_i
 
+
+  // frontend_reply_o: Response to the R/W request from the pipeline
+  val frontend_reply_o = IO(u_bank_frontend.frontend_reply_o.cloneType)
+  frontend_reply_o.bits <> u_bank_frontend.frontend_reply_o.bits
+  frontend_reply_o.valid := u_bank_frontend.frontend_reply_o.valid && RegNext(frontend_request_i.fire())
+  // val packet_arrive_o = IO(u_bank_frontend.packet_arrive_o.cloneType)
+  // packet_arrive_o <> u_bank_frontend.packet_arrive_o
+
   // Connect to the backend merger
   val u_backend_merger = Module(new BackendRequestMerger(param))
   u_backend_merger.read_request_i <> u_bank_frontend.miss_request_o
@@ -346,7 +350,7 @@ class BaseCache(
   backend_request_o <> u_backend_merger.backend_request_o
 }
 
-object BaseCache{
+object BaseCache {
   def generateCache(param: CacheParameter, lruCore: () => LRUCore): BaseCache = {
     new BaseCache(param, lruCore, (a, b) => true.B)
   }
