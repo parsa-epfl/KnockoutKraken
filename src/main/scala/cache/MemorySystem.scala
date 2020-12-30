@@ -154,20 +154,6 @@ class TLBPlusCache (
   cache_packet_arrive_o <> u_cache.packet_arrive_o
 }
 
-object TLBPlusCacheRunner extends App {
-  import chisel3.stage.ChiselStage
-  val param = new MemorySystemParameter(
-    
-  )
-  println(
-    (new ChiselStage).emitVerilog(new TLBPlusCache(
-      param,
-      () => new PseudoTreeLRUCore(param.cacheWayNumber),
-      () => new PseudoTreeLRUCore(param.tlbWayNumber)  
-    ))
-  )
-}
-
 object CacheInterfaceAdaptors {
 
 /**
@@ -220,7 +206,9 @@ class CacheInterfaceHandshakePacket(param: CacheParameter) extends Bundle {
   val size = UInt(2.W)
   val thread_id = UInt(param.threadIDWidth.W)
   val pair_v = Bool()
-  val order = Bool() // 0: 1:
+  val order = UInt(1.W) // 0: 1:
+
+  override def cloneType: this.type = new CacheInterfaceHandshakePacket(param).asInstanceOf[this.type]
 }
 
 /**
@@ -232,9 +220,22 @@ class CacheInterfaceHandshakePacket(param: CacheParameter) extends Bundle {
 class CacheRequestAdaptor (
   val param: MemorySystemParameter
 )(
-  implicit cfg: ProcConfig
+  //implicit cfg: ProcConfig
 ) extends MultiIOModule {
-  val i = IO(Flipped(Decoupled(new MInst)))
+  // val i = IO(Flipped(Decoupled(new MInst)))
+  class request_from_pipeline_t extends Bundle {
+    val size = UInt(2.W)
+    val memReq = Vec(2, new Bundle{
+      val addr = UInt(param.vAddressWidth.W)
+      val data = PROCESSOR_TYPES.DATA_T
+    })
+    val isLoad = Bool()
+    val isPair = Bool()
+    val threadID = UInt(log2Ceil(param.threadNumber).W)
+  }
+  // TODO: Replace the request_from_pipelie_t with the MInst
+  val i = IO(Flipped(Decoupled(new request_from_pipeline_t)))
+
   val o = IO(Decoupled(new CacheFrontendRequestPacket(param.toCacheParameter())))
 
   class internal_memory_request_t extends Bundle {
@@ -244,25 +245,28 @@ class CacheRequestAdaptor (
     val w_v = Bool()
     val w_data = PROCESSOR_TYPES.DATA_T
     val pair_order = UInt(1.W)
+    val pair_v = Bool()
   }
 
-  // TODO: Complete the connection between from_pipeline and i
-  val from_pipeline = Decoupled(new internal_memory_request_t)
+  val from_pipeline = Wire(Decoupled(new internal_memory_request_t))
   from_pipeline.bits.size := i.bits.size
   from_pipeline.bits.vaddr := i.bits.memReq(0).addr
-  // TODO: where is the thread id?
+  from_pipeline.bits.thread_id := i.bits.threadID
+  from_pipeline.bits.w_v := !i.bits.isLoad
   from_pipeline.bits.w_data := i.bits.memReq(0).data
   from_pipeline.bits.pair_order := 0.U // the first request
+  from_pipeline.bits.pair_v := i.bits.isPair
   from_pipeline.valid := i.valid
   i.ready := from_pipeline.ready
 
-  val s1_pair_context_n = Decoupled(new internal_memory_request_t)
+  val s1_pair_context_n = Wire(Decoupled(new internal_memory_request_t))
   s1_pair_context_n.bits.size := i.bits.size
-  // TODO: where is the thread id?
-  // pair_context_r.bits.thread_id := 0
+  s1_pair_context_n.bits.thread_id := i.bits.threadID
   s1_pair_context_n.bits.vaddr := i.bits.memReq(1).addr
+  s1_pair_context_n.bits.w_v := !i.bits.isLoad
   s1_pair_context_n.bits.w_data := i.bits.memReq(1).addr
   s1_pair_context_n.bits.pair_order := 1.U // the second request
+  s1_pair_context_n.bits.pair_v := true.B
   s1_pair_context_n.valid := from_pipeline.fire() && i.bits.isPair
   val s1_pair_context_r = FlushQueue(s1_pair_context_n, 1, false)("s1_pair_context_r")
 
@@ -294,32 +298,34 @@ class CacheRequestAdaptor (
   u_arb.io.out.ready := o.ready
 
   // a message to the reply arbiter for synchronization
-  val sync_message = Decoupled(new CacheInterfaceHandshakePacket(param.toCacheParameter()))
+  val sync_message = Wire(Decoupled(new CacheInterfaceHandshakePacket(param.toCacheParameter())))
   sync_message.bits.size := u_arb.io.out.bits.size
   sync_message.bits.bias_addr := u_arb.io.out.bits.vaddr(
     param.blockBiasWidth()-1,
     0
   )
   sync_message.bits.order := u_arb.io.out.bits.pair_order
+  sync_message.bits.pair_v := u_arb.io.out.bits.pair_v
   sync_message.bits.thread_id := u_arb.io.out.bits.thread_id
   sync_message.valid := o.fire()
   assert(sync_message.ready, "It's impossible that the FIFO of sync_message is full")
 
   val sync_message_o = IO(Decoupled(new CacheInterfaceHandshakePacket(param.toCacheParameter())))
-  sync_message_o := Queue(sync_message, 2 * param.threadNumber)
+  sync_message_o <> Queue(sync_message, 2 * param.threadNumber)
 }
 
 class CacheReplyAdaptor (
   val param: MemorySystemParameter
 )(
-  implicit cfg: ProcConfig
+  //implicit cfg: ProcConfig
 ) extends MultiIOModule {
   val cache_reply_i = IO(Flipped(Valid(new FrontendReplyPacket(param.toCacheParameter()))))
   val data_o = IO(Valid(Vec(2, PROCESSOR_TYPES.DATA_T)))
   val sync_message_i = IO(Flipped(Decoupled(new CacheInterfaceHandshakePacket(param.toCacheParameter()))))
   // sync_message_i should align with cache_reply_i
   assert(cache_reply_i.valid === sync_message_i.valid, "sync_message_i should align with cache_reply_i.")
-  
+  sync_message_i.ready := true.B //?
+
   when(cache_reply_i.valid){
     assert(cache_reply_i.bits.thread_id === sync_message_i.bits.thread_id)
   }
@@ -327,7 +333,7 @@ class CacheReplyAdaptor (
   val recovered_data = recoverData(param.cacheBlockSize, cache_reply_i.bits.data, sync_message_i.bits.size, sync_message_i.bits.bias_addr)
 
   // For normal case, just return is fine
-  val single_transaction_result = Valid(Vec(2, PROCESSOR_TYPES.DATA_T))
+  val single_transaction_result = Wire(Valid(Vec(2, PROCESSOR_TYPES.DATA_T)))
   single_transaction_result.bits(0) := recovered_data
   single_transaction_result.bits(1) := DontCare
   single_transaction_result.valid := sync_message_i.valid && !sync_message_i.bits.pair_v && cache_reply_i.bits.hit
@@ -342,7 +348,7 @@ class CacheReplyAdaptor (
   s1_store_context_r.data := recovered_data
   s1_store_context_r.v := sync_message_i.valid && sync_message_i.bits.pair_v && sync_message_i.bits.order === 0.U && cache_reply_i.bits.hit
   // for pair instruction, result generated here.
-  val pair_transaction_result = Valid(Vec(2, PROCESSOR_TYPES.DATA_T))
+  val pair_transaction_result = Wire(Valid(Vec(2, PROCESSOR_TYPES.DATA_T)))
   pair_transaction_result.bits(0) := s1_store_context_r.data
   pair_transaction_result.bits(1) := recovered_data
   pair_transaction_result.valid := s1_store_context_r.v && sync_message_i.valid && sync_message_i.bits.pair_v && sync_message_i.bits.order === 1.U && cache_reply_i.bits.hit
