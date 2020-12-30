@@ -4,8 +4,8 @@ import chisel3._
 import chisel3.util._
 
 class TLBParameter(
-  val vPageWidth: Int = 64,
-  val pPageWidth: Int = 36,
+  val vPageWidth: Int = 52,
+  val pPageWidth: Int = 24,
   threadNumber: Int = 4,
   setNumber: Int = 1,
   associativity: Int = 32,
