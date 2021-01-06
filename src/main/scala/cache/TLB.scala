@@ -41,6 +41,10 @@ class TLBEntryPacket(param: TLBParameter) extends Bundle {
   val permission = UInt(2.W)
   val modified = Bool()
 
+  def isWritable(): Bool = {
+    return modified === 1.U;
+  }
+
   override def cloneType: this.type = new TLBEntryPacket(param).asInstanceOf[this.type]
 }
 
@@ -120,7 +124,7 @@ class BaseTLB(
     {
       (oldOne, newOne) =>
       val oD = oldOne.read().asTypeOf(new TLBEntryPacket(param))
-      oD.permission === 1.U && (oldOne.read() =/= newOne.read())
+      oD.isWritable() && (oldOne.read() =/= newOne.read())
     }
   ))
 
@@ -151,7 +155,7 @@ class BaseTLB(
   val frontend_response =  u_cache.frontend_reply_o.bits.data.asTypeOf(new TLBEntryPacket(param))
   // after get response, check the permission
   violation_o.bits := u_cache.frontend_reply_o.bits.thread_id
-  violation_o.valid := u_cache.frontend_reply_o.valid && s1_wr_v_r && (frontend_response.permission =/= 1.U)
+  violation_o.valid := u_cache.frontend_reply_o.valid && s1_wr_v_r && !frontend_response.isWritable()
   // assign frontend_reply_o
   frontend_reply_o.valid := u_cache.frontend_reply_o.valid
   frontend_reply_o.bits.hit := u_cache.frontend_reply_o.bits.hit
