@@ -19,8 +19,8 @@ case class MemorySystemParameter(
 
   threadNumber: Int = 4,
 
-  tlbSetNumber: Int = 8,
-  tlbWayNumber: Int = 16,
+  tlbSetNumber: Int = 16,
+  tlbWayNumber: Int = 8,
 
   cacheSetNumber: Int = 1024,
   cacheWayNumber: Int = 4,
@@ -113,12 +113,13 @@ class TLBPlusCache (
     val thread_id = UInt(cacheParam.threadIDWidth().W)
   }
 
-  val frontend_reply_o = IO(Valid(new tlb_cache_frontend_reply_t))
+  // val frontend_reply_o = IO(Valid(new tlb_cache_frontend_reply_t))
+  val frontend_reply_o = IO(Valid(new FrontendReplyPacket(param.toCacheParameter())))
   frontend_reply_o.valid := u_cache.frontend_reply_o.valid
-  frontend_reply_o.bits.cache_hit_v := u_cache.frontend_reply_o.bits.hit
+  frontend_reply_o.bits.hit := u_cache.frontend_reply_o.bits.hit && RegNext(u_tlb.frontend_reply_o.bits.hit && !u_tlb.frontend_reply_o.bits.violation)
   frontend_reply_o.bits.data := u_cache.frontend_reply_o.bits.data
   frontend_reply_o.bits.thread_id := u_cache.frontend_reply_o.bits.thread_id
-  frontend_reply_o.bits.tlb_hit_v := RegNext(u_tlb.frontend_reply_o.bits.hit && !u_tlb.frontend_reply_o.bits.violation)
+  //frontend_reply_o.bits.tlb_hit_v := && RegNext(u_tlb.frontend_reply_o.bits.hit && !u_tlb.frontend_reply_o.bits.violation)
 
   // Flush
   // cache_flush_request_i
@@ -314,13 +315,15 @@ class CacheRequestAdaptor (
   sync_message_o <> Queue(sync_message, 2 * param.threadNumber)
 }
 
+// TODO: Add signal to indicate valid?
 class CacheReplyAdaptor (
   val param: MemorySystemParameter
 )(
   //implicit cfg: ProcConfig
 ) extends MultiIOModule {
   val cache_reply_i = IO(Flipped(Valid(new FrontendReplyPacket(param.toCacheParameter()))))
-  val data_o = IO(Valid(Vec(2, PROCESSOR_TYPES.DATA_T)))
+  // val data_o = IO(Valid(Vec(2, PROCESSOR_TYPES.DATA_T))) 
+  val data_o = IO(Valid(Vec(2, Valid(PROCESSOR_TYPES.DATA_T))))
   val sync_message_i = IO(Flipped(Decoupled(new CacheInterfaceHandshakePacket(param.toCacheParameter()))))
   // sync_message_i should align with cache_reply_i
   assert(cache_reply_i.valid === sync_message_i.valid, "sync_message_i should align with cache_reply_i.")
@@ -333,25 +336,30 @@ class CacheReplyAdaptor (
   val recovered_data = recoverData(param.cacheBlockSize, cache_reply_i.bits.data, sync_message_i.bits.size, sync_message_i.bits.bias_addr)
 
   // For normal case, just return is fine
-  val single_transaction_result = Wire(Valid(Vec(2, PROCESSOR_TYPES.DATA_T)))
-  single_transaction_result.bits(0) := recovered_data
+  val single_transaction_result = Wire(Valid(Vec(2, Valid(PROCESSOR_TYPES.DATA_T))))
+  single_transaction_result.bits(0).valid := cache_reply_i.bits.hit
+  single_transaction_result.bits(0).bits := recovered_data
   single_transaction_result.bits(1) := DontCare
-  single_transaction_result.valid := sync_message_i.valid && !sync_message_i.bits.pair_v && cache_reply_i.bits.hit
+  single_transaction_result.valid := sync_message_i.valid && !sync_message_i.bits.pair_v
 
   // store context
   class store_context_t extends Bundle {
     val data = PROCESSOR_TYPES.DATA_T
+    val hit_v = Bool()
     val v = Bool()
   }
 
   val s1_store_context_r = Reg(new store_context_t)
   s1_store_context_r.data := recovered_data
-  s1_store_context_r.v := sync_message_i.valid && sync_message_i.bits.pair_v && sync_message_i.bits.order === 0.U && cache_reply_i.bits.hit
+  s1_store_context_r.hit_v := cache_reply_i.bits.hit
+  s1_store_context_r.v := sync_message_i.valid && sync_message_i.bits.pair_v && sync_message_i.bits.order === 0.U
   // for pair instruction, result generated here.
-  val pair_transaction_result = Wire(Valid(Vec(2, PROCESSOR_TYPES.DATA_T)))
-  pair_transaction_result.bits(0) := s1_store_context_r.data
-  pair_transaction_result.bits(1) := recovered_data
-  pair_transaction_result.valid := s1_store_context_r.v && sync_message_i.valid && sync_message_i.bits.pair_v && sync_message_i.bits.order === 1.U && cache_reply_i.bits.hit
+  val pair_transaction_result = Wire(Valid(Vec(2, Valid(PROCESSOR_TYPES.DATA_T))))
+  pair_transaction_result.bits(0).bits := s1_store_context_r.data
+  pair_transaction_result.bits(0).valid := s1_store_context_r.hit_v
+  pair_transaction_result.bits(1).bits := recovered_data
+  pair_transaction_result.bits(1).valid := cache_reply_i.bits.hit
+  pair_transaction_result.valid := s1_store_context_r.v && sync_message_i.valid && sync_message_i.bits.pair_v && sync_message_i.bits.order === 1.U
 
   // select data_o from two options
   assert(!(single_transaction_result.valid && pair_transaction_result.valid), "It's impossible to collect result in both single and pair way!")
@@ -361,3 +369,172 @@ class CacheReplyAdaptor (
 
 }
 
+object CacheBackendToAXIInterface{
+
+/**
+ * Queue that stores the miss requests orderly. These requests are necessary when generating refilling packet.
+ * @param param the Cache Parameter.
+ */ 
+class RefillQueue(param: CacheParameter) extends MultiIOModule{
+  val miss_request_i = IO(Flipped(Decoupled(new MissRequestPacket(param))))
+  val backend_reply_i = IO(Flipped(Decoupled(UInt(param.blockBit.W))))
+  val refill_o = IO(Decoupled(new MissResolveReplyPacket(param)))
+  // there is a queue for the miss request
+
+  val miss_request_q = Queue(miss_request_i, param.threadNumber * 2)
+  assert(miss_request_i.ready)
+
+  refill_o.bits.thread_id := miss_request_q.bits.thread_id
+  refill_o.bits.not_sync_with_data_v := miss_request_q.bits.not_sync_with_data_v
+  refill_o.bits.addr := miss_request_q.bits.addr
+  refill_o.bits.data := backend_reply_i.bits
+
+  refill_o.valid := miss_request_q.valid && Mux(miss_request_q.bits.not_sync_with_data_v, true.B, backend_reply_i.valid)
+  miss_request_q.ready := refill_o.ready && Mux(miss_request_q.bits.not_sync_with_data_v, true.B, backend_reply_i.valid)
+  backend_reply_i.ready := refill_o.ready && !(miss_request_q.bits.not_sync_with_data_v && backend_reply_i.valid)
+}
+
+import DMAController.Bus._
+import DMAController.Worker.XferDescBundle
+import DMAController.Frontend.{AXI4Reader, AXI4Writer}
+
+class CacheBackendAXIAdaptors(param: MemorySystemParameter) extends MultiIOModule {
+  val M_AXI = new AXI4(
+    param.pAddressWidth, param.cacheBlockSize
+  )
+
+  val cache_backend_request_i = IO(Flipped(Decoupled(new MergedBackendRequestPacket(param.toCacheParameter()))))
+
+  val q_cache_backend_request = Queue(cache_backend_request_i, 8)
+
+  val cache_backend_reply_o = IO(Decoupled(new MissResolveReplyPacket(param.toCacheParameter())))
+
+  val u_axi_read_engine = Module(new AXI4Reader(param.pAddressWidth, param.cacheBlockSize))
+
+  M_AXI.ar <> u_axi_read_engine.io.bus.ar
+  M_AXI.r <> u_axi_read_engine.io.bus.r
+
+  u_axi_read_engine.io.xfer.length := 0.U
+  u_axi_read_engine.io.xfer.address := Cat(q_cache_backend_request.bits.addr, Fill(log2Ceil(param.cacheBlockSize), 0.U))
+  u_axi_read_engine.io.xfer.valid := !q_cache_backend_request.bits.w_v && q_cache_backend_request.valid
+
+  cache_backend_reply_o.bits.addr := q_cache_backend_request.bits.addr
+  cache_backend_reply_o.bits.data := u_axi_read_engine.io.dataOut.bits
+  cache_backend_reply_o.bits.not_sync_with_data_v := false.B
+  cache_backend_reply_o.bits.thread_id := q_cache_backend_request.bits.thread_id
+  cache_backend_reply_o.valid := u_axi_read_engine.io.dataOut.valid
+  u_axi_read_engine.io.dataOut.ready := cache_backend_reply_o.ready
+
+  val u_axi_write_engine = Module(new AXI4Writer(param.pAddressWidth, param.cacheBlockSize))
+
+  u_axi_write_engine.io.xfer.address := Cat(q_cache_backend_request.bits.addr, Fill(log2Ceil(param.cacheBlockSize), 0.U))
+  u_axi_write_engine.io.xfer.length := 0.U
+  u_axi_write_engine.io.xfer.valid := q_cache_backend_request.bits.w_v && q_cache_backend_request.valid
+
+  u_axi_write_engine.io.dataIn.bits := q_cache_backend_request.bits.data
+  u_axi_write_engine.io.dataIn.valid := u_axi_write_engine.io.xfer.valid
+
+  q_cache_backend_request.ready := Mux(
+    q_cache_backend_request.bits.w_v,
+    u_axi_write_engine.io.xfer.done,
+    u_axi_read_engine.io.xfer.done
+  )
+
+  M_AXI.aw <> u_axi_write_engine.io.bus.aw
+  M_AXI.w <> u_axi_write_engine.io.bus.w
+  M_AXI.b <> u_axi_write_engine.io.bus.b
+}
+}
+
+class InstructionMemorySystem(
+  param: MemorySystemParameter
+) extends MultiIOModule {
+  val u_tlb_plus_cache = Module(new TLBPlusCache(
+    param, 
+    () => new MatrixLRUCore(param.cacheWayNumber),
+    () => new PseudoTreeLRUCore(param.tlbWayNumber)
+  ))
+
+  val frontend_request_i = IO(Flipped(u_tlb_plus_cache.frontend_request_i.cloneType))
+  frontend_request_i <> u_tlb_plus_cache.frontend_request_i
+
+  val frontend_reply_o = IO(u_tlb_plus_cache.frontend_reply_o.cloneType)
+  frontend_reply_o <> u_tlb_plus_cache.frontend_reply_o
+
+  val cache_flush_request_i = IO(Flipped(u_tlb_plus_cache.cache_flush_request_i.cloneType))
+  cache_flush_request_i <> u_tlb_plus_cache.cache_flush_request_i
+
+  val tlb_flush_request_i = IO(Flipped(u_tlb_plus_cache.tlb_flush_request_i.cloneType))
+  tlb_flush_request_i <> u_tlb_plus_cache.tlb_flush_request_i
+
+  val tlb_backend_request_o = IO(u_tlb_plus_cache.tlb_backend_request_o.cloneType)
+  tlb_backend_request_o <> u_tlb_plus_cache.tlb_backend_request_o
+
+  val tlb_backend_reply_i = IO(Flipped(u_tlb_plus_cache.tlb_backend_reply_i.cloneType))
+  tlb_backend_reply_i <> u_tlb_plus_cache.tlb_backend_reply_i
+
+  val cache_backend_request_o = IO(u_tlb_plus_cache.cache_backend_request_o.cloneType)
+  cache_backend_request_o <> u_tlb_plus_cache.cache_backend_request_o.cloneType
+
+  val cache_backend_reply_i = IO(Flipped(u_tlb_plus_cache.cache_backend_reply_i.cloneType))
+  cache_backend_reply_i <> u_tlb_plus_cache.cache_backend_reply_i
+
+  val tlb_packet_arrive_o = IO(u_tlb_plus_cache.tlb_packet_arrive_o.cloneType)
+  tlb_packet_arrive_o <> u_tlb_plus_cache.tlb_packet_arrive_o
+
+  val tlb_violation_o = IO(u_tlb_plus_cache.tlb_violation_o.cloneType)
+  tlb_violation_o <> u_tlb_plus_cache.tlb_violation_o
+
+  val cache_packet_arrive_o = IO(u_tlb_plus_cache.cache_packet_arrive_o.cloneType)
+  cache_packet_arrive_o <> u_tlb_plus_cache.cache_packet_arrive_o
+}
+
+class DataMemorySystem(
+  param: MemorySystemParameter
+) extends MultiIOModule {
+  val u_tlb_plus_cache = Module(new TLBPlusCache(
+    param, 
+    () => new MatrixLRUCore(param.cacheWayNumber),
+    () => new PseudoTreeLRUCore(param.tlbWayNumber)
+  ))
+
+  val u_request_adaptor = Module(new CacheInterfaceAdaptors.CacheRequestAdaptor(param)())
+  val u_reply_adaptor = Module(new CacheInterfaceAdaptors.CacheReplyAdaptor(param)())
+
+  u_reply_adaptor.sync_message_i <> u_request_adaptor.sync_message_o
+  
+  val frontend_request_i = IO(Flipped(u_request_adaptor.i.cloneType))
+  frontend_request_i <> u_request_adaptor.i
+  u_request_adaptor.o <> u_tlb_plus_cache.frontend_request_i
+
+  val frontend_reply_o = IO(u_reply_adaptor.data_o.cloneType)
+  frontend_reply_o <> u_reply_adaptor.data_o
+  u_reply_adaptor.cache_reply_i <> u_tlb_plus_cache.frontend_reply_o
+
+  val cache_flush_request_i = IO(Flipped(u_tlb_plus_cache.cache_flush_request_i.cloneType))
+  cache_flush_request_i <> u_tlb_plus_cache.cache_flush_request_i
+
+  val tlb_flush_request_i = IO(Flipped(u_tlb_plus_cache.tlb_flush_request_i.cloneType))
+  tlb_flush_request_i <> u_tlb_plus_cache.tlb_flush_request_i
+
+  val tlb_backend_request_o = IO(u_tlb_plus_cache.tlb_backend_request_o.cloneType)
+  tlb_backend_request_o <> u_tlb_plus_cache.tlb_backend_request_o
+
+  val tlb_backend_reply_i = IO(Flipped(u_tlb_plus_cache.tlb_backend_reply_i.cloneType))
+  tlb_backend_reply_i <> u_tlb_plus_cache.tlb_backend_reply_i
+
+  val cache_backend_request_o = IO(u_tlb_plus_cache.cache_backend_request_o.cloneType)
+  cache_backend_request_o <> u_tlb_plus_cache.cache_backend_request_o
+
+  val cache_backend_reply_i = IO(Flipped(u_tlb_plus_cache.cache_backend_reply_i.cloneType))
+  cache_backend_reply_i <> u_tlb_plus_cache.cache_backend_reply_i
+
+  val tlb_packet_arrive_o = IO(u_tlb_plus_cache.tlb_packet_arrive_o.cloneType)
+  tlb_packet_arrive_o <> u_tlb_plus_cache.tlb_packet_arrive_o
+
+  val tlb_violation_o = IO(u_tlb_plus_cache.tlb_violation_o.cloneType)
+  tlb_violation_o <> u_tlb_plus_cache.tlb_violation_o
+
+  val cache_packet_arrive_o = IO(u_tlb_plus_cache.cache_packet_arrive_o.cloneType)
+  cache_packet_arrive_o <> u_tlb_plus_cache.cache_packet_arrive_o
+}

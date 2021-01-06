@@ -128,32 +128,6 @@ class CacheFrontendFlushRequest(
   }
 }
 
-
-
-/**
- * Queue that stores the miss requests orderly. These requests are necessary when generating refilling packet.
- * @param param the Cache Parameter.
- */ 
-class RefillingQueue(param: CacheParameter) extends MultiIOModule{
-  val miss_request_i = IO(Flipped(Decoupled(new MissRequestPacket(param))))
-  val backend_reply_i = IO(Flipped(Decoupled(UInt(param.blockBit.W))))
-  val refill_o = IO(Decoupled(new MissResolveReplyPacket(param)))
-  // there is a queue for the miss request
-
-  val miss_request_q = Queue(miss_request_i, param.threadNumber * 2)
-  assert(miss_request_i.ready)
-
-  refill_o.bits.thread_id := miss_request_q.bits.thread_id
-  refill_o.bits.not_sync_with_data_v := miss_request_q.bits.not_sync_with_data_v
-  refill_o.bits.addr := miss_request_q.bits.addr
-  refill_o.bits.data := backend_reply_i.bits
-
-  refill_o.valid := miss_request_q.valid && Mux(miss_request_q.bits.not_sync_with_data_v, true.B, backend_reply_i.valid)
-  miss_request_q.ready := refill_o.ready && Mux(miss_request_q.bits.not_sync_with_data_v, true.B, backend_reply_i.valid)
-  backend_reply_i.ready := refill_o.ready && !(miss_request_q.bits.not_sync_with_data_v && backend_reply_i.valid)
-}
-
-
 class MergedBackendRequestPacket(param: CacheParameter) extends Bundle{
   val addr = UInt(param.addressWidth.W)
   val thread_id = UInt(param.threadIDWidth().W)
