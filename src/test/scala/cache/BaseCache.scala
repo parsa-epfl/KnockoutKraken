@@ -78,7 +78,7 @@ class DTUCache(
   val u_delayChain = Module(new DelayChain(u_cache.param, 4))
   val u_backend = Module(new BackendMemorySimulator(u_cache.param, initialFile))
   
-  val u_refill_queue = Module(new RefillingQueue(u_cache.param))
+  val u_refill_queue = Module(new CacheBackendToAXIInterface.RefillQueue(u_cache.param))
   u_refill_queue.miss_request_i.bits.addr := u_cache.backend_request_o.bits.addr
   u_refill_queue.miss_request_i.bits.thread_id := u_cache.backend_request_o.bits.thread_id
   u_refill_queue.miss_request_i.bits.not_sync_with_data_v := false.B
