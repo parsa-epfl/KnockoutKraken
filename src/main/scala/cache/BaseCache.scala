@@ -13,8 +13,7 @@ import armflex.util.FlushQueue
 //import firrtl.PrimOps.Mul
 
 import scala.collection.mutable
-import treadle.executable.DataType
-import scala.xml.dtd.impl.Base
+//import scala.xml.dtd.impl.Base
 import chisel3.SpecifiedDirection.Flip
 
 case class CacheParameter(

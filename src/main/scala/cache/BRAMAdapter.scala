@@ -13,8 +13,8 @@ import armflex.util.FlushQueue
 //import firrtl.PrimOps.Mul
 
 import scala.collection.mutable
-import treadle.executable.DataType
-import scala.xml.dtd.impl.Base
+//import treadle.executable.DataType
+//import scala.xml.dtd.impl.Base
 
 class BRAMorRegister(implementedWithRegister: Boolean = true)(implicit cfg: BRAMConfig) extends MultiIOModule{
   val portA = IO(new BRAMPort)

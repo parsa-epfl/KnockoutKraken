@@ -113,8 +113,8 @@ implicit class BaseTLBDriver(target: DUTTLB){
   }
 
   def tick(step: Int = 1){
-    import armflex.util.SimTools._
-    logWithCycle("Tick.")
+    //import armflex.util.SimTools._
+    //logWithCycle("Tick.")
     target.clock.step(step)
   }
 }

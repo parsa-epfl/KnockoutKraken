@@ -11,25 +11,25 @@ import collection.mutable.ArrayBuffer
 
 class BaseCacheWrapper extends MultiIOModule{
   val cacheParameter = new CacheParameter(
-    1024, 4, 512, 30, 4, 512, false
+    1024, 4, 512, 30, 4, false
   )
   val lruCore = () => new PseudoTreeLRUCore(4)
   val u_cache = Module(BaseCache.generateCache(cacheParameter, lruCore))
 
   val outputHandshake = Cat(
-    u_cache.backendReadReply_i.ready,
-    u_cache.backendRequest_o.valid,
-    u_cache.frontendReply_o.valid,
-    u_cache.frontendRequest_i.ready,
-    u_cache.packet_arrive_o.valid
+    // u_cache.backendReadReply_i.ready,
+    u_cache.backend_request_o.valid,
+    u_cache.frontend_reply_o.valid,
+    u_cache.frontend_request_i.ready,
+    //u_cache.packet_arrive_o.valid
   )
 
   val ports = Array(
-    (u_cache.backendReadReply_i.bits, false),
-    (u_cache.backendRequest_o.bits, true),
-    (u_cache.frontendReply_o.bits, true),
-    (u_cache.frontendRequest_i.bits, false),
-    (u_cache.packet_arrive_o.bits, true),
+    // (u_cache.backendReadReply_i.bits, false),
+    (u_cache.backend_request_o.bits, true),
+    (u_cache.frontend_reply_o.bits, true),
+    (u_cache.frontend_request_i.bits, false),
+    //(u_cache.packet_arrive_o.bits, true),
     (outputHandshake, true)
   )
 
@@ -74,14 +74,14 @@ class BaseCacheWrapper extends MultiIOModule{
   axi <> u_reg_file.io.axiLite
 
   val inputHandshake = Cat(
-    u_cache.backendReadReply_i.valid,
-    u_cache.backendRequest_o.ready,
-    u_cache.frontendRequest_i.valid,
+    // u_cache.backendReadReply_i.valid,
+    u_cache.backend_request_o.ready,
+    u_cache.frontend_request_i.valid,
   )
 
-  u_cache.backendReadReply_i.valid := axi.awvalid
-  u_cache.backendRequest_o.ready := axi.rready
-  u_cache.frontendRequest_i.valid := axi.arvalid
+  // u_cache.backendReadReply_i.valid := axi.awvalid
+  u_cache.backend_request_o.ready := axi.rready
+  u_cache.frontend_request_i.valid := axi.arvalid
 }
 
 object BaseCacheWrapperApp extends App{

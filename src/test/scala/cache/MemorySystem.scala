@@ -10,7 +10,7 @@ import chiseltest.internal.WriteVcdAnnotation
 import firrtl.options.TargetDirAnnotation
 import TestOptionBuilder._
 
-import armflex.util.SimTools._
+//import armflex.util.SimTools._
 
 class RequestAdaptorTester extends FreeSpec with ChiselScalatestTester {
   val param = new MemorySystemParameter()
@@ -119,7 +119,12 @@ class RequestAdaptorTester extends FreeSpec with ChiselScalatestTester {
   }
 }
 
-
+// Cases:
+// 1 | 2
+// M | M
+// H | M
+// M | H
+// M | M
 class ReplyAdaptorTester extends FreeSpec with ChiselScalatestTester {
   val param = new MemorySystemParameter()
   import CacheInterfaceAdaptors._
@@ -156,13 +161,95 @@ class ReplyAdaptorTester extends FreeSpec with ChiselScalatestTester {
 
       // expect result?
       dut.data_o.valid.expect(true.B)
-      dut.data_o.bits(0).expect(0x00AB.U)
-      dut.data_o.bits(1).expect(0x0009.U)
+      dut.data_o.bits(0).bits.expect(0x00AB.U)
+      dut.data_o.bits(1).bits.expect(0x0009.U)
     }
-  }
-
-  "Data recovery" in {
-
   }
 }
 
+object DataMemorySystemTestUtility {
+
+class DelayChain[T <: Data](t: T, level: Integer) extends MultiIOModule {
+  val i = IO(Flipped(Decoupled(t)))
+  val o = IO(Decoupled(t))
+  val connections = Wire(Vec(level + 1, Decoupled(t)))
+  connections(0) <> i
+  for(i <- 1 to level){
+    connections(i) <> Queue(connections(i-1), 1)
+  }
+  o <> connections(level)
+}
+
+
+class DataMemorySystemDUT extends MultiIOModule {
+
+  val param = new MemorySystemParameter(
+    20,
+    16,
+    4096,
+    4,
+    16,
+    8,
+    1024,
+    4,
+    512
+  )
+
+  val u_system = Module(new DataMemorySystem(param))
+
+  val u_cache_request_delay_chain = Module(new DelayChain(u_system.cache_backend_request_o.bits.cloneType, 10))
+  u_system.cache_backend_request_o <> u_cache_request_delay_chain.i
+  val u_cache_reply_delay_chain = Module(new DelayChain(u_system.cache_backend_reply_i.bits.cloneType, 10))
+  u_system.cache_backend_reply_i <> u_cache_reply_delay_chain.o
+  val u_tlb_request_delay_chain = Module(new DelayChain(u_system.tlb_backend_request_o.bits.cloneType, 20))
+  u_system.tlb_backend_request_o <> u_tlb_request_delay_chain.i
+  val u_tlb_reply_delay_chain = Module(new DelayChain(u_system.tlb_backend_reply_i.bits.cloneType, 20))
+  u_system.tlb_backend_reply_i <> u_tlb_reply_delay_chain.o
+
+  // Cache mapping rule: a simple memory with everything empty.
+  val mem = Mem(1024, UInt(512.W))
+  u_cache_reply_delay_chain.i.bits.addr := u_cache_request_delay_chain.o.bits.addr
+  u_cache_reply_delay_chain.i.bits.data := mem(u_cache_request_delay_chain.o.bits.addr)
+  u_cache_reply_delay_chain.i.bits.not_sync_with_data_v := false.B
+  u_cache_reply_delay_chain.i.bits.thread_id := u_cache_request_delay_chain.o.bits.thread_id
+  u_cache_reply_delay_chain.i.valid := u_cache_request_delay_chain.o.valid && !u_cache_request_delay_chain.o.bits.w_v
+  u_cache_request_delay_chain.o.ready := true.B
+  when(u_cache_request_delay_chain.o.valid && u_cache_request_delay_chain.o.bits.w_v){
+    mem(u_cache_request_delay_chain.o.bits.addr) := u_cache_request_delay_chain.o.bits.data
+  }
+
+  // TLB Rule: xor the higher part and lower part. (How to handle the Thread ID?)
+  def tlbMappingFunction(tag: TLBTagPacket): UInt = {
+    assert(tag.thread_id.getWidth == 2)
+    assert(tag.vpage.getWidth == 8)
+    (tag.vpage(7, 4) ^ tag.vpage(3, 0)) + tag.thread_id
+  }
+
+  val tlb_modified = Mem(1024, Bool())
+
+  u_tlb_reply_delay_chain.i.bits.tag := u_tlb_request_delay_chain.o.bits.tag
+  u_tlb_reply_delay_chain.i.bits.data.pp := tlbMappingFunction(u_tlb_request_delay_chain.o.bits.tag)
+  u_tlb_reply_delay_chain.i.bits.data.modified := tlb_modified(Cat(
+    u_tlb_request_delay_chain.o.bits.tag.thread_id,
+    u_tlb_request_delay_chain.o.bits.tag.vpage
+  ))
+  u_tlb_reply_delay_chain.i.bits.data.permission := 1.U
+  
+}
+
+implicit class DataMemorySystemInterface(dut: DataMemorySystemDUT) {
+  
+}
+
+
+}
+
+class DataMemorySystemTester extends FreeSpec with ChiselScalatestTester {
+  val param = new MemorySystemParameter()
+  "Generate Verilog" in {
+    val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/memory_system/for_data"), WriteVcdAnnotation)
+    test(new DataMemorySystem(param)).withAnnotations(anno){ dut =>
+      
+    }
+  }
+}
