@@ -7,7 +7,6 @@ import chisel3.util._
 import arm.DECODE_CONTROL_SIGNALS._
 import arm.PROCESSOR_TYPES._
 import util.MACC
-import treadle.executable.MuxLongs
 
 class EInst(implicit val cfg: ProcConfig) extends Bundle {
   val rd = Valid(REG_T)

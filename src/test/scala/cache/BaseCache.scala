@@ -20,7 +20,7 @@ import chiseltest.internal.VerilatorBackendAnnotation
 import firrtl.options.TargetDirAnnotation
 import chiseltest.internal.WriteVcdAnnotation
 
-import armflex.util.SimTools._
+//import armflex.util.SimTools._
 
 /**
  * Useful testing functions and prototypes for testing a cache.
@@ -153,7 +153,7 @@ implicit class CacheDriver(target: DTUCache){
   }
 
   def tick(step: Int = 1){
-    logWithCycle("Tick.")
+    //logWithCycle("Tick.")
     target.clock.step(step)
   }
 }
