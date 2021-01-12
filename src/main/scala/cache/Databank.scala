@@ -46,6 +46,7 @@ class FrontendReplyPacket(param: CacheParameter) extends Bundle{
   val data = UInt(param.blockBit.W)
   val thread_id = UInt(param.threadIDWidth().W)
   val hit = Bool()
+  val dirty = Bool()
 
   override def cloneType(): this.type = new FrontendReplyPacket(param).asInstanceOf[this.type]
 }
@@ -84,6 +85,8 @@ class MissResolveReplyPacket(param: CacheParameter) extends Bundle{
 class WriteBackRequestPacket(param: CacheParameter) extends Bundle{
   val addr = UInt(param.addressWidth.W)
   val data = UInt(param.blockBit.W)
+
+  val flush_v = Bool() // True if this eviction is caused by flush
 
   override def cloneType: this.type = new WriteBackRequestPacket(param).asInstanceOf[this.type]
 }
@@ -180,6 +183,7 @@ class DataBankManager(
       val res = Wire(new CacheEntry(param))
       res.v := Mux(flush_v, false.B, true.B)
       res.refill(this.addr, this.thread_id, this.dataBlock)
+      res.d := true.B
       res
     }
   }
@@ -188,7 +192,8 @@ class DataBankManager(
   val s2_bank_writing_r = RegNext(s2_bank_writing_n)
 
   val s2_writing_matched = s2_bank_writing_r.valid && s2_bank_writing_r.bits.addr === s1_frontend_request_r.bits.addr
-
+  // TODO: Bugs here. The block stored in the s2_bank_writing_r is not complete when the writing is just part of the block.
+  // TODO: This will trigger a fault reading. 
   val hit_entry = Mux(
     s2_writing_matched,
     s2_bank_writing_r.bits.toEntry(),
@@ -239,6 +244,8 @@ class DataBankManager(
   frontend_write_to_bank.bits.which := match_which
   frontend_write_to_bank.valid := s1_frontend_request_r.valid && hit_v && !s1_frontend_request_r.bits.refill_v && s1_frontend_request_r.bits.w_v && writableFunction(hit_entry,updated_entry) // When flushing, write to bank.
 
+  frontend_reply_o.bits.dirty := frontend_write_to_bank.valid // This will trigger a writing.
+
   s2_bank_writing_n.bits.dataBlock := updated_entry.read()
 
   val full_writing_request = Wire(Decoupled(new BankWriteRequestPacket(param))) // A full writing, which means a complete override to the block, so no original data needed. (refill should follow this path)
@@ -282,14 +289,17 @@ class DataBankManager(
   else
     eviction_wb_req.bits.addr := replaced_entry.tag
   eviction_wb_req.bits.data := replaced_entry.read()
+  eviction_wb_req.bits.flush_v := false.B
   eviction_wb_req.valid := 
     replaced_entry.d && // evicted entry is dirty
     !hit_v && // miss occurs
     s1_frontend_request_r.fire()
+  
 
   val flush_wb_req = Wire(Decoupled(new WriteBackRequestPacket(param))) // write back due to the flushing
   flush_wb_req.bits.addr := s1_frontend_request_r.bits.addr
   flush_wb_req.bits.data := updated_entry.read()
+  flush_wb_req.bits.flush_v := true.B
   flush_wb_req.valid :=
     updated_entry.d && // flushed is dirty
     hit_v && s1_frontend_request_r.bits.flush_v && // flush confirmed.

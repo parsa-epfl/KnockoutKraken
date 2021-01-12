@@ -131,6 +131,7 @@ class MergedBackendRequestPacket(param: CacheParameter) extends Bundle{
   val addr = UInt(param.addressWidth.W)
   val thread_id = UInt(param.threadIDWidth().W)
   val w_v = Bool()
+  val flush_v = Bool() // this request is caused by flush
   val data = UInt(param.blockBit.W)
 
   override def cloneType: this.type = new MergedBackendRequestPacket(param).asInstanceOf[this.type]
@@ -147,6 +148,7 @@ class BackendRequestMerger(param: CacheParameter) extends MultiIOModule{
   read_request_converted.bits.data := DontCare
   read_request_converted.bits.thread_id := read_request_i.bits.thread_id
   read_request_converted.bits.w_v := false.B
+  read_request_converted.bits.flush_v := false.B
   read_request_converted.valid := read_request_i.valid
   read_request_i.ready := read_request_converted.ready
 
@@ -155,6 +157,7 @@ class BackendRequestMerger(param: CacheParameter) extends MultiIOModule{
   write_request_converted.bits.data := write_request_i.bits.data
   write_request_converted.bits.thread_id := DontCare
   write_request_converted.bits.w_v := true.B
+  write_request_converted.bits.flush_v := write_request_i.bits.flush_v
   write_request_converted.valid := write_request_i.valid
   write_request_i.ready := write_request_converted.ready
 

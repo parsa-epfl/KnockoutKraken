@@ -65,9 +65,12 @@ class TLBAccessRequestPacket(param: TLBParameter) extends Bundle {
  */ 
 
 class TLBFrontendReplyPacket(param: TLBParameter) extends Bundle {
-  val pp = UInt(param.pPageWidth.W)
+  // val pp = UInt(param.pPageWidth.W)
+  // val modified = 
+  val entry = new TLBEntryPacket(param)
   val hit = Bool()
   val violation = Bool()
+  val dirty = Bool()
 
   override def cloneType: this.type = new TLBFrontendReplyPacket(param).asInstanceOf[this.type]
 }
@@ -80,9 +83,18 @@ class TLBFrontendReplyPacket(param: TLBParameter) extends Bundle {
  */ 
 class TLBBackendRequestPacket(param: TLBParameter) extends Bundle {
   val tag = new TLBTagPacket(param)
+  val entry = new TLBEntryPacket(param)
   val w_v = Bool()
+  val flush_v = Bool()
 
   override def cloneType: this.type = new TLBBackendRequestPacket(param).asInstanceOf[this.type]
+
+  def toAccessRequestPacket(): TLBAccessRequestPacket = {
+    val res = new TLBAccessRequestPacket(param)
+    res.tag := this.tag
+    res.w_v := this.w_v
+    res
+  }
 }
 
 /**
@@ -113,7 +125,7 @@ class BaseTLB(
   // permission violation
   val violation_o = IO(Valid(UInt(param.threadIDWidth().W)))
   // backend
-  val backend_request_o = IO(Decoupled(new TLBAccessRequestPacket(param)))
+  val backend_request_o = IO(Decoupled(new TLBBackendRequestPacket(param)))
   val backend_reply_i = IO(Flipped(Decoupled(new TLBBackendReplyPacket(param))))
   // activate
   val packet_arrive_o = IO(Valid(UInt(param.threadIDWidth().W)))
@@ -159,16 +171,18 @@ class BaseTLB(
   // assign frontend_reply_o
   frontend_reply_o.valid := u_cache.frontend_reply_o.valid
   frontend_reply_o.bits.hit := u_cache.frontend_reply_o.bits.hit
-  frontend_reply_o.bits.pp := frontend_response.pp
+  frontend_reply_o.bits.entry := frontend_response
   frontend_reply_o.bits.violation := violation_o.valid
+  frontend_reply_o.bits.dirty := u_cache.frontend_reply_o.bits.dirty
 
   backend_request_o.bits.tag := u_cache.backend_request_o.bits.addr.asTypeOf(new TLBTagPacket(param))
-
+  backend_request_o.bits.entry := u_cache.backend_request_o.bits.data.asTypeOf(new TLBEntryPacket(param))
   backend_request_o.bits.w_v := u_cache.backend_request_o.bits.w_v
+  backend_request_o.bits.flush_v := u_cache.backend_request_o.bits.flush_v
   backend_request_o.valid := u_cache.backend_request_o.valid
   u_cache.backend_request_o.ready := backend_request_o.ready
 
-  //TODO: There should be a queue for the refilling
+  //There should be a queue for the refilling (In the module TLBWrapper)
   u_cache.refill_request_i.bits.addr := backend_reply_i.bits.tag.asUInt()
   u_cache.refill_request_i.bits.data := backend_reply_i.bits.data.asUInt()
   u_cache.refill_request_i.bits.not_sync_with_data_v := false.B

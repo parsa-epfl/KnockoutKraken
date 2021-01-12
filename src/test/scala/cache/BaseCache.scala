@@ -361,6 +361,28 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
       dut.expectReply(true, 0.U, 100.U)
     }
   }
+
+  "Hit incomplete forwarding chunk" in {
+    val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/cache/forwarding_chunk"), WriteVcdAnnotation)
+    test(new DTUCache(
+      () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
+      "test/cache/memory.txt"
+    )).withAnnotations(anno){ dut =>
+      dut.setWriteRequest(10.U, 0.U, 0xA0.U, 0xFF.U)
+      dut.tick()
+      dut.expectReply(false, 0.U, 0.U)
+      dut.clearRequest()
+      dut.waitForArrive(0.U)
+      dut.tick(10)
+      dut.setWriteRequest(10.U, 0.U, 0xA000.U, 0xFF00.U)
+      dut.tick()
+      dut.expectReply(true, 0.U, 0.U, true)
+      dut.setReadRequest(10.U, 0.U)
+      dut.tick()
+      dut.clearRequest()
+      dut.expectReply(true, 0.U, 0xA00A.U)
+    }
+  }
 }
 
 class CacheLRUTester extends FreeSpec with ChiselScalatestTester {
@@ -368,6 +390,8 @@ class CacheLRUTester extends FreeSpec with ChiselScalatestTester {
     64, 2, 32, 10, 2
   )
   import CacheTestUtility._
+
+  // TODO: RAW Hazard for LRU.
 
   "LRU Replacement" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/cache/LRU"), WriteVcdAnnotation)

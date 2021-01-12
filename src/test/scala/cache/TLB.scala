@@ -109,7 +109,7 @@ implicit class BaseTLBDriver(target: DUTTLB){
     target.frontendReply_o.bits.violation.expect(violation.B)
     target.frontendReply_o.bits.hit.expect(hit.B)
     if(!violation && hit)
-      target.frontendReply_o.bits.pp.expect(ppn)
+      target.frontendReply_o.bits.entry.pp.expect(ppn)
   }
 
   def tick(step: Int = 1){
