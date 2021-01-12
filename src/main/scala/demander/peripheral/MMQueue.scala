@@ -55,6 +55,7 @@ class MMReadQueue[T <: SoftwareControlledBundle](
   dataWidth: Int = 32
 ) extends MultiIOModule {
   val request_i = IO(Flipped(Valid(new MemoryRequestPacket(addressWidth, dataWidth))))
+  // TODO: Make all the modules read in a sync way.
   val reply_o = IO(Output(UInt(dataWidth.W)))
 
   val queue_i = IO(Flipped(Decoupled(t.cloneType)))

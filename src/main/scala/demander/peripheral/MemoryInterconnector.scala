@@ -25,7 +25,7 @@ class MemoryInterconnector(
     slave_requests_o(i).valid := master_request_i.valid && (master_request_i.bits.addr.asSInt() & masks(i).S) === addresses(i).S
   }
   
-  val encodings = PriorityEncoder(slave_requests_o.map(_.valid))
+  val encodings = OHToUInt(slave_requests_o.map(_.valid))
 
   master_reply_o.bits := MuxLookup(encodings, 0.U, slave_replies_i.zipWithIndex.map{ case (port, i) =>
     i.U -> port

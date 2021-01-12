@@ -89,7 +89,7 @@ class TLBPlusCache (
 
   // val tlb_frontend_reply = u_tlb.frontend_reply_o
   u_cache.frontend_request_i.bits.addr := Cat(
-    u_tlb.frontend_reply_o.bits.pp,
+    u_tlb.frontend_reply_o.bits.entry.pp,
     frontend_request_i.bits.addr(
       log2Ceil(param.pageSize) - param.blockBiasWidth() - 1,
       0
