@@ -52,8 +52,6 @@ case class MemorySystemParameter(
       false
     )
   }
-
-  
 }
 
 
@@ -414,7 +412,7 @@ class CacheBackendAXIAdaptors(param: MemorySystemParameter) extends MultiIOModul
   M_AXI.ar <> u_axi_read_engine.io.bus.ar
   M_AXI.r <> u_axi_read_engine.io.bus.r
 
-  u_axi_read_engine.io.xfer.length := 0.U
+  u_axi_read_engine.io.xfer.length := 1.U
   u_axi_read_engine.io.xfer.address := Cat(q_cache_backend_request.bits.addr, Fill(log2Ceil(param.cacheBlockSize), 0.U))
   u_axi_read_engine.io.xfer.valid := !q_cache_backend_request.bits.w_v && q_cache_backend_request.valid
 
@@ -428,7 +426,7 @@ class CacheBackendAXIAdaptors(param: MemorySystemParameter) extends MultiIOModul
   val u_axi_write_engine = Module(new AXI4Writer(param.pAddressWidth, param.cacheBlockSize))
 
   u_axi_write_engine.io.xfer.address := Cat(q_cache_backend_request.bits.addr, Fill(log2Ceil(param.cacheBlockSize), 0.U))
-  u_axi_write_engine.io.xfer.length := 0.U
+  u_axi_write_engine.io.xfer.length := 1.U
   u_axi_write_engine.io.xfer.valid := q_cache_backend_request.bits.w_v && q_cache_backend_request.valid
 
   u_axi_write_engine.io.dataIn.bits := q_cache_backend_request.bits.data
