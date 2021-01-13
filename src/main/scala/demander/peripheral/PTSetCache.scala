@@ -66,41 +66,40 @@ class PTSetBuffer(
   val buffer_r = Reg(Vec(requestPacketNumber, UInt(dmaWidth.W)))
 
   // Load logic.
-  val load_cnt_r = RegInit(UInt(log2Ceil(requestPacketNumber).W), 0.U)
-  when(load_cnt_r === (requestPacketNumber - 1).U){
-    load_cnt_r := 0.U
-  }.elsewhen(dma_data_i.fire()){
-    load_cnt_r := 1.U + load_cnt_r
-  }
+  val dma_cnt_r = RegInit(UInt(log2Ceil(requestPacketNumber).W), 0.U)
   val load_enabled_vi = IO(Input(Bool()))
   val load_vr = RegInit(Bool(), false.B)
   //load_vr := Mux(load_cnt_r === (requestPacketNumber - 1).U, false.B, load_vr)
-  when(load_cnt_r === (requestPacketNumber - 1).U){
+  when(dma_cnt_r === (requestPacketNumber - 1).U && dma_data_i.fire()){
     load_vr := false.B
   }.elsewhen(load_enabled_vi){
     load_vr := true.B
   }
   // Bind updated_buffer to buffer_r
   val updated_buffer = WireInit(buffer_r)
-  updated_buffer(load_cnt_r) := dma_data_i.bits
+  updated_buffer(dma_cnt_r) := dma_data_i.bits
 
   // Store logic.
   val dma_data_o = IO(Decoupled(UInt(dmaWidth.W)))
-  val store_cnt_r = RegInit(UInt(log2Ceil(requestPacketNumber).W), 0.U)
-  when(store_cnt_r === (requestPacketNumber-1).U){
-    store_cnt_r := 0.U
-  }.elsewhen(dma_data_o.fire()){
-    store_cnt_r := store_cnt_r + 1.U
-  }
   val store_enable_vi = IO(Input(Bool()))
   val store_vr = RegInit(Bool(), false.B)
-  when(store_cnt_r === (requestPacketNumber-1).U){
+  when(dma_cnt_r === (requestPacketNumber-1).U && dma_data_o.fire()){
     store_vr := false.B
   }.elsewhen(store_enable_vi){
     store_vr := true.B
   }
+
+  // update of dma_cnt_r
+  when(dma_data_i.fire() && load_vr || dma_data_o.fire() && store_vr){
+    dma_cnt_r := Mux(
+      dma_cnt_r === (requestPacketNumber - 1).U,
+      0.U,
+      dma_cnt_r + 1.U
+    )
+  }
+  
   dma_data_o.valid := store_vr
-  dma_data_o.bits := buffer_r(store_cnt_r)
+  dma_data_o.bits := buffer_r(dma_cnt_r)
 
   val pt_set_r = buffer_r.asTypeOf(t.cloneType)
   // Get LRU Element (Maybe available element)
