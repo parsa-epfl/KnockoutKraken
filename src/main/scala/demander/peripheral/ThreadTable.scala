@@ -17,10 +17,10 @@ class ThreadTable(
 
   val S_AXI = IO(AxiLiteSlave(new AxiLiteConfig(32)))
 
-  val table = SyncReadMem(threadNumber, UInt(processIDWidth.W))
+  val table = Vec(threadNumber, UInt(processIDWidth.W)) // SyncReadMem(threadNumber, UInt(processIDWidth.W))
 
   val internal_address = request_i.bits.addr(1 + log2Ceil(threadNumber),2)
-  reply_o := table(internal_address)
+  reply_o := RegNext(table(internal_address))
 
   S_AXI.arready := true.B
   S_AXI.awready := true.B
@@ -28,7 +28,7 @@ class ThreadTable(
   val axi_internal_read_address = S_AXI.araddr(1 + log2Ceil(threadNumber),2)
   val axi_internal_write_address = S_AXI.awaddr(1 + log2Ceil(threadNumber),2)
   
-  S_AXI.rdata := table(axi_internal_read_address)
+  S_AXI.rdata := RegNext(table(axi_internal_read_address))
   S_AXI.rresp := 0.U
 
   val rvalid_r = RegInit(false.B)
@@ -58,6 +58,17 @@ class ThreadTable(
   }.elsewhen(S_AXI.wvalid){
     bvalid_r := true.B
   }
+
+  class lookup_result_t extends Bundle {
+    val thread_id = UInt(log2Ceil(threadNumber).W)
+    val hit_v = Bool()
+  }
+
+  val lookup_request_i = IO(Input(UInt(processIDWidth.W)))
+  val hit_oh = table.map(_ === lookup_request_i)
+  val loopup_reply_o = IO(Output(new lookup_result_t))
+  loopup_reply_o.hit_v := VecInit(hit_oh).asUInt() =/= 0.U
+  loopup_reply_o.thread_id := Mux1H(hit_oh, Seq.tabulate(threadNumber)(_.U))
 }
 
 object ThreadTableVerilogEmitter extends App {
