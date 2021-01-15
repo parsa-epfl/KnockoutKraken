@@ -163,7 +163,7 @@ class TLBBackendMissMessagePacket extends SoftwareControlledBundle {
   }
   
   def parseFromVec(f: Vec[UInt]): this.type = {
-    val res = Wire(new TLBBackendMissMessagePacket)
+    val res = Wire(this.cloneType)
     res.v_page := Cat(f(1), f(0))
     res.v_page := f(2)
     res.asInstanceOf[this.type]
@@ -190,7 +190,7 @@ class TLBBackendEvictMessagePacket extends SoftwareControlledBundle {
   }
 
   def parseFromVec(f: Vec[UInt]): this.type = {
-    val res = Wire(new TLBBackendEvictMessagePacket)
+    val res = Wire(this.cloneType)
     res.v_page := Cat(f(1), f(0))
     res.t_id := f(2)
     res.ppn := f(3)

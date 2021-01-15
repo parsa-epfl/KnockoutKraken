@@ -34,6 +34,8 @@ class PTItem extends Bundle {
   val entry = new PTEPacket
 }
 
+// TODO: Replace previous bundles with the coresponding bundle defined in the SoftwareStruct
+
 /**
  * One Set in the Page Table. It should contains more than one PTEs.
  * 
