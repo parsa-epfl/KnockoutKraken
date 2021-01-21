@@ -47,7 +47,7 @@ abstract class SoftwareControlledBundle extends Bundle {
  * @param addressWidth the width of the address line.
  * @param dataWidth the width of the data line.
  * 
- * @note this is asynchronized read due to the property of the pipeline.
+ * @note synchronized read
  */ 
 class MMReadQueue[T <: SoftwareControlledBundle](
   t: T,
@@ -75,7 +75,7 @@ class MMReadQueue[T <: SoftwareControlledBundle](
   // the internal address used to index internal CSRs.
   val subAddressWidth = log2Ceil(read_vector.length)
   val internal_address = request_i.bits.addr(subAddressWidth + log2Ceil(dataWidth / 8) - 1,log2Ceil(dataWidth / 8))
-  reply_o := read_vector(internal_address)
+  reply_o := RegNext(read_vector(internal_address))
 
   val ready_r = Reg(Bool())
   queue_i.ready := ready_r
@@ -94,7 +94,7 @@ class MMReadQueue[T <: SoftwareControlledBundle](
  * @param addressWidth the width of the address line.
  * @param dataWidth the width of the data line.
  * 
- * @note this is asynchronized read due to the property of the pipeline.
+ * @note synchronized read.
  */ 
 class MMWriteQueue[T <: SoftwareControlledBundle](
   t: T,
@@ -114,11 +114,11 @@ class MMWriteQueue[T <: SoftwareControlledBundle](
   val subAddressWidth = log2Ceil(write_vector.length)
   val internal_address = request_i.bits.addr(subAddressWidth + log2Ceil(dataWidth / 8) - 1,log2Ceil(dataWidth / 8))
 
-  reply_o := Mux(
+  reply_o := RegNext(Mux(
     internal_address === 0.U, 
     queue_o.ready,
     write_vector(internal_address)
-  )
+  ))
 
   when(request_i.valid && request_i.bits.w_v){
     write_vector(internal_address) := request_i.bits.data

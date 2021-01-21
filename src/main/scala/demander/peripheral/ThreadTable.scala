@@ -7,6 +7,13 @@ import armflex.util.{
   AxiLiteConfig
 }
 
+class ThreadLookupResultPacket(
+  threadNumber: Int = 4
+) extends Bundle {
+  val thread_id = UInt(log2Ceil(threadNumber).W)
+  val hit_v = Bool()
+}
+
 class ThreadTable(
   threadNumber: Int = 4,
   processIDWidth: Int = 16
@@ -17,10 +24,10 @@ class ThreadTable(
 
   val S_AXI = IO(AxiLiteSlave(new AxiLiteConfig(32)))
 
-  val table = Vec(threadNumber, UInt(processIDWidth.W)) // SyncReadMem(threadNumber, UInt(processIDWidth.W))
+  val table = Reg(Vec(threadNumber, Valid(UInt(processIDWidth.W)))) // SyncReadMem(threadNumber, UInt(processIDWidth.W))
 
   val internal_address = request_i.bits.addr(1 + log2Ceil(threadNumber),2)
-  reply_o := RegNext(table(internal_address))
+  reply_o := RegNext(table(internal_address).bits)
 
   S_AXI.arready := true.B
   S_AXI.awready := true.B
@@ -44,7 +51,8 @@ class ThreadTable(
     axi_write_addr_r.bits := true.B
     axi_write_addr_r.bits := axi_internal_write_address
   }.elsewhen(S_AXI.wvalid){
-    table(axi_write_addr_r.bits) := S_AXI.wdata
+    table(axi_write_addr_r.bits).bits := S_AXI.wdata
+    table(axi_write_addr_r.bits).valid := true.B
   }
 
   S_AXI.awready := !axi_write_addr_r.valid
@@ -59,14 +67,11 @@ class ThreadTable(
     bvalid_r := true.B
   }
 
-  class lookup_result_t extends Bundle {
-    val thread_id = UInt(log2Ceil(threadNumber).W)
-    val hit_v = Bool()
-  }
-
   val lookup_request_i = IO(Input(UInt(processIDWidth.W)))
-  val hit_oh = table.map(_ === lookup_request_i)
-  val loopup_reply_o = IO(Output(new lookup_result_t))
+  val hit_oh = table.map({ term =>
+    term.valid && term.bits === lookup_request_i
+  })
+  val loopup_reply_o = IO(Output(new ThreadLookupResultPacket(threadNumber)))
   loopup_reply_o.hit_v := VecInit(hit_oh).asUInt() =/= 0.U
   loopup_reply_o.thread_id := Mux1H(hit_oh, Seq.tabulate(threadNumber)(_.U))
 }

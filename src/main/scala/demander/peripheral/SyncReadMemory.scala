@@ -6,7 +6,7 @@ import chisel3.util._
 import java.io.File
 import chisel3.util.experimental.loadMemoryFromFile
 
-class AsyncReadMemory(
+class SyncReadMemory(
   entryNumber: Int,
   addressWidth: Int = 32,
   dataWidth: Int = 32
@@ -19,7 +19,7 @@ class AsyncReadMemory(
   val internalAddressWidth = log2Ceil(entryNumber)
   val internal_address = request_i.bits.addr(internalAddressWidth - 1 + log2Ceil(dataWidth / 8), log2Ceil(dataWidth / 8))
 
-  val u_bank = Mem(entryNumber, UInt(dataWidth.W))
+  val u_bank = SyncReadMem(entryNumber, UInt(dataWidth.W))
   reply_o := u_bank(internal_address)
 
   when(request_i.valid && request_i.bits.w_v){

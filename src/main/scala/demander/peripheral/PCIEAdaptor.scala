@@ -103,65 +103,7 @@ class AXIFIFOController[T <: Data](
 object QEMUMessages {
   val sMissPacket :: sEvictNotify :: sEvictRequest :: Nil = Enum(3)
 
-  class MissReplyPacket extends SoftwareControlledBundle {
-    val vpn = UInt(52.W)
-    val process_id = UInt(16.W)
-    val permission = UInt(1.W)
-
-    val synonym_v = Bool()
-    val synonym_vpn = UInt(52.W)
-    val synonym_process_id = UInt(16.W)
-
-    def asVec(width: Int): Vec[UInt] = {
-      assert(width == 32)
-      return VecInit(Seq(
-        vpn(31, 0),
-        vpn(51, 32),
-        process_id,
-        permission,
-        synonym_v,
-        synonym_vpn(31, 0),
-        synonym_vpn(51, 32),
-        synonym_process_id
-      ))
-    }
-
-    def parseFromVec(f: Vec[UInt]): this.type = {
-      val res = Wire(this.cloneType)
-      res.vpn := Cat(f(1), f(0))
-      res.process_id := f(2)
-      res.permission := f(3)
-      res.synonym_v := f(4)
-      res.synonym_vpn := Cat(f(6), f(5))
-      res.synonym_process_id := f(7)
-      return res.asInstanceOf[this.type]
-    }
-  }
-
-  class EvictReplyPacket extends SoftwareControlledBundle {
-    val vpn = UInt(52.W)
-    val process_id = UInt(16.W)
-    val old_ppn = UInt(24.W)
-    val synonym_v = Bool()
-    def asVec(width: Int): Vec[UInt] = {
-      assert(width == 32)
-      return VecInit(Seq(
-        vpn(31, 0),
-        vpn(51, 32),
-        process_id,
-        old_ppn,
-        synonym_v
-      ))
-    }
-    def parseFromVec(f: Vec[UInt]): this.type = {
-      val res = Wire(this.cloneType)
-      res.vpn := Cat(f(1), f(0))
-      res.process_id := f(2)
-      res.old_ppn := f(3)
-      res.synonym_v := f(4)
-      return res.asInstanceOf[this.type]
-    }
-  }
+  
 
   class MissRequestPacket extends SoftwareControlledBundle {
     val vpn = UInt(52.W)

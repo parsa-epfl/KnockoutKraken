@@ -44,6 +44,7 @@ struct PageTableItem {
  * Message to request the Page walk from the TLB.
  */ 
 struct TLBMissRequestMessage {
+  uint32_t which_tlb;
   TLBTag tag;
   uint32_t permission;
 };
@@ -52,6 +53,7 @@ struct TLBMissRequestMessage {
  * Message of entry eviction from the TLB.
  */ 
 struct TLBEvictionMessage {
+  uint32_t which_tlb;
   TLBTag tag;
   PTEntry entry;
 };
@@ -77,10 +79,10 @@ struct QEMUEvictReplyMessage {
 };
 
 enum MessangeType{
-  eTLBMissRequest,
-  eTLBEvict,
-  eQEMUMissReply,
-  eQEMUEvictReply
+  eTLBMissRequest = 0,
+  eTLBEvict = 1,
+  eQEMUMissReply = 2,
+  eQEMUEvictReply = 3
 };
 
 /**
@@ -178,20 +180,24 @@ void syncPTSet(uint32_t index);
 /**
  * Send response to the TLB. This will refill the TLB with the given entry.
  * 
+ * @param which_tlb 0: I_TLB, 1: D_TLB
  * @param tag the tag of the entry to reply.
  * @param entry the entry to response
+ * 
+ * @note The hardware will automatically lookup the thread_id by the process id.
  */ 
-void responseToTLB(const TLBTag *tag, const PTEntry *entry);
+void responseToTLB(uint32_t which_tlb, const PTTag *tag, const PTEntry *entry);
 
 /**
  * Flush the TLB by given virtual page number and thread id.
  * 
+ * @param which_tlb 0: I_TLB, 1: D_TLB
  * @param tag the tag for the entry to flush. It's possible that this thread is not registered in the ThreadTable
  * @param entry the flushed entry if the flush request hits. It will not be changed if miss.
  * @return true if the entry is valid.
  * @note Always remember to put the entry back to the DRAM!
  */ 
-bool flushTLBEntry(const PTTag *tag, PTEntry *entry);
+bool flushTLBEntry(uint32_t which_tlb, const PTTag *tag, PTEntry *entry);
 
 /**
  * Pop a free physical page number from the free list.
@@ -246,11 +252,13 @@ int main(){
         // Here we have an invocation of DMA? (They should be considered in the )
         if(lookupPT(0, &pt_tag, &entry)){
           // hit? reponse to the TLB
-          responseToTLB(&base.tlb_request.tag, &entry);
+          responseToTLB(base.tlb_request.which_tlb, &pt_tag, &entry);
         } else {
           // miss.
           sendMissRequestToQEMU(&pt_tag, base.tlb_request.permission);
         }
+        // Update LRU bits and sync back?
+        syncPTSet(0);
         break;
       }
       case eTLBEvict: {
@@ -263,7 +271,7 @@ int main(){
         if(getLRU(0, &item_to_evict)){
           // Get entry from the TLB
           // TODO: Add a function to look TID by PID
-          flushTLBEntry(&item_to_evict.tag, &item_to_evict.entry);
+          flushTLBEntry(base.tlb_evict.which_tlb, &item_to_evict.tag, &item_to_evict.entry);
           movePageToQEMU(&item_to_evict.entry);
         }
         replaceLRU(0, &pt_tag, &base.tlb_evict.entry);
@@ -275,6 +283,7 @@ int main(){
         loadPTSet(0, &base.qemu_miss.tag);
         PageTableItem item_to_evict;
         if(getLRU(0, &item_to_evict)){
+          // How to determine which to flush?
           flushTLBEntry(&item_to_evict.tag, &item_to_evict.entry);
           movePageToQEMU(&item_to_evict.entry);
         }
@@ -288,11 +297,12 @@ int main(){
           entry.ppn = getFreePPN();
           entry.modified = 0;
           entry.permission = base.qemu_miss.permission;
+          insertPageFromQEMU(entry.ppn);
         }
         replaceLRU(0, &base.qemu_miss.tag, &entry);
-        // TODO: Move the page to the DRAM?
-        insertPageFromQEMU(entry.ppn);
         syncPTSet(0);
+        responseToTLB(&base.qemu_miss.tag, &entry);
+        // TODO: How to wake up the related thread?
         break;
       }
       case eQEMUEvictReply: {

@@ -23,18 +23,20 @@ import armflex.cache.{
  * @param param the parameter of the TLB.
  */ 
 class TLBWrapper(
-  param: TLBParameter
+  processIDWidth: Int,
+  param: TLBParameter,
 ) extends MultiIOModule {
   // The backend port of TLB.
   val tlb_backend_reply_o = IO(Decoupled(new TLBBackendReplyPacket(param)))
-  val tlb_backend_reply_qi = Wire(Decoupled(new TLBBackendReplyPacket(param)))
-  tlb_backend_reply_o <> Queue(tlb_backend_reply_qi, 4)
+  val tlb_backend_reply_q = Wire(Decoupled(new TLBBackendReplyPacket(param)))
+  tlb_backend_reply_o <> Queue(tlb_backend_reply_q, param.threadNumber)
   // TODO: add FIFO to the reply and request port. FIFO is also necessary for the flush request.
   // TLB flush request.
   val tlb_flush_request_o = IO(Decoupled(new TLBTagPacket(param)))
   // TLB reply, which stores the flush result.
   val tlb_frontend_reply_i = IO(Flipped(Valid(new TLBFrontendReplyPacket(param))))
 
+  val process_id_r = Reg(UInt(processIDWidth.W))
   val tag_r = Reg(new TLBTagPacket(param))
   val pte_r = Reg(new TLBEntryPacket(param))
 
@@ -45,7 +47,7 @@ class TLBWrapper(
   /**
    * Address   |  CSR
    * 0x0 - 0x1 |  vpn
-   * 0x2       |  t_id
+   * 0x2       |  process_id
    * 0x3       |  ppn
    * 0x4       |  permission
    * 0x5       |  modified
@@ -67,7 +69,7 @@ class TLBWrapper(
       reply_r := tag_r.vpage(tag_r.vpage.getWidth-1, 32)
     }
     is(0x2.U){
-      reply_r := tag_r.thread_id
+      reply_r := process_id_r
     }
     is(0x3.U){
       reply_r := pte_r.pp
@@ -85,7 +87,7 @@ class TLBWrapper(
       reply_r := flush_hit_vr
     }
     is(0x8.U){
-      reply_r := tlb_backend_reply_qi.ready
+      reply_r := tlb_backend_reply_q.ready
     }
   }
   val reply_o = IO(Output(UInt(32.W)))
@@ -108,20 +110,27 @@ class TLBWrapper(
       }
     }
     is(sReply){
-      when(tlb_backend_reply_qi.fire()){
+      when(tlb_backend_reply_q.fire()){
         state_r := sIdle
       }
     }
   }
 
-  // Update tag_r
+  // Update tag_r and process_id_r
   when(write_v && internal_address === 0x0.U){
     tag_r.vpage := Cat(tag_r.vpage(51, 32), request_i.bits.data)
   }.elsewhen(write_v && internal_address === 0x1.U){
     tag_r.vpage := Cat(request_i.bits.data, tag_r.vpage(31, 0))
   }.elsewhen(write_v && internal_address === 0x2.U){
-    tag_r.thread_id := request_i.bits.data
+    process_id_r := request_i.bits.data
   }
+
+  val lookup_process_id_o = IO(Output(UInt(processIDWidth.W)))
+  val lookup_thread_id_i = IO(Input(new ThreadLookupResultPacket(param.threadNumber)))
+  lookup_process_id_o := process_id_r
+
+  // tag_r is automatically updated according to the process_id.
+  tag_r.thread_id := lookup_thread_id_i.thread_id
 
   // Update pte_r
   when(write_v && internal_address === 0x3.U){
@@ -141,70 +150,20 @@ class TLBWrapper(
   }
   
   // Determine IO port
-  tlb_backend_reply_qi.valid := state_r === sReply
-  tlb_backend_reply_qi.bits.tag := tag_r
-  tlb_backend_reply_qi.bits.data := pte_r
+  tlb_backend_reply_q.valid := state_r === sReply
+  tlb_backend_reply_q.bits.tag := tag_r
+  tlb_backend_reply_q.bits.data := pte_r
 
   tlb_flush_request_o.bits := tag_r
   tlb_flush_request_o.valid := state_r === sFlush
 }
-
-class TLBBackendMissMessagePacket extends SoftwareControlledBundle {
-  val v_page = UInt(52.W)
-  val t_id = UInt(2.W)
-
-  def asVec(width: Int): Vec[UInt] = {
-    assert(width == 32)
-    return VecInit(Seq(
-      v_page(31, 0),
-      v_page(51, 32),
-      t_id
-    ))
-  }
-  
-  def parseFromVec(f: Vec[UInt]): this.type = {
-    val res = Wire(this.cloneType)
-    res.v_page := Cat(f(1), f(0))
-    res.v_page := f(2)
-    res.asInstanceOf[this.type]
-  }
-}
-
-class TLBBackendEvictMessagePacket extends SoftwareControlledBundle {
-  val v_page = UInt(52.W)
-  val t_id = UInt(2.W)
-  val ppn = UInt(24.W)
-  val permission = UInt(2.W)
-  val modified = Bool()
-
-  def asVec(width: Int): Vec[UInt] = {
-    assert(width == 32)
-    return VecInit(Seq(
-      v_page(31, 0),
-      v_page(51, 32),
-      t_id,
-      ppn,
-      permission,
-      modified
-    ))
-  }
-
-  def parseFromVec(f: Vec[UInt]): this.type = {
-    val res = Wire(this.cloneType)
-    res.v_page := Cat(f(1), f(0))
-    res.t_id := f(2)
-    res.ppn := f(3)
-    res.permission := f(4)
-    res.modified := f(5)
-    res.asInstanceOf[this.type]
-  }
-}
-
 /**
  * This module converts a TLB backend request (evict or just flush) to a message.
  * The message will be sent to the core so that correct operations will be carried.
  * 
  * @param param the parameter of the TLB
+ * 
+ * @note Flush result will be ignored here because another module has already ready the data.
  */
 class TLBMessageCompositor(
   param: TLBParameter
@@ -212,26 +171,26 @@ class TLBMessageCompositor(
   val tlb_backend_request_i = IO(Flipped(Decoupled(new TLBBackendRequestPacket(param))))
   // TODO: Add Two FIFOs for the message.
 
-  val miss_request = Wire(Decoupled(new TLBBackendMissMessagePacket))
-  miss_request.bits.t_id := tlb_backend_request_i.bits.tag.thread_id
-  miss_request.bits.v_page := tlb_backend_request_i.bits.tag.vpage
+  val miss_request = Wire(Decoupled(new SoftwareBundle.TLBMissRequestMessage))
+  miss_request.bits.tag.thread_id := tlb_backend_request_i.bits.tag.thread_id
+  miss_request.bits.tag.vpn := tlb_backend_request_i.bits.tag.vpage
   miss_request.valid := tlb_backend_request_i.valid && !tlb_backend_request_i.bits.w_v
 
-  val ev_request = Wire(Decoupled(new TLBBackendEvictMessagePacket))
-  ev_request.bits.v_page := tlb_backend_request_i.bits.tag.vpage
-  ev_request.bits.t_id := tlb_backend_request_i.bits.tag.thread_id
-  ev_request.bits.ppn := tlb_backend_request_i.bits.entry.pp
-  ev_request.bits.permission := tlb_backend_request_i.bits.entry.permission
-  ev_request.bits.modified := tlb_backend_request_i.bits.entry.modified
+  val ev_request = Wire(Decoupled(new SoftwareBundle.TLBEvictionMessage))
+  ev_request.bits.tag.vpn := tlb_backend_request_i.bits.tag.vpage
+  ev_request.bits.tag.thread_id := tlb_backend_request_i.bits.tag.thread_id
+  ev_request.bits.entry.ppn := tlb_backend_request_i.bits.entry.pp
+  ev_request.bits.entry.permission := tlb_backend_request_i.bits.entry.permission
+  ev_request.bits.entry.modified := tlb_backend_request_i.bits.entry.modified
   // Why not flush: Flushed element is handled by the module TLBWrapper.
   ev_request.valid := tlb_backend_request_i.valid && tlb_backend_request_i.bits.w_v && !tlb_backend_request_i.bits.flush_v
 
   val miss_request_qo = Queue(miss_request, 4)
-  val miss_request_o = IO(Decoupled(new TLBBackendMissMessagePacket))
+  val miss_request_o = IO(Decoupled(new SoftwareBundle.TLBMissRequestMessage))
   miss_request_o <> miss_request_qo
 
   val ev_request_qo = Queue(ev_request, 4)
-  val eviction_request_o = IO(Decoupled(new TLBBackendEvictMessagePacket))
+  val eviction_request_o = IO(Decoupled(new SoftwareBundle.TLBEvictionMessage))
   eviction_request_o <> ev_request_qo
 
   tlb_backend_request_i.ready := Mux(
@@ -243,6 +202,6 @@ class TLBMessageCompositor(
 
 object TLBWrapperVerilogEmitter extends App {
   import chisel3.stage.ChiselStage
-  println((new ChiselStage).emitVerilog(new TLBWrapper(new TLBParameter)))
+  println((new ChiselStage).emitVerilog(new TLBWrapper(16, new TLBParameter)))
   println((new ChiselStage).emitVerilog(new TLBMessageCompositor(new TLBParameter)))
 }

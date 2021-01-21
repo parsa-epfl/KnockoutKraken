@@ -69,7 +69,6 @@ import armflex.cache.{
  * 1. Flush I$ and D$ according to the property of this page.
  * idea: judge the type of cache (I or D) by the permission. If read only, I$.
  * 2. Wait for the writing list to complete
- * TODO: Determine a way for this module to monitor the WB queue of the cache
  * 3. Push the page to the QEMU page buffer if this page is dirty
  * 4. Send message to QEMU
  * 
