@@ -61,7 +61,7 @@ class PTTag extends SoftwareControlledBundle {
 
 class PTEntry extends SoftwareControlledBundle {
   val ppn = UInt(ParameterConstants.ppn_width.W)
-  val permission = Bool()
+  val permission = UInt(ParameterConstants.permission_bit_width.W)
   val modified = Bool()
 
   def asVec(width: Int): Vec[UInt] = {
@@ -101,7 +101,7 @@ class PageTableItem extends SoftwareControlledBundle {
 
 class TLBMissRequestMessage extends SoftwareControlledBundle {
   val tag = new TLBTag
-  val permission = Bool()
+  val permission = UInt(ParameterConstants.permission_bit_width.W)
 
   def asVec(width: Int): Vec[UInt] = {
     assert(width == 32)
@@ -145,7 +145,7 @@ class TLBEvictionMessage extends SoftwareControlledBundle {
 
 class QEMUMissReply extends SoftwareControlledBundle {
   val tag = new PTTag
-  val permission = Bool()
+  val permission = UInt(ParameterConstants.permission_bit_width.W)
 
   val synonym_v = Bool()
   val synonym_tag = new PTTag

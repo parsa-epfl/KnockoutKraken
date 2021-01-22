@@ -20,30 +20,37 @@ import armflex.cache.{
  * - responseToTLB
  * - flushTLBEntry
  * 
+ * @param processIDWidth the width of processID. TLBWrapper will automatically access the Thread table to convert the ID.
  * @param param the parameter of the TLB.
+ * @param tlbNumber the number of TLB it could support.
  */ 
 class TLBWrapper(
   processIDWidth: Int,
   param: TLBParameter,
+  tlbNumber: Int = 2
 ) extends MultiIOModule {
   // The backend port of TLB.
-  val tlb_backend_reply_o = IO(Decoupled(new TLBBackendReplyPacket(param)))
-  val tlb_backend_reply_q = Wire(Decoupled(new TLBBackendReplyPacket(param)))
-  tlb_backend_reply_o <> Queue(tlb_backend_reply_q, param.threadNumber)
+  val tlb_backend_reply_o = IO(Vec(tlbNumber, Decoupled(new TLBBackendReplyPacket(param))))
+  val tlb_backend_reply_q = Wire(Vec(tlbNumber, Decoupled(new TLBBackendReplyPacket(param))))
+  for (i <- 0 until tlbNumber){
+    tlb_backend_reply_o(i) <> Queue(tlb_backend_reply_q(i), param.threadNumber)
+  }
   // TODO: add FIFO to the reply and request port. FIFO is also necessary for the flush request.
   // TLB flush request.
-  val tlb_flush_request_o = IO(Decoupled(new TLBTagPacket(param)))
+  val tlb_flush_request_o = IO(Vec(tlbNumber, Decoupled(new TLBTagPacket(param))))
   // TLB reply, which stores the flush result.
-  val tlb_frontend_reply_i = IO(Flipped(Valid(new TLBFrontendReplyPacket(param))))
+  val tlb_frontend_reply_i = IO(Vec(tlbNumber, Flipped(Valid(new TLBFrontendReplyPacket(param)))))
 
   val process_id_r = Reg(UInt(processIDWidth.W))
   val tag_r = Reg(new TLBTagPacket(param))
   val pte_r = Reg(new TLBEntryPacket(param))
+  val which_tlb_r = Reg(UInt(log2Ceil(tlbNumber).W))
 
   val sIdle :: sFlush :: sReply :: Nil = Enum(3)
   val state_r = RegInit(sIdle)
 
-  // TODO: Determine the CSR of this module
+  // The CSR of this module
+  // TODO: Separate the ports for I-TLB and D-TLB respectively.
   /**
    * Address   |  CSR
    * 0x0 - 0x1 |  vpn
@@ -51,16 +58,18 @@ class TLBWrapper(
    * 0x3       |  ppn
    * 0x4       |  permission
    * 0x5       |  modified
+   * 0x6       |  which_tlb
    * # For flushTLBEntry
-   * 0x6       |  W: request flush R: Flush is done
-   * 0x7       |  W: Nothing R: whether the flush is hit.
+   * 0x7       |  W: request flush R: Flush is done
+   * 0x8       |  W: Nothing R: whether the flush is hit.
    * # For responseToTLB
-   * 0x8       |  W: Response R: reply queue is not full
+   * 0x9       |  W: Response R: reply queue is not full
    */ 
   val request_i = IO(Flipped(Valid(new MemoryRequestPacket(32, 32))))
   val internal_address = request_i.bits.addr(5,2)
   val reply_r = RegInit(UInt(32.W), 0.U)
   val flush_hit_vr = RegInit(Bool(), false.B)
+  
   switch(internal_address){
     is(0x0.U){
       reply_r := tag_r.vpage(31, 0)
@@ -81,13 +90,16 @@ class TLBWrapper(
       reply_r := pte_r.modified
     }
     is(0x6.U){
-      reply_r := state_r === sIdle
+      reply_r := which_tlb_r
     }
     is(0x7.U){
-      reply_r := flush_hit_vr
+      reply_r := state_r === sIdle
     }
     is(0x8.U){
-      reply_r := tlb_backend_reply_q.ready
+      reply_r := flush_hit_vr
+    }
+    is(0x9.U){
+      reply_r := tlb_backend_reply_q(which_tlb_r).ready
     }
   }
   val reply_o = IO(Output(UInt(32.W)))
@@ -98,19 +110,19 @@ class TLBWrapper(
   // Update of state_r
   switch(state_r){
     is(sIdle){
-      when(write_v && internal_address === 0x6.U){
+      when(write_v && internal_address === 0x7.U){
         state_r := sFlush
-      }.elsewhen(write_v && internal_address === 0x7.U){
+      }.elsewhen(write_v && internal_address === 0x9.U){
         state_r := sReply
       }
     }
     is(sFlush){
-      when(tlb_flush_request_o.fire()){
+      when(tlb_flush_request_o(which_tlb_r).fire()){
         state_r := sIdle
       }
     }
     is(sReply){
-      when(tlb_backend_reply_q.fire()){
+      when(tlb_backend_reply_q(which_tlb_r).fire()){
         state_r := sIdle
       }
     }
@@ -139,23 +151,25 @@ class TLBWrapper(
     pte_r.permission := request_i.bits.data
   }.elsewhen(write_v && internal_address === 0x5.U){
     pte_r.modified := request_i.bits.data
-  }.elsewhen(tlb_flush_request_o.fire()){
-    assert(tlb_frontend_reply_i.valid)
-    pte_r := tlb_frontend_reply_i.bits.entry
+  }.elsewhen(tlb_flush_request_o(which_tlb_r).fire()){
+    assert(tlb_frontend_reply_i(which_tlb_r).valid)
+    pte_r := tlb_frontend_reply_i(which_tlb_r).bits.entry
   }
 
   // Update flush_hit_vr
-  when(tlb_flush_request_o.fire()){
-    flush_hit_vr := tlb_frontend_reply_i.bits.dirty && tlb_frontend_reply_i.bits.hit
+  when(tlb_flush_request_o(which_tlb_r).fire()){
+    flush_hit_vr := tlb_frontend_reply_i(which_tlb_r).bits.dirty && tlb_frontend_reply_i(which_tlb_r).bits.hit
   }
   
   // Determine IO port
-  tlb_backend_reply_q.valid := state_r === sReply
-  tlb_backend_reply_q.bits.tag := tag_r
-  tlb_backend_reply_q.bits.data := pte_r
+  for (i <- 0 until tlbNumber){
+    tlb_backend_reply_q(i).valid := state_r === sReply && i.U === which_tlb_r
+    tlb_backend_reply_q(i).bits.tag := tag_r
+    tlb_backend_reply_q(i).bits.data := pte_r
 
-  tlb_flush_request_o.bits := tag_r
-  tlb_flush_request_o.valid := state_r === sFlush
+    tlb_flush_request_o(i).bits := tag_r
+    tlb_flush_request_o(i).valid := state_r === sFlush && i.U === which_tlb_r
+  }
 }
 /**
  * This module converts a TLB backend request (evict or just flush) to a message.
@@ -164,6 +178,7 @@ class TLBWrapper(
  * @param param the parameter of the TLB
  * 
  * @note Flush result will be ignored here because another module has already ready the data.
+ * @note To support multiple TLBs, please add an arbiter.
  */
 class TLBMessageCompositor(
   param: TLBParameter
