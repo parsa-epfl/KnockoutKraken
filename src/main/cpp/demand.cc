@@ -44,7 +44,6 @@ struct PageTableItem {
  * Message to request the Page walk from the TLB.
  */ 
 struct TLBMissRequestMessage {
-  uint32_t which_tlb;
   TLBTag tag;
   uint32_t permission;
 };
@@ -53,7 +52,6 @@ struct TLBMissRequestMessage {
  * Message of entry eviction from the TLB.
  */ 
 struct TLBEvictionMessage {
-  uint32_t which_tlb;
   TLBTag tag;
   PTEntry entry;
 };
@@ -252,7 +250,7 @@ int main(){
         // Here we have an invocation of DMA? (They should be considered in the )
         if(lookupPT(0, &pt_tag, &entry)){
           // hit? reponse to the TLB
-          responseToTLB(base.tlb_request.which_tlb, &pt_tag, &entry);
+          responseToTLB(base.tlb_request.permission == 2 ? 0 : 1, &pt_tag, &entry);
         } else {
           // miss.
           sendMissRequestToQEMU(&pt_tag, base.tlb_request.permission);
@@ -270,8 +268,7 @@ int main(){
         PageTableItem item_to_evict;
         if(getLRU(0, &item_to_evict)){
           // Get entry from the TLB
-          // TODO: Add a function to look TID by PID
-          flushTLBEntry(base.tlb_evict.which_tlb, &item_to_evict.tag, &item_to_evict.entry);
+          flushTLBEntry(base.tlb_evict.entry.permission == 2 ? 0 : 1, &item_to_evict.tag, &item_to_evict.entry);
           movePageToQEMU(&item_to_evict.entry);
         }
         replaceLRU(0, &pt_tag, &base.tlb_evict.entry);
@@ -302,7 +299,6 @@ int main(){
         replaceLRU(0, &base.qemu_miss.tag, &entry);
         syncPTSet(0);
         responseToTLB(base.qemu_miss.permission == 2 ? 0 : 1, &base.qemu_miss.tag, &entry);
-        // TODO: How to wake up the related thread?
         break;
       }
       case eQEMUEvictReply: {
