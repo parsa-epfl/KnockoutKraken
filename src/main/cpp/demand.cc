@@ -284,7 +284,7 @@ int main(){
         PageTableItem item_to_evict;
         if(getLRU(0, &item_to_evict)){
           // How to determine which to flush?
-          flushTLBEntry(&item_to_evict.tag, &item_to_evict.entry);
+          flushTLBEntry(base.qemu_miss.permission == 2 ? 0 : 1, &item_to_evict.tag, &item_to_evict.entry);
           movePageToQEMU(&item_to_evict.entry);
         }
         // 2. determine eviction?
@@ -301,7 +301,7 @@ int main(){
         }
         replaceLRU(0, &base.qemu_miss.tag, &entry);
         syncPTSet(0);
-        responseToTLB(&base.qemu_miss.tag, &entry);
+        responseToTLB(base.qemu_miss.permission == 2 ? 0 : 1, &base.qemu_miss.tag, &entry);
         // TODO: How to wake up the related thread?
         break;
       }

@@ -94,7 +94,7 @@ class PageDeletor(
 
   // Counter to monitor the flush process
   val flush_cnt_r = RegInit(0.U(6.W))
-  val flush_which = Mux(request_r.permission, true.B, false.B) // true: D Cache, false: I Cache
+  val flush_which = Mux(request_r.permission =/= 2.U, true.B, false.B) // true: D Cache, false: I Cache
   val flush_fired = Mux(flush_which, dcache_flush_request_o.fire(), icache_flush_request_o.fire())
   when(request_i.fire()){
     flush_cnt_r := 0.U
@@ -124,7 +124,7 @@ class PageDeletor(
   // Eviction done? (You have to wait for like two / three cycles to get the correct result.)
   val icache_wb_queue_empty_i = IO(Input(Bool()))
   val dcache_wb_queue_empty_i = IO(Input(Bool()))
-  val wait_which = Mux(request_r.permission, dcache_wb_queue_empty_i, icache_wb_queue_empty_i)
+  val wait_which = Mux(request_r.permission =/= 2.U, dcache_wb_queue_empty_i, icache_wb_queue_empty_i)
 
   // Port to drive DMA
   val u_page_mover = Module(new PageMover(36, 64))
