@@ -2,7 +2,7 @@ package armflex.demander
 
 import chisel3._
 import chisel3.util._
-import armflex.demander.peripheral.SoftwareBundle
+
 import armflex.cache.MemorySystemParameter
 
 class PageDemander(
@@ -23,7 +23,6 @@ class PageDemander(
    * 0x80000 - 0x90000    | Page Deletor
    * 
    */ 
-
   // The core
   val u_core = Module(new mini.Core()(new mini.MiniConfig()))
 
@@ -63,13 +62,15 @@ class PageDemander(
   u_dbuffer.reply_o <> u_bus.slave_replies_i(0)
 
   // The message queue
-  val u_r_mmq = Module(new peripheral.MMReadQueue(new SoftwareBundle.PageDemanderMessage))
+  // fetchMessage
+  val u_r_mmq = Module(new peripheral.MMReadQueue(new software_bundle.PageDemanderMessage))
   u_r_mmq.request_i <> u_bus.slave_requests_o(1)
   u_r_mmq.reply_o <> u_bus.slave_replies_i(1)
 
   // TODO:  u_r_mmq.queue_i
 
   // The truth table (with parameter)
+  // lookupThreadTable
   val u_truth_table = Module(new peripheral.ThreadTable())
   u_truth_table.request_i <> u_bus.slave_requests_o(2)
   u_truth_table.reply_o <> u_bus.slave_replies_i(2)
@@ -77,12 +78,19 @@ class PageDemander(
   // TODO: u_truth_table.S_AXI
 
   // TODO: the page table set manager
+  // loadPTSet
+  // lookupPT
+  // getLRU
+  // replaceLRU
+  // syncPTSet
   val u_ptset = Module(new peripheral.PTSetCache())
   u_ptset.reply_o <> u_bus.slave_replies_i(3)
   u_ptset.request_i <> u_bus.slave_requests_o(3)
   // u_ptset.M_AXI
 
   // The TLB wrapper
+  // responseToTLB
+  // flushTLBEntry
   // TODO: Where does the parameter comes from?
   val u_tlb_wrapper = Module(new peripheral.TLBWrapper(
     16, param.toTLBParameter()
@@ -93,13 +101,14 @@ class PageDemander(
 
   u_tlb_wrapper.reply_o <> u_bus.slave_replies_i(4)
   u_tlb_wrapper.request_i <> u_bus.slave_requests_o(4)
-  //! TODO: How to determine the TLB to be flushed? I-TLB or D-TLB?
   // TODO: u_tlb_wrapper.tlb_backend_reply_o
   // TODO: u_tlb_wrapper.tlb_flush_request_o
   // TODO: u_tlb_wrapper.tlb_frontend_reply_i
 
 
   // TODO: the free list
+  // getFreePPN
+  // recyclePPN
   val u_freelist = Module(new peripheral.FreeListWrapper(
     1 << 24
   ))
@@ -109,34 +118,21 @@ class PageDemander(
   u_freelist.reply_o <> u_bus.slave_replies_i(5)
   u_freelist.request_i <> u_bus.slave_requests_o(5)
 
-  // TODO: the QEMU message queue
-  // The messages are:
-  // - Replies from the QEMU:
-  //   - Miss Reply
-  //   - Evict Reply
-  // - Requests to the QEMU:
-  //   - Miss Request
-  //   - Evict Request I
-  //   - Evict Request II
-  val u_qemu_mq = Module(new peripheral.AXIFIFOController(new SoftwareBundle.QEMUMessage)) // TODO: @param baseAddr
 
-  // u_qemu_mq.S_AXI
-  // u_qemu_mq.fifo_o
-
-  // MMWriteQueue to QEMU.
-  val u_w_mmq = Module(new peripheral.MMWriteQueue(new SoftwareBundle.QEMUMessage))
+  // TODO: MMWriteQueue to QEMU.
+  // sendMissRequestToQEMU
+  val u_w_mmq = Module(new peripheral.MMWriteQueue(new software_bundle.QEMUMessage))
   u_w_mmq.request_i <> u_bus.slave_requests_o(5)
   u_w_mmq.reply_o <> u_bus.slave_replies_i(5)
-  u_w_mmq.queue_o <> u_qemu_mq.fifo_i
-
-  // TODO: Page deletor
-  val u_page_deletor = Module(new peripheral.PageDeletor(param.toCacheParameter()))
-  
-  
+  // u_w_mmq.queue_o
 
   // TODO: DRAM Reset
 
 }
 
+// TODO: We need a PageBuffer to record:
+// - Page from QEMU to FPGA (AXI_Slave)
+// - Page from FPGA to QEMU (AXI_Slave)
 
+// TODO: A message sender (Basically a DMA writer)
 
