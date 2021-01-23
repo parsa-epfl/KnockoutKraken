@@ -3,6 +3,8 @@ package armflex.demander.peripheral
 import chisel3._
 import chisel3.util._
 
+import armflex.demander.software_bundle
+
 import armflex.cache.{
   MemorySystemParameter,
   TLBBackendReplyPacket,
@@ -177,21 +179,21 @@ class TLBWrapper(
  * 
  * @param param the parameter of the TLB
  * 
- * @note Flush result will be ignored here because another module has already ready the data.
+ * @note Flush result will be ignored here because another module has already read the data.
  * @note To support multiple TLBs, please add an arbiter.
  */
-class TLBMessageCompositor(
+class TLBMessageConverter(
   param: TLBParameter
 ) extends MultiIOModule {
   val tlb_backend_request_i = IO(Flipped(Decoupled(new TLBBackendRequestPacket(param))))
   // TODO: Add Two FIFOs for the message.
 
-  val miss_request = Wire(Decoupled(new SoftwareBundle.TLBMissRequestMessage))
+  val miss_request = Wire(Decoupled(new software_bundle.TLBMissRequestMessage))
   miss_request.bits.tag.thread_id := tlb_backend_request_i.bits.tag.thread_id
   miss_request.bits.tag.vpn := tlb_backend_request_i.bits.tag.vpage
   miss_request.valid := tlb_backend_request_i.valid && !tlb_backend_request_i.bits.w_v
 
-  val ev_request = Wire(Decoupled(new SoftwareBundle.TLBEvictionMessage))
+  val ev_request = Wire(Decoupled(new software_bundle.TLBEvictionMessage))
   ev_request.bits.tag.vpn := tlb_backend_request_i.bits.tag.vpage
   ev_request.bits.tag.thread_id := tlb_backend_request_i.bits.tag.thread_id
   ev_request.bits.entry.ppn := tlb_backend_request_i.bits.entry.pp
@@ -200,23 +202,23 @@ class TLBMessageCompositor(
   // Why not flush: Flushed element is handled by the module TLBWrapper.
   ev_request.valid := tlb_backend_request_i.valid && tlb_backend_request_i.bits.w_v && !tlb_backend_request_i.bits.flush_v
 
-  val miss_request_qo = Queue(miss_request, 4)
-  val miss_request_o = IO(Decoupled(new SoftwareBundle.TLBMissRequestMessage))
-  miss_request_o <> miss_request_qo
+  // val miss_request_qo = Queue(miss_request, 4)
+  val miss_request_o = IO(Decoupled(new software_bundle.TLBMissRequestMessage))
+  miss_request_o <> miss_request
 
-  val ev_request_qo = Queue(ev_request, 4)
-  val eviction_request_o = IO(Decoupled(new SoftwareBundle.TLBEvictionMessage))
-  eviction_request_o <> ev_request_qo
+  // val ev_request_qo = Queue(ev_request, 4)
+  val eviction_request_o = IO(Decoupled(new software_bundle.TLBEvictionMessage))
+  eviction_request_o <> ev_request
 
   tlb_backend_request_i.ready := Mux(
     tlb_backend_request_i.bits.w_v,
-    Mux(tlb_backend_request_i.bits.flush_v, true.B, ev_request_qo.ready),
-    miss_request_qo.ready
+    Mux(tlb_backend_request_i.bits.flush_v, true.B, eviction_request_o.ready),
+    miss_request_o.ready
   )
 }
 
 object TLBWrapperVerilogEmitter extends App {
   import chisel3.stage.ChiselStage
   println((new ChiselStage).emitVerilog(new TLBWrapper(16, new TLBParameter)))
-  println((new ChiselStage).emitVerilog(new TLBMessageCompositor(new TLBParameter)))
+  println((new ChiselStage).emitVerilog(new TLBMessageConverter(new TLBParameter)))
 }

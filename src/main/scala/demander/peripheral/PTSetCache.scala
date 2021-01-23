@@ -3,6 +3,8 @@ package armflex.demander.peripheral
 import chisel3._
 import chisel3.util._
 
+import armflex.demander.software_bundle
+
 import armflex.cache.PseudoTreeLRUCore
 
 
@@ -20,8 +22,8 @@ import armflex.cache.PseudoTreeLRUCore
 class PTSetPacket(
   val entryNumber: Int = 16
 ) extends Bundle {
-  val tags = Vec(entryNumber, new SoftwareBundle.PTTag)
-  val ptes = Vec(entryNumber, new SoftwareBundle.PTEntry)
+  val tags = Vec(entryNumber, new software_bundle.PTTag)
+  val ptes = Vec(entryNumber, new software_bundle.PTEntry)
   
   val valids = UInt(entryNumber.W)
   val lru_bits = UInt(entryNumber.W)
@@ -85,12 +87,12 @@ class PTSetBuffer(
   val u_lru_core = Module(new PseudoTreeLRUCore(t.entryNumber))
   u_lru_core.io.encoding_i := pt_set_r.lru_bits(t.entryNumber-2, 0)
   val lru_index = u_lru_core.io.lru_o
-  val lru_item = Wire(new SoftwareBundle.PageTableItem)
+  val lru_item = Wire(new software_bundle.PageTableItem)
   lru_item.entry := pt_set_r.ptes(lru_index)
   lru_item.tag := pt_set_r.tags(lru_index)
 
   class get_lru_element_response_t extends Bundle {
-    val item = new SoftwareBundle.PageTableItem
+    val item = new software_bundle.PageTableItem
     val lru_v = Bool()
     // That lru_v is true means the item is valid. 
     // False means this set is not full and there is a available place.
@@ -104,7 +106,7 @@ class PTSetBuffer(
   val updated_pt_set = WireInit(pt_set_r)
   val index_to_update = Mux(lru_element_o.lru_v, lru_index, space_index)
 
-  val lru_element_i = IO(Flipped(Decoupled(new SoftwareBundle.PageTableItem)))
+  val lru_element_i = IO(Flipped(Decoupled(new software_bundle.PageTableItem)))
 
   updated_pt_set.ptes(index_to_update) := lru_element_i.bits.entry
   updated_pt_set.tags(index_to_update) := lru_element_i.bits.tag
@@ -112,7 +114,7 @@ class PTSetBuffer(
   updated_pt_set.lru_bits := u_lru_core.io.encoding_o
   updated_pt_set.valids := Cat(0.U(1.W), UIntToOH(index_to_update))
 
-  val lookup_request_i = IO(Input(new SoftwareBundle.PTTag))
+  val lookup_request_i = IO(Input(new software_bundle.PTTag))
   val hit_vector = pt_set_r.tags.zip(pt_set_r.valids.asBools()).map({
     case (tag, valid) => 
     tag.process_id === lookup_request_i.process_id && 
@@ -124,7 +126,7 @@ class PTSetBuffer(
   assert(PopCount(hit_vector) === 1.U || PopCount(hit_vector) === 0.U, "There should be only one hit at most!!!")
 
   val hit_index = OHToUInt(hit_vector)
-  val lookup_reply_o = IO(Valid(new SoftwareBundle.PageTableItem))
+  val lookup_reply_o = IO(Valid(new software_bundle.PageTableItem))
   lookup_reply_o.valid := hit_v
   lookup_reply_o.bits.entry := pt_set_r.ptes(hit_index)
   lookup_reply_o.bits.tag := lookup_request_i
@@ -206,8 +208,8 @@ class PTSetCache extends MultiIOModule {
   val reply_o = IO(Output(UInt(32.W)))
   val reply_r = Reg(UInt(32.W))
 
-  val tag_r = Reg(new SoftwareBundle.PTTag)
-  val pte_r = Reg(new SoftwareBundle.PTEntry)
+  val tag_r = Reg(new software_bundle.PTTag)
+  val pte_r = Reg(new software_bundle.PTEntry)
   val buffer_index_r = RegInit(UInt(1.W), 0.U)
 
   val internal_address = request_i.bits.addr(5,2)

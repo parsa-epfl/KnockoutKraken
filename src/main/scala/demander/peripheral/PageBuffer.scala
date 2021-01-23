@@ -3,59 +3,7 @@ package armflex.demander.peripheral
 import chisel3._
 import chisel3.util._
 
-import DMAController.Bus._
-import DMAController.Frontend._
-import armflex.util.SoftwareStructs
-
-class PageMover(
-  sourceAddressWidth: Int,
-  targetAddressWidth: Int
-) extends MultiIOModule {
-  class request_t extends Bundle {
-    val src_addr = UInt(sourceAddressWidth.W)
-    val dst_addr = UInt(targetAddressWidth.W) 
-  }
-  val move_request_i = IO(Flipped(Decoupled(new request_t)))
-  val done_o = IO(Output(Bool()))
-  val SRC_AXI_M = IO(new AXI4(sourceAddressWidth, 512))
-  val DST_AXI_M = IO(new AXI4(targetAddressWidth, 512))
-
-  val u_src_to_stream = Module(new AXI4Reader(sourceAddressWidth, 512))
-  val u_stream_to_dst = Module(new AXI4Writer(targetAddressWidth, 512))
-
-  u_src_to_stream.io.dataOut <> u_stream_to_dst.io.dataIn
-  u_src_to_stream.io.bus <> SRC_AXI_M
-  u_stream_to_dst.io.bus <> DST_AXI_M
-
-  u_src_to_stream.io.xfer.address := move_request_i.bits.src_addr
-  u_src_to_stream.io.xfer.length := 64.U
-  u_src_to_stream.io.xfer.valid := move_request_i.valid
-
-  u_stream_to_dst.io.xfer.address := move_request_i.bits.dst_addr
-  u_stream_to_dst.io.xfer.length := 64.U
-  u_stream_to_dst.io.xfer.valid := move_request_i.valid
-
-  // The ready order of two movers is:
-  //  1. u_src_to_stream
-  //  2. u_stream_to_dst
-  val first_ready_r = RegInit(false.B)
-  val ready_r = RegInit(true.B)
-
-  when(move_request_i.fire()){
-    first_ready_r := false.B
-    ready_r := false.B
-  }.elsewhen(u_src_to_stream.io.xfer.done){
-    first_ready_r := true.B
-  }.elsewhen(first_ready_r && u_stream_to_dst.io.xfer.done){
-    ready_r := true.B
-    first_ready_r := false.B
-  }
-
-  move_request_i.ready := ready_r
-  done_o := first_ready_r && u_stream_to_dst.io.xfer.done
-
-}
-
+import armflex.demander.software_bundle
 
 import armflex.cache.{
   CacheFrontendFlushRequest,
@@ -81,8 +29,8 @@ class PageDeletor(
   val state_r = RegInit(sIdle)
 
   // Port to receive request
-  val request_i = IO(Flipped(Decoupled(new SoftwareBundle.PTEntry)))
-  val request_r = Reg(new SoftwareBundle.PTEntry)
+  val request_i = IO(Flipped(Decoupled(new software_bundle.PTEntry)))
+  val request_r = Reg(new software_bundle.PTEntry)
   when(request_i.fire()){
     request_r := request_i.bits
   }
@@ -127,19 +75,19 @@ class PageDeletor(
   val wait_which = Mux(request_r.permission =/= 2.U, dcache_wb_queue_empty_i, icache_wb_queue_empty_i)
 
   // Port to drive DMA
-  val u_page_mover = Module(new PageMover(36, 64))
-  u_page_mover.move_request_i.bits.src_addr := Cat(request_r.ppn, 0.U(12.W))
+  val u_dual_master = Module(new AXIDualMasterDMA(36, 64))
+  u_dual_master.move_request_i.bits.src_addr := Cat(request_r.ppn, 0.U(12.W))
   // TODO: The base address of the pageO
-  u_page_mover.move_request_i.bits.dst_addr := 0x69ABCDEF.U
-  u_page_mover.move_request_i.valid := state_r === sMove
+  u_dual_master.move_request_i.bits.dst_addr := 0x69ABCDEF.U
+  u_dual_master.move_request_i.valid := state_r === sMove
 
-  val SRC_AXI_M = IO(u_page_mover.SRC_AXI_M.cloneType)  
-  SRC_AXI_M <> u_page_mover.SRC_AXI_M
-  val DST_AXI_M = IO(u_page_mover.DST_AXI_M.cloneType)
-  DST_AXI_M <> u_page_mover.DST_AXI_M
+  val SRC_AXI_M = IO(u_dual_master.SRC_AXI_M.cloneType)  
+  SRC_AXI_M <> u_dual_master.SRC_AXI_M
+  val DST_AXI_M = IO(u_dual_master.DST_AXI_M.cloneType)
+  DST_AXI_M <> u_dual_master.DST_AXI_M
 
   // Port to send message to QEMU
-  val message_to_qemu_o = IO(Decoupled(new SoftwareBundle.PTEntry))
+  val message_to_qemu_o = IO(Decoupled(new software_bundle.PageEvictRequest(software_bundle.QEMUMessagesType.sEvictDone)))
   message_to_qemu_o.bits := request_r
   message_to_qemu_o.valid := state_r === sSend
 
@@ -161,7 +109,7 @@ class PageDeletor(
         sWait)
     }
     is(sMove){
-      state_r := Mux(u_page_mover.done_o, sSend, sMove)
+      state_r := Mux(u_dual_master.done_o, sSend, sMove)
     }
     is(sSend){
       state_r := Mux(message_to_qemu_o.fire(), sIdle, sSend)
@@ -169,10 +117,9 @@ class PageDeletor(
   }
 }
 
-object PageMoverVerilogEmitter extends App {
-  import chisel3.stage.ChiselStage
-  val c = new ChiselStage
-  println(c.emitVerilog(new PageDeletor(
-    new CacheParameter()
-  )))
+// TODO: Put the implementation of the following function into this module:
+// - movePageToQEMU
+// - insertPageFromQEMU
+class PageBuffer extends MultiIOModule {
+  
 }
