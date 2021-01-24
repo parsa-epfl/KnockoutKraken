@@ -26,7 +26,7 @@ import armflex.cache.{
  * @param param the parameter of the TLB.
  * @param tlbNumber the number of TLB it could support.
  */ 
-class TLBWrapper(
+class TLBFlushController(
   processIDWidth: Int,
   param: TLBParameter,
   tlbNumber: Int = 2
@@ -219,6 +219,6 @@ class TLBMessageConverter(
 
 object TLBWrapperVerilogEmitter extends App {
   import chisel3.stage.ChiselStage
-  println((new ChiselStage).emitVerilog(new TLBWrapper(16, new TLBParameter)))
+  println((new ChiselStage).emitVerilog(new TLBFlushController(16, new TLBParameter)))
   println((new ChiselStage).emitVerilog(new TLBMessageConverter(new TLBParameter)))
 }

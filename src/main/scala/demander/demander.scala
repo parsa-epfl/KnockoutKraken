@@ -92,7 +92,7 @@ class PageDemander(
   // responseToTLB
   // flushTLBEntry
   // TODO: Where does the parameter comes from?
-  val u_tlb_wrapper = Module(new peripheral.TLBWrapper(
+  val u_tlb_wrapper = Module(new peripheral.TLBFlushController(
     16, param.toTLBParameter()
   ))
 
