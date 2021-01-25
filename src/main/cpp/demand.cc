@@ -1,3 +1,4 @@
+#include <bits/stdint-uintn.h>
 #include <stdint.h>
 
 constexpr int VPN_WIDTH = 52;
@@ -93,16 +94,23 @@ struct Message {
     TLBEvictionMessage tlb_evict;
     QEMUMissReplyMessage qemu_miss;
     QEMUEvictReplyMessage qemu_evict;
+    uint32_t raw[8];
   };
 };
 
 /**
  * fetch the Message from a given address.
- * 
- * @param message the pointer of the message body
- * @return if the message is valid.
+ * @return the address if the message is valid. nullptr if not.
  */
-bool fetchMessage(Message *message);
+inline volatile Message *fetchMessage(){
+  volatile int *valid_ptr = reinterpret_cast<int *>(0x20000);
+  volatile Message *outer_mess = reinterpret_cast<Message *>(0x20004);
+  if(*valid_ptr){
+    // copy
+    return outer_mess;
+  }
+  return nullptr;
+}
 
 /**
  * Access the Tread table (which stores thread_id-process_id pair) and find the process id.
@@ -110,7 +118,25 @@ bool fetchMessage(Message *message);
  * @param src the given thread id.
  * @return the process id.
  */ 
-uint32_t lookupThreadTable(uint32_t src);
+inline uint32_t lookupThreadTable(uint32_t src){
+  volatile uint32_t *base_ptr = reinterpret_cast<uint32_t *>(0x30000);
+  return base_ptr[src];
+}
+
+struct PageTableSetCSR {
+  uint64_t vpn;
+  uint32_t process_id;
+  uint32_t index;
+  uint32_t load_dma;
+  uint32_t store_dma;
+  uint32_t ppn;
+  uint32_t permission;
+  uint32_t modified;
+  uint32_t lookup;
+  uint32_t lru_result;
+  uint32_t replace_lru;
+  uint32_t ready;
+};
 
 /**
  * Call DMA to move the PT Set to one scratchpad. Return when finish.
@@ -119,7 +145,14 @@ uint32_t lookupThreadTable(uint32_t src);
  * @param index the index of the scratchpad. Select between 0 and 1.
  * @param tag the tag of the expected PTE.
  */ 
-void loadPTSet(uint32_t index, const PTTag *tag);
+inline void loadPTSet(uint32_t index, const volatile PTTag *tag){
+  volatile PageTableSetCSR *base_ptr = reinterpret_cast<PageTableSetCSR *>(0x40000);
+  base_ptr->vpn = tag->vpn;
+  base_ptr->process_id = tag->process_id;
+  base_ptr->index = index;
+  base_ptr->load_dma = 1;
+  while(!base_ptr->load_dma);
+}
 
 
 /**
@@ -133,7 +166,20 @@ void loadPTSet(uint32_t index, const PTTag *tag);
  * 
  * @note this will update the LRU automatically if there is a hit.
  */ 
-bool lookupPT(uint32_t index, const PTTag *tag, PTEntry *result);
+inline bool lookupPT(uint32_t index, const volatile PTTag *tag, PTEntry *result){
+  volatile PageTableSetCSR *base_ptr = reinterpret_cast<PageTableSetCSR *>(0x40000);
+  base_ptr->vpn = tag->vpn;
+  base_ptr->process_id = tag->process_id;
+  base_ptr->lookup = 1;
+  while(!base_ptr->ready);
+  if(base_ptr->lookup){
+    result->modified = base_ptr->modified;
+    result->permission = base_ptr->permission;
+    result->ppn = base_ptr->ppn;
+    return true;
+  }
+  return false;
+}
 
 /**
  * Get LRU entry of the PT Set in the scratchpad.
@@ -142,7 +188,20 @@ bool lookupPT(uint32_t index, const PTTag *tag, PTEntry *result);
  * @param item the result if valid.
  * @return true if the result is valid. Returning false means there is an empty place.
  */ 
-bool getLRU(uint32_t index, PageTableItem *item);
+inline bool getLRU(uint32_t index, PageTableItem *item){
+  volatile PageTableSetCSR *base_ptr = reinterpret_cast<PageTableSetCSR *>(0x40000);
+  base_ptr->index = index;
+  base_ptr->lru_result = 1;
+  if(base_ptr->lru_result){
+    item->entry.modified = base_ptr->modified;
+    item->entry.permission = base_ptr->permission;
+    item->entry.ppn = base_ptr->ppn;
+    item->tag.process_id = base_ptr->process_id;
+    item->tag.vpn = base_ptr->vpn;
+    return true;
+  }
+  return false;
+}
 
 /**
  * Replace the LRU entry in the scratchpad with the new given entry.
@@ -153,7 +212,16 @@ bool getLRU(uint32_t index, PageTableItem *item);
  * @param p_id the process id of the entry
  * @param entry the new given entry.
  */ 
-void replaceLRU(uint32_t index, const PTTag *tag, const PTEntry *entry);
+inline void replaceLRU(uint32_t index, const volatile PTTag *tag, const volatile PTEntry *entry){
+  volatile PageTableSetCSR *base_ptr = reinterpret_cast<PageTableSetCSR *>(0x40000);
+  base_ptr->index = index;
+  base_ptr->vpn = tag->vpn;
+  base_ptr->process_id = tag->process_id;
+  base_ptr->ppn = entry->ppn;
+  base_ptr->permission = entry->permission;
+  base_ptr->modified = entry->modified;
+  base_ptr->replace_lru = 1;
+}
 
 /**
  * Replace the LRU entry in the scratchpad with the new given entry.
@@ -164,7 +232,7 @@ void replaceLRU(uint32_t index, const PTTag *tag, const PTEntry *entry);
  * 
  * @overload function of replaceLRU
  */ 
-void replaceLRU(uint32_t index, const PageTableItem *item){
+inline void replaceLRU(uint32_t index, const volatile PageTableItem *item){
   replaceLRU(index, &item->tag, &item->entry);
 }
 
@@ -173,7 +241,23 @@ void replaceLRU(uint32_t index, const PageTableItem *item){
  * 
  * @param the index of the scratchpad.
  */ 
-void syncPTSet(uint32_t index);
+inline void syncPTSet(uint32_t index){
+  volatile PageTableSetCSR *base_ptr = reinterpret_cast<PageTableSetCSR *>(0x40000);
+  base_ptr->store_dma = 1;
+  while(!base_ptr->store_dma);
+}
+
+struct TLBControllerCSR {
+  uint64_t vpn;
+  uint32_t process_id;
+  uint32_t ppn;
+  uint32_t permission;
+  uint32_t modified;
+  uint32_t which_tlb;
+  uint32_t flush;
+  uint32_t flush_hit;
+  uint32_t response;
+};
 
 /**
  * Send response to the TLB. This will refill the TLB with the given entry.
@@ -184,7 +268,17 @@ void syncPTSet(uint32_t index);
  * 
  * @note The hardware will automatically lookup the thread_id by the process id.
  */ 
-void responseToTLB(uint32_t which_tlb, const PTTag *tag, const PTEntry *entry);
+inline void responseToTLB(uint32_t which_tlb, const volatile PTTag *tag, const PTEntry *entry){
+  volatile TLBControllerCSR *base_ptr = reinterpret_cast<TLBControllerCSR *>(0x50000);
+  base_ptr->which_tlb = which_tlb;
+  base_ptr->vpn = tag->vpn;
+  base_ptr->process_id = tag->process_id;
+  base_ptr->ppn = entry->ppn;
+  base_ptr->modified = entry->modified;
+  base_ptr->permission = entry->permission;
+  while(!base_ptr->response); 
+  base_ptr->response = 1;
+}
 
 /**
  * Flush the TLB by given virtual page number and thread id.
@@ -195,65 +289,136 @@ void responseToTLB(uint32_t which_tlb, const PTTag *tag, const PTEntry *entry);
  * @return true if the entry is valid.
  * @note Always remember to put the entry back to the DRAM!
  */ 
-bool flushTLBEntry(uint32_t which_tlb, const PTTag *tag, PTEntry *entry);
+inline bool flushTLBEntry(uint32_t which_tlb, const PTTag *tag, PTEntry *entry){
+  volatile TLBControllerCSR *base_ptr = reinterpret_cast<TLBControllerCSR *>(0x50000);
+  base_ptr->which_tlb = which_tlb;
+  base_ptr->vpn = tag->vpn;
+  base_ptr->process_id = tag->process_id;
+
+  base_ptr->flush = 1;
+  while(!base_ptr->flush);
+
+  if(base_ptr->flush_hit){
+    // TODO: try to
+    entry->modified = base_ptr->modified;
+    entry->permission = base_ptr->permission;
+    entry->ppn = base_ptr->ppn;
+    return true;
+  }
+  return false;
+}
+
+struct FreeListCSR {
+  uint32_t pop;
+  uint32_t push;
+  uint32_t result;
+};
 
 /**
  * Pop a free physical page number from the free list.
  * @return the physical page number.
  */ 
-uint32_t getFreePPN();
+inline uint32_t getFreePPN(){
+  volatile FreeListCSR *base_ptr = reinterpret_cast<FreeListCSR *>(0x60000);
+  while(!base_ptr->pop);
+  base_ptr->pop = 1;
+  return base_ptr->result;
+}
 
 /**
  * Recycle a physical page number and push it in the pool.
  * @param ppn the page number to be free.
  */ 
-void recyclePPN(uint32_t ppn);
+inline void recyclePPN(uint32_t ppn){
+  volatile FreeListCSR *base_ptr = reinterpret_cast<FreeListCSR *>(0x60000);
+  while(!base_ptr->push);
+  base_ptr->result = ppn;
+  base_ptr->push = 1;
+}
 
 /**
  * Forward *Miss* Request to the QEMU side.
  * 
  * @param request the page request received from the TLB.
  * 
- * TODO: There is a problem. Mesage forwarding to QEMU should use p_id instead of t_id
  */ 
-void sendMissRequestToQEMU(const PTTag *tag, const uint32_t permission);
+void sendMissRequestToQEMU(const PTTag *tag, const uint32_t permission){
+  struct page_fault_request_t {
+    uint64_t vpn;
+    uint32_t process_id;
+    uint32_t permission;
+  };
+  volatile uint32_t *control_ptr = reinterpret_cast<uint32_t *>(0x70000);
+  volatile page_fault_request_t *base_ptr = reinterpret_cast<page_fault_request_t *>(0x70004);
+  base_ptr->permission = permission;
+  base_ptr->vpn = tag->vpn;
+  base_ptr->process_id = tag->process_id;
+  *control_ptr = 1;
+  while(!control_ptr);
+}
 
 /**
  * Send request to the DMA to evict a page. This will flush I$ and D$ before actually moving the page.
  * 
  * @param entry the page table entry pointing to the page.
  */ 
-void movePageToQEMU(const PTEntry *entry);
+void movePageToQEMU(const PTEntry *entry){
+  struct page_deleater_csr_t {
+    uint32_t ppn;
+    uint32_t permission;
+    uint32_t modified;
+    uint32_t control;
+  };
+  volatile page_deleater_csr_t *control_ptr = reinterpret_cast<page_deleater_csr_t *>(0x80000);
+  control_ptr->ppn = entry->ppn;
+  control_ptr->permission = entry->permission;
+  control_ptr->modified = entry->modified;
+  while(!control_ptr->control);
+  control_ptr->control = 1;
+}
 
 /**
  * Insert the page from the buffer of QEMU to the DRAM.
  * 
  * @param ppn the physical page number of the page.
  */ 
-void insertPageFromQEMU(uint32_t ppn);
+void insertPageFromQEMU(uint32_t ppn){
+  struct page_inserter_csr_t {
+    uint32_t ppn;
+    uint32_t control;
+  };
+  volatile page_inserter_csr_t *control_ptr = reinterpret_cast<page_inserter_csr_t *>(0x90000);
+  while(!control_ptr->control);
+  control_ptr->ppn = ppn;
+  control_ptr->control = 1;
+}
+
+// TODO: In order to easily test the module, split the functions to different files.
+
+
 
 int main(){
-  Message base;
   while(true){
-    if(!fetchMessage(&base)){
+    volatile Message *base = fetchMessage();
+    if(base == nullptr){
       continue;
     }
-    switch(base.type){
+    switch(base->type){
       case eTLBMissRequest: {
         // 1. Transfer thread id to process id.
         PTTag pt_tag; // with thread id replaced.
-        pt_tag.process_id = lookupThreadTable(base.tlb_request.tag.thread_id);
-        pt_tag.vpn = base.tlb_request.tag.vpn;
+        pt_tag.process_id = lookupThreadTable(base->tlb_request.tag.thread_id);
+        pt_tag.vpn = base->tlb_request.tag.vpn;
         // 2. Look up Page table according to the vpage and pid. 
         loadPTSet(0, &pt_tag);
         PTEntry entry;
         // Here we have an invocation of DMA? (They should be considered in the )
         if(lookupPT(0, &pt_tag, &entry)){
           // hit? reponse to the TLB
-          responseToTLB(base.tlb_request.permission == 2 ? 0 : 1, &pt_tag, &entry);
+          responseToTLB(base->tlb_request.permission == 2 ? 0 : 1, &pt_tag, &entry);
         } else {
           // miss.
-          sendMissRequestToQEMU(&pt_tag, base.tlb_request.permission);
+          sendMissRequestToQEMU(&pt_tag, base->tlb_request.permission);
         }
         // Update LRU bits and sync back?
         syncPTSet(0);
@@ -261,49 +426,49 @@ int main(){
       }
       case eTLBEvict: {
         PTTag pt_tag; // with thread id replaced.
-        pt_tag.process_id = lookupThreadTable(base.tlb_evict.tag.thread_id);
-        pt_tag.vpn = base.tlb_evict.tag.vpn;
+        pt_tag.process_id = lookupThreadTable(base->tlb_evict.tag.thread_id);
+        pt_tag.vpn = base->tlb_evict.tag.vpn;
         loadPTSet(0, &pt_tag);
         // Get victim
         PageTableItem item_to_evict;
         if(getLRU(0, &item_to_evict)){
           // Get entry from the TLB
-          flushTLBEntry(base.tlb_evict.entry.permission == 2 ? 0 : 1, &item_to_evict.tag, &item_to_evict.entry);
+          flushTLBEntry(base->tlb_evict.entry.permission == 2 ? 0 : 1, &item_to_evict.tag, &item_to_evict.entry);
           movePageToQEMU(&item_to_evict.entry);
         }
-        replaceLRU(0, &pt_tag, &base.tlb_evict.entry);
+        replaceLRU(0, &pt_tag, &base->tlb_evict.entry);
         syncPTSet(0);
         break;
       }
       case eQEMUMissReply: {
         // 1. determine eviction
-        loadPTSet(0, &base.qemu_miss.tag);
+        loadPTSet(0, &base->qemu_miss.tag);
         PageTableItem item_to_evict;
         if(getLRU(0, &item_to_evict)){
           // How to determine which to flush?
-          flushTLBEntry(base.qemu_miss.permission == 2 ? 0 : 1, &item_to_evict.tag, &item_to_evict.entry);
+          flushTLBEntry(base->qemu_miss.permission == 2 ? 0 : 1, &item_to_evict.tag, &item_to_evict.entry);
           movePageToQEMU(&item_to_evict.entry);
         }
         // 2. determine eviction?
         PTEntry entry;
-        if(base.qemu_miss.synonym_valid){
-          loadPTSet(1, &base.qemu_miss.synonym);
-          lookupPT(1, &base.qemu_miss.synonym, &entry); // assert hit!
+        if(base->qemu_miss.synonym_valid){
+          loadPTSet(1, &base->qemu_miss.synonym);
+          lookupPT(1, &base->qemu_miss.synonym, &entry); // assert hit!
         } else {
           // pop the entry from the Pool
           entry.ppn = getFreePPN();
           entry.modified = 0;
-          entry.permission = base.qemu_miss.permission;
+          entry.permission = base->qemu_miss.permission;
           insertPageFromQEMU(entry.ppn);
         }
-        replaceLRU(0, &base.qemu_miss.tag, &entry);
+        replaceLRU(0, &base->qemu_miss.tag, &entry);
         syncPTSet(0);
-        responseToTLB(base.qemu_miss.permission == 2 ? 0 : 1, &base.qemu_miss.tag, &entry);
+        responseToTLB(base->qemu_miss.permission == 2 ? 0 : 1, &base->qemu_miss.tag, &entry);
         break;
       }
       case eQEMUEvictReply: {
-        if(!base.qemu_evict.synonym_valid){
-          recyclePPN(base.qemu_evict.ppn);
+        if(!base->qemu_evict.synonym_valid){
+          recyclePPN(base->qemu_evict.ppn);
         }
         break;
       }

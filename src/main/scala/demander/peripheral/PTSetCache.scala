@@ -203,10 +203,15 @@ class PTSetCache extends MultiIOModule {
    * 0xA        | R: LRU is valid, W: trigger LRU
    * # replace 
    * 0xB        | R: 1, W: replace LRU
+   * # is ready
+   * 0xC        | R: is ready
    */ 
   val request_i = IO(Flipped(Valid(new MemoryRequestPacket(32, 32))))
   val reply_o = IO(Output(UInt(32.W)))
   val reply_r = Reg(UInt(32.W))
+
+  val sIdle :: sDMARead :: sDMAWrite :: sLookup :: sLookupLRU :: sReplaceLRU :: Nil = Enum(6)
+  val status_r = RegInit(sIdle)
 
   val tag_r = Reg(new software_bundle.PTTag)
   val pte_r = Reg(new software_bundle.PTEntry)
@@ -259,13 +264,15 @@ class PTSetCache extends MultiIOModule {
     is(0xB.U){
       reply_r := true.B
     }
+    is(0xC.U){
+      reply_r := status_r === sIdle
+    }
   }
   reply_o := reply_r
 
   val write_v = request_i.valid && request_i.bits.w_v
   // Status register
-  val sIdle :: sDMARead :: sDMAWrite :: sLookup :: sLookupLRU :: sReplaceLRU :: Nil = Enum(6)
-  val status_r = RegInit(sIdle)
+
   // update of status_r
   switch(status_r){
     is(sIdle){
