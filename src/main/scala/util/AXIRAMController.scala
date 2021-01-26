@@ -85,7 +85,7 @@ class AXIRAMController(
 
   S_AXI.ar.arready := read_state_r === sIdle
 
-  S_AXI.r.rvalid := read_state_r === sTrans && read_reply_i.fire()
+  S_AXI.r.rvalid := read_state_r === sTrans && read_reply_i.valid
   S_AXI.r.rid := read_context_r.id
   S_AXI.r.rdata := read_reply_i.bits
   S_AXI.r.rlast := r_final
@@ -94,12 +94,12 @@ class AXIRAMController(
   read_request_o.valid := read_state_r === sTrans && !read_context_r.send_done
   read_request_o.bits := read_context_r.current_addr
 
-  read_reply_i.ready := read_state_r === sTrans
+  read_reply_i.ready := read_state_r === sTrans && S_AXI.r.rready
 
   val write_state_r = RegInit(sIdle)
   val write_context_r = Reg(new context_t)
 
-  // TODO: Write logic
+  // Write logic
 
   //! Only INCR burst mode is support.
   when(S_AXI.aw.awvalid){
@@ -122,7 +122,7 @@ class AXIRAMController(
     write_context_r.target_length := S_AXI.aw.awlen
   }.elsewhen(w_fire){
     write_context_r.current_send_cnt := write_context_r.current_send_cnt + 1.U
-    write_context_r.current_addr := write_context_r.current_addr + 1.U //? Not 1!!!
+    write_context_r.current_addr := write_context_r.current_addr + write_context_r.size
   }
 
   switch(write_state_r){
@@ -130,7 +130,7 @@ class AXIRAMController(
       write_state_r := Mux(aw_fire, sTrans, sIdle)
     }
     is(sTrans){
-      write_state_r := Mux(w_final && w_fire, sReply, sIdle)
+      write_state_r := Mux(w_final && w_fire, sReply, sTrans)
     }
     is(sReply){
       write_state_r := Mux(b_fire, sIdle, sReply)
