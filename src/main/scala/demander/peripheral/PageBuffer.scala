@@ -39,7 +39,7 @@ class PageDeletor(
    * 0x3      | r: is ready, w: start
    */ 
   val request_i = IO(Flipped(Valid(new MemoryRequestPacket(32, 32))))
-  val reply_o = IO(UInt(32.W))
+  val reply_o = IO(Output(UInt(32.W)))
 
   val pte_r = Reg(new software_bundle.PTEntry)
   val start_r = RegInit(false.B)
@@ -308,7 +308,7 @@ class PageBuffer extends MultiIOModule {
 
   val chosen_port = Wire(Decoupled(u_port_a_arb.io.chosen.cloneType))
   chosen_port.valid := u_port_a_arb.io.out.valid
-  chosen_port.ready := u_port_a_arb.io.out.ready
+  u_port_a_arb.io.out.ready := chosen_port.ready
   chosen_port.bits := u_port_a_arb.io.chosen
 
   val chosen_port_q = Queue(chosen_port, 1, true)
@@ -327,16 +327,18 @@ class PageBuffer extends MultiIOModule {
   u_converter.read_reply_i.valid := chosen_port_q.valid && chosen_port_q.bits === 1.U
 
   // Port B is for write request
-
   val u_port_b_arb = Module(new RRArbiter(u_converter.write_request_o.bits.cloneType, 2))
   u_port_b_arb.io.in(0).bits.addr := normal_write_request_i.bits.addr
   u_port_b_arb.io.in(0).bits.data := normal_write_request_i.bits.data
   u_port_b_arb.io.in(0).bits.mask := Fill(512 / 8, 1.U(1.W))
+  u_port_b_arb.io.in(0).valid := normal_write_request_i.valid
+  normal_write_request_i.ready := u_port_b_arb.io.in(0).ready
   u_port_b_arb.io.in(1) <> u_converter.write_request_o
 
   u_bram.portB.ADDR := u_port_b_arb.io.out.bits.addr
   u_bram.portB.DI := u_port_b_arb.io.out.bits.data
   u_bram.portB.EN := u_port_b_arb.io.out.valid
   u_bram.portB.WE := u_port_b_arb.io.out.bits.mask
+  u_port_b_arb.io.out.ready := true.B
 }
 

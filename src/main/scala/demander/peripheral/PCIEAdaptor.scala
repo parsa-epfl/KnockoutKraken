@@ -19,6 +19,7 @@ class QEMUMessageReceiver (
   val u_axi_ram_controller = Module(new AXIRAMController(64, 512))
 
   u_axi_ram_controller.S_AXI <> S_AXI
+  u_axi_ram_controller.read_request_o.ready := false.B
   u_axi_ram_controller.read_reply_i := DontCare
   fifo_o.bits := fifo_o.bits.parseFromVec(VecInit(u_axi_ram_controller.write_request_o.bits.data.asBools().grouped(32).map(Cat(_)).toSeq))
 
@@ -64,7 +65,7 @@ class QEMUMessageConverter(
   evict_reply_enq.bits := evict_reply_enq.bits.parseFromVec(i.bits.data)
 
   miss_reply_o <> Queue(miss_reply_enq, fifoDepth)
-  evict_reply_enq <> Queue(evict_reply_enq, fifoDepth)
+  evict_reply_o <> Queue(evict_reply_enq, fifoDepth)
 
   i.ready := miss_reply_enq.fire() || evict_reply_enq.fire()
 }

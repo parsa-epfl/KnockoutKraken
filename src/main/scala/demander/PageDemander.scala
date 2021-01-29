@@ -11,39 +11,27 @@ class PageDemander(
   instructionFile: String = ""
 ) extends MultiIOModule {
   // The address map of the functional units.
-  /**
-   * Address Range | Peripheral
-   * 0x00000 - 0x10000    | Instruction Buffer
-   * 0x10000 - 0x20000    | Data Buffer (stack)
-   * 0x20000 - 0x30000    | Message Queue
-   * 0x30000 - 0x40000    | Truth Table
-   * 0x40000 - 0x50000    | Page Table Set manager
-   * 0x50000 - 0x60000    | TLB wrapper
-   * 0x60000 - 0x70000    | Free List
-   * 0x70000 - 0x80000    | QEMU Queue
-   * 0x80000 - 0x90000    | Page Deletor
-   * 
-   */ 
   // The core
   val u_core = Module(new mini.Core()(new mini.MiniConfig()))
+  u_core.io.host.fromhost := DontCare
 
   // The instruction buffer
-  val u_ibuffer = Module(new peripheral.SyncReadMemory(1 << 14)(instructionFile))
+  val u_ibuffer = Module(new peripheral.SyncMemory(1 << 14)(instructionFile))
   u_ibuffer.request_i.bits.addr := u_core.io.icache.req.bits.addr
-  u_ibuffer.request_i.bits.data := DontCare
-  u_ibuffer.request_i.bits.w_mask := DontCare
+  u_ibuffer.request_i.bits.data := 0.U
+  u_ibuffer.request_i.bits.w_mask := 0.U
   u_ibuffer.request_i.bits.w_v := false.B
   u_ibuffer.request_i.valid := u_core.io.icache.req.valid
 
-  u_core.io.icache.resp.bits := u_ibuffer.reply_o
+  u_core.io.icache.resp.bits.data := u_ibuffer.reply_o
   u_core.io.icache.resp.valid := RegNext(u_core.io.icache.req.valid)
 
   // The bridge
   val u_bus = Module(new peripheral.MemoryInterconnector(
-    addresses = Seq.tabulate(8)({ i =>
+    addresses = Seq.tabulate(9)({ i =>
       (i + 1) << 16
     }),
-    masks = Seq.fill(8)(0xFFFF0000),
+    masks = Seq.fill(9)(0xFFFF0000),
   ));  
 
   u_bus.master_request_i.bits.addr := u_core.io.dcache.req.bits.addr
@@ -58,7 +46,7 @@ class PageDemander(
   // The functional units
 
   // The data buffer
-  val u_dbuffer = Module(new peripheral.SyncReadMemory(1 << 14)())
+  val u_dbuffer = Module(new peripheral.SyncMemory(1 << 14)())
   u_dbuffer.request_i <> u_bus.slave_requests_o(0)
   u_dbuffer.reply_o <> u_bus.slave_replies_i(0)
 
@@ -74,7 +62,7 @@ class PageDemander(
   u_truth_table.request_i <> u_bus.slave_requests_o(2)
   u_truth_table.reply_o <> u_bus.slave_replies_i(2)
   
-  val S_AXI_Truthtable = IO(Flipped(u_truth_table.S_AXI.cloneType))
+  val S_AXI_Truthtable = IO(u_truth_table.S_AXI.cloneType)
   u_truth_table.S_AXI <> S_AXI_Truthtable
 
   // TThe page table set manager
@@ -107,7 +95,7 @@ class PageDemander(
   u_tlb_wrapper.tlb_backend_reply_o <> tlb_backend_reply_o
   val tlb_flush_request_o = IO(u_tlb_wrapper.tlb_flush_request_o.cloneType)
   u_tlb_wrapper.tlb_flush_request_o <> tlb_flush_request_o
-  val tlb_frontend_reply_i = IO(Flipped(u_tlb_wrapper.tlb_frontend_reply_i.cloneType))
+  val tlb_frontend_reply_i = IO(u_tlb_wrapper.tlb_frontend_reply_i.cloneType)
   u_tlb_wrapper.tlb_frontend_reply_i <> tlb_frontend_reply_i
 
 
@@ -120,9 +108,9 @@ class PageDemander(
 
   val M_AXI_FL = IO(u_freelist.M_AXI.cloneType)
   u_freelist.M_AXI <> M_AXI_FL
-  val freelist_empty_vo = IO(u_freelist.empty_vo.cloneType)
+  val freelist_empty_vo = IO(Output(u_freelist.empty_vo.cloneType))
   u_freelist.empty_vo <> freelist_empty_vo
-  val freelist_full_vo = IO(u_freelist.full_vo.cloneType)
+  val freelist_full_vo = IO(Output(u_freelist.full_vo.cloneType))
   u_freelist.full_vo <> freelist_full_vo
   u_freelist.reply_o <> u_bus.slave_replies_i(5)
   u_freelist.request_i <> u_bus.slave_requests_o(5)
@@ -154,13 +142,13 @@ class PageDemander(
   val dcache_flush_request_o = IO(u_page_deletor.dcache_flush_request_o.cloneType)
   u_page_deletor.dcache_flush_request_o <> dcache_flush_request_o
 
-  val dcache_wb_queue_empty_i = IO(Flipped(u_page_deletor.dcache_wb_queue_empty_i.cloneType))
+  val dcache_wb_queue_empty_i = IO(Input(u_page_deletor.dcache_wb_queue_empty_i.cloneType))
   u_page_deletor.dcache_wb_queue_empty_i <> dcache_wb_queue_empty_i
 
   val icache_flush_request_o = IO(u_page_deletor.icache_flush_request_o.cloneType)
   u_page_deletor.icache_flush_request_o <> icache_flush_request_o
 
-  val icache_wb_queue_empty_i = IO(Flipped(u_page_deletor.icache_wb_queue_empty_i.cloneType))
+  val icache_wb_queue_empty_i = IO(Input(u_page_deletor.icache_wb_queue_empty_i.cloneType))
   u_page_deletor.icache_wb_queue_empty_i <> icache_wb_queue_empty_i
   
 
@@ -204,15 +192,15 @@ class PageDemander(
   
   u_demander_message_complex.o <> u_r_mmq.queue_i
 
-  val u_itlb_message_convert = Module(new peripheral.TLBMessageConverter(param.toTLBParameter()))
+  val u_itlb_message_convert = Module(new peripheral.TLBMessageConverter(param.toTLBParameter(), 2.U))
   u_itlb_message_convert.eviction_request_o <> u_demander_message_complex.itlb_evict_request_i
   u_itlb_message_convert.miss_request_o <> u_demander_message_complex.itlb_miss_request_i
   val itlb_backend_request_i = IO(Flipped(u_itlb_message_convert.tlb_backend_request_i.cloneType))
   u_itlb_message_convert.tlb_backend_request_i <> itlb_backend_request_i
 
-  val u_dtlb_message_convert = Module(new peripheral.TLBMessageConverter(param.toTLBParameter()))
-  u_dtlb_message_convert.eviction_request_o := u_demander_message_complex.dtlb_evict_request_i
-  u_dtlb_message_convert.miss_request_o := u_demander_message_complex.dtlb_miss_request_i
+  val u_dtlb_message_convert = Module(new peripheral.TLBMessageConverter(param.toTLBParameter(), 0.U))
+  u_dtlb_message_convert.eviction_request_o <> u_demander_message_complex.dtlb_evict_request_i
+  u_dtlb_message_convert.miss_request_o <> u_demander_message_complex.dtlb_miss_request_i
   val dtlb_backend_request_i = IO(Flipped(u_dtlb_message_convert.tlb_backend_request_i.cloneType))
   u_dtlb_message_convert.tlb_backend_request_i <> dtlb_backend_request_i
 

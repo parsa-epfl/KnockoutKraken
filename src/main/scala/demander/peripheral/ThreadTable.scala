@@ -12,6 +12,8 @@ class ThreadLookupResultPacket(
 ) extends Bundle {
   val thread_id = UInt(log2Ceil(threadNumber).W)
   val hit_v = Bool()
+
+  override def cloneType: this.type = new ThreadLookupResultPacket(threadNumber).asInstanceOf[this.type]
 }
 
 class ThreadTable(
@@ -35,7 +37,7 @@ class ThreadTable(
   val axi_internal_read_address = S_AXI.araddr(1 + log2Ceil(threadNumber),2)
   val axi_internal_write_address = S_AXI.awaddr(1 + log2Ceil(threadNumber),2)
   
-  S_AXI.rdata := RegNext(table(axi_internal_read_address))
+  S_AXI.rdata := RegNext(table(axi_internal_read_address)).bits
   S_AXI.rresp := 0.U
 
   val rvalid_r = RegInit(false.B)

@@ -86,6 +86,7 @@ class TLBBackendRequestPacket(param: TLBParameter) extends Bundle {
   val entry = new TLBEntryPacket(param)
   val w_v = Bool()
   val flush_v = Bool()
+  val need_write_permission_v = Bool()
 
   override def cloneType: this.type = new TLBBackendRequestPacket(param).asInstanceOf[this.type]
 
@@ -179,6 +180,7 @@ class BaseTLB(
   backend_request_o.bits.entry := u_cache.backend_request_o.bits.data.asTypeOf(new TLBEntryPacket(param))
   backend_request_o.bits.w_v := u_cache.backend_request_o.bits.w_v
   backend_request_o.bits.flush_v := u_cache.backend_request_o.bits.flush_v
+  backend_request_o.bits.need_write_permission_v := u_cache.backend_request_o.bits.need_write_permission_v
   backend_request_o.valid := u_cache.backend_request_o.valid
   u_cache.backend_request_o.ready := backend_request_o.ready
 
