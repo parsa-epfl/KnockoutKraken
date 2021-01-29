@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 
 import armflex.cache.MemorySystemParameter
+import DMAController.Bus._
 
 class PageDemander(
   param: MemorySystemParameter,
@@ -72,8 +73,9 @@ class PageDemander(
   val u_truth_table = Module(new peripheral.ThreadTable())
   u_truth_table.request_i <> u_bus.slave_requests_o(2)
   u_truth_table.reply_o <> u_bus.slave_replies_i(2)
-
-  u_truth_table.S_AXI // from QEMU (lite) (R/W)
+  
+  val S_AXI_Truthtable = IO(Flipped(u_truth_table.S_AXI.cloneType))
+  u_truth_table.S_AXI <> S_AXI_Truthtable
 
   // TThe page table set manager
   // loadPTSet
@@ -84,7 +86,8 @@ class PageDemander(
   val u_ptset = Module(new peripheral.PTSetCache())
   u_ptset.reply_o <> u_bus.slave_replies_i(3)
   u_ptset.request_i <> u_bus.slave_requests_o(3)
-  u_ptset.M_AXI // to DRAM (R/W)
+  val M_AXI_PTSet = IO(u_ptset.M_AXI.cloneType) // DRAM(R/W)
+  u_ptset.M_AXI <> M_AXI_PTSet
 
   // The TLB wrapper
   // responseToTLB
@@ -100,9 +103,12 @@ class PageDemander(
   u_tlb_wrapper.reply_o <> u_bus.slave_replies_i(4)
   u_tlb_wrapper.request_i <> u_bus.slave_requests_o(4)
 
-  u_tlb_wrapper.tlb_backend_reply_o
-  u_tlb_wrapper.tlb_flush_request_o
-  u_tlb_wrapper.tlb_frontend_reply_i
+  val tlb_backend_reply_o = IO(u_tlb_wrapper.tlb_backend_reply_o.cloneType)
+  u_tlb_wrapper.tlb_backend_reply_o <> tlb_backend_reply_o
+  val tlb_flush_request_o = IO(u_tlb_wrapper.tlb_flush_request_o.cloneType)
+  u_tlb_wrapper.tlb_flush_request_o <> tlb_flush_request_o
+  val tlb_frontend_reply_i = IO(Flipped(u_tlb_wrapper.tlb_frontend_reply_i.cloneType))
+  u_tlb_wrapper.tlb_frontend_reply_i <> tlb_frontend_reply_i
 
 
   // Free PA list
@@ -111,9 +117,13 @@ class PageDemander(
   val u_freelist = Module(new peripheral.FreeListWrapper(
     1 << 24
   ))
-  u_freelist.M_AXI // to DRAM (R/W)
-  u_freelist.empty_vo
-  u_freelist.full_vo
+
+  val M_AXI_FL = IO(u_freelist.M_AXI.cloneType)
+  u_freelist.M_AXI <> M_AXI_FL
+  val freelist_empty_vo = IO(u_freelist.empty_vo.cloneType)
+  u_freelist.empty_vo <> freelist_empty_vo
+  val freelist_full_vo = IO(u_freelist.full_vo.cloneType)
+  u_freelist.full_vo <> freelist_full_vo
   u_freelist.reply_o <> u_bus.slave_replies_i(5)
   u_freelist.request_i <> u_bus.slave_requests_o(5)
 
@@ -132,25 +142,46 @@ class PageDemander(
   u_bus.slave_requests_o(7) <> u_page_deletor.request_i
   u_bus.slave_replies_i(7) <> u_page_deletor.reply_o
 
-  u_page_deletor.M_AXI // to DRAM (R)
-  u_page_deletor.dcache_flush_request_o
-  u_page_deletor.dcache_wb_queue_empty_i
+  val M_AXI_Page = IO(u_page_deletor.M_AXI.cloneType)
+  // u_page_deletor.M_AXI // (DRAM: R)
+  u_page_deletor.M_AXI.aw <> AXI4AW.stub(36)
+  u_page_deletor.M_AXI.w <> AXI4W.stub(512)
+  u_page_deletor.M_AXI.b <> AXI4B.stub()
 
-  u_page_deletor.icache_flush_request_o
-  u_page_deletor.icache_wb_queue_empty_i
+  u_page_deletor.M_AXI.ar <> M_AXI_Page.ar
+  u_page_deletor.M_AXI.r <> M_AXI_Page.r
+
+  val dcache_flush_request_o = IO(u_page_deletor.dcache_flush_request_o.cloneType)
+  u_page_deletor.dcache_flush_request_o <> dcache_flush_request_o
+
+  val dcache_wb_queue_empty_i = IO(Flipped(u_page_deletor.dcache_wb_queue_empty_i.cloneType))
+  u_page_deletor.dcache_wb_queue_empty_i <> dcache_wb_queue_empty_i
+
+  val icache_flush_request_o = IO(u_page_deletor.icache_flush_request_o.cloneType)
+  u_page_deletor.icache_flush_request_o <> icache_flush_request_o
+
+  val icache_wb_queue_empty_i = IO(Flipped(u_page_deletor.icache_wb_queue_empty_i.cloneType))
+  u_page_deletor.icache_wb_queue_empty_i <> icache_wb_queue_empty_i
   
 
   // Page Inserter
   // insertPageFromQEMU
   val u_page_inserter = Module(new peripheral.PageInserter)
-  u_page_inserter.M_AXI // to DRAM (W)
-  
+
+  // u_page_inserter.M_AXI // to DRAM (W)
+  u_page_inserter.M_AXI.ar <> AXI4AR.stub(36)
+  u_page_inserter.M_AXI.r <> AXI4R.stub(512)
+  u_page_inserter.M_AXI.aw <> M_AXI_Page.aw
+  u_page_inserter.M_AXI.w <> M_AXI_Page.w
+  u_page_inserter.M_AXI.b <> M_AXI_Page.b
+
   u_page_inserter.reply_o <> u_bus.slave_replies_i(8)
   u_page_inserter.request_i <> u_bus.slave_requests_o(8)
 
   // The page buffer
   val u_page_buffer = Module(new peripheral.PageBuffer)
-  u_page_buffer.S_AXI // From QEMU (RW)
+  val S_AXI_PageBuffer = IO(Flipped(u_page_buffer.S_AXI.cloneType))
+  u_page_buffer.S_AXI <> S_AXI_PageBuffer // From QEMU (RW)
   u_page_buffer.normal_read_reply_o <> u_page_inserter.read_reply_i
   u_page_buffer.normal_read_request_i <> u_page_inserter.read_request_o
   u_page_buffer.normal_write_request_i <> u_page_deletor.page_buffer_write_o
@@ -161,8 +192,11 @@ class PageDemander(
   u_qemu_message_compositor.evict_notify_req_i <> u_page_deletor.start_message_o
   u_qemu_message_compositor.page_fault_req_i <> u_miss_to_qemu.queue_o 
 
+  
   val u_qemu_message_sender = Module(new peripheral.QEMUMessageSender())
-  u_qemu_message_sender.M_AXI // To QEMU (W)
+  val M_AXI_QEMU_Message = IO(u_qemu_message_sender.M_AXI.cloneType)
+  // u_qemu_message_sender.M_AXI // To QEMU (W)
+  u_qemu_message_sender.M_AXI <> M_AXI_QEMU_Message
   u_qemu_message_sender.fifo_i <> u_qemu_message_compositor.o
 
   // Demander Message complex
@@ -173,12 +207,14 @@ class PageDemander(
   val u_itlb_message_convert = Module(new peripheral.TLBMessageConverter(param.toTLBParameter()))
   u_itlb_message_convert.eviction_request_o <> u_demander_message_complex.itlb_evict_request_i
   u_itlb_message_convert.miss_request_o <> u_demander_message_complex.itlb_miss_request_i
-  u_itlb_message_convert.tlb_backend_request_i
+  val itlb_backend_request_i = IO(Flipped(u_itlb_message_convert.tlb_backend_request_i.cloneType))
+  u_itlb_message_convert.tlb_backend_request_i <> itlb_backend_request_i
 
   val u_dtlb_message_convert = Module(new peripheral.TLBMessageConverter(param.toTLBParameter()))
   u_dtlb_message_convert.eviction_request_o := u_demander_message_complex.dtlb_evict_request_i
   u_dtlb_message_convert.miss_request_o := u_demander_message_complex.dtlb_miss_request_i
-  u_dtlb_message_convert.tlb_backend_request_i
+  val dtlb_backend_request_i = IO(Flipped(u_dtlb_message_convert.tlb_backend_request_i.cloneType))
+  u_dtlb_message_convert.tlb_backend_request_i <> dtlb_backend_request_i
 
   val u_qemu_to_demander_message_conveter = Module(new peripheral.QEMUMessageConverter())
   u_demander_message_complex.qemu_miss_reply_i <> u_qemu_to_demander_message_conveter.miss_reply_o 
@@ -187,17 +223,13 @@ class PageDemander(
   val u_qemu_message_receiver = Module(new peripheral.QEMUMessageReceiver({
     addr => true.B // TODO: Replace with correct function.
   }))
-  u_qemu_message_receiver.S_AXI // From QEMU (R)
+  val S_AXI_QEMU_Message = IO(Flipped(u_qemu_message_receiver.S_AXI.cloneType))
+  u_qemu_message_receiver.S_AXI <> S_AXI_QEMU_Message // From QEMU (R)
+
   u_qemu_message_receiver.fifo_o <> u_qemu_to_demander_message_conveter.i
 
 
   // TODO: DRAM Reset
 
 }
-
-// TODO: We need a PageBuffer to record:
-// - Page from QEMU to FPGA (AXI_Slave)
-// - Page from FPGA to QEMU (AXI_Slave)
-
-// TODO: A message sender (Basically a DMA writer)
 
