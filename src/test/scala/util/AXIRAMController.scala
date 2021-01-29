@@ -73,13 +73,13 @@ class AXIRAMControllerTester extends FreeSpec with ChiselScalatestTester {
         dut.clock.step()
       }
 
-      timescope{
+      timescope {
         dut.ram_read_request_o.ready.poke(true.B)
         for (i <- 0 until 8){
           // check the 8 requests.
           dut.ram_read_request_o.valid.expect(true.B)
           dut.ram_read_request_o.bits.expect((0x10 + i * 4).U)
-        
+          
           dut.clock.step()
         }
       }
@@ -90,7 +90,6 @@ class AXIRAMControllerTester extends FreeSpec with ChiselScalatestTester {
           dut.clock.step(8)
         }
       }
-
 
       // 8 requests are checked. Now it's time to return the data.
       fork {
