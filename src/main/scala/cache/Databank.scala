@@ -58,8 +58,9 @@ class FrontendReplyPacket(param: CacheParameter) extends Bundle{
 class MissRequestPacket(param: CacheParameter) extends Bundle{
   val addr = UInt(param.addressWidth.W)
   val thread_id = UInt(param.threadIDWidth().W)
+  val need_write_permission_v = Bool() // For TLB miss. This parameter will be passed to QEMU for sanity check.
 
-  val not_sync_with_data_v = Bool()
+  val not_sync_with_data_v = Bool() 
 
   override def cloneType: this.type = new MissRequestPacket(param).asInstanceOf[this.type]
 }
@@ -274,6 +275,7 @@ class DataBankManager(
   s2_miss_request_n.bits.addr := s1_frontend_request_r.bits.addr
   s2_miss_request_n.bits.thread_id := s1_frontend_request_r.bits.thread_id
   s2_miss_request_n.bits.not_sync_with_data_v := false.B
+  s2_miss_request_n.bits.need_write_permission_v := s1_frontend_request_r.bits.w_v
   s2_miss_request_n.valid := !hit_v && s1_frontend_request_r.fire() && 
     !full_writing_v &&  // full writing is not a miss
     !s1_frontend_request_r.bits.flush_v // flush is not a miss

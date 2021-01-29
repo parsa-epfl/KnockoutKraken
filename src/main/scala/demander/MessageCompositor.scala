@@ -43,15 +43,17 @@ class DemanderMessageCompositor(
     dtlb_miss_req_q,
     itlb_miss_req_q,
   ).map({ mess =>
-    val res = Decoupled(mess.bits.getRawMessage.cloneType)
-    res.bits <> mess.bits.getRawMessage
-    res.valid <> mess.valid
-    res.ready <> mess.ready
+    val res = Wire(Decoupled(mess.bits.getRawMessage.cloneType))
+    res.bits := mess.bits.getRawMessage
+    res.valid := mess.valid
+    mess.ready := res.ready
     res
   })
   // TODO: Create an arbiter.
   val u_arb = Module(new Arbiter(new PageDemanderMessage, 6))
-  u_arb.io.in <> VecInit(messages)
+  u_arb.io.in.zip(messages).foreach({
+    case (s, d) => s <> d
+  })
   u_arb.io.out <> o
 }
 
@@ -74,11 +76,18 @@ class QEMUMessageCompositor(
     evict_notify_req_q,
     page_fault_req_q
   ).map({ mess =>
-    val res = Decoupled(mess.bits.getRawMessage.cloneType)
-    res.bits <> mess.bits.getRawMessage
-    res.valid <> mess.valid
-    res.ready <> mess.ready
+    val res = Wire(Decoupled(mess.bits.getRawMessage.cloneType))
+    res.bits := mess.bits.getRawMessage
+    res.valid := mess.valid
+    mess.ready := res.ready
     res
   })
+
+  val u_arb = Module(new Arbiter(new QEMUMessage, 3))
+  
+  u_arb.io.in.zip(messages).foreach({
+    case (s, d) => s <> d
+  })
+  u_arb.io.out <> o
 }
 
