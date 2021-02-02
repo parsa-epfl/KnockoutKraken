@@ -84,9 +84,8 @@ class PageDemander(
   // The TLB wrapper
   // responseToTLB
   // flushTLBEntry
-  // TODO: Where does the parameter comes from?
   val u_tlb_wrapper = Module(new peripheral.TLBFlushController(
-    16, param.toTLBParameter()
+    software_bundle.ParameterConstants.process_id_width, param.toTLBParameter()
   ))
 
   u_tlb_wrapper.lookup_process_id_o <> u_thread_table.lookup_request_i
@@ -106,6 +105,7 @@ class PageDemander(
   // Free PA list
   // getFreePPN
   // recyclePPN
+  // TODO: Add the base address for the Free List wrapper
   val u_freelist = Module(new peripheral.FreeListWrapper(
     1 << 24
   ))

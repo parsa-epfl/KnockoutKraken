@@ -34,7 +34,6 @@ class DemanderMessageCompositor(
   val qemu_miss_rep_q = Queue(qemu_miss_reply_i, fifoDepth)
   val qemu_evict_req_q = Queue(qemu_evict_reply_i, fifoDepth)
 
-  // TODO: Generate the message for each type.
   val messages = Seq(
     qemu_evict_req_q,
     qemu_miss_rep_q,
@@ -49,7 +48,6 @@ class DemanderMessageCompositor(
     mess.ready := res.ready
     res
   })
-  // TODO: Create an arbiter.
   val u_arb = Module(new Arbiter(new PageDemanderMessage, 6))
   u_arb.io.in.zip(messages).foreach({
     case (s, d) => s <> d

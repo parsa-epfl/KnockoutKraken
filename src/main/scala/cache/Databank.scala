@@ -193,8 +193,6 @@ class DataBankManager(
   val s2_bank_writing_r = RegNext(s2_bank_writing_n)
 
   val s2_writing_matched = s2_bank_writing_r.valid && s2_bank_writing_r.bits.addr === s1_frontend_request_r.bits.addr
-  // TODO: Bugs here. The block stored in the s2_bank_writing_r is not complete when the writing is just part of the block.
-  // TODO: This will trigger a fault reading. 
   val hit_entry = Mux(
     s2_writing_matched,
     s2_bank_writing_r.bits.toEntry(),

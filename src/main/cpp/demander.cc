@@ -1,7 +1,5 @@
 #include "demander_api.hpp"
 
-// TODO: In order to easily test the module, split the functions to different files.
-
 int main(){
   while(true){
     volatile int *message_available = reinterpret_cast<int *>(0x20000);
