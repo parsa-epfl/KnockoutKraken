@@ -5,6 +5,7 @@ import chisel3.util._
 
 import armflex.cache.MemorySystemParameter
 import DMAController.Bus._
+import armflex.demander.software_bundle.ParameterConstants
 
 class PageDemander(
   param: MemorySystemParameter,
@@ -24,7 +25,7 @@ class PageDemander(
   u_ibuffer.request_i.valid := u_core.io.icache.req.valid
 
   u_core.io.icache.resp.bits.data := u_ibuffer.reply_o
-  u_core.io.icache.resp.valid := RegNext(u_core.io.icache.req.valid)
+  u_core.io.icache.resp.valid := true.B
 
   // The bridge
   val u_bus = Module(new peripheral.MemoryInterconnector(
@@ -56,14 +57,17 @@ class PageDemander(
   u_r_mmq.request_i <> u_bus.slave_requests_o(1)
   u_r_mmq.reply_o <> u_bus.slave_replies_i(1)
 
-  // The truth table (with parameter)
+  // The thread table (with parameter)
   // lookupThreadTable
-  val u_truth_table = Module(new peripheral.ThreadTable())
-  u_truth_table.request_i <> u_bus.slave_requests_o(2)
-  u_truth_table.reply_o <> u_bus.slave_replies_i(2)
+  val u_thread_table = Module(new peripheral.ThreadTable(
+    param.threadNumber,
+    ParameterConstants.process_id_width
+  ))
+  u_thread_table.request_i <> u_bus.slave_requests_o(2)
+  u_thread_table.reply_o <> u_bus.slave_replies_i(2)
   
-  val S_AXI_Truthtable = IO(u_truth_table.S_AXI.cloneType)
-  u_truth_table.S_AXI <> S_AXI_Truthtable
+  val S_AXI_Threadtable = IO(u_thread_table.S_AXI.cloneType)
+  u_thread_table.S_AXI <> S_AXI_Threadtable
 
   // TThe page table set manager
   // loadPTSet
@@ -85,8 +89,8 @@ class PageDemander(
     16, param.toTLBParameter()
   ))
 
-  u_tlb_wrapper.lookup_process_id_o <> u_truth_table.lookup_request_i
-  u_tlb_wrapper.lookup_thread_id_i <> u_truth_table.loopup_reply_o
+  u_tlb_wrapper.lookup_process_id_o <> u_thread_table.lookup_request_i
+  u_tlb_wrapper.lookup_thread_id_i <> u_thread_table.loopup_reply_o
 
   u_tlb_wrapper.reply_o <> u_bus.slave_replies_i(4)
   u_tlb_wrapper.request_i <> u_bus.slave_requests_o(4)

@@ -35,15 +35,13 @@ class PTSetPacket(
  * Page table set buffer and its attached logic.
  * 
  * @param t the Chisel type of the PT Set
- * @param dmaWidth the width of DMA request.
  */ 
 class PTSetBuffer(
   t: PTSetPacket,
-  dmaWidth: Int = 512
 ) extends MultiIOModule {
-  val dma_data_i = IO(Flipped(Decoupled(UInt(dmaWidth.W))))
-  val requestPacketNumber = (t.getWidth / dmaWidth) + (if(t.getWidth % dmaWidth == 0) 0 else 1)
-  val buffer_r = Reg(Vec(requestPacketNumber, UInt(dmaWidth.W)))
+  val dma_data_i = IO(Flipped(Decoupled(UInt(512.W))))
+  val requestPacketNumber = 3
+  val buffer_r = Reg(Vec(requestPacketNumber, UInt(512.W)))
 
   // Load logic.
   val dma_cnt_r = RegInit(UInt(log2Ceil(requestPacketNumber).W), 0.U)
@@ -60,7 +58,7 @@ class PTSetBuffer(
   updated_buffer(dma_cnt_r) := dma_data_i.bits
 
   // Store logic.
-  val dma_data_o = IO(Decoupled(UInt(dmaWidth.W)))
+  val dma_data_o = IO(Decoupled(UInt(512.W)))
   val store_enable_vi = IO(Input(Bool()))
   val store_vr = RegInit(Bool(), false.B)
   when(dma_cnt_r === (requestPacketNumber-1).U && dma_data_o.fire()){
@@ -159,27 +157,23 @@ class PTSetCache extends MultiIOModule {
 
   val u_buffer_0 = Module(new PTSetBuffer(new PTSetPacket))
   val u_buffer_1 = Module(new PTSetBuffer(new PTSetPacket))
-  val u_axi_read = Module(new AXI4Reader(64, 512))
-  val u_axi_write = Module(new AXI4Writer(64, 512))
+  val u_axi_read = Module(new AXI4Reader(36, 512))
+  val u_axi_write = Module(new AXI4Writer(36, 512))
 
-  val M_AXI = IO(new AXI4(64, 512))
+  val M_AXI = IO(new AXI4(36, 512))
   M_AXI.ar <> u_axi_read.io.bus.ar
   M_AXI.r <> u_axi_read.io.bus.r
-  u_axi_read.io.bus.aw.awready := false.B
-  u_axi_read.io.bus.w.wready := false.B
-  u_axi_read.io.bus.b.bid := DontCare
-  u_axi_read.io.bus.b.bvalid := false.B
-  u_axi_read.io.bus.b.bresp := DontCare
+  u_axi_read.io.bus.aw <> AXI4AW.stub(36)
+  u_axi_read.io.bus.w <> AXI4W.stub(512)
+  u_axi_read.io.bus.b <> AXI4B.stub()
+  
   M_AXI.aw <> u_axi_write.io.bus.aw
   M_AXI.w <> u_axi_write.io.bus.w
   M_AXI.b <> u_axi_write.io.bus.b
 
-  u_axi_write.io.bus.ar.arready := false.B
-  u_axi_write.io.bus.r.rvalid := false.B
-  u_axi_write.io.bus.r.rdata := DontCare
-  u_axi_write.io.bus.r.rid := DontCare
-  u_axi_write.io.bus.r.rlast := DontCare
-  u_axi_write.io.bus.r.rresp := DontCare
+  u_axi_write.io.bus.ar <> AXI4AR.stub(36)
+  u_axi_write.io.bus.r <> AXI4R.stub(512)
+
 
   u_buffer_0.dma_data_i.bits := u_axi_read.io.dataOut.bits
   u_buffer_1.dma_data_i.bits := u_axi_read.io.dataOut.bits
@@ -233,10 +227,10 @@ class PTSetCache extends MultiIOModule {
       reply_r := buffer_index_r
     }
     is(0x4.U){
-      reply_r := u_axi_read.io.xfer.done
+      reply_r := status_r === sIdle
     }
     is(0x5.U){
-      reply_r := u_axi_write.io.xfer.done
+      reply_r := status_r === sIdle
     }
     is(0x6.U){
       reply_r := pte_r.ppn
@@ -363,7 +357,11 @@ class PTSetCache extends MultiIOModule {
   u_axi_read.io.xfer.length := u_buffer_0.requestPacketNumber.U
   u_axi_read.io.xfer.valid := write_v && internal_address === 0x4.U
   // TODO: Calculate the address of the DMA.
-  u_axi_read.io.xfer.address := 0x0.U
+  // 1. Get the page set number
+  val pageset_number = tag_r.vpn(23, 4) //determine the hash function here.
+  // 2. Calculate the address
+  val pageset_addr = Cat(pageset_number * 3.U(2.W), 0.U(6.W)) // from 0x0 to 0xC0000000
+  u_axi_read.io.xfer.address := pageset_addr
   u_axi_read.io.dataOut.ready := Mux(
     buffer_index_r.asBool(),
     u_buffer_1.dma_data_i.ready,
@@ -374,7 +372,7 @@ class PTSetCache extends MultiIOModule {
   u_axi_write.io.xfer.length := u_buffer_0.requestPacketNumber.U
   u_axi_write.io.xfer.valid := write_v && internal_address === 0x5.U
   // TODO: Calculate the address of the DMA.
-  u_axi_write.io.xfer.address := 0x0.U
+  u_axi_write.io.xfer.address := pageset_addr
   u_axi_write.io.dataIn.valid := Mux(
     buffer_index_r.asBool(),
     u_buffer_1.dma_data_o.valid,
