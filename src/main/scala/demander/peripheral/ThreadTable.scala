@@ -20,7 +20,6 @@ class ThreadTable(
   threadNumber: Int = 4,
   processIDWidth: Int = 15
 ) extends MultiIOModule {
-  // TODO: Wrap the ThreadTable with: 1. AXI port 2. Request port from the mini-riscv
   val request_i = IO(Flipped(Valid(new MemoryRequestPacket(32, 32))))
   val reply_o = IO(Output(UInt(32.W)))
 

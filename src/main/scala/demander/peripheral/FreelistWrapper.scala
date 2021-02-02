@@ -73,9 +73,7 @@ class FreeList(
 
   val dma_view_of_chunk = chunk_r.asTypeOf(Vec(3, UInt(512.W)))
   val updated_dma_view_of_chunk = WireInit(dma_view_of_chunk)
-  // TODO: store counter.
   val store_vr = RegInit(false.B)
-  // TODO: load counter.
   val load_vr = RegInit(false.B)
   val dma_cnt_r = RegInit(UInt(2.W), 0.U)
 
@@ -135,12 +133,10 @@ class FreeList(
     }
   }
 
-  // TODO: Determine the logic of pop and push.
   full_o := ptr_r === 0.U && chunk_id_r === 0.U
   empty_o := state_r === sEmpty
   pop_o.valid := state_r === sIdle
   push_i.ready := state_r === sIdle || state_r === sEmpty
-  // TODO: Determine the update of these registers.
   // ptr_r
   when(push_i.fire() && pop_o.fire()){
     ptr_r := ptr_r

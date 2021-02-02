@@ -79,7 +79,6 @@ class TLBFrontendReplyPacket(param: TLBParameter) extends Bundle {
  * Request TLB send to the backend for looking up the miss entry or writing back.
  * @param param the TLB Parameter
  * 
- * TODO: Make it compatible with TLBAccessRequestPacket
  */ 
 class TLBBackendRequestPacket(param: TLBParameter) extends Bundle {
   val tag = new TLBTagPacket(param)

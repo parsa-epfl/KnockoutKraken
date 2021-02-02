@@ -356,7 +356,6 @@ class PTSetCache extends MultiIOModule {
   // Bind port to u_axi_read
   u_axi_read.io.xfer.length := u_buffer_0.requestPacketNumber.U
   u_axi_read.io.xfer.valid := write_v && internal_address === 0x4.U
-  // TODO: Calculate the address of the DMA.
   // 1. Get the page set number
   val pageset_number = tag_r.vpn(23, 4) //determine the hash function here.
   // 2. Calculate the address
@@ -371,7 +370,6 @@ class PTSetCache extends MultiIOModule {
   // Bind port to u_axi_write
   u_axi_write.io.xfer.length := u_buffer_0.requestPacketNumber.U
   u_axi_write.io.xfer.valid := write_v && internal_address === 0x5.U
-  // TODO: Calculate the address of the DMA.
   u_axi_write.io.xfer.address := pageset_addr
   u_axi_write.io.dataIn.valid := Mux(
     buffer_index_r.asBool(),

@@ -52,7 +52,6 @@ class TLBFlushController(
   val state_r = RegInit(sIdle)
 
   // The CSR of this module
-  // TODO: Separate the ports for I-TLB and D-TLB respectively.
   /**
    * Address   |  CSR
    * 0x0 - 0x1 |  vpn
@@ -182,13 +181,13 @@ class TLBFlushController(
  * 
  * @note Flush result will be ignored here because another module has already read the data.
  * @note To support multiple TLBs, please add an arbiter.
+ * @note the fifos for the message is added in the message compositor.
  */
 class TLBMessageConverter(
   param: TLBParameter,
   readPermission: UInt
 ) extends MultiIOModule {
   val tlb_backend_request_i = IO(Flipped(Decoupled(new TLBBackendRequestPacket(param))))
-  // TODO: Add Two FIFOs for the message.
 
   val miss_request = Wire(Decoupled(new software_bundle.TLBMissRequestMessage))
   miss_request.bits.tag.thread_id := tlb_backend_request_i.bits.tag.thread_id
