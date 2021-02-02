@@ -13,7 +13,7 @@ object ParameterConstants {
   val vpn_width = 52
   val ppn_width = 24
   val thread_id_width = 2
-  val process_id_width = 16
+  val process_id_width = 15
   val permission_bit_width = 2
 }
 
@@ -39,8 +39,8 @@ class TLBTag extends SoftwareControlledBundle {
 }
 
 class PTTag extends SoftwareControlledBundle {
-  val vpn = UInt(ParameterConstants.vpn_width.W)
-  val process_id = UInt(ParameterConstants.process_id_width.W)
+  val vpn = UInt(ParameterConstants.vpn_width.W) // 52
+  val process_id = UInt(ParameterConstants.process_id_width.W) // 16
 
   def asVec(width: Int): Vec[UInt] = {
     assert(width == 32)
@@ -60,9 +60,9 @@ class PTTag extends SoftwareControlledBundle {
 }
 
 class PTEntry extends SoftwareControlledBundle {
-  val ppn = UInt(ParameterConstants.ppn_width.W)
-  val permission = UInt(ParameterConstants.permission_bit_width.W)
-  val modified = Bool()
+  val ppn = UInt(ParameterConstants.ppn_width.W) // 24
+  val permission = UInt(ParameterConstants.permission_bit_width.W) // 2
+  val modified = Bool() // 1
 
   def asVec(width: Int): Vec[UInt] = {
     assert(width == 32)

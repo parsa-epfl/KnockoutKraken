@@ -85,33 +85,34 @@ enum MessangeType{
   eQEMUEvictReply = 3
 };
 
-/**
- * A message that could be handled by the processor
- */
-struct Message {
-  MessangeType type;
-  union {
-    TLBMissRequestMessage tlb_request;
-    TLBEvictionMessage tlb_evict;
-    QEMUMissReplyMessage qemu_miss;
-    QEMUEvictReplyMessage qemu_evict;
-    uint32_t raw[8];
-  };
-};
+// /**
+//  * A message that could be handled by the processor
+//  */
+// struct Message {
+//   MessangeType type;
+//   // TODO: Replace union with a raw pointer. 
+//   union {
+//     TLBMissRequestMessage tlb_request;
+//     TLBEvictionMessage tlb_evict;
+//     QEMUMissReplyMessage qemu_miss;
+//     QEMUEvictReplyMessage qemu_evict;
+//     uint32_t raw[8];
+//   };
+// };
 
-/**
- * fetch the Message from a given address.
- * @return the address if the message is valid. nullptr if not.
- */
-inline volatile Message *fetchMessage(){
-  volatile int *valid_ptr = reinterpret_cast<int *>(0x20000);
-  volatile Message *outer_mess = reinterpret_cast<Message *>(0x20004);
-  if(*valid_ptr){
-    // copy
-    return outer_mess;
-  }
-  return nullptr;
-}
+// /**
+//  * fetch the Message from a given address.
+//  * @return the address if the message is valid. nullptr if not.
+//  */
+// inline volatile Message *fetchMessage(){
+//   volatile int *valid_ptr = reinterpret_cast<int *>(0x20000);
+//   volatile Message *outer_mess = reinterpret_cast<Message *>(0x20004);
+//   if(*valid_ptr){
+//     // copy
+//     return outer_mess;
+//   }
+//   return nullptr;
+// }
 
 /**
  * Access the Tread table (which stores thread_id-process_id pair) and find the process id.
