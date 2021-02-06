@@ -15,6 +15,9 @@ object ParameterConstants {
   val thread_id_width = 2
   val process_id_width = 15
   val permission_bit_width = 2
+
+  val dram_addr_width = 36
+  val dram_data_width = 512
 }
 
 class TLBTag extends SoftwareControlledBundle {
