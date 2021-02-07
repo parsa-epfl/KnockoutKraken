@@ -46,12 +46,12 @@ class PageWalker(
   val M_AXI = IO(u_axi_reader.io.bus.cloneType)
   M_AXI <> u_axi_reader.io.bus
   // The Page table set buffer.
-  val u_buffer = Module(new PTSetBuffer(new PTSetPacket()))
+  val u_buffer = Module(new PageTableSetBuffer(new PTSetPacket()))
   u_buffer.dma_data_i <> u_axi_reader.io.dataOut
   u_buffer.dma_data_o.ready := false.B
   u_buffer.store_enable_vi := false.B
-  u_buffer.lru_element_i.valid := false.B
-  u_buffer.lru_element_i.bits := DontCare
+  // u_buffer.lru_element_i.valid := false.B
+  // u_buffer.lru_element_i.bits := DontCare
 
   // Reply to TLB
   val tlb_backend_reply_o = IO(Vec(tlbNumber, Decoupled(new TLBBackendReplyPacket(param))))
@@ -85,19 +85,21 @@ class PageWalker(
 
   val pte_r = Reg(Valid(new PTEntry))
   when(state_r === sLookup){
-    pte_r.bits := u_buffer.lookup_reply_o.bits.entry
-    pte_r.valid := u_buffer.lookup_reply_o.valid
+    pte_r.bits := u_buffer.lookup_reply_o.item.entry
+    pte_r.valid := u_buffer.lookup_reply_o.hit_v
   }
 
   // IO assignment of u_buffer.
   u_buffer.load_enabled_vi := u_miss_arb.io.out.fire()
   u_buffer.lookup_request_i.process_id := request_r.process_id
   u_buffer.lookup_request_i.vpn := request_r.vpn
+
+  u_buffer.write_request_i.valid := false.B
+  u_buffer.write_request_i.bits := DontCare
   
 
   // IO assignment of AXI Read DMA
-  val pageset_number = request_r.vpn(23, 4)
-  u_axi_reader.io.xfer.address := Cat(pageset_number * 3.U(2.W), 0.U(6.W))
+  u_axi_reader.io.xfer.address := ParameterConstants.getPageTableAddressByVPN(request_r.vpn)
   u_axi_reader.io.xfer.length := u_buffer.requestPacketNumber.U
   u_axi_reader.io.xfer.valid := state_r === sMove
 
