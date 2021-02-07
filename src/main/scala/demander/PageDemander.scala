@@ -75,11 +75,11 @@ class PageDemander(
   // getLRU
   // replaceLRU
   // syncPTSet
-  val u_ptset = Module(new peripheral.PTSetCache())
-  u_ptset.reply_o <> u_bus.slave_replies_i(3)
-  u_ptset.request_i <> u_bus.slave_requests_o(3)
-  val M_AXI_PTSet = IO(u_ptset.M_AXI.cloneType) // DRAM(R/W)
-  u_ptset.M_AXI <> M_AXI_PTSet
+  // val u_ptset = Module(new peripheral.PTSetCache())
+  // u_ptset.reply_o <> u_bus.slave_replies_i(3)
+  // u_ptset.request_i <> u_bus.slave_requests_o(3)
+  // val M_AXI_PTSet = IO(u_ptset.M_AXI.cloneType) // DRAM(R/W)
+  // u_ptset.M_AXI <> M_AXI_PTSet
 
   // The TLB wrapper
   // responseToTLB
@@ -127,61 +127,61 @@ class PageDemander(
 
   // Page deletor
   // movePageToQEMU
-  val u_page_deletor = Module(new peripheral.PageDeletor(
-    param.toCacheParameter()
-  ))
+  // val u_page_deletor = Module(new peripheral.PageDeletor(
+  //   param.toCacheParameter()
+  // ))
 
-  u_bus.slave_requests_o(7) <> u_page_deletor.request_i
-  u_bus.slave_replies_i(7) <> u_page_deletor.reply_o
+  // u_bus.slave_requests_o(7) <> u_page_deletor.request_i
+  // u_bus.slave_replies_i(7) <> u_page_deletor.reply_o
 
-  val M_AXI_Page = IO(u_page_deletor.M_AXI.cloneType)
-  // u_page_deletor.M_AXI // (DRAM: R)
-  u_page_deletor.M_AXI.aw <> AXI4AW.stub(36)
-  u_page_deletor.M_AXI.w <> AXI4W.stub(512)
-  u_page_deletor.M_AXI.b <> AXI4B.stub()
+  // val M_AXI_Page = IO(u_page_deletor.M_AXI.cloneType)
+  // // u_page_deletor.M_AXI // (DRAM: R)
+  // u_page_deletor.M_AXI.aw <> AXI4AW.stub(36)
+  // u_page_deletor.M_AXI.w <> AXI4W.stub(512)
+  // u_page_deletor.M_AXI.b <> AXI4B.stub()
 
-  u_page_deletor.M_AXI.ar <> M_AXI_Page.ar
-  u_page_deletor.M_AXI.r <> M_AXI_Page.r
+  // u_page_deletor.M_AXI.ar <> M_AXI_Page.ar
+  // u_page_deletor.M_AXI.r <> M_AXI_Page.r
 
-  val dcache_flush_request_o = IO(u_page_deletor.dcache_flush_request_o.cloneType)
-  u_page_deletor.dcache_flush_request_o <> dcache_flush_request_o
+  // val dcache_flush_request_o = IO(u_page_deletor.dcache_flush_request_o.cloneType)
+  // u_page_deletor.dcache_flush_request_o <> dcache_flush_request_o
 
-  val dcache_wb_queue_empty_i = IO(Input(u_page_deletor.dcache_wb_queue_empty_i.cloneType))
-  u_page_deletor.dcache_wb_queue_empty_i <> dcache_wb_queue_empty_i
+  // val dcache_wb_queue_empty_i = IO(Input(u_page_deletor.dcache_wb_queue_empty_i.cloneType))
+  // u_page_deletor.dcache_wb_queue_empty_i <> dcache_wb_queue_empty_i
 
-  val icache_flush_request_o = IO(u_page_deletor.icache_flush_request_o.cloneType)
-  u_page_deletor.icache_flush_request_o <> icache_flush_request_o
+  // val icache_flush_request_o = IO(u_page_deletor.icache_flush_request_o.cloneType)
+  // u_page_deletor.icache_flush_request_o <> icache_flush_request_o
 
-  val icache_wb_queue_empty_i = IO(Input(u_page_deletor.icache_wb_queue_empty_i.cloneType))
-  u_page_deletor.icache_wb_queue_empty_i <> icache_wb_queue_empty_i
+  // val icache_wb_queue_empty_i = IO(Input(u_page_deletor.icache_wb_queue_empty_i.cloneType))
+  // u_page_deletor.icache_wb_queue_empty_i <> icache_wb_queue_empty_i
   
 
   // Page Inserter
   // insertPageFromQEMU
-  val u_page_inserter = Module(new peripheral.PageInserter)
+  // val u_page_inserter = Module(new peripheral.PageInserter)
 
   // u_page_inserter.M_AXI // to DRAM (W)
-  u_page_inserter.M_AXI.ar <> AXI4AR.stub(36)
-  u_page_inserter.M_AXI.r <> AXI4R.stub(512)
-  u_page_inserter.M_AXI.aw <> M_AXI_Page.aw
-  u_page_inserter.M_AXI.w <> M_AXI_Page.w
-  u_page_inserter.M_AXI.b <> M_AXI_Page.b
+  // u_page_inserter.M_AXI.ar <> AXI4AR.stub(36)
+  // u_page_inserter.M_AXI.r <> AXI4R.stub(512)
+  // u_page_inserter.M_AXI.aw <> M_AXI_Page.aw
+  // u_page_inserter.M_AXI.w <> M_AXI_Page.w
+  // u_page_inserter.M_AXI.b <> M_AXI_Page.b
 
-  u_page_inserter.reply_o <> u_bus.slave_replies_i(8)
-  u_page_inserter.request_i <> u_bus.slave_requests_o(8)
+  // u_page_inserter.reply_o <> u_bus.slave_replies_i(8)
+  // u_page_inserter.request_i <> u_bus.slave_requests_o(8)
 
   // The page buffer
   val u_page_buffer = Module(new peripheral.PageBuffer)
   val S_AXI_PageBuffer = IO(Flipped(u_page_buffer.S_AXI.cloneType))
   u_page_buffer.S_AXI <> S_AXI_PageBuffer // From QEMU (RW)
-  u_page_buffer.normal_read_reply_o <> u_page_inserter.read_reply_i
-  u_page_buffer.normal_read_request_i <> u_page_inserter.read_request_o
-  u_page_buffer.normal_write_request_i <> u_page_deletor.page_buffer_write_o
+  // u_page_buffer.normal_read_reply_o <> u_page_inserter.read_reply_i
+  // u_page_buffer.normal_read_request_i <> u_page_inserter.read_request_o
+  //u_page_buffer.normal_write_request_i <> u_page_deletor.page_buffer_write_o
 
   // QEMU Message complex
   val u_qemu_message_compositor = Module(new QEMUMessageCompositor())
-  u_qemu_message_compositor.evict_done_req_i <> u_page_deletor.done_message_o
-  u_qemu_message_compositor.evict_notify_req_i <> u_page_deletor.start_message_o
+  //u_qemu_message_compositor.evict_done_req_i <> u_page_deletor.done_message_o
+  // u_qemu_message_compositor.evict_notify_req_i <> u_page_deletor.start_message_o
   u_qemu_message_compositor.page_fault_req_i <> u_miss_to_qemu.queue_o 
 
   

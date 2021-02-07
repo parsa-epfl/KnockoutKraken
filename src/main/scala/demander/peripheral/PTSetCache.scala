@@ -6,6 +6,7 @@ import chisel3.util._
 import armflex.demander.software_bundle
 
 import armflex.cache.PseudoTreeLRUCore
+import armflex.demander.software_bundle.PageTableItem
 
 
 // The purpose of this module is:
@@ -31,16 +32,36 @@ class PTSetPacket(
   override def cloneType: this.type = new PTSetPacket(entryNumber).asInstanceOf[this.type]
 } 
 
+class PageSetBufferWriteRequestPacket(
+  entryNumber: Int = 16
+) extends Bundle {
+  val item = new PageTableItem
+  val index = UInt(log2Ceil(entryNumber).W)
+
+  override def cloneType: this.type = new PageSetBufferWriteRequestPacket(entryNumber).asInstanceOf[this.type]
+}
+
+class PageSetBufferLookupReplyPacket(
+  entryNumber: Int = 16
+) extends Bundle {
+  val item = new PageTableItem
+  val index = UInt(log2Ceil(entryNumber).W)
+  val hit_v = Bool()
+
+  override def cloneType: this.type = new PageSetBufferLookupReplyPacket(entryNumber).asInstanceOf[this.type]
+}
+
 /**
  * Page table set buffer and its attached logic.
  * 
  * @param t the Chisel type of the PT Set
  */ 
-class PTSetBuffer(
+class PageTableSetBuffer(
   t: PTSetPacket,
 ) extends MultiIOModule {
   val dma_data_i = IO(Flipped(Decoupled(UInt(512.W))))
-  val requestPacketNumber = 3
+  val entryNumber = t.entryNumber
+  val requestPacketNumber = (entryNumber / 16) * 3
   val buffer_r = Reg(Vec(requestPacketNumber, UInt(512.W)))
 
   // Load logic.
@@ -92,6 +113,7 @@ class PTSetBuffer(
   class get_lru_element_response_t extends Bundle {
     val item = new software_bundle.PageTableItem
     val lru_v = Bool()
+    val index = UInt(log2Ceil(t.entryNumber).W)
     // That lru_v is true means the item is valid. 
     // False means this set is not full and there is a available place.
   }
@@ -99,18 +121,20 @@ class PTSetBuffer(
   val lru_element_o = IO(Output(new get_lru_element_response_t))
   lru_element_o.item := lru_item
   lru_element_o.lru_v := ~pt_set_r.valids === 0.U
+  lru_element_o.index := Mux(lru_element_o.lru_v, lru_index, space_index)
 
   // Update LRU Element
   val updated_pt_set = WireInit(pt_set_r)
-  val index_to_update = Mux(lru_element_o.lru_v, lru_index, space_index)
 
-  val lru_element_i = IO(Flipped(Decoupled(new software_bundle.PageTableItem)))
+  // val lru_element_i = IO(Flipped(Decoupled(new software_bundle.PageTableItem)))
+  val write_request_i = IO(Flipped(Decoupled(new PageSetBufferWriteRequestPacket(t.entryNumber))))
 
-  updated_pt_set.ptes(index_to_update) := lru_element_i.bits.entry
-  updated_pt_set.tags(index_to_update) := lru_element_i.bits.tag
-  u_lru_core.io.lru_i := index_to_update
+  updated_pt_set.ptes(write_request_i.bits.index) := write_request_i.bits.item.entry
+  updated_pt_set.tags(write_request_i.bits.index) := write_request_i.bits.item.tag
+
+  u_lru_core.io.lru_i := write_request_i.bits.index
   updated_pt_set.lru_bits := u_lru_core.io.encoding_o
-  updated_pt_set.valids := Cat(0.U(1.W), UIntToOH(index_to_update))
+  updated_pt_set.valids := Cat(0.U(1.W), UIntToOH(write_request_i.bits.index))
 
   val lookup_request_i = IO(Input(new software_bundle.PTTag))
   val hit_vector = pt_set_r.tags.zip(pt_set_r.valids.asBools()).map({
@@ -124,268 +148,21 @@ class PTSetBuffer(
   assert(PopCount(hit_vector) === 1.U || PopCount(hit_vector) === 0.U, "There should be only one hit at most!!!")
 
   val hit_index = OHToUInt(hit_vector)
-  val lookup_reply_o = IO(Valid(new software_bundle.PageTableItem))
-  lookup_reply_o.valid := hit_v
-  lookup_reply_o.bits.entry := pt_set_r.ptes(hit_index)
-  lookup_reply_o.bits.tag := lookup_request_i
+  val lookup_reply_o = IO(Output(new PageSetBufferLookupReplyPacket))
+  lookup_reply_o.hit_v := hit_v
+  lookup_reply_o.item.entry := pt_set_r.ptes(hit_index)
+  lookup_reply_o.item.tag := lookup_request_i
+  lookup_reply_o.index := hit_index
 
-  when(lru_element_i.valid){
+  when(write_request_i.valid){
     buffer_r := updated_pt_set.asTypeOf(buffer_r.cloneType)
   }.elsewhen(dma_data_i.fire()){
     buffer_r := updated_buffer
   }
-  lru_element_i.ready := true.B
+  write_request_i.ready := true.B
 
-  dma_data_i.ready := load_vr && !lru_element_i.valid
-
-}
-
-/**
- * The purpose of this module is to let software rapidly handle the PT Entries in the same set.
- * It implements 5 basic functions:
- * 
- * - loadPTSet
- * - lookupPT
- * - getLRU
- * - replaceLRU
- * - syncPTSet
- */ 
-class PTSetCache extends MultiIOModule {
-  import DMAController.Frontend.AXI4Reader
-  import DMAController.Frontend.AXI4Writer
-  import DMAController.Bus._
-
-  val u_buffer_0 = Module(new PTSetBuffer(new PTSetPacket))
-  val u_buffer_1 = Module(new PTSetBuffer(new PTSetPacket))
-  val u_axi_read = Module(new AXI4Reader(36, 512))
-  val u_axi_write = Module(new AXI4Writer(36, 512))
-
-  val M_AXI = IO(new AXI4(36, 512))
-  M_AXI.ar <> u_axi_read.io.bus.ar
-  M_AXI.r <> u_axi_read.io.bus.r
-  u_axi_read.io.bus.aw <> AXI4AW.stub(36)
-  u_axi_read.io.bus.w <> AXI4W.stub(512)
-  u_axi_read.io.bus.b <> AXI4B.stub()
-  
-  M_AXI.aw <> u_axi_write.io.bus.aw
-  M_AXI.w <> u_axi_write.io.bus.w
-  M_AXI.b <> u_axi_write.io.bus.b
-
-  u_axi_write.io.bus.ar <> AXI4AR.stub(36)
-  u_axi_write.io.bus.r <> AXI4R.stub(512)
-
-
-  u_buffer_0.dma_data_i.bits := u_axi_read.io.dataOut.bits
-  u_buffer_1.dma_data_i.bits := u_axi_read.io.dataOut.bits
-
-  /**
-   * Memory-mapped CSRs:
-   * Address    | CSR
-   * [0x0, 0x1] | VPN
-   * 0x2        | process id
-   * 0x3        | Index
-   * # Start DMA to load
-   * 0x4        | W: start load, R: load is ready
-   * # Start DMA to store
-   * 0x5        | W: Start store, R: store is ready
-   * # Lookup result
-   * 0x6        | PPN
-   * 0x7        | Permission
-   * 0x8        | Modified
-   * 0x9        | R: Lookup is hit W: trigger lookup
-   * # get LRU
-   * 0xA        | R: LRU is valid, W: trigger LRU
-   * # replace 
-   * 0xB        | R: 1, W: replace LRU
-   * # is ready
-   * 0xC        | R: is ready
-   */ 
-  val request_i = IO(Flipped(Valid(new MemoryRequestPacket(32, 32))))
-  val reply_o = IO(Output(UInt(32.W)))
-  val reply_r = Reg(UInt(32.W))
-
-  val sIdle :: sDMARead :: sDMAWrite :: sLookup :: sLookupLRU :: sReplaceLRU :: Nil = Enum(6)
-  val status_r = RegInit(sIdle)
-
-  val tag_r = Reg(new software_bundle.PTTag)
-  val pte_r = Reg(new software_bundle.PTEntry)
-  val buffer_index_r = RegInit(UInt(1.W), 0.U)
-
-  val internal_address = request_i.bits.addr(5,2)
-  // Read logic
-  switch(internal_address){
-    is(0x0.U){
-      reply_r := tag_r.vpn(31, 0)
-    }
-    is(0x1.U){
-      reply_r := tag_r.vpn(51, 32)
-    }
-    is(0x2.U){
-      reply_r := tag_r.process_id
-    }
-    is(0x3.U){
-      reply_r := buffer_index_r
-    }
-    is(0x4.U){
-      reply_r := status_r === sIdle
-    }
-    is(0x5.U){
-      reply_r := status_r === sIdle
-    }
-    is(0x6.U){
-      reply_r := pte_r.ppn
-    }
-    is(0x7.U){
-      reply_r := pte_r.permission
-    }
-    is(0x8.U){
-      reply_r := pte_r.modified
-    }
-    is(0x9.U){
-      reply_r := Mux(
-        buffer_index_r.asBool(),
-        u_buffer_1.lookup_reply_o.valid,
-        u_buffer_0.lookup_reply_o.valid
-      )
-    }
-    is(0xA.U){
-      reply_r := Mux(
-        buffer_index_r.asBool(),
-        u_buffer_1.lru_element_o.lru_v,
-        u_buffer_0.lru_element_o.lru_v
-      )
-    }
-    is(0xB.U){
-      reply_r := true.B
-    }
-    is(0xC.U){
-      reply_r := status_r === sIdle
-    }
-  }
-  reply_o := reply_r
-
-  val write_v = request_i.valid && request_i.bits.w_v
-  // Status register
-
-  // update of status_r
-  switch(status_r){
-    is(sIdle){
-      val transactionType = Seq(
-        0x4.U -> sDMARead,
-        0x5.U -> sDMAWrite,
-        0x9.U -> sLookup,
-        0xA.U -> sLookupLRU,
-        0xB.U -> sReplaceLRU
-      )
-      when(write_v){
-        status_r := MuxLookup(internal_address, sIdle, transactionType)
-      }
-    }
-    is(sDMARead){
-      status_r := Mux(u_axi_read.io.xfer.done, sIdle, sDMARead)
-    }
-    is(sDMAWrite){
-      status_r := Mux(u_axi_write.io.xfer.done, sIdle, sDMAWrite)
-    }
-    is(sLookup){
-      status_r := sIdle
-    }
-    is(sLookupLRU){
-      status_r := sIdle
-    }
-    is(sReplaceLRU){
-      status_r := sIdle
-    }
-  }
-
-  // update tag_r
-  when(write_v && internal_address === 0x0.U){
-    tag_r.vpn := Cat(tag_r.vpn(51, 32), request_i.bits.data)
-  }.elsewhen(write_v && internal_address === 0x1.U){
-    tag_r.vpn := Cat(request_i.bits.data, tag_r.vpn(31, 0))
-  }.elsewhen(write_v && internal_address === 0x2.U){
-    tag_r.process_id := request_i.bits.data
-  }
-
-  // update buffer_index_r
-  when(write_v && internal_address === 0x3.U){
-    buffer_index_r := request_i.bits.data
-  }
-
-  // update pte_r
-  when(write_v && internal_address === 0x6.U){
-    pte_r.ppn := request_i.bits.data
-  }.elsewhen(write_v && internal_address === 0x7.U){
-    pte_r.permission := request_i.bits.data
-  }.elsewhen(write_v && internal_address === 0x8.U){
-    pte_r.modified := request_i.bits.data
-  }.elsewhen(status_r === sLookup){
-    pte_r := Mux(
-      buffer_index_r.asBool(),
-      u_buffer_1.lookup_reply_o.bits.entry,
-      u_buffer_0.lookup_reply_o.bits.entry
-    )
-  }.elsewhen(status_r === sLookupLRU){
-    pte_r := Mux(
-      buffer_index_r.asBool(),
-      u_buffer_1.lru_element_o.item.entry,
-      u_buffer_0.lru_element_o.item.entry
-    )
-  }
-
-  // Bind port to u_buffer_0
-  u_buffer_0.lookup_request_i := tag_r
-  u_buffer_0.lru_element_i.bits.tag := tag_r
-  u_buffer_0.lru_element_i.bits.entry := pte_r
-  u_buffer_0.lru_element_i.valid := status_r === sReplaceLRU && buffer_index_r === 0.U
-  u_buffer_0.load_enabled_vi := write_v && internal_address === 0x4.U && buffer_index_r === 0.U
-  u_buffer_0.dma_data_i.valid := u_axi_read.io.dataOut.valid && buffer_index_r === 0.U
-  u_buffer_0.store_enable_vi := write_v && internal_address === 0x5.U && buffer_index_r === 0.U
-  u_buffer_0.dma_data_o.ready := u_axi_write.io.dataIn.ready && buffer_index_r === 0.U
-
-  // Bind port to u_buffer_1
-  u_buffer_1.lookup_request_i := tag_r
-  u_buffer_1.lru_element_i.bits.tag := tag_r
-  u_buffer_1.lru_element_i.bits.entry := pte_r
-  u_buffer_1.lru_element_i.valid := status_r === sReplaceLRU && buffer_index_r === 1.U
-  u_buffer_1.load_enabled_vi := write_v && internal_address === 0x4.U && buffer_index_r === 1.U
-  u_buffer_1.dma_data_i.valid := u_axi_read.io.dataOut.valid && buffer_index_r === 1.U
-  u_buffer_1.store_enable_vi := write_v && internal_address === 0x5.U && buffer_index_r === 1.U
-  u_buffer_1.dma_data_o.ready := u_axi_write.io.dataIn.ready && buffer_index_r === 1.U
-
-  // Bind port to u_axi_read
-  u_axi_read.io.xfer.length := u_buffer_0.requestPacketNumber.U
-  u_axi_read.io.xfer.valid := write_v && internal_address === 0x4.U
-  // 1. Get the page set number
-  val pageset_number = tag_r.vpn(23, 4) //determine the hash function here.
-  // 2. Calculate the address
-  val pageset_addr = Cat(pageset_number * 3.U(2.W), 0.U(6.W)) // from 0x0 to 0xC0000000
-  u_axi_read.io.xfer.address := pageset_addr
-  u_axi_read.io.dataOut.ready := Mux(
-    buffer_index_r.asBool(),
-    u_buffer_1.dma_data_i.ready,
-    u_buffer_0.dma_data_i.ready
-  )
-
-  // Bind port to u_axi_write
-  u_axi_write.io.xfer.length := u_buffer_0.requestPacketNumber.U
-  u_axi_write.io.xfer.valid := write_v && internal_address === 0x5.U
-  u_axi_write.io.xfer.address := pageset_addr
-  u_axi_write.io.dataIn.valid := Mux(
-    buffer_index_r.asBool(),
-    u_buffer_1.dma_data_o.valid,
-    u_buffer_0.dma_data_o.valid
-  )
-  u_axi_write.io.dataIn.bits := Mux(
-    buffer_index_r.asBool(),
-    u_buffer_1.dma_data_o.bits,
-    u_buffer_0.dma_data_o.bits
-  )
+  dma_data_i.ready := load_vr && !write_request_i.valid
 
 }
 
-object PTSetCacheVerilogEmitter extends App{
-  import chisel3.stage.ChiselStage
-  println((new ChiselStage).emitVerilog(new PTSetCache))
-}
 

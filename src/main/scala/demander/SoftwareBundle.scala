@@ -18,6 +18,12 @@ object ParameterConstants {
 
   val dram_addr_width = 36
   val dram_data_width = 512
+
+  def getPageTableAddressByVPN(vpn: UInt) = {
+    // val res = Wire()
+    val pageset_number = vpn(23, 4)
+    Cat(pageset_number * 3.U(2.W), 0.U(6.W))
+  }
 }
 
 class TLBTag extends SoftwareControlledBundle {
