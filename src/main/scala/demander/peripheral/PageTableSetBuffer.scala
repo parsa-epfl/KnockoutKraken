@@ -20,7 +20,7 @@ import armflex.demander.software_bundle.PageTableItem
  * 
  * @note the size of this bundle is 96 * entryNumber
  */ 
-class PTSetPacket(
+class PageTableSetPacket(
   val entryNumber: Int = 16
 ) extends Bundle {
   val tags = Vec(entryNumber, new software_bundle.PTTag)
@@ -29,7 +29,7 @@ class PTSetPacket(
   val valids = UInt(entryNumber.W)
   val lru_bits = UInt(entryNumber.W)
 
-  override def cloneType: this.type = new PTSetPacket(entryNumber).asInstanceOf[this.type]
+  override def cloneType: this.type = new PageTableSetPacket(entryNumber).asInstanceOf[this.type]
 } 
 
 class PageSetBufferWriteRequestPacket(
@@ -57,7 +57,7 @@ class PageSetBufferLookupReplyPacket(
  * @param t the Chisel type of the PT Set
  */ 
 class PageTableSetBuffer(
-  t: PTSetPacket,
+  t: PageTableSetPacket,
 ) extends MultiIOModule {
   val dma_data_i = IO(Flipped(Decoupled(UInt(512.W))))
   val entryNumber = t.entryNumber

@@ -167,6 +167,7 @@ class BaseTLB(
   val frontend_response =  u_cache.frontend_reply_o.bits.data.asTypeOf(new TLBEntryPacket(param))
   // after get response, check the permission
   violation_o.bits := u_cache.frontend_reply_o.bits.thread_id
+  // TODO: Not very sure whether a flush will trigger a violation problem.
   violation_o.valid := u_cache.frontend_reply_o.valid && s1_wr_v_r && !frontend_response.isWritable()
   // assign frontend_reply_o
   frontend_reply_o.valid := u_cache.frontend_reply_o.valid

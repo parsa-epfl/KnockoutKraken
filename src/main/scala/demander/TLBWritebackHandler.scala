@@ -26,7 +26,7 @@ class TLBWritebackHandler(
   val tt_pid_i = IO(Input(UInt(ParameterConstants.process_id_width.W)))
 
   // Add page table set buffer and axi dma
-  val u_buffer = Module(new peripheral.PageTableSetBuffer(new peripheral.PTSetPacket))
+  val u_buffer = Module(new peripheral.PageTableSetBuffer(new peripheral.PageTableSetPacket))
 
   val u_axi_read = Module(new AXI4Reader(
     ParameterConstants.dram_addr_width,

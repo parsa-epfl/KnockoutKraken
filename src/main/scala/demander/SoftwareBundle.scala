@@ -2,7 +2,11 @@ package armflex.demander.software_bundle
 
 import chisel3._
 import chisel3.util._
-import armflex.demander.peripheral.SoftwareControlledBundle
+
+abstract class SoftwareControlledBundle extends Bundle {
+  def asVec(width: Int): Vec[UInt]
+  def parseFromVec(vec: Vec[UInt]): this.type
+}
 
 
 /**

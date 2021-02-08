@@ -127,6 +127,11 @@ class TLBPlusCache (
   val tlb_flush_request_i = IO(Flipped(u_tlb.flush_request_i.cloneType))
   tlb_flush_request_i <> u_tlb.flush_request_i
 
+  val tlb_flush_reply_o = IO(Output(u_tlb.frontend_reply_o.cloneType))
+  tlb_flush_reply_o.bits := u_tlb.frontend_reply_o.bits
+  // TODO: When the TLB is not a register file, this logic won't hold. Find a solution to it.
+  tlb_flush_reply_o.valid := u_tlb.frontend_reply_o.valid && tlb_flush_request_i.fire()
+
   // Backend
   // tlb_backend_request_o
   val tlb_backend_request_o = IO(u_tlb.backend_request_o.cloneType)
