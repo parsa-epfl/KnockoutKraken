@@ -147,7 +147,8 @@ class ReplyAdaptorTester extends FreeSpec with ChiselScalatestTester {
 
       dut.clock.step()
 
-      dut.data_o.valid.expect(false.B)
+      dut.data_o.valid.expect(true.B)
+      dut.data_o.bits.data.expect(0x00AB.U)
 
       dut.sync_message_i.bits.bias_addr.poke(3.U)
       dut.sync_message_i.bits.order.poke(1.U)
@@ -161,8 +162,7 @@ class ReplyAdaptorTester extends FreeSpec with ChiselScalatestTester {
 
       // expect result?
       dut.data_o.valid.expect(true.B)
-      dut.data_o.bits(0).bits.expect(0x00AB.U)
-      dut.data_o.bits(1).bits.expect(0x0009.U)
+      dut.data_o.bits.data.expect(0x0009.U)
     }
   }
 }
