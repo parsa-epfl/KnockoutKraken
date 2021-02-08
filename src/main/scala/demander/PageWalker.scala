@@ -46,7 +46,7 @@ class PageWalker(
   val M_AXI = IO(u_axi_reader.io.bus.cloneType)
   M_AXI <> u_axi_reader.io.bus
   // The Page table set buffer.
-  val u_buffer = Module(new PageTableSetBuffer(new PTSetPacket()))
+  val u_buffer = Module(new PageTableSetBuffer(new PageTableSetPacket()))
   u_buffer.dma_data_i <> u_axi_reader.io.dataOut
   u_buffer.dma_data_o.ready := false.B
   u_buffer.store_enable_vi := false.B

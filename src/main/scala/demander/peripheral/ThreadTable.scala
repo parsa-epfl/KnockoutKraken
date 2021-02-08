@@ -20,15 +20,9 @@ class ThreadTable(
   threadNumber: Int = 4,
   processIDWidth: Int = 15
 ) extends MultiIOModule {
-  val request_i = IO(Flipped(Valid(new MemoryRequestPacket(32, 32))))
-  val reply_o = IO(Output(UInt(32.W)))
-
   val S_AXI = IO(AxiLiteSlave(new AxiLiteConfig(32)))
 
   val table = Reg(Vec(threadNumber, Valid(UInt(processIDWidth.W)))) // SyncReadMem(threadNumber, UInt(processIDWidth.W))
-
-  val internal_address = request_i.bits.addr(1 + log2Ceil(threadNumber),2)
-  reply_o := RegNext(table(internal_address).bits)
 
   val axi_internal_read_address = S_AXI.araddr(1 + log2Ceil(threadNumber),2)
   val axi_internal_write_address = S_AXI.awaddr(1 + log2Ceil(threadNumber),2)
