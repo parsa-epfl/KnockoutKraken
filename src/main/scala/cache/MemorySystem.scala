@@ -313,7 +313,7 @@ class CacheRequestAdaptor (
   sync_message_o <> Queue(sync_message, 2 * param.threadNumber)
 }
 
-// TODO: Add signal to indicate valid?
+// The purpose of this module is to apply masking and shifting to the data so that it's in the correct position.
 class CacheReplyAdaptor (
   val param: MemorySystemParameter
 )(
@@ -321,7 +321,7 @@ class CacheReplyAdaptor (
 ) extends MultiIOModule {
   val cache_reply_i = IO(Flipped(Valid(new FrontendReplyPacket(param.toCacheParameter()))))
   // val data_o = IO(Valid(Vec(2, PROCESSOR_TYPES.DATA_T))) 
-  val data_o = IO(Valid(Vec(2, Valid(PROCESSOR_TYPES.DATA_T))))
+  val data_o = IO(Valid(new FrontendReplyPacket(param.toCacheParameter())))
   val sync_message_i = IO(Flipped(Decoupled(new CacheInterfaceHandshakePacket(param.toCacheParameter()))))
   // sync_message_i should align with cache_reply_i
   assert(cache_reply_i.valid === sync_message_i.valid, "sync_message_i should align with cache_reply_i.")
@@ -333,36 +333,11 @@ class CacheReplyAdaptor (
 
   val recovered_data = recoverData(param.cacheBlockSize, cache_reply_i.bits.data, sync_message_i.bits.size, sync_message_i.bits.bias_addr)
 
-  // For normal case, just return is fine
-  val single_transaction_result = Wire(Valid(Vec(2, Valid(PROCESSOR_TYPES.DATA_T))))
-  single_transaction_result.bits(0).valid := cache_reply_i.bits.hit
-  single_transaction_result.bits(0).bits := recovered_data
-  single_transaction_result.bits(1) := DontCare
-  single_transaction_result.valid := sync_message_i.valid && !sync_message_i.bits.pair_v
-
-  // store context
-  class store_context_t extends Bundle {
-    val data = PROCESSOR_TYPES.DATA_T
-    val hit_v = Bool()
-    val v = Bool()
-  }
-
-  val s1_store_context_r = Reg(new store_context_t)
-  s1_store_context_r.data := recovered_data
-  s1_store_context_r.hit_v := cache_reply_i.bits.hit
-  s1_store_context_r.v := sync_message_i.valid && sync_message_i.bits.pair_v && sync_message_i.bits.order === 0.U
-  // for pair instruction, result generated here.
-  val pair_transaction_result = Wire(Valid(Vec(2, Valid(PROCESSOR_TYPES.DATA_T))))
-  pair_transaction_result.bits(0).bits := s1_store_context_r.data
-  pair_transaction_result.bits(0).valid := s1_store_context_r.hit_v
-  pair_transaction_result.bits(1).bits := recovered_data
-  pair_transaction_result.bits(1).valid := cache_reply_i.bits.hit
-  pair_transaction_result.valid := s1_store_context_r.v && sync_message_i.valid && sync_message_i.bits.pair_v && sync_message_i.bits.order === 1.U
-
-  // select data_o from two options
-  assert(!(single_transaction_result.valid && pair_transaction_result.valid), "It's impossible to collect result in both single and pair way!")
-  data_o.valid := pair_transaction_result.valid || single_transaction_result.valid
-  data_o.bits := Mux(single_transaction_result.valid, single_transaction_result.bits, pair_transaction_result.bits)
+  data_o.bits.data := recovered_data
+  data_o.bits.dirty := cache_reply_i.bits.dirty
+  data_o.bits.hit := cache_reply_i.bits.hit
+  data_o.bits.thread_id := cache_reply_i.bits.thread_id
+  data_o.valid := cache_reply_i.valid
 }
 
 }
