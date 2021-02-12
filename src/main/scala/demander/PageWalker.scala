@@ -18,16 +18,16 @@ class PageWalker(
   tlbNumber: Int = 2
 ) extends MultiIOModule {
   import software_bundle.TLBMissRequestMessage
-  import software_bundle.PageFaultRequest
+  import software_bundle.PageFaultNotification
   import DMAController.Bus._
   import DMAController.Frontend._
 
   // IO of TLB miss.
   val tlb_miss_req_i = IO(Vec(
-    tlbNumber, Flipped(Decoupled(new TLBMissRequestMessage))
+    tlbNumber, Flipped(Decoupled(new TLBMissRequestMessage(param)))
   ))
 
-  val u_miss_arb = Module(new RRArbiter(new TLBMissRequestMessage, tlbNumber))
+  val u_miss_arb = Module(new RRArbiter(new TLBMissRequestMessage(param), tlbNumber))
   u_miss_arb.io.in <> tlb_miss_req_i
 
   // val selected_miss_req = u_miss_arb.io.out
@@ -57,7 +57,7 @@ class PageWalker(
   val tlb_backend_reply_o = IO(Vec(tlbNumber, Decoupled(new TLBBackendReplyPacket(param))))
 
   // Message sent to QEMU
-  val page_fault_req_o = IO(Decoupled(new PageFaultRequest))
+  val page_fault_req_o = IO(Decoupled(new PageFaultNotification))
 
   // The state machine.
   val sIdle :: sMove :: sLookup :: sReply :: Nil = Enum(4)
@@ -79,7 +79,7 @@ class PageWalker(
     request_r.permission := u_miss_arb.io.out.bits.permission
     request_r.process_id := tt_pid_i.bits
     request_r.thread_id := u_miss_arb.io.out.bits.tag.thread_id
-    request_r.vpn := u_miss_arb.io.out.bits.tag.vpn
+    request_r.vpn := u_miss_arb.io.out.bits.tag.vpage
     request_r.source := u_miss_arb.io.chosen
   }
 

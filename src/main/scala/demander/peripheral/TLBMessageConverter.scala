@@ -32,15 +32,13 @@ class TLBMessageConverter(
 ) extends MultiIOModule {
   val tlb_backend_request_i = IO(Flipped(Decoupled(new TLBBackendRequestPacket(param))))
 
-  val miss_request = Wire(Decoupled(new software_bundle.TLBMissRequestMessage))
-  miss_request.bits.tag.thread_id := tlb_backend_request_i.bits.tag.thread_id
-  miss_request.bits.tag.vpn := tlb_backend_request_i.bits.tag.vpage
+  val miss_request = Wire(Decoupled(new software_bundle.TLBMissRequestMessage(param)))
+  miss_request.bits.tag:= tlb_backend_request_i.bits.tag
   miss_request.bits.permission := Mux(tlb_backend_request_i.bits.need_write_permission_v, 1.U, readPermission)
   miss_request.valid := tlb_backend_request_i.valid && !tlb_backend_request_i.bits.w_v
 
-  val ev_request = Wire(Decoupled(new software_bundle.TLBEvictionMessage))
-  ev_request.bits.tag.vpn := tlb_backend_request_i.bits.tag.vpage
-  ev_request.bits.tag.thread_id := tlb_backend_request_i.bits.tag.thread_id
+  val ev_request = Wire(Decoupled(new software_bundle.TLBEvictionMessage(param)))
+  ev_request.bits.tag := tlb_backend_request_i.bits.tag
   ev_request.bits.entry.ppn := tlb_backend_request_i.bits.entry.pp
   ev_request.bits.entry.permission := tlb_backend_request_i.bits.entry.permission // Eviction should always evict a modified page.
   ev_request.bits.entry.modified := tlb_backend_request_i.bits.entry.modified
@@ -52,11 +50,11 @@ class TLBMessageConverter(
   }
 
   // val miss_request_qo = Queue(miss_request, 4)
-  val miss_request_o = IO(Decoupled(new software_bundle.TLBMissRequestMessage))
+  val miss_request_o = IO(Decoupled(new software_bundle.TLBMissRequestMessage(param)))
   miss_request_o <> miss_request
 
   // val ev_request_qo = Queue(ev_request, 4)
-  val eviction_request_o = IO(Decoupled(new software_bundle.TLBEvictionMessage))
+  val eviction_request_o = IO(Decoupled(new software_bundle.TLBEvictionMessage(param)))
   eviction_request_o <> ev_request
 
   tlb_backend_request_i.ready := Mux(

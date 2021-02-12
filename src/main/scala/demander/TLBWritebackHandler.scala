@@ -14,10 +14,10 @@ class TLBWritebackHandler(
 
   // the eviction request of the TLB
   val tlb_evict_req_i = IO(Vec(
-    tlbNumber, Flipped(Decoupled(new TLBEvictionMessage))
+    tlbNumber, Flipped(Decoupled(new TLBEvictionMessage(param)))
   ))
   // arbiter to select the evict request
-  val u_arb = Module(new RRArbiter(new TLBEvictionMessage, tlbNumber))
+  val u_arb = Module(new RRArbiter(new TLBEvictionMessage(param), tlbNumber))
   u_arb.io.in <> tlb_evict_req_i
 
   // lookup pid by tid
@@ -74,7 +74,7 @@ class TLBWritebackHandler(
 
   val request_r = Reg(new request_t)
   when(u_arb.io.out.fire()){
-    request_r.tag.vpn := u_arb.io.out.bits.tag.vpn
+    request_r.tag.vpn := u_arb.io.out.bits.tag.vpage
     request_r.tag.process_id := tt_pid_i
     request_r.evicted_pte := u_arb.io.out.bits.entry
     request_r.source := u_arb.io.chosen
@@ -95,10 +95,6 @@ class TLBWritebackHandler(
     assert(u_buffer.lookup_reply_o.hit_v)
     victim_index_r := u_buffer.lookup_reply_o.index
   }
-
-  val tt_pid_o = IO(Output(UInt(ParameterConstants.process_id_width.W)))
-  tt_pid_o := u_buffer.lru_element_o.item.tag.process_id
-  val tt_tid_i = IO(Input(new peripheral.ThreadLookupResultPacket(param.threadNumber))) // If miss, directly jump to the delete page.
 
   // sUpdatePT
   u_buffer.write_request_i.bits.index := victim_index_r

@@ -73,7 +73,7 @@ class PageDeletor(
 
   // sNotify
   // Port to send a starting message.
-  val start_message_o = IO(Decoupled(new PageEvictRequest(QEMUMessagesType.sEvictNotify)))
+  val start_message_o = IO(Decoupled(new PageEvictNotification(QEMUMessagesType.sEvictNotify)))
   start_message_o.bits.pte := item_r.entry
   start_message_o.valid := state_r === sNotify
 
@@ -123,6 +123,7 @@ class PageDeletor(
   class page_buffer_write_request_t extends Bundle {
     val addr = UInt(10.W) // TODO: Make external and let it becomes a parameter.
     val data = UInt(512.W) // TODO: Make external.
+    val last_v = Bool()
   }
   val page_buffer_write_o = IO(Decoupled(new page_buffer_write_request_t))
 
@@ -141,6 +142,7 @@ class PageDeletor(
   val page_buffer_addr_cnt_r = RegInit(0.U(6.W)) 
   page_buffer_write_o.bits.data := dma_data_q.bits
   page_buffer_write_o.bits.addr := page_buffer_addr_cnt_r
+  page_buffer_write_o.bits.last_v := page_buffer_addr_cnt_r === 63.U
   page_buffer_write_o.valid := dma_data_q.valid
   dma_data_q.ready := page_buffer_write_o.ready
 
@@ -152,7 +154,7 @@ class PageDeletor(
 
   // sSend
   // Port to send message to QEMU
-  val done_message_o = IO(Decoupled(new PageEvictRequest(QEMUMessagesType.sEvictDone)))
+  val done_message_o = IO(Decoupled(new PageEvictNotification(QEMUMessagesType.sEvictDone)))
   done_message_o.bits.pte := item_r.entry
   done_message_o.valid := state_r === sSend
 

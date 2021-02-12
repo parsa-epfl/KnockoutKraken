@@ -18,7 +18,7 @@ class QEMUMissReplyHandler(
 ) extends MultiIOModule {
   val qemu_miss_reply_i = IO(Flipped(Decoupled(new QEMUMissReply())))
   
-  val sIdle :: sCheckAndLoadSynonym :: sGetSynonym :: sLoadSet :: sGetEvict :: sDeletePage :: sReplace :: sInsertPage :: sMoveback :: sReplyToTLB :: Nil = Enum(10)
+  val sIdle :: sCheckAndLoadSynonym :: sGetSynonym :: sLoadSet :: sGetEvict :: sDeletePageReq :: sDeletePage :: sReplace :: sInsertPage :: sMoveback :: sReplyToTLB :: Nil = Enum(11)
   val state_r = RegInit(sIdle)
 
   val u_buffer = Module(new PageTableSetBuffer(new PageTableSetPacket))
@@ -108,12 +108,12 @@ class QEMUMissReplyHandler(
     target_index_r := u_buffer.lru_element_o.index
   }
 
-  // sDeletePage
+  // sDeletePageReq
   // Judge by done_o
   val page_delete_req_o = IO(Decoupled(new PageTableItem))
   val page_delete_done_i = IO(Input(Bool()))
   page_delete_req_o.bits := victim_r
-  page_delete_req_o.valid := state_r === sDeletePage
+  page_delete_req_o.valid := state_r === sDeletePageReq
 
   // sReplace
   u_buffer.write_request_i.bits.index := target_index_r
@@ -165,7 +165,10 @@ class QEMUMissReplyHandler(
       state_r := Mux(u_axi_read.io.xfer.done, sGetEvict, sLoadSet)
     }
     is(sGetEvict){
-      state_r := Mux(u_buffer.lru_element_o.lru_v, sDeletePage, sReplace)
+      state_r := Mux(u_buffer.lru_element_o.lru_v, sDeletePageReq, sReplace)
+    }
+    is(sDeletePageReq){
+      state_r := Mux(page_delete_req_o.fire(), sDeletePage, sDeletePageReq)
     }
     is(sDeletePage){
       state_r := Mux(page_delete_done_i, sReplace, sDeletePage)
