@@ -51,12 +51,12 @@ class PageInserter extends MultiIOModule {
   switch(state_r){
     is(sIdle){
       read_done_r := false.B
-      addr_cnt_r := 0x3C.U // TODO: Make the initial address as an external parameter
+      addr_cnt_r := 64.U // TODO: Make the initial address as an external parameter
     }
     is(sBusy){
       when(read_request_o.fire() && u_write_dma.io.dataIn.ready){
         addr_cnt_r := Mux(read_done_r, addr_cnt_r, addr_cnt_r + 1.U)
-        read_done_r := addr_cnt_r === 0x3FF.U
+        read_done_r := addr_cnt_r === 127.U
       }
     }
   }
