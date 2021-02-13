@@ -75,3 +75,7 @@ class PageInserter extends MultiIOModule {
   req_i.ready := state_r === sIdle
 }
 
+object PageInserterVerilogEmitter extends App {
+  val c = chisel3.stage.ChiselStage
+  println(c.emitVerilog(new PageInserter()))
+}

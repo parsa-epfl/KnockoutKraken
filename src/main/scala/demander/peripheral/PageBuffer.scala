@@ -118,3 +118,7 @@ class PageBuffer extends MultiIOModule {
   }
 }
 
+object PageBufferVerilogEmitter extends App {
+  val c = new chisel3.stage.ChiselStage
+  println(c.emitVerilog(new PageBuffer))
+}

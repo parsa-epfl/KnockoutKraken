@@ -3,6 +3,7 @@ package armflex.demander.software_bundle
 import chisel3._
 import chisel3.util._
 import armflex.cache._
+import armflex.demander.peripheral.TLBMessageConverter
 
 abstract class SoftwareControlledBundle extends Bundle {
   def asVec(width: Int): Vec[UInt]
@@ -100,12 +101,18 @@ class TLBMissRequestMessage(param: TLBParameter) extends Bundle {
   val tag = new TLBTag(param)
   val permission = UInt(ParameterConstants.permission_bit_width.W)
 
+  override def cloneType: this.type = {
+    return new TLBMissRequestMessage(param).asInstanceOf[this.type]
+  }
 }
 
 class TLBEvictionMessage(param: TLBParameter) extends Bundle {
   val tag = new TLBTag(param)
   val entry = new PTEntry
 
+  override def cloneType: this.type = {
+    return new TLBEvictionMessage(param).asInstanceOf[this.type]
+  }
 }
 
 
@@ -152,7 +159,7 @@ class QEMUTxMessage extends RawMessage {
   def parseFromVec(f: Vec[UInt]): this.type = {
     val res = Wire(this.cloneType)
     res.message_type := f(0)
-    res.message_type := VecInit(f.slice(1, 9))
+    res.data := VecInit(f.slice(1, 9))
     return res.asInstanceOf[this.type]
   }
 }

@@ -39,3 +39,7 @@ class QEMUMessageCompositor(
   u_arb.io.out <> o
 }
 
+object QEMUMessageCompositorVerilogEmitter extends App {
+  val c = new chisel3.stage.ChiselStage
+  println(c.emitVerilog(new QEMUMessageCompositor))
+}

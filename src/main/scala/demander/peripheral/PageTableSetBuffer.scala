@@ -165,4 +165,7 @@ class PageTableSetBuffer(
 
 }
 
-
+object PageTableSetBufferVerilogEmitter extends App {
+  val c = new chisel3.stage.ChiselStage
+  println(c.emitVerilog(new PageTableSetBuffer(new PageTableSetPacket())))
+}

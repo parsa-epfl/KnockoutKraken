@@ -23,7 +23,7 @@ class TLBWritebackHandler(
   // lookup pid by tid
   val tt_tid_o = IO(Output(UInt(param.threadIDWidth().W)))
   tt_tid_o := u_arb.io.out.bits.tag.thread_id
-  val tt_pid_i = IO(Input(UInt(ParameterConstants.process_id_width.W)))
+  val tt_pid_i = IO(Input(Valid(UInt(ParameterConstants.process_id_width.W))))
 
   // Add page table set buffer and axi dma
   val u_buffer = Module(new peripheral.PageTableSetBuffer(new peripheral.PageTableSetPacket))
@@ -75,7 +75,7 @@ class TLBWritebackHandler(
   val request_r = Reg(new request_t)
   when(u_arb.io.out.fire()){
     request_r.tag.vpn := u_arb.io.out.bits.tag.vpage
-    request_r.tag.process_id := tt_pid_i
+    request_r.tag.process_id := tt_pid_i.bits
     request_r.evicted_pte := u_arb.io.out.bits.entry
     request_r.source := u_arb.io.chosen
     request_r.thread_id := u_arb.io.out.bits.tag.thread_id
@@ -111,7 +111,7 @@ class TLBWritebackHandler(
 
   switch(state_r){
     is(sIdle){
-      state_r := Mux(u_arb.io.out.fire(), sMoveIn, sIdle)
+      state_r := Mux(u_arb.io.out.fire() && tt_pid_i.valid, sMoveIn, sIdle)
     }
     is(sMoveIn){
       state_r := Mux(u_axi_read.io.xfer.done, sPick, sMoveIn)

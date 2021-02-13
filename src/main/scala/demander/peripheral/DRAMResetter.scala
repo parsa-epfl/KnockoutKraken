@@ -19,7 +19,7 @@ class DRAMResster extends MultiIOModule {
   ready_o := state_r === sIdle
 
   // TODO: Replace the constant with a function to FPGA DRAM Size.
-  val endAddress = 0x10000000
+  val endAddress = 1 << (ParameterConstants.dram_addr_width - 12 + 4)
   val roundNumber = endAddress / (64 * 256)
   val round_cnt_r = RegInit(0.U(log2Ceil(roundNumber).W))
 
@@ -42,5 +42,10 @@ class DRAMResster extends MultiIOModule {
   when(state_r === sFlush && u_axi_write.io.xfer.done && round_cnt_r === (roundNumber-1).U){
     state_r := sIdle
   }
+}
+
+object DRAMResetterVerilogEmitter extends App {
+  val c = new chisel3.stage.ChiselStage
+  println(c.emitVerilog(new DRAMResster()))
 }
 
