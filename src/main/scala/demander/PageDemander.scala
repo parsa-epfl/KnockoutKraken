@@ -73,11 +73,11 @@ class PageDemander(
     u_dtlb_mconv.tlb_backend_request_i.valid := dtlb_backend_request_i.valid 
     dtlb_backend_request_i.ready := u_dtlb_mconv.tlb_backend_request_i.ready
 
-    M_AXI_RESET.ar <> AXI4AR.stub(ParameterConstants.dram_addr_width)
-    M_AXI_RESET.r <> AXI4R.stub(ParameterConstants.dram_data_width)
-    M_AXI_RESET.aw <> AXI4AW.stub(ParameterConstants.dram_addr_width)
-    M_AXI_RESET.w <> AXI4W.stub(ParameterConstants.dram_data_width)
-    M_AXI_RESET.b <> AXI4B.stub()
+    M_AXI_RESET.ar <> AXI4AR.tieOff(ParameterConstants.dram_addr_width)
+    M_AXI_RESET.r <> AXI4R.tieOff(ParameterConstants.dram_data_width)
+    M_AXI_RESET.aw <> AXI4AW.tieOff(ParameterConstants.dram_addr_width)
+    M_AXI_RESET.w <> AXI4W.tieOff(ParameterConstants.dram_data_width)
+    M_AXI_RESET.b <> AXI4B.tieOff()
   }
 
   // Hardware page walker
