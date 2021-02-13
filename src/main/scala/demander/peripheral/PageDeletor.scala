@@ -51,10 +51,16 @@ class PageDeletor(
     item_tid_r := tt_tid_i.thread_id
   }
 
+  class tlb_flush_request_t extends Bundle {
+    val req = new TLBTagPacket(param.toTLBParameter())
+    val which = UInt(1.W)
+  }
+
   // sFlushTLB
-  val tlb_flush_request_o = IO(Decoupled(new TLBTagPacket(param.toTLBParameter())))
-  tlb_flush_request_o.bits.thread_id := item_tid_r
-  tlb_flush_request_o.bits.vpage := item_r.tag.vpn
+  val tlb_flush_request_o = IO(Decoupled(new tlb_flush_request_t))
+  tlb_flush_request_o.bits.req.thread_id := item_tid_r
+  tlb_flush_request_o.bits.req.vpage := item_r.tag.vpn
+  tlb_flush_request_o.bits.which := Mux(item_r.entry.permission === 2.U, 0.U, 1.U)
   tlb_flush_request_o.valid := state_r === sFlushTLB
   val tlb_frontend_reply_i = IO(Flipped(Valid(new TLBFrontendReplyPacket(param.toTLBParameter()))))
 
@@ -202,4 +208,9 @@ class PageDeletor(
   val done_o = IO(Output(Bool()))
   done_o := state_r === sWait && queue_empty && !item_r.entry.modified ||
     state_r === sSend && done_message_o.fire()
+}
+
+object PageDeletorVerilogEmitter extends App {
+  val c = new chisel3.stage.ChiselStage
+  println(c.emitVerilog(new PageDeletor(new MemorySystemParameter())))
 }

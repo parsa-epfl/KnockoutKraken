@@ -17,3 +17,8 @@ class QEMUEvictReplyHandler extends MultiIOModule {
     free_o.ready
   )
 }
+
+object QEMUEvictReplyHandlerVerilogEmitter extends App {
+  val c = new chisel3.stage.ChiselStage
+  println(c.emitVerilog(new QEMUEvictReplyHandler))
+}

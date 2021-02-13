@@ -28,6 +28,11 @@ class QEMUPageEvictHandler extends MultiIOModule {
   u_buffer.dma_data_i <> u_axi_read.io.dataOut
   u_buffer.dma_data_o.ready := false.B
 
+  u_buffer.write_request_i.valid := false.B
+  u_buffer.write_request_i.bits := DontCare
+  u_buffer.store_enable_vi := false.B
+
+
   // AXI Bus
   val M_AXI = IO(new AXI4(
     ParameterConstants.dram_addr_width,
@@ -42,6 +47,8 @@ class QEMUPageEvictHandler extends MultiIOModule {
     request_r := evict_request_i.bits
   }
 
+  u_buffer.load_enabled_vi := evict_request_i.fire()
+
   // sLoadSet
   u_axi_read.io.xfer.address := ParameterConstants.getPageTableAddressByVPN(request_r.tag.vpn)
   u_axi_read.io.xfer.length := u_buffer.requestPacketNumber.U
@@ -50,7 +57,8 @@ class QEMUPageEvictHandler extends MultiIOModule {
   val victim_r = Reg(new PageTableItem)
   u_buffer.lookup_request_i := request_r.tag
   when(state_r === sDeletePageReq){
-    victim_r := u_buffer.lookup_reply_o
+    victim_r := u_buffer.lookup_reply_o.item
+    assert(u_buffer.lookup_reply_o.hit_v)
   }
 
   // sDeletePage

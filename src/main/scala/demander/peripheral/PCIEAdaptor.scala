@@ -103,3 +103,11 @@ class QEMUMessageConverter(
 
   i.ready := miss_reply_enq.fire() || evict_reply_enq.fire()
 }  
+
+
+object PCIEAdaptorVerilogEmitter extends App {
+  val c = new chisel3.stage.ChiselStage
+  println(c.emitVerilog(new QEMUMessageReceiver((x: UInt) => true.B)))
+  println(c.emitVerilog(new QEMUMessageSender))
+  println(c.emitVerilog(new QEMUMessageConverter))
+}
