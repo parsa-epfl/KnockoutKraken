@@ -17,11 +17,11 @@ import org.scalatest.FreeSpec
 import armflex.cache.MemorySystemParameter
 
 
-class PageDemanderPageFaultTester extends FreeSpec with ChiselScalatestTester {
+class PageWalkTester extends FreeSpec with ChiselScalatestTester {
   import PageDemanderDriver._
   "Normal" in {
-    val anno = Seq(TargetDirAnnotation("test/demander/pagefault/normal"), VerilatorBackendAnnotation, WriteVcdAnnotation)
-    test(new PageDemanderDUT(new MemorySystemParameter(), "src/main/cpp/demander.txt")).withAnnotations(anno){ dut =>
+    val anno = Seq(TargetDirAnnotation("test/demander/pagewalk/normal"), VerilatorBackendAnnotation, WriteVcdAnnotation)
+    test(new PageDemanderDUT(new MemorySystemParameter())).withAnnotations(anno){ dut =>
       // apply a miss request
       // Set the thread table.
       dut.registerThreadTable(0.U, 10.U)
@@ -77,7 +77,7 @@ class PageDemanderPageFaultTester extends FreeSpec with ChiselScalatestTester {
 
   "Page Fault" in {
     val anno = Seq(TargetDirAnnotation("test/demander/pagefault/pagefault"), VerilatorBackendAnnotation, WriteVcdAnnotation)
-    test(new PageDemanderDUT(new MemorySystemParameter(), "src/main/cpp/demander.txt")).withAnnotations(anno){ dut =>
+    test(new PageDemanderDUT(new MemorySystemParameter())).withAnnotations(anno){ dut =>
       // apply a miss request
       // Set the thread table.
       dut.registerThreadTable(0.U, 10.U)

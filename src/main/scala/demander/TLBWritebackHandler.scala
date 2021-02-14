@@ -79,6 +79,7 @@ class TLBWritebackHandler(
     request_r.evicted_pte := u_arb.io.out.bits.entry
     request_r.source := u_arb.io.chosen
     request_r.thread_id := u_arb.io.out.bits.tag.thread_id
+    assert(u_arb.io.out.bits.entry.modified, "Only modified entry can be written back")
   }
 
   u_buffer.load_enabled_vi := u_arb.io.out.fire()
