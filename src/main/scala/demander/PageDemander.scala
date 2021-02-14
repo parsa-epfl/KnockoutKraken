@@ -246,8 +246,10 @@ class PageDemander(
   val M_AXI_PAPOOL = IO(u_pool.M_AXI.cloneType)
   M_AXI_PAPOOL <> u_pool.M_AXI
 
-  // u_pool.empty_o
-  // u_pool.full_o
+  val pa_pool_empty_o = IO(Output(Bool()))
+  pa_pool_empty_o := u_pool.empty_o
+  val pa_pool_full_o = IO(Output(Bool()))
+  pa_pool_full_o := u_pool.full_o
   u_pool.pop_o <> u_qemu_miss.ppn_pop_i
 
   // QEMU eviction notifier

@@ -75,6 +75,11 @@ class PageDemanderDUT(
   val M_AXI_PAPOOL = IO(u_page_demander.M_AXI_PAPOOL.cloneType)
   M_AXI_PAPOOL <> u_page_demander.M_AXI_PAPOOL
 
+  val pa_pool_empty_o = IO(Output(Bool()))
+  pa_pool_empty_o := u_page_demander.pa_pool_empty_o
+  val pa_pool_full_o = IO(Output(Bool()))
+  pa_pool_full_o := u_page_demander.pa_pool_full_o
+
   // AXI Bus for Page Walker
   val M_AXI_PW = IO(u_page_demander.M_AXI_PW.cloneType)
   M_AXI_PW <> u_page_demander.M_AXI_PW
