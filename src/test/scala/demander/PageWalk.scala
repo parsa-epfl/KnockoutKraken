@@ -35,16 +35,7 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
         dut.itlb_backend_request_i.ready.expect(true.B)
         dut.tk()
       }
-      dut.waitForSignalToBe(dut.M_AXI_PW.ar.arvalid)
-      // Ok, how to handle the reply?
-      // Maybe we should add a DRAM here? Although I can manually reply to it. (Let's do it manually.)
-      dut.M_AXI_PW.ar.araddr.expect((0xAB * 3 * 64).U)
-      dut.M_AXI_PW.ar.arlen.expect(2.U)
-      // accept the read request
-      timescope {
-        dut.M_AXI_PW.ar.arready.poke(true.B)
-        dut.tk()
-      }
+
       // prepare for the data
       dut.pageset_packet_i.lru_bits.poke(1.U)
       dut.pageset_packet_i.valids.poke(1.U)
@@ -53,18 +44,8 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
       dut.pageset_packet_i.ptes(0).ppn.poke(0xCBA.U)
       dut.pageset_packet_i.ptes(0).modified.poke(false.B)
       dut.pageset_packet_i.ptes(0).permission.poke(2.U)
-      // pushing data to the dut.
-      timescope {
-        for(i <- 0 until 3){
-          dut.M_AXI_PW.r.rdata.poke(dut.pageset_converter_raw_o(i).peek)
-          dut.M_AXI_PW.r.rid.poke(0.U)
-          dut.M_AXI_PW.r.rlast.poke((i == 2).B)
-          dut.M_AXI_PW.r.rresp.poke(0.U)
-          dut.M_AXI_PW.r.rvalid.poke(true.B)
-          dut.M_AXI_PW.r.rready.expect(true.B)
-          dut.tk()
-        }
-      }
+
+      dut.sendPageTableSet(dut.M_AXI_PW, (0xAB * 3 * 64).U)
       // wait for the reply to the TLB
       dut.waitForSignalToBe(dut.itlb_backend_reply_o.valid)
       dut.itlb_backend_reply_o.bits.tag.thread_id.expect(0.U)
@@ -91,28 +72,7 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
         dut.dtlb_backend_request_i.ready.expect(true.B)
         dut.tk()
       }
-      dut.waitForSignalToBe(dut.M_AXI_PW.ar.arvalid)
-      // Ok, how to handle the reply?
-      // Maybe we should add a DRAM here? Although I can manually reply to it. (Let's do it manually.)
-      dut.M_AXI_PW.ar.araddr.expect((0xAB * 3 * 64).U)
-      dut.M_AXI_PW.ar.arlen.expect(2.U)
-      // accept the read request
-      timescope {
-        dut.M_AXI_PW.ar.arready.poke(true.B)
-        dut.tk()
-      }
-      // pushing data to the dut.
-      timescope {
-        for(i <- 0 until 3){
-          dut.M_AXI_PW.r.rdata.poke(dut.pageset_converter_raw_o(i).peek)
-          dut.M_AXI_PW.r.rid.poke(0.U)
-          dut.M_AXI_PW.r.rlast.poke((i == 2).B)
-          dut.M_AXI_PW.r.rresp.poke(0.U)
-          dut.M_AXI_PW.r.rvalid.poke(true.B)
-          dut.M_AXI_PW.r.rready.expect(true.B)
-          dut.tk()
-        }
-      }
+      dut.sendPageTableSet(dut.M_AXI_PW, (0xAB * 3 * 64).U)
       // This will trigger an page fault.
       println("Page fault should have been triggered. Check it now.")
       dut.waitForSignalToBe(dut.M_AXI_QEMUTX.aw.awvalid)

@@ -158,7 +158,8 @@ implicit class PageDemanderDriver(target: PageDemanderDUT){
    * @return the number of cycles (interval) it waits for.
    * 
    */ 
-  def waitForSignalToBe(port: Bool, value: Boolean = true): Int = {
+  def waitForSignalToBe(port: Bool, value: Boolean = true): Int = {    
+    println(s"wait ${port.pathName} to be $value.")
     var interval = 0
     while(port.peek.litToBoolean != value){  
       target.tk()
@@ -185,6 +186,117 @@ implicit class PageDemanderDriver(target: PageDemanderDUT){
     target.S_AXI_TT.bvalid.expect(true.B)
     target.S_AXI_TT.bready.poke(true.B)
     target.tk()
+  }
+
+  def sendQEMUMessage(message_type: BigInt, rawMessage: Seq[BigInt]) = timescope {
+    target.S_AXI_QEMU_RX.aw.awready.expect(true.B)
+    target.S_AXI_QEMU_RX.aw.awvalid.poke(true.B)
+    target.S_AXI_QEMU_RX.aw.awburst.poke(1.U)
+    target.S_AXI_QEMU_RX.aw.awlen.poke(0.U)
+    target.S_AXI_QEMU_RX.aw.awsize.poke(6.U)
+    tk()
+    target.S_AXI_QEMU_RX.aw.awvalid.poke(false.B)
+    waitForSignalToBe(
+      target.S_AXI_QEMU_RX.w.wready)
+    val raw_res = (rawMessage :+ message_type).reverse.reduce { (last: BigInt, current: BigInt) =>
+        (last << 32) | current
+    }
+    target.S_AXI_QEMU_RX.w.wdata.poke(raw_res.U)
+    target.S_AXI_QEMU_RX.w.wvalid.poke(true.B)
+    target.S_AXI_QEMU_RX.w.wlast.poke(true.B)
+    target.S_AXI_QEMU_RX.w.wstrb.poke(((BigInt(1) << 64) - 1).U)
+    tk()
+    target.S_AXI_QEMU_RX.w.wvalid.poke(false.B)
+    waitForSignalToBe(target.S_AXI_QEMU_RX.b.bvalid)
+    target.S_AXI_QEMU_RX.b.bready.poke(true.B)
+    tk()
+  }
+
+  def sendPageFaultResponse(vpn: BigInt, pid: Int, permission: Int, synonym: Boolean, s_vpn: BigInt, s_pid: Int) = {
+    sendQEMUMessage(
+      2, Seq(
+        vpn & 0xFFFFFFFF,
+        vpn >> 32,
+        pid,
+        permission, 
+        if(synonym) 1 else 0,
+        s_vpn & 0xFFFFFFFF,
+        s_vpn >> 32,
+        s_pid
+      )
+    )
+  }
+
+  def movePageIn(duplicated_line: BigInt) = timescope {
+    target.S_AXI_PAGE.aw.awready.expect(true.B)
+    target.S_AXI_PAGE.aw.awvalid.poke(true.B)
+    target.S_AXI_PAGE.aw.awaddr.poke(4096.U)
+    target.S_AXI_PAGE.aw.awburst.poke(1.U)
+    target.S_AXI_PAGE.aw.awlen.poke(63.U)
+    target.S_AXI_PAGE.aw.awsize.poke(6.U)
+    target.S_AXI_PAGE.aw.awvalid.poke(true.B)
+    tk()
+    target.S_AXI_PAGE.aw.awvalid.poke(false.B)
+    // transfer data
+    for (i <- 0 until 64){
+      waitForSignalToBe(target.S_AXI_PAGE.w.wready)
+      target.S_AXI_PAGE.w.wdata.poke(duplicated_line.U)
+      target.S_AXI_PAGE.w.wstrb.poke(((BigInt(1) << 64) - 1).U)
+      target.S_AXI_PAGE.w.wlast.poke((i == 63).B)
+      target.S_AXI_PAGE.w.wvalid.poke(true.B)
+      tk()
+      target.S_AXI_PAGE.w.wvalid.poke(false.B)
+    } 
+    // wait for reply
+    waitForSignalToBe(target.S_AXI_PAGE.b.bvalid)
+    target.S_AXI_PAGE.b.bready.poke(true.B)
+    tk()
+  }
+
+  def receivePageTableSet(master_bus: AXI4, expectedAddr: UInt) = {
+    waitForSignalToBe(master_bus.aw.awvalid)
+    master_bus.aw.awaddr.expect(expectedAddr)
+    master_bus.aw.awlen.expect(2.U)
+    timescope {
+      master_bus.aw.awready.poke(true.B)
+      tk()
+    }
+    for(i <- 0 until 3){
+      waitForSignalToBe(master_bus.w.wvalid)
+      target.pageset_converter_raw_i(i).poke(
+        master_bus.w.wdata.peek()
+      )
+      timescope {
+        master_bus.w.wready.poke(true.B)
+        tk()
+      }
+    }
+    timescope {
+      waitForSignalToBe(master_bus.b.bready)
+      master_bus.b.bvalid.poke(true.B)
+      tk()
+    }
+  } 
+
+  def sendPageTableSet(master_bus: AXI4, expectedAddr: UInt) = {
+    waitForSignalToBe(master_bus.ar.arvalid)
+    master_bus.ar.araddr.expect(expectedAddr)
+    master_bus.ar.arlen.expect(2.U)
+    timescope {
+      master_bus.ar.arready.poke(true.B)
+      tk()
+    }
+    timescope {
+      for(i <- 0 until 3){
+        waitForSignalToBe(master_bus.r.rready)
+        master_bus.r.rdata.poke(target.pageset_converter_raw_o(i).peek)
+        master_bus.r.rid.poke(0.U)
+        master_bus.r.rlast.poke((i == 2).B)
+        master_bus.r.rresp.poke(0.U)
+        master_bus.r.rvalid.poke(true.B)
+        tk()
+      }
+    }
   }
 }
 

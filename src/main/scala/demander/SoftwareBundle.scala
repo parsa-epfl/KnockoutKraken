@@ -125,8 +125,8 @@ object QEMUMessagesType {
   val sPageFaultNotify = 4.U(3.W)
   val sEvictNotify = 5.U(3.W)
   val sEvictDone = 6.U(3.W)
+  
   val sPageEvict = 7.U(3.W)
-
   val sMissReply = 2.U(3.W)
   val sEvictReply = 3.U(3.W)
 }
