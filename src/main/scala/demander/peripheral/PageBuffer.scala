@@ -34,9 +34,9 @@ class PageBuffer extends MultiIOModule {
   u_converter.S_AXI <> S_AXI
 
   // BRAM Internal Address| Meaning| AXI Page number
-  // 0-63|Page to QEMU|1
-  // 64-127|Page from QEMU|2
-  // 128|QEMU fetch page ack|3
+  // 0-63|Page to QEMU|0
+  // 64-127|Page from QEMU|1
+  // 128|QEMU fetch page ack|2
   // 129|QEMU push page valid|3
 
   val bramCfg = new BRAMConfig(
@@ -67,7 +67,7 @@ class PageBuffer extends MultiIOModule {
 
   val chosen_port_q = Queue(chosen_port, 1, true)
 
-  u_bram.portA.ADDR := chosen_port.bits
+  u_bram.portA.ADDR := u_port_a_arb.io.out.bits
   u_bram.portA.DI := DontCare
   u_bram.portA.EN := chosen_port.fire()
   u_bram.portA.WE := 0.U
@@ -92,7 +92,7 @@ class PageBuffer extends MultiIOModule {
   u_port_b_arb.io.in(1).bits.addr := u_converter.write_request_o.bits.addr(15, 6)
   u_port_b_arb.io.in(1).bits.data := u_converter.write_request_o.bits.data
   u_port_b_arb.io.in(1).bits.mask := u_converter.write_request_o.bits.mask
-  u_port_b_arb.io.in(1).valid := u_converter.write_request_o.valid && !page_from_qemu_vr && (u_converter.write_request_o.bits.addr(15, 12) === 2.U || u_converter.write_request_o.bits.addr(15, 12) === 3.U)
+  u_port_b_arb.io.in(1).valid := u_converter.write_request_o.valid && !page_from_qemu_vr && (u_converter.write_request_o.bits.addr(15, 12) === 1.U)
 
   u_converter.write_request_o.ready := u_port_b_arb.io.in(1).ready && !page_from_qemu_vr
 
@@ -105,15 +105,16 @@ class PageBuffer extends MultiIOModule {
   // update logic of page_to_qemu_vr
   when(normal_write_request_i.fire() && normal_write_request_i.bits.last_v){
     page_to_qemu_vr := true.B
-  }.elsewhen(u_converter.write_request_o.fire() && u_converter.write_request_o.bits.addr === 0x3000.U){
-    // How to judge whether this is the last transaction of QEMU?
+  }.elsewhen(u_converter.read_request_o.fire() && u_converter.read_request_o.bits === 0x0FC0.U){
+    // The last entry is read by QEMU
     page_to_qemu_vr := false.B
   }
 
   // update logic of page_from_qemu_vr
   when(normal_read_request_i.bits === 127.U && normal_read_request_i.fire()){
     page_from_qemu_vr := false.B
-  }.elsewhen(u_converter.write_request_o.fire() && u_converter.write_request_o.bits.addr === 0x3040.U){
+  }.elsewhen(u_converter.write_request_o.fire() && u_converter.write_request_o.bits.addr === 0x1FC0.U){
+    // the last entry is put by QEMU
     page_from_qemu_vr := true.B
   }
 }

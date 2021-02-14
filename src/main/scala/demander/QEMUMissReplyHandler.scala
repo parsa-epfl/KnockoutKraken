@@ -58,7 +58,6 @@ class QEMUMissReplyHandler(
   val tt_pid_o = IO(Output(UInt(ParameterConstants.process_id_width.W)))
   tt_pid_o := qemu_miss_reply_i.bits.tag.process_id
   val tt_tid_i = IO(Input(new ThreadLookupResultPacket(param.threadNumber)))
-  u_buffer.load_enabled_vi := qemu_miss_reply_i.fire() && qemu_miss_reply_i.bits.synonym_v
 
   qemu_miss_reply_i.ready := state_r === sIdle
   val request_r = Reg(new QEMUMissReply)
@@ -79,7 +78,6 @@ class QEMUMissReplyHandler(
   // sGetSynonym
 
   u_buffer.lookup_request_i := request_r.synonym_tag
-
   when(ppn_pop_i.fire()){
     ppn_r := ppn_pop_i.bits
   }.elsewhen(state_r === sGetSynonym){
@@ -127,10 +125,9 @@ class QEMUMissReplyHandler(
   // TODO: RAW Hazard detected. You have to wait for the Page deletor to complete before inserting pages.
   // TODO: Reuse the AXI DMA.
   val page_insert_req_o = IO(Decoupled(UInt(ParameterConstants.ppn_width.W)))
-  page_insert_req_o.bits := victim_r.entry.ppn
+  page_insert_req_o.bits := ppn_r
   page_insert_req_o.valid := state_r === sInsertPage
   val page_insert_done_i = IO(Input(Bool()))
-  u_buffer.store_enable_vi := page_insert_req_o.fire() // ahead of one cycle to activate the writing mode of the ubuffer.
 
   // sMoveback
   u_axi_write.io.xfer.address := ParameterConstants.getPageTableAddressByVPN(request_r.tag.vpn)

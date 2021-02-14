@@ -82,7 +82,6 @@ class TLBWritebackHandler(
     assert(u_arb.io.out.bits.entry.modified, "Only modified entry can be written back")
   }
 
-  u_buffer.load_enabled_vi := u_arb.io.out.fire()
   u_buffer.lookup_request_i := request_r.tag
 
   // sMoveIn
@@ -102,7 +101,6 @@ class TLBWritebackHandler(
   u_buffer.write_request_i.bits.item.entry := request_r.evicted_pte
   u_buffer.write_request_i.bits.item.tag := request_r.tag
   u_buffer.write_request_i.valid := state_r === sUpdatePT
-  u_buffer.store_enable_vi := u_buffer.write_request_i.fire()
 
 
   // sMoveOut

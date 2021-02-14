@@ -49,7 +49,6 @@ class PageWalker(
   val u_buffer = Module(new PageTableSetBuffer(new PageTableSetPacket()))
   u_buffer.dma_data_i <> u_axi_reader.io.dataOut
   u_buffer.dma_data_o.ready := false.B
-  u_buffer.store_enable_vi := false.B
   // u_buffer.lru_element_i.valid := false.B
   // u_buffer.lru_element_i.bits := DontCare
 
@@ -90,7 +89,6 @@ class PageWalker(
   }
 
   // IO assignment of u_buffer.
-  u_buffer.load_enabled_vi := u_miss_arb.io.out.fire()
   u_buffer.lookup_request_i.process_id := request_r.process_id
   u_buffer.lookup_request_i.vpn := request_r.vpn
 
