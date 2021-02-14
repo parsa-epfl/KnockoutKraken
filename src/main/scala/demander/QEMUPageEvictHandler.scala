@@ -30,7 +30,6 @@ class QEMUPageEvictHandler extends MultiIOModule {
 
   u_buffer.write_request_i.valid := false.B
   u_buffer.write_request_i.bits := DontCare
-  u_buffer.store_enable_vi := false.B
 
 
   // AXI Bus
@@ -46,8 +45,6 @@ class QEMUPageEvictHandler extends MultiIOModule {
   when(evict_request_i.fire()){
     request_r := evict_request_i.bits
   }
-
-  u_buffer.load_enabled_vi := evict_request_i.fire()
 
   // sLoadSet
   u_axi_read.io.xfer.address := ParameterConstants.getPageTableAddressByVPN(request_r.tag.vpn)

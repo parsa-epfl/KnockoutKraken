@@ -196,17 +196,17 @@ implicit class PageDemanderDriver(target: PageDemanderDUT){
     target.S_AXI_QEMU_RX.aw.awsize.poke(6.U)
     tk()
     target.S_AXI_QEMU_RX.aw.awvalid.poke(false.B)
-    waitForSignalToBe(
-      target.S_AXI_QEMU_RX.w.wready)
-    val raw_res = (rawMessage :+ message_type).reverse.reduce { (last: BigInt, current: BigInt) =>
+    val raw_res = (message_type +: rawMessage).reverse.reduce { (last: BigInt, current: BigInt) =>
         (last << 32) | current
     }
     target.S_AXI_QEMU_RX.w.wdata.poke(raw_res.U)
-    target.S_AXI_QEMU_RX.w.wvalid.poke(true.B)
     target.S_AXI_QEMU_RX.w.wlast.poke(true.B)
     target.S_AXI_QEMU_RX.w.wstrb.poke(((BigInt(1) << 64) - 1).U)
-    tk()
-    target.S_AXI_QEMU_RX.w.wvalid.poke(false.B)
+    timescope {
+      waitForSignalToBe(target.S_AXI_QEMU_RX.w.wready)
+      target.S_AXI_QEMU_RX.w.wvalid.poke(true.B)
+      tk()
+    }
     waitForSignalToBe(target.S_AXI_QEMU_RX.b.bvalid)
     target.S_AXI_QEMU_RX.b.bready.poke(true.B)
     tk()
@@ -227,7 +227,7 @@ implicit class PageDemanderDriver(target: PageDemanderDUT){
     )
   }
 
-  def movePageIn(duplicated_line: BigInt) = timescope {
+  def movePageIn(duplicatedLine: BigInt) = timescope {
     target.S_AXI_PAGE.aw.awready.expect(true.B)
     target.S_AXI_PAGE.aw.awvalid.poke(true.B)
     target.S_AXI_PAGE.aw.awaddr.poke(4096.U)
@@ -239,10 +239,10 @@ implicit class PageDemanderDriver(target: PageDemanderDUT){
     target.S_AXI_PAGE.aw.awvalid.poke(false.B)
     // transfer data
     for (i <- 0 until 64){
-      waitForSignalToBe(target.S_AXI_PAGE.w.wready)
-      target.S_AXI_PAGE.w.wdata.poke(duplicated_line.U)
+      target.S_AXI_PAGE.w.wdata.poke(duplicatedLine.U)
       target.S_AXI_PAGE.w.wstrb.poke(((BigInt(1) << 64) - 1).U)
       target.S_AXI_PAGE.w.wlast.poke((i == 63).B)
+      waitForSignalToBe(target.S_AXI_PAGE.w.wready)
       target.S_AXI_PAGE.w.wvalid.poke(true.B)
       tk()
       target.S_AXI_PAGE.w.wvalid.poke(false.B)
@@ -288,11 +288,11 @@ implicit class PageDemanderDriver(target: PageDemanderDUT){
     }
     timescope {
       for(i <- 0 until 3){
-        waitForSignalToBe(master_bus.r.rready)
         master_bus.r.rdata.poke(target.pageset_converter_raw_o(i).peek)
         master_bus.r.rid.poke(0.U)
         master_bus.r.rlast.poke((i == 2).B)
         master_bus.r.rresp.poke(0.U)
+        waitForSignalToBe(master_bus.r.rready)
         master_bus.r.rvalid.poke(true.B)
         tk()
       }

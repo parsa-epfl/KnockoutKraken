@@ -66,30 +66,18 @@ class PageTableSetBuffer(
 
   // Load logic.
   val dma_cnt_r = RegInit(UInt(log2Ceil(requestPacketNumber).W), 0.U)
-  val load_enabled_vi = IO(Input(Bool()))
-  val load_vr = RegInit(Bool(), false.B)
-  //load_vr := Mux(load_cnt_r === (requestPacketNumber - 1).U, false.B, load_vr)
-  when(dma_cnt_r === (requestPacketNumber - 1).U && dma_data_i.fire()){
-    load_vr := false.B
-  }.elsewhen(load_enabled_vi){
-    load_vr := true.B
-  }
   // Bind updated_buffer to buffer_r
   val updated_buffer = WireInit(buffer_r)
   updated_buffer(dma_cnt_r) := dma_data_i.bits
 
+  val sIdle :: sMoveIn :: sMoveOut :: Nil = Enum(3)
+  val state_r = RegInit(sIdle)
+
   // Store logic.
   val dma_data_o = IO(Decoupled(UInt(512.W)))
-  val store_enable_vi = IO(Input(Bool()))
-  val store_vr = RegInit(Bool(), false.B)
-  when(dma_cnt_r === (requestPacketNumber-1).U && dma_data_o.fire()){
-    store_vr := false.B
-  }.elsewhen(store_enable_vi){
-    store_vr := true.B
-  }
 
   // update of dma_cnt_r
-  when(dma_data_i.fire() && load_vr || dma_data_o.fire() && store_vr){
+  when(dma_data_i.fire() || dma_data_o.fire()){
     dma_cnt_r := Mux(
       dma_cnt_r === (requestPacketNumber - 1).U,
       0.U,
@@ -97,7 +85,7 @@ class PageTableSetBuffer(
     )
   }
   
-  dma_data_o.valid := store_vr
+  dma_data_o.valid := state_r === sMoveOut || state_r === sIdle
   dma_data_o.bits := buffer_r(dma_cnt_r)
 
   val pt_set_r = buffer_r.asTypeOf(t.cloneType)
@@ -154,14 +142,33 @@ class PageTableSetBuffer(
   lookup_reply_o.item.tag := lookup_request_i
   lookup_reply_o.index := hit_index
 
-  when(write_request_i.valid){
+  when(write_request_i.fire() && !dma_data_i.fire()){
     buffer_r := updated_pt_set.asTypeOf(buffer_r.cloneType)
   }.elsewhen(dma_data_i.fire()){
     buffer_r := updated_buffer
   }
-  write_request_i.ready := true.B
 
-  dma_data_i.ready := load_vr && !write_request_i.valid
+  write_request_i.ready := state_r === sIdle
+  dma_data_i.ready := state_r === sMoveIn || (state_r === sIdle && !write_request_i.fire())
+
+  switch(state_r){
+    is(sIdle){
+      when(dma_data_i.fire()){
+        state_r := sMoveIn
+      }.elsewhen(dma_data_o.fire()){
+        state_r := sMoveOut
+      }.otherwise {
+        state_r := sIdle
+      }
+    }
+    is(sMoveIn){
+      state_r := Mux(dma_data_i.fire() && dma_cnt_r === (requestPacketNumber - 1).U, sIdle, sMoveIn)
+    }
+    is(sMoveOut){
+      state_r := Mux(dma_data_o.fire() && dma_cnt_r === (requestPacketNumber - 1).U, sIdle, sMoveOut)
+
+    }
+  }
 
 }
 
