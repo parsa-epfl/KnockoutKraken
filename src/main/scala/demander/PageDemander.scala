@@ -176,6 +176,8 @@ class PageDemander(
   u_page_deleter.dcache_flush_request_o <> dcache_flush_request_o
   val dcache_wb_queue_empty_i = IO(Input(Bool()))
   u_page_deleter.dcache_wb_queue_empty_i <> dcache_wb_queue_empty_i
+  val dcache_stall_request_vo = IO(Output(Bool()))
+  dcache_stall_request_vo := u_page_deleter.stall_dcache_vo
 
   u_qemu_miss.page_delete_done_i := u_page_deleter.done_o
   u_qemu_page_evict.page_delete_done_i := u_page_deleter.done_o
@@ -184,6 +186,8 @@ class PageDemander(
   u_page_deleter.icache_flush_request_o <> icache_flush_request_o
   val icache_wb_queue_empty_i = IO(Input(Bool()))
   u_page_deleter.icache_wb_queue_empty_i <> icache_wb_queue_empty_i
+  val icache_stall_request_vo = IO(Output(Bool()))
+  icache_stall_request_vo := u_page_deleter.stall_icache_vo
 
   val u_arb_page_delete_req = Module(new Arbiter(new PageTableItem, 2))
   u_arb_page_delete_req.io.in(0) <> u_qemu_miss.page_delete_req_o
@@ -236,7 +240,7 @@ class PageDemander(
   u_page_buffer.normal_read_reply_o <> u_page_inserter.read_reply_i
   u_page_buffer.normal_write_request_i <> u_page_deleter.page_buffer_write_o
   
-  
+
   // the PA Pool
   val u_pool = Module(new FreeList)
   val M_AXI_PAPOOL = IO(u_pool.M_AXI.cloneType)

@@ -43,7 +43,6 @@ class AXI4Writer(val addrWidth : Int, val dataWidth : Int) extends Module{
   val dataState = RegInit(sDataIdle)
   val addrState = RegInit(sAddrIdle)
 
-  val done = RegInit(false.B)
   val enable = RegInit(false.B)
   val last = WireInit(false.B)
   val length = RegInit(0.U(addrWidth.W))
@@ -67,13 +66,12 @@ class AXI4Writer(val addrWidth : Int, val dataWidth : Int) extends Module{
 
   io.dataIn.ready := ready
 
-  io.xfer.done := done
+  io.xfer.done := dataState === sDataDone
 
   last := length === 1.U
 
   switch(dataState){
     is(sDataIdle){
-      done := false.B
       when(io.xfer.valid){
         length := io.xfer.length
         dataState := sDataTransfer
@@ -98,7 +96,6 @@ class AXI4Writer(val addrWidth : Int, val dataWidth : Int) extends Module{
       }
     }
     is(sDataDone){
-      done := true.B
       dataState := sDataIdle
     }
   }
@@ -119,7 +116,7 @@ class AXI4Writer(val addrWidth : Int, val dataWidth : Int) extends Module{
       }
     }
     is(sAddrDone){
-      when(done){
+      when(io.xfer.done){
         addrState := sAddrIdle
       }
     }

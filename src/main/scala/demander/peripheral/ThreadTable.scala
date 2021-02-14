@@ -7,6 +7,8 @@ import armflex.util.{
   AxiLiteConfig
 }
 
+import chisel3.experimental.BundleLiterals._
+
 class ThreadLookupResultPacket(
   threadNumber: Int = 4
 ) extends Bundle {
@@ -24,12 +26,19 @@ class ThreadTable(
 ) extends MultiIOModule {
   val S_AXI = IO(AxiLiteSlave(new AxiLiteConfig(32)))
 
-  val table = Reg(Vec(threadNumber, Valid(UInt(processIDWidth.W)))) // SyncReadMem(threadNumber, UInt(processIDWidth.W))
+  val table = RegInit(
+    Vec(threadNumber, Valid(UInt(processIDWidth.W))),
+    0.U.asTypeOf(Vec(threadNumber, Valid(UInt(processIDWidth.W))))
+  )
 
   val axi_internal_read_address = S_AXI.araddr(1 + log2Ceil(threadNumber),2)
   val axi_internal_write_address = S_AXI.awaddr(1 + log2Ceil(threadNumber),2)
 
-  val axi_read_addr_r = Reg(Valid(UInt(log2Ceil(threadNumber).W)))
+  val axi_read_addr_r = RegInit(
+    Valid(UInt(log2Ceil(threadNumber).W)),
+    0.U.asTypeOf(Valid(UInt(log2Ceil(threadNumber).W)))
+  )
+  
   when(S_AXI.rready && S_AXI.rvalid){
     axi_read_addr_r.valid := false.B
   }.elsewhen(S_AXI.arready && S_AXI.arvalid){
@@ -45,7 +54,7 @@ class ThreadTable(
 
   val axi_write_addr_r = Reg(Valid(UInt(log2Ceil(threadNumber).W)))
   axi_write_addr_r.valid := false.B
-  
+
   when(S_AXI.wvalid && S_AXI.wready){
     table(axi_write_addr_r.bits).bits := S_AXI.wdata
     table(axi_write_addr_r.bits).valid := true.B

@@ -171,13 +171,21 @@ class QEMUMissReplyHandler(
       state_r := Mux(page_delete_done_i, sReplace, sDeletePage)
     }
     is(sReplace){
-      state_r := Mux(u_buffer.write_request_i.fire(), sInsertPage, sReplace)
+      state_r := Mux(
+        u_buffer.write_request_i.fire(),
+        Mux(request_r.synonym_v, sMoveback ,sInsertPage), // Synonym means no pages insertion is needed.
+        sReplace
+      )
     }
     is(sInsertPage){
       state_r := Mux(page_insert_done_i, sMoveback, sInsertPage)
     }
     is(sMoveback){
-      state_r := Mux(tid_r.valid, sReplyToTLB, sIdle)
+      state_r := Mux(
+        u_axi_write.io.xfer.done,
+        Mux(tid_r.valid, sReplyToTLB, sIdle),
+        sMoveback
+      )
     }
     is(sReplyToTLB){
       state_r := Mux(tlb_backend_reply_o.fire(), sIdle, sReplyToTLB)

@@ -23,7 +23,7 @@ class TLBWritebackTester extends FreeSpec with ChiselScalatestTester {
     test(new PageDemanderDUT(new MemorySystemParameter())).withAnnotations(anno){ dut =>
       // apply a miss request
       // Set the thread table.
-      dut.registerThreadTable(0.U, 10.U)
+      dut.registerThreadTable(0, 10)
       // set TLB eviction up.
       timescope {
         dut.dtlb_backend_request_i.bits.flush_v.poke(false.B)
