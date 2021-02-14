@@ -17,7 +17,7 @@ import armflex.demander.software_bundle.QEMUPageEvictRequest
 class QEMUPageEvictHandler extends MultiIOModule {
   val evict_request_i = IO(Flipped(Decoupled(new QEMUPageEvictRequest())))
   
-  val sIdle :: sLoadSet :: sDeletePageReq :: sDeletePage :: Nil = Enum(4)
+  val sIdle :: sLoadSet :: sGetEntry :: sDeletePageReq :: sDeletePage :: Nil = Enum(5)
   val state_r = RegInit(sIdle)
 
   val u_buffer = Module(new PageTableSetBuffer(new PageTableSetPacket))
@@ -53,7 +53,7 @@ class QEMUPageEvictHandler extends MultiIOModule {
 
   val victim_r = Reg(new PageTableItem)
   u_buffer.lookup_request_i := request_r.tag
-  when(state_r === sDeletePageReq){
+  when(state_r === sGetEntry){
     victim_r := u_buffer.lookup_reply_o.item
     assert(u_buffer.lookup_reply_o.hit_v)
   }
@@ -71,7 +71,10 @@ class QEMUPageEvictHandler extends MultiIOModule {
       state_r := Mux(evict_request_i.fire(), sLoadSet, sIdle)
     }
     is(sLoadSet){
-      state_r := Mux(u_axi_read.io.xfer.done, sDeletePageReq, sLoadSet)
+      state_r := Mux(u_axi_read.io.xfer.done, sGetEntry, sLoadSet)
+    }
+    is(sGetEntry){
+      state_r := sDeletePageReq
     }
     is(sDeletePageReq){
       state_r := Mux(page_delete_req_o.fire(), sDeletePage, sDeletePageReq)
