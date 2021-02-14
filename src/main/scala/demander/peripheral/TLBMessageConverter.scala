@@ -46,7 +46,7 @@ class TLBMessageConverter(
   ev_request.valid := tlb_backend_request_i.valid && tlb_backend_request_i.bits.w_v && !tlb_backend_request_i.bits.flush_v
 
   when(ev_request.valid){
-    assert(ev_request.bits.entry.permission === 2.U, "Eviction only occurs in dirty and permission-granted TLB entry.")
+    assert(ev_request.bits.entry.permission === 1.U, "Eviction only occurs in dirty and permission-granted TLB entry.")
   }
 
   // val miss_request_qo = Queue(miss_request, 4)

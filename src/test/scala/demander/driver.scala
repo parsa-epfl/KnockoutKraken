@@ -9,6 +9,7 @@ import armflex.cache.MemorySystemParameter
 
 import DMAController.Bus._
 import armflex.demander.software_bundle.ParameterConstants
+import armflex.demander.peripheral.PageTableSetPacket
 
 object PageDemanderTestHelper {
 
@@ -22,6 +23,9 @@ class PageSetConverter extends MultiIOModule {
   val pageset_packet_i = IO(Input(new PageTableSetPacket()))
   val raw_o = IO(Output(Vec(3, UInt(512.W))))
   raw_o := VecInit(pageset_packet_i.asUInt().asBools().grouped(512).map(VecInit(_).asUInt()).toSeq)
+  val raw_i = IO(Input(Vec(3, UInt(512.W))))
+  val pageset_packet_o = IO(Output(new PageTableSetPacket()))
+  pageset_packet_o := raw_i.asUInt().asTypeOf(new PageTableSetPacket())
 }
 
 
@@ -39,8 +43,7 @@ class PageSetConverter extends MultiIOModule {
  * 
  */ 
 class PageDemanderDUT(
-  param: MemorySystemParameter,
-  instructionFile: String = ""
+  param: MemorySystemParameter
 ) extends MultiIOModule {
   val u_page_demander = Module(new PageDemander(param, 2, false))
   // AXI Bus for thread table
@@ -132,6 +135,12 @@ class PageDemanderDUT(
   pageset_packet_i <> u_helper_page_set_converter.pageset_packet_i
   val pageset_converter_raw_o = IO(Output(u_helper_page_set_converter.raw_o.cloneType))
   pageset_converter_raw_o <> u_helper_page_set_converter.raw_o
+
+  val pageset_packet_o = IO(Output(new PageTableSetPacket()))
+  pageset_packet_o <> u_helper_page_set_converter.pageset_packet_o
+  val pageset_converter_raw_i = IO(Input(Vec(3, UInt(512.W))))
+  pageset_converter_raw_i <> u_helper_page_set_converter.raw_i
+
 }
 
 
