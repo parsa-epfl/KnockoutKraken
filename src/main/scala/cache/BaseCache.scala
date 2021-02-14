@@ -257,6 +257,7 @@ class BaseCache(
   val frontend_request_i = IO(Flipped(Decoupled(new CacheFrontendRequestPacket(param))))
   val flush_request_i = IO(Flipped(Decoupled(new CacheFrontendFlushRequest(param))))
   val refill_request_i = IO(Flipped(Decoupled(new MissResolveReplyPacket(param))))
+  val stall_request_vi = IO(Input(Bool()))
 
   //val refill_request = Wire(u_bank_frontend.frontend_request_i.cloneType)
   //refill_request.valid := u_refill_queue.refill_o.valid
@@ -309,7 +310,9 @@ class BaseCache(
   // The refilling request from the backend of the cache
   u_frontend_arb.io.in(1) <> refill_request_internal
 
-  u_frontend_arb.io.out <> u_bank_frontend.frontend_request_i
+  u_bank_frontend.frontend_request_i.bits := u_frontend_arb.io.out.bits
+  u_bank_frontend.frontend_request_i.valid := !stall_request_vi && u_frontend_arb.io.out.valid
+  u_frontend_arb.io.out.ready := !stall_request_vi && u_bank_frontend.frontend_request_i.ready
 
 
   // frontend_reply_o: Response to the R/W request from the pipeline

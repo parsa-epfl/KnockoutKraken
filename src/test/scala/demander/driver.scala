@@ -168,15 +168,15 @@ implicit class PageDemanderDriver(target: PageDemanderDUT){
     return interval
   }
   
-  def registerThreadTable(thread_id: UInt, process_id: UInt) = timescope {
+  def registerThreadTable(thread_id: Int, process_id: Int) = timescope {
     // Send write request
-    target.S_AXI_TT.awaddr.poke(thread_id)
+    target.S_AXI_TT.awaddr.poke((thread_id * 4).U)
     target.S_AXI_TT.awvalid.poke(true.B)
     target.S_AXI_TT.awready.expect(true.B)
     target.tk()
     target.S_AXI_TT.awvalid.poke(false.B)
     // Send write data
-    target.S_AXI_TT.wdata.poke(process_id)
+    target.S_AXI_TT.wdata.poke(process_id.U)
     target.S_AXI_TT.wvalid.poke(true.B)
     // Wait for it ready.
     target.S_AXI_TT.wready.expect(true.B)
@@ -225,6 +225,33 @@ implicit class PageDemanderDriver(target: PageDemanderDUT){
         s_pid
       )
     )
+  }
+
+  def expectQEMUMessage(addr: BigInt, message_type: BigInt, rawMessage: Seq[BigInt]) = timescope {
+    // message request
+    waitForSignalToBe(target.M_AXI_QEMUTX.aw.awvalid)
+    target.M_AXI_QEMUTX.aw.awaddr.expect(addr.U)
+    target.M_AXI_QEMUTX.aw.awlen.expect(0.U)
+    timescope {
+      target.M_AXI_QEMUTX.aw.awready.poke(true.B)
+      target.tk()
+    }
+    // message body
+    waitForSignalToBe(target.M_AXI_QEMUTX.w.wvalid)
+    val binaryMessage = (Seq[BigInt](1, message_type) ++: rawMessage).reverse.reduce { (last: BigInt, current: BigInt) =>
+        (last << 32) | current
+    }
+    target.M_AXI_QEMUTX.w.wdata.expect(binaryMessage.U)
+    timescope {
+      target.M_AXI_QEMUTX.w.wready.poke(true.B)
+      target.tk()
+    }
+    // write reply
+    timescope {
+      target.M_AXI_QEMUTX.b.bvalid.poke(true.B)
+      waitForSignalToBe(target.M_AXI_QEMUTX.b.bready)
+      tk()
+    }
   }
 
   def movePageIn(duplicatedLine: BigInt) = timescope {

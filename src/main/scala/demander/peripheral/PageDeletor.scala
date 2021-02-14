@@ -121,7 +121,12 @@ class PageDeletor(
   // sWait
   // Eviction done? (You have to wait for like two / three cycles to get the correct result.)
   val icache_wb_queue_empty_i = IO(Input(Bool()))
+  val stall_icache_vo = IO(Output(Bool()))
+  stall_icache_vo := state_r === sWait && item_r.entry.permission === 2.U
   val dcache_wb_queue_empty_i = IO(Input(Bool()))
+  val stall_dcache_vo = IO(Output(Bool()))
+  stall_dcache_vo := state_r === sWait && item_r.entry.permission =/= 2.U
+
   val queue_empty = Mux(item_r.entry.permission =/= 2.U, dcache_wb_queue_empty_i, icache_wb_queue_empty_i)
 
   // sMove

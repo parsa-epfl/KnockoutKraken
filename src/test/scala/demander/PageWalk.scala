@@ -24,7 +24,7 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
     test(new PageDemanderDUT(new MemorySystemParameter())).withAnnotations(anno){ dut =>
       // apply a miss request
       // Set the thread table.
-      dut.registerThreadTable(0.U, 10.U)
+      dut.registerThreadTable(0, 10)
       timescope {
         dut.itlb_backend_request_i.bits.flush_v.poke(false.B)
         dut.itlb_backend_request_i.bits.need_write_permission_v.poke(false.B)
@@ -61,7 +61,7 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
     test(new PageDemanderDUT(new MemorySystemParameter())).withAnnotations(anno){ dut =>
       // apply a miss request
       // Set the thread table.
-      dut.registerThreadTable(0.U, 10.U)
+      dut.registerThreadTable(0, 10)
       timescope {
         dut.dtlb_backend_request_i.bits.flush_v.poke(false.B)
         dut.dtlb_backend_request_i.bits.need_write_permission_v.poke(false.B)
