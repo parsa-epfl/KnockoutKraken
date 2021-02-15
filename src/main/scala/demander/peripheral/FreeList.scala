@@ -79,11 +79,11 @@ class FreeList(
   u_axi_writer.io.bus.ar <> AXI4AR.stub(ParameterConstants.dram_addr_width)
   u_axi_writer.io.bus.r <> AXI4R.stub(ParameterConstants.dram_data_width)
 
-  u_axi_reader.io.xfer.address := Cat(dram_read_ptr_r + 0x30000.U, 0.U(6.W))
+  u_axi_reader.io.xfer.address := Cat(dram_read_ptr_r + 0x300000.U, 0.U(6.W))
   u_axi_reader.io.xfer.length := 1.U
   u_axi_reader.io.xfer.valid := state_r === sFetch && dram_read_ptr_r =/= dram_history_ptr_r
 
-  u_axi_writer.io.xfer.address := Cat(dram_write_ptr_r + 0x30000.U, 0.U(6.W))
+  u_axi_writer.io.xfer.address := Cat(dram_write_ptr_r + 0x300000.U, 0.U(6.W))
   u_axi_writer.io.xfer.length := 1.U
   u_axi_writer.io.xfer.valid := state_r === sStore
 
