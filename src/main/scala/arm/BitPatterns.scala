@@ -200,14 +200,14 @@ object INSTRUCTIONS
   // Don't support Division
   // 31 | 30 | 29 | 28 27 26 25 24 23 22 21 | 20 19 18 17 16 | 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
   // sf |  0 |  S |  1  1  0  1  0  1  1  0 |       Rm       |      opcode       |      Rn        |        Rd      |                  |
-  //  0 |  0 |  S |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  0  0 |      Rn        |        Rd      | LSLV             | 32-bit
-  //  0 |  0 |  S |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  0  1 |      Rn        |        Rd      | LSRV             | 32-bit
-  //  0 |  0 |  S |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  1  0 |      Rn        |        Rd      | ASRV             | 32-bit
-  //  0 |  0 |  S |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  1  1 |      Rn        |        Rd      | RORV             | 32-bit
-  //  1 |  0 |  S |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  0  0 |      Rn        |        Rd      | LSLV             | 64-bit
-  //  1 |  0 |  S |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  0  1 |      Rn        |        Rd      | LSRV             | 64-bit
-  //  1 |  0 |  S |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  1  0 |      Rn        |        Rd      | ASRV             | 64-bit
-  //  1 |  0 |  S |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  1  1 |      Rn        |        Rd      | RORV             | 64-bit
+  //  0 |  0 |  0 |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  0  0 |      Rn        |        Rd      | LSLV             | 32-bit
+  //  0 |  0 |  0 |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  0  1 |      Rn        |        Rd      | LSRV             | 32-bit
+  //  0 |  0 |  0 |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  1  0 |      Rn        |        Rd      | ASRV             | 32-bit
+  //  0 |  0 |  0 |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  1  1 |      Rn        |        Rd      | RORV             | 32-bit
+  //  1 |  0 |  0 |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  0  0 |      Rn        |        Rd      | LSLV             | 64-bit
+  //  1 |  0 |  0 |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  0  1 |      Rn        |        Rd      | LSRV             | 64-bit
+  //  1 |  0 |  0 |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  1  0 |      Rn        |        Rd      | ASRV             | 64-bit
+  //  1 |  0 |  0 |  1  1  0  1  0  1  1  0 |       Rm       |  0  0  1  0  1  1 |      Rn        |        Rd      | RORV             | 64-bit
   def DP2S_LSLV32 = BitPat("b00011010110?????001000??????????")
   def DP2S_LSRV32 = BitPat("b00011010110?????001001??????????")
   def DP2S_ASRV32 = BitPat("b00011010110?????001010??????????")
@@ -256,12 +256,34 @@ object INSTRUCTIONS
   def ASSR_SUB  = BitPat("b11001011??0?????????????????????")
   def ASSR_SUBS = BitPat("b11101011??0?????????????????????")
 
-  // Add/subtract (extended register)
+  // Add/subtract (extended register) C4-283
   // 31 | 30 | 29 | 28 27 26 25 24 | 23 22 | 21 | 20 19 18 17 16 | 15 14 13 | 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
   // sf | op |  S |  0  1  0  1  1 |  opt  |  1 |      Rm        |  option  |   imm3   |       Rn       |       Rd       |                  |
-  //  1 |  0 |  0 |  0  1  0  1  1 |  0  0 |  1 |      Rm        |  option  |   imm3   |       Rn       |  1  1  1  1  1 | CMP              | 32-bit  */
+  //  0 |  0 |  1 |  0  1  0  1  1 |  0  0 |  1 |      Rm        |  option  |   imm3   |       Rn       |  1  1  1  1  1 | CMN              | 32-bit  */
+  //  0 |  1 |  1 |  0  1  0  1  1 |  0  0 |  1 |      Rm        |  option  |   imm3   |       Rn       |  1  1  1  1  1 | CMP              | 32-bit  */
+  //  0 |  0 |  0 |  0  1  0  1  1 |  0  0 |  1 |      Rm        |  option  |   imm3   |       Rn       |       Rd       | ADD              | 32-bit  */
+  //  0 |  0 |  1 |  0  1  0  1  1 |  0  0 |  1 |      Rm        |  option  |   imm3   |       Rn       |       Rd       | ADDS             | 32-bit  */
+  //  0 |  1 |  0 |  0  1  0  1  1 |  0  0 |  1 |      Rm        |  option  |   imm3   |       Rn       |       Rd       | SUB              | 32-bit  */
+  //  0 |  1 |  1 |  0  1  0  1  1 |  0  0 |  1 |      Rm        |  option  |   imm3   |       Rn       |       Rd       | SUBS             | 32-bit  */
+  //  0 |  0 |  1 |  0  1  0  1  1 |  0  0 |  1 |      Rm        |  option  |   imm3   |       Rn       |  1  1  1  1  1 | CMN              | 64-bit  */
+  //  0 |  1 |  1 |  0  1  0  1  1 |  0  0 |  1 |      Rm        |  option  |   imm3   |       Rn       |  1  1  1  1  1 | CMP              | 64-bit  */
+  //  1 |  0 |  0 |  0  1  0  1  1 |  0  0 |  1 |      Rm        |  option  |   imm3   |       Rn       |       Rd       | ADD              | 64-bit  */
+  //  1 |  0 |  1 |  0  1  0  1  1 |  0  0 |  1 |      Rm        |  option  |   imm3   |       Rn       |       Rd       | ADDS             | 64-bit  */
+  //  1 |  1 |  0 |  0  1  0  1  1 |  0  0 |  1 |      Rm        |  option  |   imm3   |       Rn       |       Rd       | SUB              | 64-bit  */
+  //  1 |  1 |  1 |  0  1  0  1  1 |  0  0 |  1 |      Rm        |  option  |   imm3   |       Rn       |       Rd       | SUBS             | 64-bit  */
   def ASER = BitPat("b1??01011??1?????????????????????")
-  def ASER_ADD = BitPat("b10001011??1?????????????????????")
+  def ASER_CMN32  = BitPat("b00101011001????????????????11111")
+  def ASER_CMP32  = BitPat("b01101011001????????????????11111")
+  def ASER_ADD32  = BitPat("b00001011001?????????????????????")
+  def ASER_ADDS32 = BitPat("b00101011001?????????????????????")
+  def ASER_SUB32  = BitPat("b01001011001?????????????????????")
+  def ASER_SUBS32 = BitPat("b01101011001?????????????????????")
+  def ASER_CMN    = BitPat("b10101011001????????????????11111")
+  def ASER_CMP    = BitPat("b11101011001????????????????11111")
+  def ASER_ADD    = BitPat("b10001011001?????????????????????")
+  def ASER_ADDS   = BitPat("b10101011001?????????????????????")
+  def ASER_SUB    = BitPat("b11001011001?????????????????????")
+  def ASER_SUBS   = BitPat("b11101011001?????????????????????")
 
   // Add/subtract (immediate)
   // 31 | 30 | 29 | 28 27 26 25 24 | 23 22 | 21 20 19 18 17 16 15 14 13 12 11 10 | 09 08 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
@@ -536,4 +558,17 @@ object INSTRUCTIONS
   def LSUReg_STUR    = BitPat("b11111000000?????????00??????????")
   def LSUReg_LDUR    = BitPat("b11111000010?????????00??????????")
   def LSUReg_PRFUM   = BitPat("b11111000100?????????00??????????")
+
+  // Hint instructions
+  // 31 30 29 28 27 26 25 24 23 22 | 21 | 20 19 | 18 17 16 | 15 14 13 12 | 11 10 09 08 | 07 06 05 | 04 03 02 01 00 | Instruction Page | Variant
+  //  1  1  0  1  0  1  0  1  0  0 |  0 |  0  0 |  0  1  1 |  0  0  1  0 |     CRm     |   op2    |  1  1  1  1  1 |                  |
+  //  1  1  0  1  0  1  0  1  0  0 |  0 |  0  0 |  0  1  1 |  0  0  1  0 |  0  0  0  0 |  0  0  0 |  1  1  1  1  1 |              NOP |
+  //  1  1  0  1  0  1  0  1  0  0 |  0 |  0  0 |  0  1  1 |  0  0  1  0 |  0  1  X  X |   op2    |  1  1  1  1  1 |              NOP |
+  //  1  1  0  1  0  1  0  1  0  0 |  0 |  0  0 |  0  1  1 |  0  0  1  0 |  1  0  X  X |   op2    |  1  1  1  1  1 |              NOP |
+  //  1  1  0  1  0  1  0  1  0  0 |  0 |  0  0 |  0  1  1 |  0  0  1  0 |  1  1  X  X |   op2    |  1  1  1  1  1 |              NOP |
+  def HINT       = BitPat("b11010101000000110010???????11111")
+  def HINT_NOP00 = BitPat("b11010101000000110010000000011111")
+  def HINT_NOP01 = BitPat("b1101010100000011001001?????11111")
+  def HINT_NOP10 = BitPat("b1101010100000011001010?????11111")
+  def HINT_NOP11 = BitPat("b1101010100000011001011?????11111")
 }

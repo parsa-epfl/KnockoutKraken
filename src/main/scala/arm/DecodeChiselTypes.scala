@@ -167,9 +167,9 @@ object DECODE_CONTROL_SIGNALS
   def I_T = UInt(TYPE_W)
 
   val I_X = DEC_LITS.I_X.U(TYPE_W)
+  val I_HINT  =  DEC_LITS.I_HINT.U(TYPE_W)  // HINT instruction
   val I_LogSR =  DEC_LITS.I_LogSR.U(TYPE_W) // Logical (shifted register)
   val I_LogI  =  DEC_LITS.I_LogI.U(TYPE_W) // Logical (immediate)
-  val I_PCRel =  DEC_LITS.I_PCRel.U(TYPE_W) // PC-Relative
 
   val I_CCImm =  DEC_LITS.I_CCImm.U(TYPE_W) // Conditional compare (immediate)
   val I_CCReg =  DEC_LITS.I_CCReg.U(TYPE_W) // Conditional compare (register)
@@ -177,12 +177,13 @@ object DECODE_CONTROL_SIGNALS
 
   val I_ASImm =  DEC_LITS.I_ASImm.U(TYPE_W) // Add/Subtract (Immediate)
   val I_ASSR  =  DEC_LITS.I_ASSR.U(TYPE_W) // Add/subtract (shifted register)
+  val I_ASER  =  DEC_LITS.I_ASER.U(TYPE_W) // Add/subtract (extended register)
   val I_MovI  =  DEC_LITS.I_MovI.U(TYPE_W) // Move wide (immediate)
-  val I_BitF  =  DEC_LITS.I_BitF.U(TYPE_W) // Logical (shifted register)
 
   val I_DP1S  =  DEC_LITS.I_DP1S.U(TYPE_W) // Data-processing (1 source)
   val I_DP2S  =  DEC_LITS.I_DP2S.U(TYPE_W) // Data-processing (2 source)
   val I_DP3S  =  DEC_LITS.I_DP3S.U(TYPE_W) // Data-processing (3 source)
+  val I_BitF  =  DEC_LITS.I_BitF.U(TYPE_W) // Logical (shifted register)
 
   val I_LSUReg  = DEC_LITS.I_LSUReg.U(TYPE_W)  // Load/store register (unscaled immediate)
   val I_LSRegPo = DEC_LITS.I_LSRegPo.U(TYPE_W) // Load/store register (post-indexed)
@@ -200,6 +201,7 @@ object DECODE_CONTROL_SIGNALS
   val I_CBImm =  DEC_LITS.I_CBImm.U(TYPE_W) // Branch and Compare (immediate)
 
   val I_BReg  =  DEC_LITS.I_BReg.U(TYPE_W)  // Conditional branch (register)
+  val I_PCRel =  DEC_LITS.I_PCRel.U(TYPE_W) // PC-Relative
 }
 
 object DECODE_MATCHING_TABLES
@@ -315,6 +317,19 @@ object DECODE_MATCHING_TABLES
       ASSR_ADDS    -> List(I_ASSR,  OP_ADD,   Y, Y, N, Y, N),
       ASSR_SUB     -> List(I_ASSR,  OP_SUB,   Y, Y, N, N, N),
       ASSR_SUBS    -> List(I_ASSR,  OP_SUB,   Y, Y, N, Y, N),
+      // Add/subtract (extended register)
+      ASER_CMP32   -> List(I_ASER,  OP_SUB,   N, Y, N, Y, Y),
+      ASER_CMN32   -> List(I_ASER,  OP_ADD,   N, Y, N, Y, Y),
+      ASER_ADD32   -> List(I_ASER,  OP_ADD,   Y, Y, N, N, Y),
+      ASER_ADDS32  -> List(I_ASER,  OP_ADD,   Y, Y, N, Y, Y),
+      ASER_SUB32   -> List(I_ASER,  OP_SUB,   Y, Y, N, N, Y),
+      ASER_SUBS32  -> List(I_ASER,  OP_SUB,   Y, Y, N, Y, Y),
+      ASER_CMP     -> List(I_ASER,  OP_SUB,   N, Y, N, Y, N),
+      ASER_CMN     -> List(I_ASER,  OP_ADD,   N, Y, N, Y, N),
+      ASER_ADD     -> List(I_ASER,  OP_ADD,   Y, Y, N, N, N),
+      ASER_ADDS    -> List(I_ASER,  OP_ADD,   Y, Y, N, Y, N),
+      ASER_SUB     -> List(I_ASER,  OP_SUB,   Y, Y, N, N, N),
+      ASER_SUBS    -> List(I_ASER,  OP_SUB,   Y, Y, N, Y, N),
       // Add/subtract (immediate)
       ASImm_CMP32  -> List(I_ASImm, OP_SUB,   N, Y, N, Y, Y),
       ASImm_CMN32  -> List(I_ASImm, OP_ADD,   N, Y, N, Y, Y),
@@ -453,7 +468,12 @@ object DECODE_MATCHING_TABLES
       LSRegPr_LDR32   -> List(I_LSRegPr, OP_LDR32, Y, N, N, N, Y),
       LSRegPr_LDRSW   -> List(I_LSRegPr, OP_LDRSW, Y, N, N, N, N),
       LSRegPr_STR     -> List(I_LSRegPr, OP_STR64, Y, N, N, N, N),
-      LSRegPr_LDR     -> List(I_LSRegPr, OP_LDR64, Y, N, N, N, N)
+      LSRegPr_LDR     -> List(I_LSRegPr, OP_LDR64, Y, N, N, N, N),
+      // Hint
+      HINT_NOP00      -> List(I_HINT, OP_X, N, N, N, N, N),
+      HINT_NOP01      -> List(I_HINT, OP_X, N, N, N, N, N),
+      HINT_NOP10      -> List(I_HINT, OP_X, N, N, N, N, N),
+      HINT_NOP11      -> List(I_HINT, OP_X, N, N, N, N, N)
    )
 }
 
