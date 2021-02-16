@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+message ArmflexArchState_p {
+	repeated uint64 xregs = 1 [packed=false]; 
+	uint64 pc= 2;
+	uint64 sp = 3;
+	uint32 nzcv = 4;
+}
+
+message ArmflexCommitTrace_p {
+	ArmflexArchState_p state = 1;
+	uint32 inst = 2;
+	repeated uint64 mem_addr = 3;
+	repeated uint64 mem_data = 4;
+	
+	bytes inst_block_data = 5;
+	repeated bytes mem_block_data = 6;
+}
