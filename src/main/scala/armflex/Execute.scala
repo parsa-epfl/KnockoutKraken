@@ -414,16 +414,26 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   val rVal2 = WireInit(Mux(io.dinst.rs2 === 31.U, 0.U, io.rVal2))
   val rVal3 = WireInit(Mux(io.dinst.imm(4,0) === 31.U, 0.U, io.rVal3))
   // R[31] can be SP or Zero depending on instructions
-  when(io.dinst.itype === I_ASImm && io.dinst.op === OP_ADD && io.dinst.rs1 === 31.U) {
-    rVal1 := io.rVal1
+  when(io.dinst.rs1 === 31.U) {
+    rVal1 := MuxLookup(io.dinst.itype, 0.U, Array(
+      I_ASImm -> io.rVal1,
+      I_ASER -> io.rVal1
+    ))
   }
 
   // Operations
+  // Sign extend 
+  val extendReg = Module(new ExtendReg)
+  extendReg.io.value := io.rVal2
+  extendReg.io.option := io.dinst.shift_val.bits(5,3)
+  extendReg.io.shift := 0.U // No shift here
+
   // Shift
   val shiftALU = Module(new ShiftALU())
   shiftALU.io.word :=
     MuxLookup(io.dinst.itype, rVal2, Array(
                 I_ASSR  -> rVal2,
+                I_ASER  -> extendReg.io.res,
                 I_PCRel -> io.dinst.imm, // LSL 12
                 I_ASImm -> io.dinst.imm,
                 I_CCImm -> io.dinst.imm, // PASSTHROUGH
@@ -434,10 +444,12 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
                 I_LogI  -> rVal1, // PASSTHROUGH
                 I_BitF  -> rVal1 // ROR(X(Rn), immr)
               ))
-  // !shift_val.valid => PASSTHROUGH
+  // when !shift_val.valid => PASSTHROUGH
   shiftALU.io.amount := Mux(io.dinst.shift_val.valid,
-    Mux(io.dinst.itype === I_DP2S, io.rVal2(5,0), io.dinst.shift_val.bits),
-    0.U)
+    MuxLookup(io.dinst.itype, io.dinst.shift_val.bits, Array(
+      I_DP2S -> io.rVal2(5,0),
+      I_ASER -> io.dinst.shift_val.bits(2,0)
+    )), 0.U)
   shiftALU.io.opcode := io.dinst.shift_type
   shiftALU.io.is32bit := io.dinst.is32bit
 
@@ -476,6 +488,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
 
   val aluVal1 = WireInit(MuxLookup(io.dinst.itype, rVal1, Array(
                             I_ASSR  -> rVal1,
+                            I_ASER  -> rVal1,
                             I_ASImm -> rVal1,
                             I_CCImm -> rVal1,
                             I_CCReg -> rVal1,
@@ -485,6 +498,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
                           )))
   val aluVal2 = WireInit(MuxLookup(io.dinst.itype, shiftALU.io.res, Array(
                             I_ASSR  -> shiftALU.io.res,
+                            I_ASER  -> shiftALU.io.res,
                             I_ASImm -> shiftALU.io.res,
                             I_CCImm -> shiftALU.io.res, // PASSTHROUGH imm
                             I_CCReg -> shiftALU.io.res, // PASSTHROUGH rs2
@@ -548,6 +562,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
     I_DP2S  -> shiftALU.io.res,
     I_DP3S  -> dataProc3S.io.res,
     I_ASSR  -> addWithCarry.io.res,
+    I_ASER  -> addWithCarry.io.res,
     I_ASImm -> addWithCarry.io.res,
     I_MovI  -> move.io.res,
     I_CSel  -> Mux(condHolds.io.res, rVal1, addWithCarry.io.res)
@@ -577,6 +592,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
     I_CCReg -> true.B,
     I_ASImm -> true.B,
     I_ASSR  -> true.B,
+    I_ASER  -> true.B,
     I_MovI  -> true.B,
     I_CSel  -> true.B
   ))

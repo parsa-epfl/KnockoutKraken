@@ -47,7 +47,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
       I_MovI  -> inst( 4, 0),
       I_ASImm -> inst( 4, 0),
       I_ASSR  -> inst( 4, 0),
-      I_ASSR  -> inst( 4, 0),
+      I_ASER  -> inst( 4, 0),
       I_CSel  -> inst( 4, 0),
       I_LSRegPo -> inst( 4, 0),
       I_LSReg   -> inst( 4, 0),
@@ -68,6 +68,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
       I_LogSR -> inst( 9, 5),
       I_LogI  -> inst( 9, 5),
       I_ASSR  -> inst( 9, 5),
+      I_ASER  -> inst( 9, 5),
       I_ASImm -> inst( 9, 5),
       I_CCImm -> inst( 9, 5),
       I_CCReg -> inst( 9, 5),
@@ -86,6 +87,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
     rs2 := MuxLookup(itype, DontCare, Array(
       I_LogSR -> inst(20,16),
       I_ASSR  -> inst(20,16),
+      I_ASER  -> inst(20,16),
       I_CSel  -> inst(20,16),
       I_CCReg -> inst(20,16),
       I_TBImm -> inst( 4, 0),
@@ -128,6 +130,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
     shift_val.bits := MuxLookup(itype, DontCare, Array(
       I_LogSR -> inst(15,10),
       I_ASSR  -> inst(15,10),
+      I_ASER  -> inst(15,10), // NOTE: 15,13 = ExtendType, 12,10 = amount
       I_ASImm -> Mux(inst(22), 12.U, 0.U),
       I_BitF  -> inst(21,16) ))
 
@@ -135,6 +138,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
       I_DP2S  -> inst(11,10),
       I_LogSR -> inst(23,22),
       I_ASSR  -> inst(23,22),
+      I_ASER  -> LSL,
       I_ASImm -> LSL,
       I_BitF  -> ROR))
 
@@ -144,6 +148,7 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
       I_CCReg -> inst(15,12),
       I_BCImm -> inst( 3, 0)
     ))
+
     nzcv.bits := MuxLookup(itype, DontCare, Array (
       I_CCImm -> inst( 3, 0),
       I_CCReg -> inst( 3, 0)

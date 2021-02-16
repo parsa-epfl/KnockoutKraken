@@ -161,9 +161,9 @@ object DEC_LITS {
   // Instruction Types for scala
   val TYPE_W = 5
   val I_X = 0
-  val I_LogSR = 1  // Logical (shifted register)
-  val I_LogI  = 2  // Logical (immediate)
-  val I_PCRel = 3  // PC-Relative
+  val I_HINT  = 1  // HINT
+  val I_LogSR = 2  // Logical (shifted register)
+  val I_LogI  = 3  // Logical (immediate)
 
   val I_CCImm = 4  // Conditional compare (immediate)
   val I_CCReg = 5  // Conditional compare (register)
@@ -171,12 +171,13 @@ object DEC_LITS {
 
   val I_ASImm = 8  // Add/Subtract (Immediate)
   val I_ASSR  = 9  // Add/subtract (shifted register)
-  val I_MovI  = 10 // Move wide (immediate)
-  val I_BitF  = 11 // Bitfield
+  val I_ASER  = 10 // Add/subtract (extended register)
+  val I_MovI  = 11 // Move wide (immediate)
 
   val I_DP1S  = 12 // Data-processing (1 source)
   val I_DP2S  = 13 // Data-processing (2 source)
   val I_DP3S  = 14 // Data-processing (3 source)
+  val I_BitF  = 15 // Bitfield
 
   val I_LSUReg  = 16 // Load/store register (unscaled immediate)
   val I_LSRegPo = 17 // Load/store register (post-indexed)
@@ -194,4 +195,6 @@ object DEC_LITS {
   val I_CBImm = 27 // Branch and Compare (immediate)
 
   val I_BReg  = 28 // Conditional branch (register)
+  val I_PCRel = 29 // PC-Relative
+
 }
