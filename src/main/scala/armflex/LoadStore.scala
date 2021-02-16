@@ -7,30 +7,33 @@ import chisel3.util._
 import arm.PROCESSOR_TYPES._
 import arm.DECODE_CONTROL_SIGNALS._
 
-class MemReq(implicit val cfg: ProcConfig) extends Bundle
+class MemReq extends Bundle
 {
   val addr = DATA_T
   val data = DATA_T
   val reg = REG_T
 }
 
-class MInst(implicit val cfg: ProcConfig) extends Bundle
+class MInst extends Bundle
 {
 
-  val size = UInt(2.W)
+  val size = Output(UInt(2.W))
   val isPair = Output(Bool())
-  val isLoad = Bool()
-  val is32bit = Bool()
-  val isSigned= Bool()
+  val isLoad = Output(Bool())
+  val is32bit = Output(Bool())
+  val isSigned= Output(Bool())
   val memReq = Output(Vec(2, new MemReq))
 
   // With Write Back
   val rd_res = Output(DATA_T)
-  val rd = Output(Valid(REG_T))
-  val unalignedExcpSP = Output(Bool())
+  val rd = Valid(REG_T)
+  val exceptions = Valid(new Bundle {
+    val unalignedExcp = Bool()
+    val unalignedExcpSP = Bool()
+  })
 }
 
-class LDSTUnitIO(implicit val cfg: ProcConfig) extends Bundle
+class LDSTUnitIO extends Bundle
 {
   val dinst = Input(new DInst)
   val rVal1 = Input(DATA_T) // Rn
@@ -40,7 +43,7 @@ class LDSTUnitIO(implicit val cfg: ProcConfig) extends Bundle
   val minst = Output(Valid(new MInst))
 }
 
-class ExtendReg(implicit val cfg: ProcConfig) extends Module
+class ExtendReg extends Module
 {
   val io = IO(new Bundle {
                 val value = Input(DATA_T)
@@ -67,7 +70,7 @@ class ExtendReg(implicit val cfg: ProcConfig) extends Module
   io.res := res << io.shift
 }
 
-class LDSTUnit(implicit val cfg: ProcConfig) extends Module
+class LDSTUnit extends Module
 {
 
   val io = IO(new LDSTUnitIO)
@@ -172,35 +175,25 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
 
   val data = WireInit(io.rVal2) // data = Rt = rVal2
 
-  // Output
-  io.minst.bits.size := size
-  io.minst.bits.isSigned := isSigned
-  io.minst.bits.is32bit := size =/= SIZE64 && !(io.dinst.itype === I_LSUImm && io.dinst.op === OP_LDRSW)
-  io.minst.bits.isLoad := isLoad
-  io.minst.valid := MuxLookup(io.dinst.itype, false.B, Array(
-    I_LSPairPr -> true.B,
-    I_LSPair   -> true.B,
-    I_LSPairPo -> true.B,
-    I_LSUReg   -> true.B,
-    I_LSRegPr  -> true.B,
-    I_LSReg   -> true.B,
-    I_LSRegPo  -> true.B,
-    I_LSUImm -> true.B
-  ))
+  // Prepare MInst
+  val minst = Wire(new MInst)
+  minst.size := size
+  minst.isSigned := isSigned
+  minst.is32bit := size =/= SIZE64 && !(io.dinst.itype === I_LSUImm && io.dinst.op === OP_LDRSW)
+  minst.isLoad := isLoad
 
-  io.minst.bits.memReq(0).addr := ldst_address
-  io.minst.bits.memReq(0).data := data
-  io.minst.bits.memReq(0).reg := io.dinst.rd.bits
+  minst.memReq(0).addr := ldst_address
+  minst.memReq(0).data := data
+  minst.memReq(0).reg := io.dinst.rd.bits
   // For Pair LD/ST
   val dbytes = 1.U << size
-  io.minst.bits.isPair :=
+  minst.isPair :=
   (io.dinst.itype === I_LSPairPr ||
     io.dinst.itype === I_LSPair  ||
     io.dinst.itype === I_LSPairPo)
-  io.minst.bits.memReq(1).addr := ldst_address + dbytes
-  io.minst.bits.memReq(1).data := DontCare // Read 3 ports from RFile in single cycle Rd;Rt;Rt2
-  io.minst.bits.memReq(1).reg := io.dinst.rs2
-
+  minst.memReq(1).addr := ldst_address + dbytes
+  minst.memReq(1).data := DontCare // Read 3 ports from RFile in single cycle Rd;Rt;Rt2
+  minst.memReq(1).reg := io.dinst.rs2
 
   // if wback then
   //   if wb_unknown then
@@ -212,11 +205,41 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   //   else
   //     X[n] = address;
   val wback_addr = WireInit(base_address + offst)
-  io.minst.bits.unalignedExcpSP := io.dinst.rs1 === 31.U && wback_addr(1,0) =/= 0.U
-  io.minst.bits.rd_res := wback_addr
-  io.minst.bits.rd.bits := io.dinst.rs1
-  io.minst.bits.rd.valid := wback
+  minst.rd_res := wback_addr
+  minst.rd.bits := io.dinst.rs1
+  minst.rd.valid := wback
 
+  // Check for Exceptions
+  // NOTE: Read Manual section B2.5 for alignment support -> Possible performance improvements
+  val isAlignedMem_0 = WireInit(MuxLookup(minst.size, false.B, Array(
+    SIZEB  -> true.B,
+    SIZEH  -> (minst.memReq(0).addr(0) === 0.U),
+    SIZE32 -> (minst.memReq(0).addr(1,0) === 0.U),
+    SIZE64 -> (minst.memReq(0).addr(2,0) === 0.U)
+  )))
+
+  val isAlignedMem_1 = WireInit(MuxLookup(minst.size, false.B, Array(
+    SIZEB  -> true.B,
+    SIZEH  -> (minst.memReq(1).addr(0) === 0.U),
+    SIZE32 -> (minst.memReq(1).addr(1,0) === 0.U),
+    SIZE64 -> (minst.memReq(1).addr(2,0) === 0.U)
+  )))
+  minst.exceptions.bits.unalignedExcpSP := io.dinst.rs1 === 31.U && wback_addr(1,0) =/= 0.U
+  minst.exceptions.bits.unalignedExcp := !isAlignedMem_0 || (minst.isPair && !isAlignedMem_1)
+  minst.exceptions.valid := minst.exceptions.bits.asUInt.orR
+
+  // Output
+  io.minst.bits := minst
+  io.minst.valid := MuxLookup(io.dinst.itype, false.B, Array(
+    I_LSPairPr -> true.B,
+    I_LSPair   -> true.B,
+    I_LSPairPo -> true.B,
+    I_LSUReg   -> true.B,
+    I_LSRegPr  -> true.B,
+    I_LSReg   -> true.B,
+    I_LSRegPo  -> true.B,
+    I_LSUImm -> true.B
+  ))
   // TODO
   // boolean tag_checked = memop != MemOp_PREFETCH && (n != 31); // itype == LSUReg
   // boolean tag_checked = wback || (n != 31);                   // itype == LSUImm
@@ -249,7 +272,7 @@ class LDSTUnit(implicit val cfg: ProcConfig) extends Module
   val rt_unkown = WireInit(false.B)
 }
 
-class DataAlignByte(implicit val cfg: ProcConfig) extends Module {
+class DataAlignByte extends Module {
   val io = IO(new Bundle {
     val currReq = Input(UInt(1.W))
     val minst = Input(new MInst)
