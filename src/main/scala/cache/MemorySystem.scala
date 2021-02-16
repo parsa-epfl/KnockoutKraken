@@ -541,3 +541,63 @@ class DataMemorySystem(
   val cache_packet_arrive_o = IO(u_tlb_plus_cache.cache_packet_arrive_o.cloneType)
   cache_packet_arrive_o <> u_tlb_plus_cache.cache_packet_arrive_o
 }
+
+/**
+ * This module combines the Instruction path and Data path together. 
+ * Nothing special, only a wrapper :)
+ */ 
+class NearPipelineMemorySystem(
+  param: MemorySystemParameter
+) extends MultiIOModule {
+  val u_inst = Module(new InstructionMemorySystem(param))
+  // ports of instruction path
+  val icache_backend_reply_i = IO(Flipped(u_inst.cache_backend_reply_i.cloneType))
+  u_inst.cache_backend_reply_i <> icache_backend_reply_i
+  val icache_backend_request_o = IO(u_inst.cache_backend_request_o.cloneType)
+  u_inst.cache_backend_request_o <> icache_backend_request_o
+  val icache_flush_request_i = IO(u_inst.cache_flush_request_i.cloneType)
+  u_inst.cache_flush_request_i <> icache_flush_request_i
+  val icache_packet_arrive_o = IO(u_inst.cache_packet_arrive_o.cloneType)
+  u_inst.cache_packet_arrive_o <> icache_packet_arrive_o
+  val ifrontend_reply_o = IO(u_inst.frontend_reply_o.cloneType)
+  u_inst.frontend_reply_o <> ifrontend_reply_o
+  val ifrontend_request_i = IO(Flipped(u_inst.frontend_request_i.cloneType))
+  u_inst.frontend_request_i <> ifrontend_request_i
+  u_inst.stall_request_i := false.B
+  val itlb_backend_reply_i = IO(Flipped(u_inst.tlb_backend_reply_i.cloneType))
+  u_inst.tlb_backend_reply_i <> itlb_backend_reply_i
+  val itlb_backend_request_o = IO(u_inst.tlb_backend_request_o.cloneType)
+  u_inst.tlb_backend_request_o <> itlb_backend_request_o
+  val itlb_flush_request_i = IO(Flipped(u_inst.tlb_flush_request_i.cloneType))
+  u_inst.tlb_flush_request_i <> itlb_flush_request_i
+  val itlb_packet_arrive_o = IO(u_inst.tlb_packet_arrive_o.cloneType)
+  u_inst.tlb_packet_arrive_o <> itlb_packet_arrive_o
+  val itlb_violation_o = IO(u_inst.tlb_violation_o.cloneType)
+  u_inst.tlb_violation_o <> itlb_violation_o
+
+  val u_data = Module(new DataMemorySystem(param))
+  // ports of the data path
+  val dcache_backend_reply_i = IO(Flipped(u_data.cache_backend_reply_i.cloneType))
+  u_data.cache_backend_reply_i <> dcache_backend_reply_i
+  val dcache_backend_request_o = IO(u_data.cache_backend_request_o.cloneType)
+  u_data.cache_backend_request_o <> dcache_backend_request_o
+  val dcache_flush_request_i = IO(Flipped(u_data.cache_flush_request_i.cloneType))
+  u_data.cache_flush_request_i <> dcache_flush_request_i
+  val dcache_packet_arrive_o = IO(u_data.cache_packet_arrive_o.cloneType)
+  u_data.cache_packet_arrive_o <> dcache_packet_arrive_o
+  val dfrontend_reply_o = IO(u_data.frontend_reply_o.cloneType)
+  u_data.frontend_reply_o <> dfrontend_reply_o
+  val dfrontend_request_i = IO(Flipped(u_data.frontend_request_i.cloneType))
+  u_data.frontend_request_i <> dfrontend_request_i
+  u_data.stall_request_i := false.B
+  val dtlb_backend_reply_i = IO(Flipped(u_data.tlb_backend_reply_i.cloneType))
+  u_data.tlb_backend_reply_i <> dtlb_backend_reply_i
+  val dtlb_backend_request_o = IO(u_data.tlb_backend_request_o.cloneType)
+  u_data.tlb_backend_request_o <> dtlb_backend_request_o
+  val dtlb_flush_request_i = IO(Flipped(u_data.tlb_flush_request_i.cloneType))
+  u_data.tlb_flush_request_i <> dtlb_flush_request_i
+  val dtlb_packet_arrive_o = IO(u_data.tlb_packet_arrive_o.cloneType)
+  u_data.tlb_packet_arrive_o <> dtlb_packet_arrive_o
+  val dtlb_violation_o = IO(u_data.tlb_violation_o.cloneType)
+  u_data.tlb_violation_o <> dtlb_violation_o
+}
