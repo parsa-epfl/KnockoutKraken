@@ -5,7 +5,7 @@ import chisel3.util._
 
 import arm.PROCESSOR_TYPES._
 
-import util._
+import armflex.util._
 
 import TPU2STATE._
 
@@ -53,8 +53,6 @@ class TransplantUnitHostIO(implicit val cfg: ProcConfig) extends Bundle
 {
   val fire = Input(ValidTag(cfg.TAG_T))
   val done = Output(ValidTag(cfg.TAG_T))
-  val missTLB = Output(ValidTag(MISS_T, new TLBMiss))
-  val fillTLB = Input(Valid(new TLBFill))
   val getState = Input(ValidTag(cfg.TAG_T))
 }
 
@@ -72,9 +70,6 @@ class TransplantUnitCPUIO(implicit val cfg: ProcConfig) extends Bundle
   val fire = Output(ValidTag(cfg.TAG_T))
   val freeze = Output(ValidTag(cfg.TAG_T))
   val done = Input(ValidTag(cfg.TAG_T))
-
-  val missTLB = Input(ValidTag(MISS_T, new TLBMiss))
-  val fillTLB = Output(Valid(new TLBFill))
 }
 
 class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
@@ -207,10 +202,6 @@ class TransplantUnit(implicit val cfg: ProcConfig) extends Module{
   io.tpu2cpu.flush.tag := freezeTag1D
   io.host2tpu.done.valid := RegNext(doneSig)
   io.host2tpu.done.tag := freezeTag1D
-
-  // CPU <-> HOST direct communcation
-  io.host2tpu.missTLB <> io.tpu2cpu.missTLB
-  io.host2tpu.fillTLB <> io.tpu2cpu.fillTLB
 }
 
 // In parsa-epfl/qemu/fa-qflex

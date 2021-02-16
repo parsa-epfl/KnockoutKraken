@@ -7,7 +7,7 @@ import arm.PROCESSOR_TYPES._
 import arm.DECODE_CONTROL_SIGNALS._
 import arm.DECODE_MATCHING_TABLES._
 
-class DInst(implicit val cfg: ProcConfig) extends Bundle
+class DInst extends Bundle
 {
   // Data
   val rd = Valid(REG_T)
@@ -26,12 +26,9 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
   // Enables
   val nzcv  = Valid(NZCV_T)
 
-  val tag = Output(cfg.TAG_T)
   val inst32 = Valid(INST_T)
 
-  val pc = Output(DATA_T)
-
-  def decode(inst : UInt, tag_ : UInt): DInst = {
+  def decode(inst : UInt): DInst = {
     val decoder = ListLookup(inst, decode_default, decode_table)
 
     // Data
@@ -159,7 +156,6 @@ class DInst(implicit val cfg: ProcConfig) extends Bundle
     val csignals = Seq(op, rd.valid, shift_val.valid, cond.valid, nzcv.valid, is32bit)
     csignals zip cdecoder map { case (s, d) => s := d }
 
-    tag := tag_
     inst32.valid := (itype =/= I_X)
     inst32.bits := inst
 
@@ -205,28 +201,13 @@ object DInst {
     // Instruction
     dinst.inst32.bits := INST_X
     dinst.inst32.valid := N
-    dinst.tag := cfg.TAG_X
-    dinst.pc := DATA_X
     dinst
   }
 }
 
-class DecodeUnitIO(implicit val cfg: ProcConfig) extends Bundle
+class DecodeUnit(implicit val cfg: ProcConfig) extends MultiIOModule 
 {
-  // Fetch - Decode
-  val finst = Input(new FInst)
-  // Decode - Issue
-  val dinst = Output(new DInst)
-}
-
-/** Decode unit
-  */
-class DecodeUnit(implicit val cfg: ProcConfig) extends Module
-{
-  val io = IO(new DecodeUnitIO)
-  val inst = io.finst.inst
-  val dinst = WireInit(DInst())
-  dinst.decode(inst, io.finst.tag)
-  dinst.pc := io.finst.pc
-  io.dinst := dinst
+  val inst = IO(Input(INST_T))
+  val dinst = IO(Output(new DInst))
+  dinst := WireInit(DInst()).decode(inst)
 }
