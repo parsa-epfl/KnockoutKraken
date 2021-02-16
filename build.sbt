@@ -3,12 +3,16 @@ ThisBuild / scalaVersion     := "2.12.12"
 ThisBuild / version          := "0.1.0"
 ThisBuild / organization     := "parsa.epfl.ch"
 
+PB.targets in Compile := Seq(
+    scalapb.gen() -> (sourceManaged in Compile).value / "scalapb")
+
 lazy val root = (project in file("."))
   .settings(
     name := "armflex",
     libraryDependencies ++= Seq(
       "edu.berkeley.cs" %% "chisel3" % "3.4.1",
       "edu.berkeley.cs" %% "chiseltest" % "0.3.1" % "test",
+	  "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
       "com.github.tototoshi" %% "scala-csv" % "1.3.6"
     ),
     scalacOptions ++= Seq(
@@ -21,6 +25,9 @@ lazy val root = (project in file("."))
     addCompilerPlugin("edu.berkeley.cs" % "chisel3-plugin" % "3.4.1" cross CrossVersion.full),
     addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.1" cross CrossVersion.full)
   )
+libraryDependencies ++= Seq(
+)
+
 
 Test / fork := true
 testOptions in Test += Tests.Argument("-oF")

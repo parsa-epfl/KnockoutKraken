@@ -2,8 +2,10 @@ package armflex.util
 
 import chisel3._
 
+import java.nio.ByteBuffer
+
 object SoftwareStructs {
-  import scala.language.implicitConversions
+  //import scala.language.implicitConversions
 
   //implicit def uint2bigint(bits: UInt): BigInt = { bits.litValue }
   //implicit def bool2bigint(bits: Bool): BigInt = { bits.litValue }
@@ -21,17 +23,25 @@ object SoftwareStructs {
   //implicit def bool2int(bits: Bool):   Int   = { bigint2int(bool2bigint(bits)) }
   //implicit def bool2long(bits: Bool):  Long  = { bigint2long(bool2bigint(bits)) }
 
-  case class PState (
-    val xregs : List[BigInt],
-    val pc : BigInt,
-    val sp : BigInt,
-    val nzcv : Int
-  ) {
+  def asU(unsigned: Long): BigInt =
+    BigInt(0.toByte +: ByteBuffer.allocate(8).putLong(unsigned).array())
+  def asU(unsigned: Int): BigInt = 
+    BigInt(0.toByte +: ByteBuffer.allocate(4).putInt(unsigned).array())
+
+  def toLong(unsignedLong: BigInt): Long =
+    (((unsignedLong >> 1).toLong << 1) + (unsignedLong & 1).toLong)
+  def toInt(unsignedLong: BigInt): Int =
+    (((unsignedLong >> 1).toInt << 1) + (unsignedLong & 1).toInt)
+
+  case class PState(
+    val xregs: List[BigInt],
+    val pc:    BigInt,
+    val sp:    BigInt,
+    val nzcv:  Int) {
     override def toString() = {
       val name = s"PROC STATE:"
-      val regs = xregs.zipWithIndex.map {
-        case (reg, i) =>
-          s"X${i}:0x${"%016x".format(reg)}"
+      val regs = xregs.zipWithIndex.map { case (reg, i) =>
+        s"X${i}:0x${"%016x".format(reg)}"
       }.mkString("\n")
       val str = Seq(
         name,
@@ -44,30 +54,34 @@ object SoftwareStructs {
       str + "\n"
     }
 
-    def matches(other: PState): (Boolean, String) = {
+    def matches(other: PState): Option[String] = {
       var str: String = ""
-      val diffXRegs = (this.xregs zip other.xregs).zipWithIndex.filter {
-        case ((t,o), i) => t != o
+      val diffXRegs = (this.xregs zip other.xregs).zipWithIndex.filter { case ((t, o), i) =>
+        t != o
       }
-      if(!diffXRegs.isEmpty || this.pc != other.pc || this.nzcv != other.nzcv) {
+      if (!diffXRegs.isEmpty || this.pc != other.pc || this.nzcv != other.nzcv) {
         str = str ++ "PState didn't match, differences FPGA - QEMU:\n"
-        diffXRegs foreach {
-          case ((t, o), i) =>
-            str = str ++ s"X${i}:0x${"%016x".format(t)} != 0x${"%016x".format(o)}\n"
+        diffXRegs foreach { case ((t, o), i) =>
+          str = str ++ s"X${i}:0x${"%016x".format(t)} != 0x${"%016x".format(o)}\n"
         }
-        if(this.pc != other.pc)
+        if (this.pc != other.pc)
           str = str ++ s"PC:0x${"%016x".format(this.pc)} != 0x${"%016x".format(other.pc)}\n"
-        if(this.sp != other.sp)
+        if (this.sp != other.sp)
           str = str ++ s"SP:0x${"%016x".format(this.sp)} != 0x${"%016x".format(other.sp)}\n"
-        if(this.nzcv != other.nzcv)
+        if (this.nzcv != other.nzcv)
           str = str ++ s"NZCV:${this.nzcv.toBinaryString} != ${other.nzcv.toBinaryString}\n"
 
-        return (false, str)
+        return Some(str)
       } else {
-
         str = str ++ "PState matched.\n"
-        return (true, str)
+        return None
       }
     }
   }
+
+  case class CommitTrace(
+    val state:    PState,
+    val inst:     BigInt,
+    val mem_addr: List[BigInt],
+    val mem_data: List[BigInt])
 }
