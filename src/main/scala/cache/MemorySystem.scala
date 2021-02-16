@@ -117,6 +117,7 @@ class TLBPlusCache (
   frontend_reply_o.bits.hit := u_cache.frontend_reply_o.bits.hit && RegNext(u_tlb.frontend_reply_o.bits.hit && !u_tlb.frontend_reply_o.bits.violation)
   frontend_reply_o.bits.data := u_cache.frontend_reply_o.bits.data
   frontend_reply_o.bits.thread_id := u_cache.frontend_reply_o.bits.thread_id
+  frontend_reply_o.bits.dirty := u_cache.frontend_reply_o.bits.dirty
   //frontend_reply_o.bits.tlb_hit_v := && RegNext(u_tlb.frontend_reply_o.bits.hit && !u_tlb.frontend_reply_o.bits.violation)
 
   // Flush
@@ -126,6 +127,15 @@ class TLBPlusCache (
   // tlb_flush_request_i
   val tlb_flush_request_i = IO(Flipped(u_tlb.flush_request_i.cloneType))
   tlb_flush_request_i <> u_tlb.flush_request_i
+
+  // Stall
+  val stall_request_i = IO(Input(Bool()))
+  u_cache.stall_request_vi := stall_request_i 
+
+  val tlb_flush_reply_o = IO(Output(u_tlb.frontend_reply_o.cloneType))
+  tlb_flush_reply_o.bits := u_tlb.frontend_reply_o.bits
+  // TODO: When the TLB is not a register file, this logic won't hold. Find a solution to it.
+  tlb_flush_reply_o.valid := u_tlb.frontend_reply_o.valid && tlb_flush_request_i.fire()
 
   // Backend
   // tlb_backend_request_o
@@ -313,7 +323,7 @@ class CacheRequestAdaptor (
   sync_message_o <> Queue(sync_message, 2 * param.threadNumber)
 }
 
-// TODO: Add signal to indicate valid?
+// The purpose of this module is to apply masking and shifting to the data so that it's in the correct position.
 class CacheReplyAdaptor (
   val param: MemorySystemParameter
 )(
@@ -321,7 +331,7 @@ class CacheReplyAdaptor (
 ) extends MultiIOModule {
   val cache_reply_i = IO(Flipped(Valid(new FrontendReplyPacket(param.toCacheParameter()))))
   // val data_o = IO(Valid(Vec(2, PROCESSOR_TYPES.DATA_T))) 
-  val data_o = IO(Valid(Vec(2, Valid(PROCESSOR_TYPES.DATA_T))))
+  val data_o = IO(Valid(new FrontendReplyPacket(param.toCacheParameter())))
   val sync_message_i = IO(Flipped(Decoupled(new CacheInterfaceHandshakePacket(param.toCacheParameter()))))
   // sync_message_i should align with cache_reply_i
   assert(cache_reply_i.valid === sync_message_i.valid, "sync_message_i should align with cache_reply_i.")
@@ -333,36 +343,11 @@ class CacheReplyAdaptor (
 
   val recovered_data = recoverData(param.cacheBlockSize, cache_reply_i.bits.data, sync_message_i.bits.size, sync_message_i.bits.bias_addr)
 
-  // For normal case, just return is fine
-  val single_transaction_result = Wire(Valid(Vec(2, Valid(PROCESSOR_TYPES.DATA_T))))
-  single_transaction_result.bits(0).valid := cache_reply_i.bits.hit
-  single_transaction_result.bits(0).bits := recovered_data
-  single_transaction_result.bits(1) := DontCare
-  single_transaction_result.valid := sync_message_i.valid && !sync_message_i.bits.pair_v
-
-  // store context
-  class store_context_t extends Bundle {
-    val data = PROCESSOR_TYPES.DATA_T
-    val hit_v = Bool()
-    val v = Bool()
-  }
-
-  val s1_store_context_r = Reg(new store_context_t)
-  s1_store_context_r.data := recovered_data
-  s1_store_context_r.hit_v := cache_reply_i.bits.hit
-  s1_store_context_r.v := sync_message_i.valid && sync_message_i.bits.pair_v && sync_message_i.bits.order === 0.U
-  // for pair instruction, result generated here.
-  val pair_transaction_result = Wire(Valid(Vec(2, Valid(PROCESSOR_TYPES.DATA_T))))
-  pair_transaction_result.bits(0).bits := s1_store_context_r.data
-  pair_transaction_result.bits(0).valid := s1_store_context_r.hit_v
-  pair_transaction_result.bits(1).bits := recovered_data
-  pair_transaction_result.bits(1).valid := cache_reply_i.bits.hit
-  pair_transaction_result.valid := s1_store_context_r.v && sync_message_i.valid && sync_message_i.bits.pair_v && sync_message_i.bits.order === 1.U
-
-  // select data_o from two options
-  assert(!(single_transaction_result.valid && pair_transaction_result.valid), "It's impossible to collect result in both single and pair way!")
-  data_o.valid := pair_transaction_result.valid || single_transaction_result.valid
-  data_o.bits := Mux(single_transaction_result.valid, single_transaction_result.bits, pair_transaction_result.bits)
+  data_o.bits.data := recovered_data
+  data_o.bits.dirty := cache_reply_i.bits.dirty
+  data_o.bits.hit := cache_reply_i.bits.hit
+  data_o.bits.thread_id := cache_reply_i.bits.thread_id
+  data_o.valid := cache_reply_i.valid
 }
 
 }
@@ -397,13 +382,15 @@ import DMAController.Worker.XferDescBundle
 import DMAController.Frontend.{AXI4Reader, AXI4Writer}
 
 class CacheBackendAXIAdaptors(param: MemorySystemParameter) extends MultiIOModule {
-  val M_AXI = new AXI4(
+  val M_AXI = IO(new AXI4(
     param.pAddressWidth, param.cacheBlockSize
-  )
+  ))
 
   val cache_backend_request_i = IO(Flipped(Decoupled(new MergedBackendRequestPacket(param.toCacheParameter()))))
 
-  val q_cache_backend_request = Queue(cache_backend_request_i, 8)
+  val q_cache_backend_request = Queue(cache_backend_request_i, param.threadNumber * 2)
+  val pending_queue_empty_o = IO(Output(Bool()))
+  pending_queue_empty_o := !q_cache_backend_request.valid
 
   val cache_backend_reply_o = IO(Decoupled(new MissResolveReplyPacket(param.toCacheParameter())))
 
@@ -411,13 +398,16 @@ class CacheBackendAXIAdaptors(param: MemorySystemParameter) extends MultiIOModul
 
   M_AXI.ar <> u_axi_read_engine.io.bus.ar
   M_AXI.r <> u_axi_read_engine.io.bus.r
+  u_axi_read_engine.io.bus.b <> AXI4B.stub()
+  u_axi_read_engine.io.bus.aw <> AXI4AW.stub(param.pAddressWidth)
+  u_axi_read_engine.io.bus.w <> AXI4W.stub(param.cacheBlockSize)
 
   u_axi_read_engine.io.xfer.length := 1.U
   u_axi_read_engine.io.xfer.address := Cat(q_cache_backend_request.bits.addr, Fill(log2Ceil(param.cacheBlockSize), 0.U))
   u_axi_read_engine.io.xfer.valid := !q_cache_backend_request.bits.w_v && q_cache_backend_request.valid
 
   cache_backend_reply_o.bits.addr := q_cache_backend_request.bits.addr
-  cache_backend_reply_o.bits.data := u_axi_read_engine.io.dataOut.bits
+  cache_backend_reply_o.bits.data := u_axi_read_engine.io.dataOut.bits // FIXME: Add FIFO here to shrink the critical path?
   cache_backend_reply_o.bits.not_sync_with_data_v := false.B
   cache_backend_reply_o.bits.thread_id := q_cache_backend_request.bits.thread_id
   cache_backend_reply_o.valid := u_axi_read_engine.io.dataOut.valid
@@ -441,7 +431,10 @@ class CacheBackendAXIAdaptors(param: MemorySystemParameter) extends MultiIOModul
   M_AXI.aw <> u_axi_write_engine.io.bus.aw
   M_AXI.w <> u_axi_write_engine.io.bus.w
   M_AXI.b <> u_axi_write_engine.io.bus.b
+  u_axi_write_engine.io.bus.ar <> AXI4AR.stub(param.pAddressWidth)
+  u_axi_write_engine.io.bus.r <> AXI4R.stub(param.cacheBlockSize)
 }
+
 }
 
 class InstructionMemorySystem(
@@ -465,6 +458,12 @@ class InstructionMemorySystem(
   val tlb_flush_request_i = IO(Flipped(u_tlb_plus_cache.tlb_flush_request_i.cloneType))
   tlb_flush_request_i <> u_tlb_plus_cache.tlb_flush_request_i
 
+  val tlb_flush_reply_o = IO(u_tlb_plus_cache.tlb_flush_reply_o.cloneType)
+  tlb_flush_reply_o <> u_tlb_plus_cache.tlb_flush_reply_o
+
+  val stall_request_i = IO(Input(Bool()))
+  u_tlb_plus_cache.stall_request_i := stall_request_i
+
   val tlb_backend_request_o = IO(u_tlb_plus_cache.tlb_backend_request_o.cloneType)
   tlb_backend_request_o <> u_tlb_plus_cache.tlb_backend_request_o
 
@@ -472,7 +471,7 @@ class InstructionMemorySystem(
   tlb_backend_reply_i <> u_tlb_plus_cache.tlb_backend_reply_i
 
   val cache_backend_request_o = IO(u_tlb_plus_cache.cache_backend_request_o.cloneType)
-  cache_backend_request_o <> u_tlb_plus_cache.cache_backend_request_o.cloneType
+  cache_backend_request_o <> u_tlb_plus_cache.cache_backend_request_o
 
   val cache_backend_reply_i = IO(Flipped(u_tlb_plus_cache.cache_backend_reply_i.cloneType))
   cache_backend_reply_i <> u_tlb_plus_cache.cache_backend_reply_i
@@ -515,6 +514,12 @@ class DataMemorySystem(
   val tlb_flush_request_i = IO(Flipped(u_tlb_plus_cache.tlb_flush_request_i.cloneType))
   tlb_flush_request_i <> u_tlb_plus_cache.tlb_flush_request_i
 
+  val tlb_flush_reply_o = IO(u_tlb_plus_cache.tlb_flush_reply_o.cloneType)
+  tlb_flush_reply_o <> u_tlb_plus_cache.tlb_flush_reply_o
+
+  val stall_request_i = IO(Input(Bool()))
+  u_tlb_plus_cache.stall_request_i := stall_request_i
+
   val tlb_backend_request_o = IO(u_tlb_plus_cache.tlb_backend_request_o.cloneType)
   tlb_backend_request_o <> u_tlb_plus_cache.tlb_backend_request_o
 
@@ -535,4 +540,64 @@ class DataMemorySystem(
 
   val cache_packet_arrive_o = IO(u_tlb_plus_cache.cache_packet_arrive_o.cloneType)
   cache_packet_arrive_o <> u_tlb_plus_cache.cache_packet_arrive_o
+}
+
+/**
+ * This module combines the Instruction path and Data path together. 
+ * Nothing special, only a wrapper :)
+ */ 
+class NearPipelineMemorySystem(
+  param: MemorySystemParameter
+) extends MultiIOModule {
+  val u_inst = Module(new InstructionMemorySystem(param))
+  // ports of instruction path
+  val icache_backend_reply_i = IO(Flipped(u_inst.cache_backend_reply_i.cloneType))
+  u_inst.cache_backend_reply_i <> icache_backend_reply_i
+  val icache_backend_request_o = IO(u_inst.cache_backend_request_o.cloneType)
+  u_inst.cache_backend_request_o <> icache_backend_request_o
+  val icache_flush_request_i = IO(u_inst.cache_flush_request_i.cloneType)
+  u_inst.cache_flush_request_i <> icache_flush_request_i
+  val icache_packet_arrive_o = IO(u_inst.cache_packet_arrive_o.cloneType)
+  u_inst.cache_packet_arrive_o <> icache_packet_arrive_o
+  val ifrontend_reply_o = IO(u_inst.frontend_reply_o.cloneType)
+  u_inst.frontend_reply_o <> ifrontend_reply_o
+  val ifrontend_request_i = IO(Flipped(u_inst.frontend_request_i.cloneType))
+  u_inst.frontend_request_i <> ifrontend_request_i
+  u_inst.stall_request_i := false.B
+  val itlb_backend_reply_i = IO(Flipped(u_inst.tlb_backend_reply_i.cloneType))
+  u_inst.tlb_backend_reply_i <> itlb_backend_reply_i
+  val itlb_backend_request_o = IO(u_inst.tlb_backend_request_o.cloneType)
+  u_inst.tlb_backend_request_o <> itlb_backend_request_o
+  val itlb_flush_request_i = IO(Flipped(u_inst.tlb_flush_request_i.cloneType))
+  u_inst.tlb_flush_request_i <> itlb_flush_request_i
+  val itlb_packet_arrive_o = IO(u_inst.tlb_packet_arrive_o.cloneType)
+  u_inst.tlb_packet_arrive_o <> itlb_packet_arrive_o
+  val itlb_violation_o = IO(u_inst.tlb_violation_o.cloneType)
+  u_inst.tlb_violation_o <> itlb_violation_o
+
+  val u_data = Module(new DataMemorySystem(param))
+  // ports of the data path
+  val dcache_backend_reply_i = IO(Flipped(u_data.cache_backend_reply_i.cloneType))
+  u_data.cache_backend_reply_i <> dcache_backend_reply_i
+  val dcache_backend_request_o = IO(u_data.cache_backend_request_o.cloneType)
+  u_data.cache_backend_request_o <> dcache_backend_request_o
+  val dcache_flush_request_i = IO(Flipped(u_data.cache_flush_request_i.cloneType))
+  u_data.cache_flush_request_i <> dcache_flush_request_i
+  val dcache_packet_arrive_o = IO(u_data.cache_packet_arrive_o.cloneType)
+  u_data.cache_packet_arrive_o <> dcache_packet_arrive_o
+  val dfrontend_reply_o = IO(u_data.frontend_reply_o.cloneType)
+  u_data.frontend_reply_o <> dfrontend_reply_o
+  val dfrontend_request_i = IO(Flipped(u_data.frontend_request_i.cloneType))
+  u_data.frontend_request_i <> dfrontend_request_i
+  u_data.stall_request_i := false.B
+  val dtlb_backend_reply_i = IO(Flipped(u_data.tlb_backend_reply_i.cloneType))
+  u_data.tlb_backend_reply_i <> dtlb_backend_reply_i
+  val dtlb_backend_request_o = IO(u_data.tlb_backend_request_o.cloneType)
+  u_data.tlb_backend_request_o <> dtlb_backend_request_o
+  val dtlb_flush_request_i = IO(Flipped(u_data.tlb_flush_request_i.cloneType))
+  u_data.tlb_flush_request_i <> dtlb_flush_request_i
+  val dtlb_packet_arrive_o = IO(u_data.tlb_packet_arrive_o.cloneType)
+  u_data.tlb_packet_arrive_o <> dtlb_packet_arrive_o
+  val dtlb_violation_o = IO(u_data.tlb_violation_o.cloneType)
+  u_data.tlb_violation_o <> dtlb_violation_o
 }

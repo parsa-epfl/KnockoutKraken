@@ -3,102 +3,98 @@ package armflex.demander.peripheral
 import chisel3._
 import chisel3.util._
 
-import DMAController.Bus._
-import DMAController.Frontend._
-import armflex.util.SoftwareStructs
-
-class PageMover(
-  sourceAddressWidth: Int,
-  targetAddressWidth: Int
-) extends MultiIOModule {
-  class request_t extends Bundle {
-    val src_addr = UInt(sourceAddressWidth.W)
-    val dst_addr = UInt(targetAddressWidth.W) 
-  }
-  val move_request_i = IO(Flipped(Decoupled(new request_t)))
-  val done_o = IO(Output(Bool()))
-  val SRC_AXI_M = IO(new AXI4(sourceAddressWidth, 512))
-  val DST_AXI_M = IO(new AXI4(targetAddressWidth, 512))
-
-  val u_src_to_stream = Module(new AXI4Reader(sourceAddressWidth, 512))
-  val u_stream_to_dst = Module(new AXI4Writer(targetAddressWidth, 512))
-
-  u_src_to_stream.io.dataOut <> u_stream_to_dst.io.dataIn
-  u_src_to_stream.io.bus <> SRC_AXI_M
-  u_stream_to_dst.io.bus <> DST_AXI_M
-
-  u_src_to_stream.io.xfer.address := move_request_i.bits.src_addr
-  u_src_to_stream.io.xfer.length := 64.U
-  u_src_to_stream.io.xfer.valid := move_request_i.valid
-
-  u_stream_to_dst.io.xfer.address := move_request_i.bits.dst_addr
-  u_stream_to_dst.io.xfer.length := 64.U
-  u_stream_to_dst.io.xfer.valid := move_request_i.valid
-
-  // The ready order of two movers is:
-  //  1. u_src_to_stream
-  //  2. u_stream_to_dst
-  val first_ready_r = RegInit(false.B)
-  val ready_r = RegInit(true.B)
-
-  when(move_request_i.fire()){
-    first_ready_r := false.B
-    ready_r := false.B
-  }.elsewhen(u_src_to_stream.io.xfer.done){
-    first_ready_r := true.B
-  }.elsewhen(first_ready_r && u_stream_to_dst.io.xfer.done){
-    ready_r := true.B
-    first_ready_r := false.B
-  }
-
-  move_request_i.ready := ready_r
-  done_o := first_ready_r && u_stream_to_dst.io.xfer.done
-
-}
-
+import armflex.demander._
+import armflex.demander.software_bundle._
 
 import armflex.cache.{
   CacheFrontendFlushRequest,
   CacheParameter,
+  TLBTagPacket,
+  TLBFrontendReplyPacket
 }
+import armflex.cache.MemorySystemParameter
+
 
 /**
  * Delete a page according to the given PTE.
+ * Replated function: movePageToQEMU
  * 
  * This module will:
- * 1. Flush I$ and D$ according to the property of this page.
+ * 1. Lookup the Thread table for the thread. If not paried with a thread, go to 3.
+ * 2. Flush TLB. If hit and dirty, update the entry.
+ * 3. Notify QEMU that an eviction will start.
+ * 4. Flush I$ and D$ according to the property of this page.
  * idea: judge the type of cache (I or D) by the permission. If read only, I$.
- * 2. Wait for the writing list to complete
- * 3. Push the page to the QEMU page buffer if this page is dirty
- * 4. Send message to QEMU
+ * 5. Wait for the writing list to complete
+ * 6. Push the page to the QEMU page buffer if this page is dirty
+ * 7. Send message to QEMU that the eviction is complete
  * 
- * @param param the parameter of the cache
+ * @param param the parameter of the MemorySystem
  */ 
 class PageDeletor(
-  param: CacheParameter
+  param: MemorySystemParameter
 ) extends MultiIOModule {
-  val sIdle :: sFlush :: sPipe :: sWait :: sMove :: sSend :: Nil = Enum(6)
+  val sIdle :: sGetTID :: sFlushTLB :: sNotify :: sFlushPage :: sPipe :: sWait :: sMove :: sSend :: Nil = Enum(9)
   val state_r = RegInit(sIdle)
 
-  // Port to receive request
-  val request_i = IO(Flipped(Decoupled(new SoftwareBundle.PTEntry)))
-  val request_r = Reg(new SoftwareBundle.PTEntry)
-  when(request_i.fire()){
-    request_r := request_i.bits
-  }
-  request_i.ready := state_r === sIdle
+  val page_delete_req_i = IO(Flipped(Decoupled(new PageTableItem)))
 
+  val item_r = Reg(new PageTableItem)
+  
+  // sGetTID
+  val tt_pid_o = IO(Output(UInt(ParameterConstants.process_id_width.W)))
+  tt_pid_o := item_r.tag.process_id
+  val tt_tid_i = IO(Input(new peripheral.ThreadLookupResultPacket(param.threadNumber))) // If miss, directly jump to the delete page.
+
+  val item_tid_r = Reg(UInt(param.threadNumber.W))
+  when(state_r === sGetTID){
+    item_tid_r := tt_tid_i.thread_id
+  }
+
+  class tlb_flush_request_t extends Bundle {
+    val req = new TLBTagPacket(param.toTLBParameter())
+    val which = UInt(1.W)
+  }
+
+  // sFlushTLB
+  val tlb_flush_request_o = IO(Decoupled(new tlb_flush_request_t))
+  tlb_flush_request_o.bits.req.thread_id := item_tid_r
+  tlb_flush_request_o.bits.req.vpage := item_r.tag.vpn
+  tlb_flush_request_o.bits.which := Mux(item_r.entry.permission === 2.U, 0.U, 1.U)
+  tlb_flush_request_o.valid := state_r === sFlushTLB
+  val tlb_frontend_reply_i = IO(Flipped(Valid(new TLBFrontendReplyPacket(param.toTLBParameter()))))
+
+  // update the modified bit
+  when(page_delete_req_i.fire()){
+    item_r := page_delete_req_i.bits
+  }.elsewhen(
+    state_r === sFlushTLB && 
+    tlb_flush_request_o.fire() && 
+    tlb_frontend_reply_i.bits.dirty && 
+    tlb_frontend_reply_i.bits.hit
+  ){
+    assert(tlb_frontend_reply_i.valid)
+    item_r.entry.modified := true.B
+  }
+
+  // sNotify
+  // Port to send a starting message.
+  val start_message_o = IO(Decoupled(new PageEvictNotification(QEMUMessagesType.sEvictNotify)))
+  start_message_o.bits.pte := item_r.entry
+  start_message_o.valid := state_r === sNotify
+
+  // sFlush
   // Ports for flushing cache
-  val icache_flush_request_o = IO(Decoupled(new CacheFrontendFlushRequest(param)))
-  val dcache_flush_request_o = IO(Decoupled(new CacheFrontendFlushRequest(param)))
+  val icache_flush_request_o = IO(Decoupled(new CacheFrontendFlushRequest(param.toCacheParameter())))
+  val dcache_flush_request_o = IO(Decoupled(new CacheFrontendFlushRequest(param.toCacheParameter())))
 
   // Counter to monitor the flush process
   val flush_cnt_r = RegInit(0.U(6.W))
-  val flush_which = Mux(request_r.permission, true.B, false.B) // true: D Cache, false: I Cache
+  val flush_which = Mux(item_r.entry.permission =/= 2.U, true.B, false.B) // true: D Cache, false: I Cache
   val flush_fired = Mux(flush_which, dcache_flush_request_o.fire(), icache_flush_request_o.fire())
-  when(request_i.fire()){
+  when(page_delete_req_i.fire()){
     flush_cnt_r := 0.U
-  }.elsewhen(state_r === sFlush){
+  }.elsewhen(state_r === sFlushPage){
     flush_cnt_r := Mux(
      flush_fired,
       flush_cnt_r + 1.U,
@@ -106,73 +102,120 @@ class PageDeletor(
     )
   }
 
-  icache_flush_request_o.bits.addr := Cat(request_r.ppn, flush_cnt_r)
+  icache_flush_request_o.bits.addr := Cat(item_r.entry.ppn, flush_cnt_r)
   icache_flush_request_o.bits.thread_id := 0.U
   dcache_flush_request_o.bits := icache_flush_request_o.bits
   
-  icache_flush_request_o.valid := state_r === sFlush && !flush_which
-  dcache_flush_request_o.valid := state_r === sFlush && flush_which
+  icache_flush_request_o.valid := state_r === sFlushPage && !flush_which
+  dcache_flush_request_o.valid := state_r === sFlushPage && flush_which
 
+  // sPipe
   // Wait 4 cycles so that the request has been piped.
   val pipe_cnt_r = RegInit(0.U(2.W))
-  when(state_r === sFlush && flush_cnt_r === 63.U && flush_fired){
+  when(state_r === sFlushPage && flush_cnt_r === 63.U && flush_fired){
     pipe_cnt_r := 0.U
   }.elsewhen(state_r === sPipe){
     pipe_cnt_r := pipe_cnt_r + 1.U
   }
 
+  // sWait
   // Eviction done? (You have to wait for like two / three cycles to get the correct result.)
   val icache_wb_queue_empty_i = IO(Input(Bool()))
+  val stall_icache_vo = IO(Output(Bool()))
+  stall_icache_vo := state_r === sWait && item_r.entry.permission === 2.U
   val dcache_wb_queue_empty_i = IO(Input(Bool()))
-  val wait_which = Mux(request_r.permission, dcache_wb_queue_empty_i, icache_wb_queue_empty_i)
+  val stall_dcache_vo = IO(Output(Bool()))
+  stall_dcache_vo := state_r === sWait && item_r.entry.permission =/= 2.U
 
-  // Port to drive DMA
-  val u_page_mover = Module(new PageMover(36, 64))
-  u_page_mover.move_request_i.bits.src_addr := Cat(request_r.ppn, 0.U(12.W))
-  // TODO: The base address of the pageO
-  u_page_mover.move_request_i.bits.dst_addr := 0x69ABCDEF.U
-  u_page_mover.move_request_i.valid := state_r === sMove
+  val queue_empty = Mux(item_r.entry.permission =/= 2.U, dcache_wb_queue_empty_i, icache_wb_queue_empty_i)
 
-  val SRC_AXI_M = IO(u_page_mover.SRC_AXI_M.cloneType)  
-  SRC_AXI_M <> u_page_mover.SRC_AXI_M
-  val DST_AXI_M = IO(u_page_mover.DST_AXI_M.cloneType)
-  DST_AXI_M <> u_page_mover.DST_AXI_M
+  // sMove
+  // A DMA that moves data from the DRAM to page buffer.
+  class page_buffer_write_request_t extends Bundle {
+    val addr = UInt(10.W) // TODO: Make external and let it becomes a parameter.
+    val data = UInt(512.W) // TODO: Make external.
+    val last_v = Bool()
+  }
+  val page_buffer_write_o = IO(Decoupled(new page_buffer_write_request_t))
 
+  val u_read_dma = Module(new DMAController.Frontend.AXI4Reader(36, 512))
+  val M_AXI = IO(new DMAController.Bus.AXI4(36, 512))
+  u_read_dma.io.bus <> M_AXI
+  u_read_dma.io.xfer.address := Cat(item_r.entry.ppn, Fill(12, 0.U(1.W)))
+  u_read_dma.io.xfer.length := 64.U
+  u_read_dma.io.xfer.valid := state_r === sMove
+  val dma_data_q = Queue(u_read_dma.io.dataOut, 2) // shrink the critical path.
+
+  // A counter to control the address of the output
+  // ? What if I want to delete more than one page at the same time?
+  // TODO: We need a method to assign addresses to the page buffer. Maybe a stack or something else.
+  // ? Actually I prefer a pointer.
+  val page_buffer_addr_cnt_r = RegInit(0.U(6.W)) 
+  page_buffer_write_o.bits.data := dma_data_q.bits
+  page_buffer_write_o.bits.addr := page_buffer_addr_cnt_r
+  page_buffer_write_o.bits.last_v := page_buffer_addr_cnt_r === 63.U
+  page_buffer_write_o.valid := dma_data_q.valid
+  dma_data_q.ready := page_buffer_write_o.ready
+
+  when(state_r === sIdle){
+    page_buffer_addr_cnt_r := 0.U
+  }.elsewhen(page_buffer_write_o.fire()){
+    page_buffer_addr_cnt_r := page_buffer_addr_cnt_r + 1.U
+  }
+
+  // sSend
   // Port to send message to QEMU
-  val message_to_qemu_o = IO(Decoupled(new SoftwareBundle.PTEntry))
-  message_to_qemu_o.bits := request_r
-  message_to_qemu_o.valid := state_r === sSend
+  val done_message_o = IO(Decoupled(new PageEvictNotification(QEMUMessagesType.sEvictDone)))
+  done_message_o.bits.pte := item_r.entry
+  done_message_o.valid := state_r === sSend
 
   // Update logic of the state machine
   switch(state_r){
     is(sIdle){
-      state_r := Mux(request_i.fire(), sFlush, sIdle)
+      state_r := Mux(page_delete_req_i.fire(), sGetTID, sIdle)
     }
-    is(sFlush){
-      state_r := Mux(flush_cnt_r === 63.U && flush_fired, sPipe, sFlush)
+    is(sGetTID){
+      state_r := Mux(tt_tid_i.hit_v, sFlushTLB, sNotify)
+    }
+    is(sFlushTLB){
+      state_r := Mux(tlb_flush_request_o.fire(), sNotify, sFlushTLB)
+    }
+    is(sNotify){
+      state_r := Mux(
+        start_message_o.fire(),
+        sFlushPage,
+        sNotify
+      )
+    }
+    is(sFlushPage){
+      state_r := Mux(flush_cnt_r === 63.U && flush_fired, sPipe, sFlushPage)
     }
     is(sPipe){
       state_r := Mux(pipe_cnt_r === 3.U, sWait, sPipe)
     }
     is(sWait){
       state_r := Mux(
-        wait_which, 
-        Mux(request_r.modified, sMove, sSend),
-        sWait)
+        queue_empty, 
+        Mux(item_r.entry.modified, sMove, sIdle),
+        sWait
+      )
     }
     is(sMove){
-      state_r := Mux(u_page_mover.done_o, sSend, sMove)
+      state_r := Mux(u_read_dma.io.xfer.done, sSend, sMove)
     }
     is(sSend){
-      state_r := Mux(message_to_qemu_o.fire(), sIdle, sSend)
+      state_r := Mux(done_message_o.fire(), sIdle, sSend)
     }
   }
+
+  page_delete_req_i.ready := state_r === sIdle
+  
+  val done_o = IO(Output(Bool()))
+  done_o := state_r === sWait && queue_empty && !item_r.entry.modified ||
+    state_r === sSend && done_message_o.fire()
 }
 
-object PageMoverVerilogEmitter extends App {
-  import chisel3.stage.ChiselStage
-  val c = new ChiselStage
-  println(c.emitVerilog(new PageDeletor(
-    new CacheParameter()
-  )))
+object PageDeletorVerilogEmitter extends App {
+  val c = new chisel3.stage.ChiselStage
+  println(c.emitVerilog(new PageDeletor(new MemorySystemParameter())))
 }

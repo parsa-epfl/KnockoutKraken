@@ -68,6 +68,12 @@ object AXI4AW {
     aw.awvalid := 0.U
     aw
   }
+
+  def stub(addrWidth: Int): AXI4AW = {
+    val aw = Wire(new AXI4AW(addrWidth))
+    aw.awready := false.B
+    aw
+  }
 }
 
 class AXI4W(val dataWidth : Int) extends Bundle{
@@ -95,6 +101,12 @@ object AXI4W{
     w.wvalid := 0.U
     w
   }
+
+  def stub(dataWidth: Int): AXI4W = {
+    val w = Wire(new AXI4W(dataWidth))
+    w.wready := false.B
+    w
+  }
 }
 
 class AXI4B extends Bundle{
@@ -110,9 +122,18 @@ object AXI4B{
     b.bready := ready
     b
   }
+
   def tieOff(): AXI4B = {
     val b = Wire(new AXI4B())
     b.bready := 0.U
+    b
+  }
+
+  def stub(): AXI4B = {
+    val b = Wire(new AXI4B())
+    b.bid := DontCare
+    b.bresp := DontCare
+    b.bvalid := false.B
     b
   }
 }
@@ -160,6 +181,12 @@ object AXI4AR{
     ar.arvalid := 0.U
     ar
   }
+
+  def stub(addrWidth: Int): AXI4AR = {
+    val ar = Wire(new AXI4AR(addrWidth))
+    ar.arready := false.B
+    ar
+  }
 }
 
 class AXI4R(val dataWidth : Int) extends Bundle{
@@ -180,6 +207,16 @@ object AXI4R{
   def tieOff(dataWidth : Int): AXI4R = {
     val r = Wire(new AXI4R(dataWidth))
     r.rready := 0.U
+    r
+  }
+
+  def stub(dataWidth: Int): AXI4R = {
+    val r = Wire(new AXI4R(dataWidth))
+    r.rdata := DontCare
+    r.rid := DontCare
+    r.rlast := DontCare
+    r.rresp := DontCare
+    r.rvalid := false.B
     r
   }
 }

@@ -79,13 +79,13 @@ class TLBFrontendReplyPacket(param: TLBParameter) extends Bundle {
  * Request TLB send to the backend for looking up the miss entry or writing back.
  * @param param the TLB Parameter
  * 
- * TODO: Make it compatible with TLBAccessRequestPacket
  */ 
 class TLBBackendRequestPacket(param: TLBParameter) extends Bundle {
   val tag = new TLBTagPacket(param)
   val entry = new TLBEntryPacket(param)
   val w_v = Bool()
   val flush_v = Bool()
+  val need_write_permission_v = Bool()
 
   override def cloneType: this.type = new TLBBackendRequestPacket(param).asInstanceOf[this.type]
 
@@ -140,6 +140,9 @@ class BaseTLB(
     }
   ))
 
+  // It's not necessary to stall the TLB from outside.
+  u_cache.stall_request_vi := false.B
+
   // bind the frontend_request
   u_cache.frontend_request_i.bits.addr := frontend_request_i.bits.asUInt()
   u_cache.frontend_request_i.bits.thread_id := frontend_request_i.bits.tag.thread_id
@@ -167,6 +170,7 @@ class BaseTLB(
   val frontend_response =  u_cache.frontend_reply_o.bits.data.asTypeOf(new TLBEntryPacket(param))
   // after get response, check the permission
   violation_o.bits := u_cache.frontend_reply_o.bits.thread_id
+  // TODO: Not very sure whether a flush will trigger a violation problem.
   violation_o.valid := u_cache.frontend_reply_o.valid && s1_wr_v_r && !frontend_response.isWritable()
   // assign frontend_reply_o
   frontend_reply_o.valid := u_cache.frontend_reply_o.valid
@@ -179,6 +183,7 @@ class BaseTLB(
   backend_request_o.bits.entry := u_cache.backend_request_o.bits.data.asTypeOf(new TLBEntryPacket(param))
   backend_request_o.bits.w_v := u_cache.backend_request_o.bits.w_v
   backend_request_o.bits.flush_v := u_cache.backend_request_o.bits.flush_v
+  backend_request_o.bits.need_write_permission_v := u_cache.backend_request_o.bits.need_write_permission_v
   backend_request_o.valid := u_cache.backend_request_o.valid
   u_cache.backend_request_o.ready := backend_request_o.ready
 

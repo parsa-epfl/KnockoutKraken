@@ -132,6 +132,7 @@ class MergedBackendRequestPacket(param: CacheParameter) extends Bundle{
   val thread_id = UInt(param.threadIDWidth().W)
   val w_v = Bool()
   val flush_v = Bool() // this request is caused by flush
+  val need_write_permission_v = Bool()
   val data = UInt(param.blockBit.W)
 
   override def cloneType: this.type = new MergedBackendRequestPacket(param).asInstanceOf[this.type]
@@ -149,6 +150,7 @@ class BackendRequestMerger(param: CacheParameter) extends MultiIOModule{
   read_request_converted.bits.thread_id := read_request_i.bits.thread_id
   read_request_converted.bits.w_v := false.B
   read_request_converted.bits.flush_v := false.B
+  read_request_converted.bits.need_write_permission_v := read_request_i.bits.need_write_permission_v
   read_request_converted.valid := read_request_i.valid
   read_request_i.ready := read_request_converted.ready
 
@@ -158,6 +160,7 @@ class BackendRequestMerger(param: CacheParameter) extends MultiIOModule{
   write_request_converted.bits.thread_id := DontCare
   write_request_converted.bits.w_v := true.B
   write_request_converted.bits.flush_v := write_request_i.bits.flush_v
+  write_request_converted.bits.need_write_permission_v := true.B
   write_request_converted.valid := write_request_i.valid
   write_request_i.ready := write_request_converted.ready
 
@@ -254,6 +257,7 @@ class BaseCache(
   val frontend_request_i = IO(Flipped(Decoupled(new CacheFrontendRequestPacket(param))))
   val flush_request_i = IO(Flipped(Decoupled(new CacheFrontendFlushRequest(param))))
   val refill_request_i = IO(Flipped(Decoupled(new MissResolveReplyPacket(param))))
+  val stall_request_vi = IO(Input(Bool()))
 
   //val refill_request = Wire(u_bank_frontend.frontend_request_i.cloneType)
   //refill_request.valid := u_refill_queue.refill_o.valid
@@ -306,7 +310,9 @@ class BaseCache(
   // The refilling request from the backend of the cache
   u_frontend_arb.io.in(1) <> refill_request_internal
 
-  u_frontend_arb.io.out <> u_bank_frontend.frontend_request_i
+  u_bank_frontend.frontend_request_i.bits := u_frontend_arb.io.out.bits
+  u_bank_frontend.frontend_request_i.valid := !stall_request_vi && u_frontend_arb.io.out.valid
+  u_frontend_arb.io.out.ready := !stall_request_vi && u_bank_frontend.frontend_request_i.ready
 
 
   // frontend_reply_o: Response to the R/W request from the pipeline

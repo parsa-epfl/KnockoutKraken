@@ -41,7 +41,6 @@ class AXI4Reader(val addrWidth : Int, val dataWidth : Int) extends Module{
 
   val state = RegInit(sIdle)
 
-  val done = RegInit(false.B)
   val enable = RegInit(false.B)
   val last = RegInit(false.B)
   val araddr = RegInit(0.U(addrWidth.W))
@@ -60,11 +59,10 @@ class AXI4Reader(val addrWidth : Int, val dataWidth : Int) extends Module{
 
   io.dataOut.valid := valid
   io.dataOut.bits := io.bus.r.rdata
-  io.xfer.done := done
+  io.xfer.done := state === sDone
 
   switch(state){
     is(sIdle){
-      done := false.B
       when(io.xfer.valid){
         state := sAddr
         arvalid := true.B
@@ -88,7 +86,6 @@ class AXI4Reader(val addrWidth : Int, val dataWidth : Int) extends Module{
       }
     }
     is(sDone){
-      done := true.B
       state := sIdle
     }
   }
