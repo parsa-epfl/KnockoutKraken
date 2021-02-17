@@ -1,7 +1,7 @@
 package armflex.util
 
 import SoftwareStructs._
-
+import armflex_p.armflex_p
 import armflex_p.ArmflexArchState_p
 import armflex_p.ArmflexCommitTrace_p
 

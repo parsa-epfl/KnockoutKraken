@@ -122,7 +122,6 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
       }
       // 3.2 Send eviction start
       dut.expectQEMUMessage(
-        0,
         5,
         Seq(0x10, 1, 1)
       )
@@ -161,7 +160,6 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
 
       // 3.6 Send eviction done
       dut.expectQEMUMessage(
-        64, // increase by 1.
         6,
         Seq(0x10, 1, 1)
       )

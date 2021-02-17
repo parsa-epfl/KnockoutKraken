@@ -47,7 +47,7 @@ class AXIRAMController(
   //  Read logic
 
   //! Only INCR burst mode is support.
-  when(S_AXI.ar.arvalid){
+  when(S_AXI.ar.arvalid && S_AXI.ar.arlen =/= 0.U){
     assert(S_AXI.ar.arburst === 1.U)
   }
 

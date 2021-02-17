@@ -112,12 +112,6 @@ class AXIRAMControllerTester extends FreeSpec with ChiselScalatestTester {
           dut.clock.step()
         }
       }.join()
-
-      // Done
-      dut.read_dma_config_i.done.expect(true.B)
-      dut.clock.step()
-
-      dut.read_dma_config_i.done.expect(false.B)
     }
   }
 
@@ -156,15 +150,6 @@ class AXIRAMControllerTester extends FreeSpec with ChiselScalatestTester {
           }
         }
       }.join()
-
-      // Wait for response
-      dut.clock.step()
-      // wait done raise up
-      dut.clock.step()
-      dut.write_dma_config_i.done.expect(true.B)
-      dut.clock.step()
-      dut.write_dma_config_i.done.expect(false.B)
-      dut.clock.step()
     }
   }
 }

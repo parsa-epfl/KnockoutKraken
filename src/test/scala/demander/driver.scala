@@ -115,8 +115,6 @@ class PageDemanderDUT(
   val S_AXI_PAGE = IO(Flipped(u_page_demander.S_AXI_PAGE.cloneType))
   S_AXI_PAGE <> u_page_demander.S_AXI_PAGE
   // AXI Master for pushing message to QEMU
-  val M_AXI_QEMUTX = IO(u_page_demander.M_AXI_QEMUTX.cloneType)
-  M_AXI_QEMUTX <> u_page_demander.M_AXI_QEMUTX
   // I TLB backend request
   val itlb_backend_request_i = IO(Flipped(u_page_demander.itlb_backend_request_i.cloneType))
   itlb_backend_request_i <> u_page_demander.itlb_backend_request_i
@@ -124,8 +122,10 @@ class PageDemanderDUT(
   val dtlb_backend_request_i = IO(Flipped(u_page_demander.dtlb_backend_request_i.cloneType))
   dtlb_backend_request_i <> u_page_demander.dtlb_backend_request_i
   // AXI Slave for receiving message to QEMU
-  val S_AXI_QEMU_RX = IO(Flipped(u_page_demander.S_AXI_QEMU_RX.cloneType))
-  S_AXI_QEMU_RX <> u_page_demander.S_AXI_QEMU_RX
+  val S_AXI_QEMU_MQ = IO(Flipped(u_page_demander.S_AXI_QEMU_MQ.cloneType))
+  S_AXI_QEMU_MQ <> u_page_demander.S_AXI_QEMU_MQ
+  val S_AXIL_QEMU_MQ = IO(u_page_demander.S_AXIL_QEMU_MQ.cloneType)
+  S_AXIL_QEMU_MQ <> u_page_demander.S_AXIL_QEMU_MQ
 
   // DRAM Resetter
   u_page_demander.M_AXI_RESET.ar <> AXI4AR.stub(ParameterConstants.dram_addr_width)
@@ -194,26 +194,26 @@ implicit class PageDemanderDriver(target: PageDemanderDUT){
   }
 
   def sendQEMUMessage(message_type: BigInt, rawMessage: Seq[BigInt]) = timescope {
-    target.S_AXI_QEMU_RX.aw.awready.expect(true.B)
-    target.S_AXI_QEMU_RX.aw.awvalid.poke(true.B)
-    target.S_AXI_QEMU_RX.aw.awburst.poke(1.U)
-    target.S_AXI_QEMU_RX.aw.awlen.poke(0.U)
-    target.S_AXI_QEMU_RX.aw.awsize.poke(6.U)
+    target.S_AXI_QEMU_MQ.aw.awready.expect(true.B)
+    target.S_AXI_QEMU_MQ.aw.awvalid.poke(true.B)
+    target.S_AXI_QEMU_MQ.aw.awburst.poke(1.U)
+    target.S_AXI_QEMU_MQ.aw.awlen.poke(0.U)
+    target.S_AXI_QEMU_MQ.aw.awsize.poke(6.U)
     tk()
-    target.S_AXI_QEMU_RX.aw.awvalid.poke(false.B)
+    target.S_AXI_QEMU_MQ.aw.awvalid.poke(false.B)
     val raw_res = (message_type +: rawMessage).reverse.reduce { (last: BigInt, current: BigInt) =>
         (last << 32) | current
     }
-    target.S_AXI_QEMU_RX.w.wdata.poke(raw_res.U)
-    target.S_AXI_QEMU_RX.w.wlast.poke(true.B)
-    target.S_AXI_QEMU_RX.w.wstrb.poke(((BigInt(1) << 64) - 1).U)
+    target.S_AXI_QEMU_MQ.w.wdata.poke(raw_res.U)
+    target.S_AXI_QEMU_MQ.w.wlast.poke(true.B)
+    target.S_AXI_QEMU_MQ.w.wstrb.poke(((BigInt(1) << 64) - 1).U)
     timescope {
-      waitForSignalToBe(target.S_AXI_QEMU_RX.w.wready)
-      target.S_AXI_QEMU_RX.w.wvalid.poke(true.B)
+      waitForSignalToBe(target.S_AXI_QEMU_MQ.w.wready)
+      target.S_AXI_QEMU_MQ.w.wvalid.poke(true.B)
       tk()
     }
-    waitForSignalToBe(target.S_AXI_QEMU_RX.b.bvalid)
-    target.S_AXI_QEMU_RX.b.bready.poke(true.B)
+    waitForSignalToBe(target.S_AXI_QEMU_MQ.b.bvalid)
+    target.S_AXI_QEMU_MQ.b.bready.poke(true.B)
     tk()
   }
 
@@ -232,29 +232,40 @@ implicit class PageDemanderDriver(target: PageDemanderDUT){
     )
   }
 
-  def expectQEMUMessage(addr: BigInt, message_type: BigInt, rawMessage: Seq[BigInt]) = timescope {
+  def expectQEMUMessage(message_type: BigInt, rawMessage: Seq[BigInt]) = timescope {
+    var message_available = false
     // message request
-    waitForSignalToBe(target.M_AXI_QEMUTX.aw.awvalid)
-    target.M_AXI_QEMUTX.aw.awaddr.expect(addr.U)
-    target.M_AXI_QEMUTX.aw.awlen.expect(0.U)
+    do{
+      println("Access S_AXIL_QEMU_MQ by 0x4")
+      timescope {
+        target.S_AXIL_QEMU_MQ.araddr.poke(0x4.U)
+        target.S_AXIL_QEMU_MQ.arvalid.poke(true.B)
+        waitForSignalToBe(target.S_AXIL_QEMU_MQ.arready)
+        tk()
+      }
+      target.S_AXIL_QEMU_MQ.rvalid.expect(true.B)
+      val result = target.S_AXIL_QEMU_MQ.rdata.peek.litValue()
+      if(result != 0){
+        message_available = true
+      }
+      timescope {
+        target.S_AXIL_QEMU_MQ.rready.poke(true.B)
+        tk()
+      }
+    } while(!message_available);
+    // read the message
+    waitForSignalToBe(target.S_AXI_QEMU_MQ.ar.arready)
     timescope {
-      target.M_AXI_QEMUTX.aw.awready.poke(true.B)
-      target.tk()
+      target.S_AXI_QEMU_MQ.ar.arvalid.poke(true.B)
+      tk()
     }
-    // message body
-    waitForSignalToBe(target.M_AXI_QEMUTX.w.wvalid)
-    val binaryMessage = (Seq[BigInt](1, message_type) ++: rawMessage).reverse.reduce { (last: BigInt, current: BigInt) =>
+    waitForSignalToBe(target.S_AXI_QEMU_MQ.r.rvalid)
+    val raw_res = (message_type +: rawMessage).reverse.reduce { (last: BigInt, current: BigInt) =>
         (last << 32) | current
     }
-    target.M_AXI_QEMUTX.w.wdata.expect(binaryMessage.U)
+    target.S_AXI_QEMU_MQ.r.rdata.expect(raw_res.U)
     timescope {
-      target.M_AXI_QEMUTX.w.wready.poke(true.B)
-      target.tk()
-    }
-    // write reply
-    timescope {
-      target.M_AXI_QEMUTX.b.bvalid.poke(true.B)
-      waitForSignalToBe(target.M_AXI_QEMUTX.b.bready)
+      target.S_AXI_QEMU_MQ.r.rready.poke(true.B)
       tk()
     }
   }

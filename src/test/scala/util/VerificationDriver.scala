@@ -8,7 +8,7 @@ import scala.collection.mutable._
 import ArmflexProtoBuf._
 import SoftwareStructs._
 import armflex.CommitInst
-import armflex_p.ArmflexCommitTrace_p
+import armflex_p.armflex_p.ArmflexCommitTrace_p
 
 class VerificationDriver(val filename: String) {
   private lazy val classLoader: ClassLoader = getClass().getClassLoader()

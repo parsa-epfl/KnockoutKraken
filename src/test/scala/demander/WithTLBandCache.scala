@@ -71,8 +71,10 @@ class PageDemanderWithTLBandCache(
   u_pd.M_AXI_PAPOOL <> M_AXI_PAPOOL
   val M_AXI_PW = IO(u_pd.M_AXI_PW.cloneType)
   u_pd.M_AXI_PW <> M_AXI_PW
-  val M_AXI_QEMUTX = IO(u_pd.M_AXI_QEMUTX.cloneType)
-  u_pd.M_AXI_QEMUTX <> M_AXI_QEMUTX
+  val S_AXI_QEMU_MQ = IO(u_pd.S_AXI_QEMU_MQ.cloneType)
+  u_pd.S_AXI_QEMU_MQ <> S_AXI_QEMU_MQ
+  val S_AXIL_QEMU_MQ = IO(u_pd.S_AXIL_QEMU_MQ.cloneType)
+  u_pd.S_AXIL_QEMU_MQ <> S_AXIL_QEMU_MQ
   val M_AXI_QEMU_MISS = IO(u_pd.M_AXI_QEMU_MISS.cloneType)
   u_pd.M_AXI_QEMU_MISS <> M_AXI_QEMU_MISS
   val M_AXI_QEMU_PAGE_EVICT = IO(u_pd.M_AXI_QEMU_PAGE_EVICT.cloneType)
@@ -83,8 +85,6 @@ class PageDemanderWithTLBandCache(
   u_pd.M_AXI_TLBWB <> M_AXI_TLBWB
   val S_AXI_PAGE = IO(Flipped(u_pd.S_AXI_PAGE.cloneType))
   u_pd.S_AXI_PAGE <> S_AXI_PAGE
-  val S_AXI_QEMU_RX = IO(Flipped(u_pd.S_AXI_QEMU_RX.cloneType))
-  u_pd.S_AXI_QEMU_RX <> S_AXI_QEMU_RX
   val S_AXI_TT = IO(u_pd.S_AXI_TT.cloneType)
   u_pd.S_AXI_TT <> S_AXI_TT
 

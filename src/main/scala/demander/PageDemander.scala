@@ -8,17 +8,17 @@ import DMAController.Bus._
 import armflex.demander.software_bundle.ParameterConstants
 import armflex.demander.peripheral.TLBMessageConverter
 import armflex.demander.peripheral.ThreadTable
-import armflex.demander.peripheral.QEMUMessageCompositor
 import armflex.demander.peripheral.FreeList
 import armflex.cache.TLBBackendReplyPacket
 import armflex.demander.peripheral.PageDeletor
 import armflex.demander.peripheral.PageInserter
 import armflex.demander.peripheral.PageBuffer
-import armflex.demander.peripheral.QEMUMessageReceiver
-import armflex.demander.peripheral.QEMUMessageSender
+import armflex.demander.peripheral.QEMUMessageDecoder
+import armflex.demander.peripheral.QEMUMessageEncoder
 import armflex.demander.peripheral.DRAMResster
 import armflex.demander.software_bundle.PageTableItem
 import armflex.cache.TLBTagPacket
+import armflex.util.AXIControlledMessageQueue
 
 
 /**
@@ -47,12 +47,9 @@ class PageDemander(
   val dtlb_backend_request_i = IO(Flipped(u_dtlb_mconv.tlb_backend_request_i.cloneType))
   u_dtlb_mconv.tlb_backend_request_i.bits := dtlb_backend_request_i.bits
 
-  // QEMU Message Receiver
+  // QEMU Message Decoder
   // TODO: Separate the message type here.
-  val u_qemu_rx = Module(new QEMUMessageReceiver((x:UInt) => true.B))
-  val S_AXI_QEMU_RX = IO(Flipped(u_qemu_rx.S_AXI.cloneType))
-  u_qemu_rx.S_AXI <> S_AXI_QEMU_RX
-
+  val u_qmd = Module(new QEMUMessageDecoder(messageFIFODepth))
   // DRAM Resetter.
   val M_AXI_RESET = IO(new AXI4(
     ParameterConstants.dram_addr_width,
@@ -128,7 +125,7 @@ class PageDemander(
   val M_AXI_QEMU_PAGE_EVICT = IO(u_qemu_page_evict.M_AXI.cloneType)
   u_qemu_page_evict.M_AXI <> M_AXI_QEMU_PAGE_EVICT
 
-  u_qemu_page_evict.evict_request_i <> u_qemu_rx.qemu_evict_page_req_o
+  u_qemu_page_evict.evict_request_i <> u_qmd.qemu_evict_page_req_o
 
   // export TLB backend reply
   // two source: one from the page walk and one from the QEMU miss resolution
@@ -157,7 +154,7 @@ class PageDemander(
     u_dtlb_backend_reply_arb.io.in(1).ready
   )
   
-  u_qemu_miss.qemu_miss_reply_i <> Queue(u_qemu_rx.qemu_miss_reply_o, messageFIFODepth)
+  u_qemu_miss.qemu_miss_reply_i <> u_qmd.qemu_miss_reply_o
 
   val M_AXI_PAGE = IO(new AXI4(
     ParameterConstants.dram_addr_width,
@@ -231,7 +228,6 @@ class PageDemander(
   u_page_inserter.done_o <> u_qemu_miss.page_insert_done_i
   u_page_inserter.req_i <> u_qemu_miss.page_insert_req_o
 
-
   // Page Buffer
   val u_page_buffer = Module(new PageBuffer())
   val S_AXI_PAGE = IO(Flipped(u_page_buffer.S_AXI.cloneType))
@@ -240,7 +236,6 @@ class PageDemander(
   u_page_buffer.normal_read_reply_o <> u_page_inserter.read_reply_i
   u_page_buffer.normal_write_request_i <> u_page_deleter.page_buffer_write_o
   
-
   // the PA Pool
   val u_pool = Module(new FreeList)
   val M_AXI_PAPOOL = IO(u_pool.M_AXI.cloneType)
@@ -254,23 +249,31 @@ class PageDemander(
 
   // QEMU eviction notifier
   val u_qemu_evict_reply = Module(new QEMUEvictReplyHandler())
-  u_qemu_evict_reply.req_i <> Queue(u_qemu_rx.qemu_evict_reply_o, messageFIFODepth)
+  u_qemu_evict_reply.req_i <> u_qmd.qemu_evict_reply_o
   u_qemu_evict_reply.free_o <> u_pool.push_i
   
-  // QEMU message compositor
-  val u_qmc = Module(new QEMUMessageCompositor(messageFIFODepth))
-  u_qmc.evict_done_req_i <> u_page_deleter.done_message_o
-  u_qmc.evict_notify_req_i <> u_page_deleter.start_message_o
-  u_qmc.page_fault_req_i <> u_page_walker.page_fault_req_o
+  // QEMU message encoder
+  val u_qme = Module(new QEMUMessageEncoder(messageFIFODepth))
+  u_qme.evict_done_req_i <> u_page_deleter.done_message_o
+  u_qme.evict_notify_req_i <> u_page_deleter.start_message_o
+  u_qme.page_fault_req_i <> u_page_walker.page_fault_req_o
 
-  // QEMU message sender
-  val u_qemu_tx = Module(new QEMUMessageSender())
-  val M_AXI_QEMUTX = IO(u_qemu_tx.M_AXI.cloneType)
-  u_qemu_tx.M_AXI <> M_AXI_QEMUTX
-  u_qemu_tx.fifo_i <> u_qmc.o
+  // QEMU Message FIFO
+  val u_qemu_mq = Module(new AXIControlledMessageQueue)
+  val S_AXI_QEMU_MQ = IO(Flipped(u_qemu_mq.S_AXI.cloneType))
+  u_qemu_mq.S_AXI <> S_AXI_QEMU_MQ
+  val S_AXIL_QEMU_MQ = IO(u_qemu_mq.S_AXIL.cloneType)
+  u_qemu_mq.S_AXIL <> S_AXIL_QEMU_MQ
+  u_qemu_mq.fifo_i <> u_qme.o
+  u_qemu_mq.fifo_o <> u_qmd.message_i
+
+  // For interrupt
+  val qemu_message_available_o = IO(Output(Bool()))
+  qemu_message_available_o := u_qme.o.valid
 }
 
 object PageDemanderVerilogEmitter extends App{
   val c = chisel3.stage.ChiselStage
   println(c.emitVerilog(new PageDemander(new MemorySystemParameter)))
 }
+

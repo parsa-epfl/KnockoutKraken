@@ -1,4 +1,4 @@
-package armflex.demander.peripheral
+package armflex.util
 
 import chisel3._
 import chisel3.util._

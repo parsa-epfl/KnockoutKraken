@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+package armflex_p;
+
 message ArmflexArchState_p {
 	repeated uint64 xregs = 1 [packed=false]; 
 	uint64 pc= 2;
