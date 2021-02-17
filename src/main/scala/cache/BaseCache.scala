@@ -318,7 +318,7 @@ class BaseCache(
   // frontend_reply_o: Response to the R/W request from the pipeline
   val frontend_reply_o = IO(u_bank_frontend.frontend_reply_o.cloneType)
   frontend_reply_o.bits <> u_bank_frontend.frontend_reply_o.bits
-  frontend_reply_o.valid := u_bank_frontend.frontend_reply_o.valid && RegNext(frontend_request_i.fire())
+  frontend_reply_o.valid := u_bank_frontend.frontend_reply_o.valid && (if(param.implementedWithRegister) frontend_request_i.fire() else RegNext(frontend_request_i.fire()))
   // val packet_arrive_o = IO(u_bank_frontend.packet_arrive_o.cloneType)
   // packet_arrive_o <> u_bank_frontend.packet_arrive_o
 

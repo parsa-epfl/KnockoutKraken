@@ -150,6 +150,7 @@ class TLBTester extends FreeSpec with ChiselScalatestTester {
       () => new BaseTLB(param, () => new PseudoTreeLRUCore(param.associativity)), ""
     )).withAnnotations(anno){ dut =>
       dut.setReadRequest(0.U, 0.U)
+      dut.frontendRequest_i.valid.expect(true.B)
       dut.expectReply(false, false, 0.U)
       dut.tick()
       dut.clearRequest()

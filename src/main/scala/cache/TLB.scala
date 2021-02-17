@@ -113,10 +113,10 @@ class TLBBackendReplyPacket(param: TLBParameter) extends Bundle {
  * @param param the TLB Parameter
  * @param refillEnabled whether keep ports for refilling.
  */ 
+// TODO: Build the TLB with data manager + register file rather than the BaseCache.
 class BaseTLB(
   val param: TLBParameter,
-  lruCore: () => LRUCore,
-  refillEnabled: Boolean = true
+  lruCore: () => LRUCore
 ) extends MultiIOModule {
   // frontend
   val frontend_request_i = IO(Flipped(Decoupled(new TLBAccessRequestPacket(param))))

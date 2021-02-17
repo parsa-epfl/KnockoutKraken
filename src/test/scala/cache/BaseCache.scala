@@ -82,12 +82,14 @@ class DTUCache(
   u_refill_queue.miss_request_i.bits.addr := u_cache.backend_request_o.bits.addr
   u_refill_queue.miss_request_i.bits.thread_id := u_cache.backend_request_o.bits.thread_id
   u_refill_queue.miss_request_i.bits.not_sync_with_data_v := false.B
+  u_refill_queue.miss_request_i.bits.need_write_permission_v := u_cache.backend_request_o.bits.need_write_permission_v
   u_refill_queue.miss_request_i.valid := u_cache.backend_request_o.fire() && !u_cache.backend_request_o.bits.w_v
 
   u_refill_queue.backend_reply_i <> u_delayChain.cacheReply_o
 
   u_cache.refill_request_i <> u_refill_queue.refill_o
   u_cache.backend_request_o <> u_delayChain.cacheRequest_i
+  u_cache.stall_request_vi := false.B
   
   u_backend.request_i <> u_delayChain.backendRequest_o
   u_backend.reply_o <> u_delayChain.backendReply_i
@@ -182,7 +184,7 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/cache/normal_read"), WriteVcdAnnotation)
     test(new DTUCache(
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
-      "test/cache/memory.txt"
+      "src/test/content/memory.txt"
     )).withAnnotations(anno){ dut =>
       //dut.frontendRequest_i.bits.
       //dut.
@@ -202,7 +204,7 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/cache/synonyms"), WriteVcdAnnotation)
     test(new DTUCache(
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
-      "test/cache/memory.txt"
+      "src/test/content/memory.txt"
     )).withAnnotations(anno){ dut =>
       // the first transaction
       dut.setReadRequest(108.U, 0.U)
@@ -236,7 +238,7 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/cache/RAW"), WriteVcdAnnotation)
     test(new DTUCache(
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
-      "test/cache/memory.txt"
+      "src/test/content/memory.txt"
     )).withAnnotations(anno){ dut =>
       dut.setWriteRequest(
         108.U, 0.U, 114.U, ((1l << 8) - 1).U // no full mask here in order not to trigger the full write.
@@ -262,7 +264,7 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/cache/full_writing"), WriteVcdAnnotation)
     test(new DTUCache(
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
-      "test/cache/memory.txt"
+      "src/test/content/memory.txt"
     )).withAnnotations(anno){ dut =>
       dut.setWriteRequest(111.U, 0.U, 10.U, ((1l << 32) - 1).U)
       dut.tick()
@@ -287,7 +289,7 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/cache/flushing"), WriteVcdAnnotation)
     test(new DTUCache(
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
-      "test/cache/memory.txt"
+      "src/test/content/memory.txt"
     )).withAnnotations(anno){ dut =>
       dut.setReadRequest(101.U, 0.U)
       dut.tick()
@@ -328,7 +330,7 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/cache/write_flushing"), WriteVcdAnnotation)
     test(new DTUCache(
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
-      "test/cache/memory.txt"
+      "src/test/content/memory.txt"
     )).withAnnotations(anno){ dut =>
       dut.setWriteRequest(10.U, 0.U, 100.U, ((1l << 8) - 1).U)
       dut.tick()
@@ -366,7 +368,7 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/cache/forwarding_chunk"), WriteVcdAnnotation)
     test(new DTUCache(
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
-      "test/cache/memory.txt"
+      "src/test/content/memory.txt"
     )).withAnnotations(anno){ dut =>
       dut.setWriteRequest(10.U, 0.U, 0xA0.U, 0xFF.U)
       dut.tick()
@@ -397,7 +399,7 @@ class CacheLRUTester extends FreeSpec with ChiselScalatestTester {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/cache/LRU"), WriteVcdAnnotation)
     test(new DTUCache(
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
-      "test/cache/memory.txt"
+      "src/test/content/memory.txt"
     )).withAnnotations(anno){ dut =>
       // set number is 64, associativity is 2.
       dut.setReadRequest(0.U, 0.U)
