@@ -231,10 +231,10 @@ class PipelineHardDriverModule(implicit val cfg: ProcConfig) extends MultiIOModu
   when(RegNext(pairFired)) {
     pipeline.mem.data.resp.bits := RegNext(memRespBits.memReq(1).data)
   }
-
+  
   // TODO Simulate memory misses?
-  pipeline.mem.wake.tag := DontCare
-  pipeline.mem.wake.valid := false.B
+  pipeline.mem.wake := DontCare
+  pipeline.mem.wake foreach (_.valid := false.B)
 
   val commit = Module(new Queue(new CommitTraceBundle, 128, true, true))
   commit.io.enq <> traceExpect

@@ -49,11 +49,6 @@ class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule
   val pregsVec = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(PStateRegs())))
 
   // -------- Pipeline ---------
-  // Wakeup after memory miss completed
-  pipeline.archstate.wake.valid := mem.wake.valid
-  pipeline.archstate.wake.tag := mem.wake.tag
-  pipeline.archstate.wake.bits.get := pregsVec(pipeline.archstate.wake.tag).PC
-
   // Get state from Issue
   pipeline.archstate.issue.regs.curr <> pregsVec(pipeline.archstate.issue.sel.tag)
   pipeline.archstate.issue.rd <> rfile.rd

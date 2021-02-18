@@ -25,7 +25,7 @@ class PipelineMemoryIO(implicit val cfg: ProcConfig) extends Bundle {
     val resp = Input(Valid(DATA_T))
     val latency = 2
   }
-  val wake = Input(ValidTag(cfg.TAG_T))
+  val wake = Input(Vec(4, ValidTag(cfg.TAG_T)))
 }
 
 class IssueArchStateIO[T <: UInt](gen: T) extends Bundle {
@@ -38,7 +38,6 @@ class IssueArchStateIO[T <: UInt](gen: T) extends Bundle {
 class PipeArchStateIO[T <: UInt](gen: T) extends Bundle {
   val issue = new IssueArchStateIO(gen)
   val commit = new CommitArchStateIO(gen)
-  val wake = Input(ValidTag(gen, DATA_T))
   override def cloneType: this.type = new PipeArchStateIO[T](gen).asInstanceOf[this.type]
 }
 
@@ -92,9 +91,7 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   // Transplant
   fetch.ctrl.start := transplantIO.start
   // Wake on memory miss completed
-  fetch.ctrl.mem.valid := mem.wake.valid
-  fetch.ctrl.mem.tag := mem.wake.tag
-  fetch.ctrl.mem.bits.get := archstate.wake.bits.get
+  fetch.ctrl.memWake := mem.wake
   // Wake on state commit
   fetch.ctrl.commit.valid := commitU.commit.commited.valid && !commitU.commit.transplant.valid
   fetch.ctrl.commit.tag := commitU.commit.commited.tag

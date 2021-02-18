@@ -12,7 +12,7 @@ class FetchUnit(implicit val cfg: ProcConfig) extends MultiIOModule {
   val ctrl = IO(new Bundle {
     val start = Input(ValidTag(cfg.TAG_T, DATA_T))
     val commit = Input(ValidTag(cfg.TAG_T, DATA_T))
-    val mem = Input(ValidTag(cfg.TAG_T, DATA_T))
+    val memWake = Vec(4, ValidTag(cfg.TAG_T))
   })
 
   val mem = IO(DecoupledTag(cfg.TAG_T, DATA_T))
@@ -40,9 +40,10 @@ class FetchUnit(implicit val cfg: ProcConfig) extends MultiIOModule {
     pc(ctrl.commit.tag) := ctrl.commit.bits.get
     en(ctrl.commit.tag) := true.B
   }
-  when(ctrl.mem.valid) {
+  for(device <- 0 until 4) {
+    when(ctrl.memWake(device).valid) {
     // Wakeup from Memory miss
-    pc(ctrl.mem.tag) := ctrl.mem.bits.get
-    en(ctrl.mem.tag) := true.B
+      en(ctrl.memWake(device).tag) := true.B
+    }
   }
 }
