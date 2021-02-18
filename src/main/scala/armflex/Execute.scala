@@ -567,7 +567,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
     I_MovI  -> move.io.res,
     I_CSel  -> Mux(condHolds.io.res, rVal1, addWithCarry.io.res)
   ))
-  einst.res := Mux(io.dinst.is32bit, Cat(0.U, res(31,0)), res)
+  einst.res := res
   einst.rd := io.dinst.rd
   when(io.dinst.itype === I_LogSR || io.dinst.itype === I_LogI) {
     einst.rd.valid := io.dinst.rd.bits =/= 31.U

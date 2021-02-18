@@ -217,6 +217,8 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
 
   commitNext.undef := !issued_dinst.inst32.valid
   commitNext.inst := issued_dinst.inst32.bits
+  commitNext.is32bit := issued_dinst.is32bit
+  commitNext.tag := issuer.io.deq.tag
 
   // Memory Resp
   val memLatency = mem.data.latency
@@ -230,12 +232,8 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   commitLDSTNext.rd(1).bits := ShiftRegister(memInstReq.io.deq.bits.memReq(0).reg, memLatency)
   commitLDSTNext.res(1) := mem.data.resp.bits(0).bits
   // LD Pair
-  commitLDSTNext.rd(2).valid := mem.data.resp.bits(1).valid
-  commitLDSTNext.rd(2).bits := ShiftRegister(memInstReq.io.deq.bits.memReq(1).reg, memLatency)
-  commitLDSTNext.res(2) := mem.data.resp.bits(1).bits
-
-  commitU.enq.bits := Mux(mem.data.resp.valid, commitLDSTNext, commitNext)
-  commitU.enq.bits.tag := Mux(mem.data.resp.valid, memInstReqTag, issuer.io.deq.tag)
+  commitLDSTNext.is32bit := ShiftRegister(memInstReq.io.deq.bits.is32bit, memLatency)
+  commitLDSTNext.tag := memInstReqTag
 
   // ----- Control Execute Stage Handshakes -----
   // Handle response from Memory Hierarchy before Issued Inst

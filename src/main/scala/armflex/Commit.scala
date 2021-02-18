@@ -17,6 +17,7 @@ class CommitInst[T <: UInt](gen: T) extends Bundle {
   val br_taken = Output(Valid(DATA_T))
   val exceptions = Valid(UInt(1.W))
   val undef = Output(Bool())
+  val is32bit = Output(Bool())
   override def cloneType: this.type = new CommitInst[T](gen).asInstanceOf[this.type]
 }
 
@@ -98,7 +99,7 @@ class CommitUnit[T <: UInt](gen: T, nbThreads: Int) extends MultiIOModule {
 
   assert(s_WB === 0.U && s_WB1 === 1.U && s_WB2 === 2.U)
   commit.archstate.wr.addr := rd(wbState).bits
-  commit.archstate.wr.data := res(wbState)
+  commit.archstate.wr.data := Mux(commitQueue.io.deq.bits.is32bit, Cat(0.U, res(wbState)(31,0)), res(wbState))
 
   switch(wbState) {
     is(s_WB) {
