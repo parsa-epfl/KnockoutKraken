@@ -15,7 +15,7 @@ import Chisel.debug
 class ProcConfig(
   // Chisel Generator configs
   val NB_THREADS:   Int = 2,
-  val TLB_NB_ENTRY: Int = 32,
+  val BLOCK_SIZE:   Int = 512,
   // Simulation settings
   val DebugSignals: Boolean = false,
   val rtlVerbose:   Boolean = false,
@@ -34,19 +34,19 @@ class ProcConfig(
 }
 
 class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule {
+  val pipeline = Module(new Pipeline)
 
   // Memory
-  val mem = IO(new MemoryIO)
+  val mem = IO(pipeline.mem.cloneType)
+  mem <> pipeline.mem
   // Transplants
   val transplantIO = IO(new Bundle {
     val state = new BRAMPort()(cfg.bramConfigState)
     val ctrl = new TransplantUnitHostIO
   })
 
-  val pipeline = Module(new Pipeline)
   val rfile = Module(new RFileSingle(cfg.NB_THREADS, cfg.TAG_T, cfg.DebugSignals))
   val pregsVec = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(PStateRegs())))
-  mem <> pipeline.mem
 
   // -------- Pipeline ---------
   // Wakeup after memory miss completed

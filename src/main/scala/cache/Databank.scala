@@ -42,13 +42,21 @@ class DataBankFrontendRequestPacket(
 
 
 
-class FrontendReplyPacket(param: CacheParameter) extends Bundle{
-  val data = UInt(param.blockBit.W)
-  val thread_id = UInt(param.threadIDWidth().W)
+class FrontendReplyPacket(
+  dataWidth: Int,
+  threadWidth: Int 
+) extends Bundle{
+
+  val data = UInt(dataWidth.W)
+  val thread_id = UInt(threadWidth.W)
   val hit = Bool()
   val dirty = Bool()
 
-  override def cloneType(): this.type = new FrontendReplyPacket(param).asInstanceOf[this.type]
+  def this(param: CacheParameter) {
+    this(param.blockBit, param.threadIDWidth())
+  }
+
+  override def cloneType(): this.type = new FrontendReplyPacket(dataWidth, threadWidth).asInstanceOf[this.type]
 }
 
 /**

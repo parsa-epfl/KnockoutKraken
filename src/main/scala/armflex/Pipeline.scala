@@ -12,17 +12,17 @@ import armflex.util._
 import armflex.util.DecoupledTools._
 import Chisel.debug
 
-class MemoryIO(implicit val cfg: ProcConfig) extends Bundle {
+class PipelineMemoryIO(implicit val cfg: ProcConfig) extends Bundle {
   val inst = new Bundle {
     val req =
-      Decoupled(new CacheFrontendRequestPacket(64, cfg.NB_THREADS_W, 512))
+      Decoupled(new CacheFrontendRequestPacket(DATA_SZ, cfg.NB_THREADS_W, cfg.BLOCK_SIZE))
     val resp =
-      Input(Valid(new FrontendReplyPacket((new MemorySystemParameter).toCacheParameter)))
+      Input(Valid(new FrontendReplyPacket(cfg.BLOCK_SIZE, cfg.NB_THREADS_W)))
     val latency = 1
   }
   val data = new Bundle {
     val req = Decoupled(new MInst)
-    val resp = Flipped(Decoupled(Vec(2, Valid(DATA_T))))
+    val resp = Input(Valid(DATA_T))
     val latency = 2
   }
   val wake = Input(ValidTag(cfg.TAG_T))
@@ -52,7 +52,7 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   //  val resetStats = Input(UInt(8.W))
   //})
   // Memory Hierarchy
-  val mem = IO(new MemoryIO)
+  val mem = IO(new PipelineMemoryIO)
 
   // Transplant case
   val transplantIO = IO(new Bundle {
@@ -223,17 +223,33 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   // Memory Resp
   val memLatency = mem.data.latency
   val commitLDSTNext = WireInit(CommitInst(cfg.TAG_T))
-  val memInstReqTag = ShiftRegister(memInstReq.io.deq.tag, memLatency)
-  // With wback
-  commitLDSTNext.rd(0) := ShiftRegister(memInstReq.io.deq.bits.rd, memLatency)
-  commitLDSTNext.res(0) := ShiftRegister(memInstReq.io.deq.bits.rd_res, memLatency)
+  val memInstReqSingle = ShiftRegister(memInstReq.io.deq.bits, memLatency)
+  val memInstReqPair = RegNext(memInstReqSingle) // One more cycle for Pair
+  val memInstReqSingleTag = ShiftRegister(memInstReq.io.deq.tag, memLatency)
+  val memInstReqPairTag = RegNext(memInstReqSingleTag)
+  val pairFired = ShiftRegister(memInstReq.io.deq.fire && memInstReq.io.deq.bits.isPair, memLatency)
   // LD Single
-  commitLDSTNext.rd(1).valid := mem.data.resp.bits(0).valid
-  commitLDSTNext.rd(1).bits := ShiftRegister(memInstReq.io.deq.bits.memReq(0).reg, memLatency)
-  commitLDSTNext.res(1) := mem.data.resp.bits(0).bits
+  commitLDSTNext.rd(0) := memInstReqSingle.rd
+  commitLDSTNext.res(0) := memInstReqSingle.rd_res
+  commitLDSTNext.res(1) := mem.data.resp.bits
+  commitLDSTNext.rd(1).valid := memInstReqSingle.isLoad
+  commitLDSTNext.rd(1).bits := memInstReqSingle.memReq(0).reg
+  commitLDSTNext.tag := memInstReqSingleTag
+  commitLDSTNext.is32bit := memInstReqSingle.is32bit
   // LD Pair
-  commitLDSTNext.is32bit := ShiftRegister(memInstReq.io.deq.bits.is32bit, memLatency)
-  commitLDSTNext.tag := memInstReqTag
+  commitLDSTNext.rd(2).bits := memInstReqPair.memReq(1).reg
+  commitLDSTNext.res(2) := mem.data.resp.bits
+  when(RegNext(pairFired) && mem.data.resp.valid) {
+    commitLDSTNext.rd(2).valid := memInstReqPair.isLoad
+    commitLDSTNext.rd(0) := memInstReqPair.rd
+    commitLDSTNext.res(0) := memInstReqPair.rd_res
+    commitLDSTNext.res(1) := RegNext(mem.data.resp.bits)
+    commitLDSTNext.rd(1).valid := memInstReqPair.isLoad
+    commitLDSTNext.rd(1).bits := memInstReqPair.memReq(0).reg
+    commitLDSTNext.rd(2).bits := memInstReqPair.memReq(1).reg
+    commitLDSTNext.tag := memInstReqPairTag
+    commitLDSTNext.is32bit := memInstReqPair.is32bit
+  }
 
   // ----- Control Execute Stage Handshakes -----
   // Handle response from Memory Hierarchy before Issued Inst
@@ -242,17 +258,15 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   memInstReq.io.enq.valid := false.B
   memInstReq.io.deq.ready := false.B
   mem.data.req.valid := false.B
-  mem.data.resp.ready := false.B
   commitU.enq.valid := false.B
 
   memInstReq.io.deq.handshake(mem.data.req)
-
   val commitAsIssue = commitU.commit.commited.valid && issuer.io.deq.tag === commitU.commit.commited.tag
   val memoryReqAsIssue = memInstReq.io.deq.valid && issuer.io.deq.tag === memInstReq.io.deq.tag
+  commitU.enq.bits := Mux(mem.data.resp.valid, commitLDSTNext, commitNext)
   when(mem.data.resp.valid) {
     // When memory response arrives, don't take from issue but from response
-    commitU.enq.valid := true.B
-    assert(commitU.enq.ready)
+    commitU.enq.valid := !pairFired // Ditch first valid on pair instruction
   }.elsewhen(!(commitAsIssue || memoryReqAsIssue)) {
     // Can only issue when not commiting same thread
     when(ldstU.io.minst.valid && !ldstU.io.minst.bits.exceptions.valid) {

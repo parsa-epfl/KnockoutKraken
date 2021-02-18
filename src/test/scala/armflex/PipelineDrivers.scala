@@ -218,14 +218,19 @@ class PipelineHardDriverModule(implicit val cfg: ProcConfig) extends MultiIOModu
   memResp.io.enq.bits := issue.io.deq.bits
   memResp.io.enq.valid := issue.io.deq.fire && pipeline.dbg.issuingMem
 
-  pipeline.mem.data.req.ready := true.B
+  val pairJustFired = RegNext(pipeline.mem.data.req.fire && pipeline.mem.data.req.bits.isPair)
+  pipeline.mem.data.req.ready := !pairJustFired
   memResp.io.deq.ready := pipeline.mem.data.req.fire
 
-  pipeline.mem.data.resp.valid := ShiftRegister(memResp.io.deq.fire, pipeline.mem.data.latency)
-  pipeline.mem.data.resp.bits(0).valid := ShiftRegister(pipeline.mem.data.req.bits.isLoad, pipeline.mem.data.latency)
-  pipeline.mem.data.resp.bits(1).valid := ShiftRegister(pipeline.mem.data.req.bits.isPair && pipeline.mem.data.req.bits.isLoad, pipeline.mem.data.latency)
-  pipeline.mem.data.resp.bits(0).bits := ShiftRegister(memResp.io.deq.bits.memReq(0).data, pipeline.mem.data.latency)
-  pipeline.mem.data.resp.bits(1).bits := ShiftRegister(memResp.io.deq.bits.memReq(1).data, pipeline.mem.data.latency)
+  val pairFired = ShiftRegister(pipeline.mem.data.req.fire && pipeline.mem.data.req.bits.isPair, pipeline.mem.data.latency)
+  val memRespBits = ShiftRegister(memResp.io.deq.bits, pipeline.mem.data.latency)
+  val memReqBits = ShiftRegister(pipeline.mem.data.req.bits, pipeline.mem.data.latency)
+  val memRespCurr = WireInit(memRespBits)
+  pipeline.mem.data.resp.valid := ShiftRegister(memResp.io.deq.fire, pipeline.mem.data.latency) || RegNext(pairFired)
+  pipeline.mem.data.resp.bits := memRespBits.memReq(0).data
+  when(RegNext(pairFired)) {
+    pipeline.mem.data.resp.bits := RegNext(memRespBits.memReq(1).data)
+  }
 
   // TODO Simulate memory misses?
   pipeline.mem.wake.tag := DontCare
