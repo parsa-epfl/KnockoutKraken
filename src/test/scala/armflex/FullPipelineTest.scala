@@ -19,8 +19,8 @@ import armflex.util.VerificationDriver
 import armflex.util.ArmflexProtoBuf._
 import armflex.cache.MemorySystemParameter
 import armflex.util.SoftwareStructs.CommitTrace
-import armflex.ArmflexDrivers.PipelineHardDriver
-import armflex.DriversExtra._
+import armflex.TestDriversExtra._
+import armflex.PipelineDrivers._
 import org.scalatest.exceptions.TestFailedException
 
 class PipelineTest(val dut: PipelineHardDriverModule, traceDrv: VerificationDriver) {
@@ -35,7 +35,7 @@ class PipelineTest(val dut: PipelineHardDriverModule, traceDrv: VerificationDriv
     var trace: CommitTrace = null
     while (running) {
       if (dut.transplantOut.state.valid.peek.litToBoolean) {
-        trace = dut.transplantOut.state.bits.peekTrace()
+        trace = dut.transplantOut.state.bits.peek()
         transplantInsts.enqueue(dut.transplantOut.inst.peek().litValue)
       }
       if (dut.transplantIO.ctrl.done.valid.peek.litToBoolean) {

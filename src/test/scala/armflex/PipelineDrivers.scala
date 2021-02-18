@@ -9,7 +9,7 @@ import chiseltest.internal._
 import chiseltest.experimental.TestOptionBuilder._
 
 import armflex.TPU2STATE._
-import armflex.DriversExtra._
+import armflex.TestDriversExtra._
 
 import armflex.util._
 import armflex.util.SoftwareStructs._
@@ -17,50 +17,7 @@ import armflex.util.BRAMPortDriver.BRAMPortDriver
 import chisel3.util.Queue
 import firrtl.annotations.MemoryLoadFileType.Hex
 
-object ArmflexDrivers {
-  implicit class FullStateBundleDriver(self: FullStateBundle) {
-    def poke(state: PState) = {
-      for (reg <- 0 until 32) {
-        self.rfile(reg).poke(state.xregs(reg).U)
-      }
-      self.regs.PC.poke(state.pc.U)
-      self.regs.SP.poke(state.sp.U)
-      self.regs.NZCV.poke(state.nzcv.U)
-    }
-
-    def compareAssert(target: FullStateBundle): Unit = {
-      val success = WireInit(true.B)
-      when(self.regs.PC =/= target.regs.PC) {
-        printf(p"PC:${Hexadecimal(self.regs.PC)}=/=${Hexadecimal(target.regs.PC)}\n")
-        success := false.B
-      }
-      when(self.regs.SP =/= target.regs.SP) {
-        printf(p"SP${Hexadecimal(self.regs.SP)}=/=${Hexadecimal(target.regs.SP)}\n")
-        success := false.B
-      }
-      when(self.regs.NZCV =/= target.regs.NZCV) {
-        printf(p"NZCV${Hexadecimal(self.regs.NZCV)}=/=${Hexadecimal(target.regs.NZCV)}\n")
-        success := false.B
-      }
-      for (reg <- 0 until 32) {
-        val expect = self.rfile(reg)
-        val actual = target.rfile(reg)
-        when(expect =/= actual) {
-          printf(p"${reg}:${Hexadecimal(expect)}=/=${Hexadecimal(actual)}\n")
-          success := false.B
-        }
-      }
-      assert(success)
-    }
-  }
-  implicit class TransplantUnitHostIODriver(target: TransplantUnitHostIO) {
-    def fire(tag: Int)(implicit clock: Clock) = timescope {
-      target.fire.valid.poke(true.B)
-      target.fire.tag.poke(tag.U)
-      clock.step()
-    }
-  }
-
+object PipelineDrivers {
   implicit class PipelineHardDriver(pipeline: PipelineHardDriverModule) {
     implicit val clock = pipeline.clock
 
@@ -100,17 +57,6 @@ object ArmflexDrivers {
       pstate
     }
 
-    private def getState(state: FullStateBundle): PState = {
-      val pstate = state.regs
-      val rfile = state.rfile
-
-      val xregs = for (reg <- 0 until 32) yield rfile(reg).peek.litValue
-      val pc = pstate.PC.peek.litValue
-      val sp = pstate.SP.peek.litValue
-      val nzcv = pstate.NZCV.peek.litValue.toInt
-      new PState(xregs.toList: List[BigInt], pc: BigInt, sp: BigInt, nzcv: Int)
-    }
-
     def traceIn(trace: CommitTrace): Unit =
       pipeline.traceIn.enqueue(trace)
     def traceExpect(trace: CommitTrace): Unit =
@@ -121,43 +67,57 @@ object ArmflexDrivers {
 import chisel3.util.DecoupledIO
 import chisel3.experimental.BundleLiterals._
 
-object DriversExtra {
-  implicit class CommitTraceBundleDriver[T <: CommitTraceBundle](target: CommitTraceBundle) {
-    def peekTrace(): CommitTrace = {
-      // TODO: check for init
-      val xregs = (for (reg <- 0 until 32) yield target.state.rfile(reg).peek().litValue).toList
-      val pc = target.state.regs.PC.peek().litValue
-      val sp = target.state.regs.SP.peek().litValue
-      val nzcv = target.state.regs.NZCV.peek().litValue
+object TestDriversExtra {
+  implicit class FullStateBundleDriver(self: FullStateBundle) {
+    def poke(state: PState) = {
+      for (reg <- 0 until 32) {
+        self.rfile(reg).poke(state.xregs(reg).U)
+      }
+      self.regs.PC.poke(state.pc.U)
+      self.regs.SP.poke(state.sp.U)
+      self.regs.NZCV.poke(state.nzcv.U)
+    }
+    def peek(): PState = {
+      val pstate = self.regs
+      val rfile = self.rfile
 
-      val inst = target.inst.peek().litValue
-      val mem_addr = List(target.memReq(0).addr.peek().litValue, target.memReq(1).addr.peek().litValue)
-      val mem_data = List(target.memReq(0).data.peek().litValue, target.memReq(1).data.peek().litValue)
-      val state = new PState(xregs, pc, sp, nzcv.toInt)
+      val xregs = for (reg <- 0 until 32) yield rfile(reg).peek.litValue
+      val pc = pstate.PC.peek.litValue
+      val sp = pstate.SP.peek.litValue
+      val nzcv = pstate.NZCV.peek.litValue.toInt
+      new PState(xregs.toList: List[BigInt], pc: BigInt, sp: BigInt, nzcv: Int)
+    }
+  }
+
+  implicit class CommitTraceBundleDriver(self: CommitTraceBundle) {
+    def poke(trace: CommitTrace) = {
+      self.state.poke(trace.state)
+      self.inst.poke(trace.inst.U)
+      self.memReq(0).addr.poke(trace.mem_addr(0).U)
+      self.memReq(1).addr.poke(trace.mem_addr(1).U)
+      self.memReq(0).data.poke(trace.mem_data(0).U)
+      self.memReq(1).data.poke(trace.mem_data(1).U)
+    }
+    def peek(): CommitTrace = {
+      val state = self.state.peek()
+      val inst = self.inst.peek.litValue
+      val mem_addr = List(self.memReq(0).addr.peek.litValue, self.memReq(1).addr.peek.litValue)
+      val mem_data = List(self.memReq(0).data.peek.litValue, self.memReq(1).data.peek.litValue)
       new CommitTrace(state, inst, mem_addr, mem_data)
+    }
+  }
+
+  implicit class TransplantUnitHostIODriver(target: TransplantUnitHostIO) {
+    def fire(tag: Int)(implicit clock: Clock) = timescope {
+      target.fire.valid.poke(true.B)
+      target.fire.tag.poke(tag.U)
+      clock.step()
     }
   }
   implicit class CommitTraceDecoupledDriver[T <: CommitTraceBundle](target: DecoupledIO[T])
       extends DecoupledDriver[T](target) {
     def enqueue(trace: CommitTrace): Unit = timescope {
-      val state = trace.state
-      // TODO: check for init
-      for (reg <- 0 until 32) {
-        target.bits.state.rfile(reg).poke(state.xregs(reg).U)
-      }
-      target.bits.state.regs.poke(
-        (new PStateRegs).Lit(
-          _.PC -> state.pc.U,
-          _.SP -> state.sp.U,
-          _.NZCV -> state.nzcv.U
-        )
-      )
-      target.bits.inst.poke(trace.inst.U)
-      target.bits.memReq(0).addr.poke(trace.mem_addr(0).U)
-      target.bits.memReq(1).addr.poke(trace.mem_addr(1).U)
-      target.bits.memReq(0).data.poke(trace.mem_data(0).U)
-      target.bits.memReq(1).data.poke(trace.mem_data(1).U)
-
+      target.bits.poke(trace)
       target.valid.poke(true.B)
       fork
         .withRegion(Monitor) {
@@ -186,8 +146,8 @@ class CommitTraceBundle extends Bundle {
   )
 }
 
+import armflex.ArmflexBundleFunctions._
 class PipelineHardDriverModule(implicit val cfg: ProcConfig) extends MultiIOModule {
-  import armflex.ArmflexDrivers._
   val pipeline = Module(new PipelineWithTransplant)
   val transplantIO = IO(pipeline.transplantIO.cloneType)
   transplantIO <> pipeline.transplantIO
