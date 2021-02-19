@@ -7,6 +7,8 @@ import chisel3.util._
 import chiseltest._
 import chiseltest.internal._
 import chiseltest.experimental.TestOptionBuilder._
+import chisel3.util.DecoupledIO
+import chisel3.experimental.BundleLiterals._
 
 import armflex.TPU2STATE._
 import armflex.TestDriversExtra._
@@ -14,6 +16,8 @@ import armflex.TestDriversExtra._
 import armflex.util._
 import armflex.util.SoftwareStructs._
 import armflex.util.BRAMPortDriver.BRAMPortDriver
+import armflex.util.ExtraUtils._
+import armflex.TestDriversExtra._
 import chisel3.util.Queue
 import firrtl.annotations.MemoryLoadFileType.Hex
 
@@ -64,9 +68,6 @@ object PipelineDrivers {
   }
 }
 
-import chisel3.util.DecoupledIO
-import chisel3.experimental.BundleLiterals._
-
 object TestDriversExtra {
   implicit class FullStateBundleDriver(self: FullStateBundle) {
     def poke(state: PState) = {
@@ -86,6 +87,30 @@ object TestDriversExtra {
       val sp = pstate.SP.peek.litValue
       val nzcv = pstate.NZCV.peek.litValue.toInt
       new PState(xregs.toList: List[BigInt], pc: BigInt, sp: BigInt, nzcv: Int)
+    }
+    def compareAssert(target: FullStateBundle): Unit = {
+      val success = WireInit(true.B)
+      when(self.regs.PC =/= target.regs.PC) {
+        printf(p"PC:${Hexadecimal(self.regs.PC)}=/=${Hexadecimal(target.regs.PC)}\n")
+        success := false.B
+      }
+      when(self.regs.SP =/= target.regs.SP) {
+        printf(p"SP${Hexadecimal(self.regs.SP)}=/=${Hexadecimal(target.regs.SP)}\n")
+        success := false.B
+      }
+      when(self.regs.NZCV =/= target.regs.NZCV) {
+        printf(p"NZCV${Hexadecimal(self.regs.NZCV)}=/=${Hexadecimal(target.regs.NZCV)}\n")
+        success := false.B
+      }
+      for (reg <- 0 until 32) {
+        val expect = self.rfile(reg)
+        val actual = target.rfile(reg)
+        when(expect =/= actual) {
+          printf(p"${reg}:${Hexadecimal(expect)}=/=${Hexadecimal(actual)}\n")
+          success := false.B
+        }
+      }
+      assert(success)
     }
   }
 
@@ -131,7 +156,6 @@ object TestDriversExtra {
 }
 
 import chisel3.util.{Decoupled, Queue, ShiftRegister}
-import armflex.util.DecoupledTools._
 import arm.PROCESSOR_TYPES._
 
 class CommitTraceBundle extends Bundle {
@@ -146,7 +170,6 @@ class CommitTraceBundle extends Bundle {
   )
 }
 
-import armflex.ArmflexBundleFunctions._
 class PipelineHardDriverModule(implicit val cfg: ProcConfig) extends MultiIOModule {
   val pipeline = Module(new PipelineWithTransplant)
   val transplantIO = IO(pipeline.transplantIO.cloneType)
@@ -178,20 +201,22 @@ class PipelineHardDriverModule(implicit val cfg: ProcConfig) extends MultiIOModu
   memResp.io.enq.bits := issue.io.deq.bits
   memResp.io.enq.valid := issue.io.deq.fire && pipeline.dbg.issuingMem
 
-  val pairJustFired = RegNext(pipeline.mem.data.req.fire && pipeline.mem.data.req.bits.isPair)
-  pipeline.mem.data.req.ready := !pairJustFired
-  memResp.io.deq.ready := pipeline.mem.data.req.fire
-
-  val pairFired = ShiftRegister(pipeline.mem.data.req.fire && pipeline.mem.data.req.bits.isPair, pipeline.mem.data.latency)
-  val memRespBits = ShiftRegister(memResp.io.deq.bits, pipeline.mem.data.latency)
-  val memReqBits = ShiftRegister(pipeline.mem.data.req.bits, pipeline.mem.data.latency)
-  val memRespCurr = WireInit(memRespBits)
-  pipeline.mem.data.resp.valid := ShiftRegister(memResp.io.deq.fire, pipeline.mem.data.latency) || RegNext(pairFired)
-  pipeline.mem.data.resp.bits := memRespBits.memReq(0).data
-  when(RegNext(pairFired)) {
-    pipeline.mem.data.resp.bits := RegNext(memRespBits.memReq(1).data)
+  val pairJustFired = pipeline.mem.data.req.fire && memResp.io.deq.bits.memReq(1).addr =/= 0.U
+  val pairReq = RegNext(pairJustFired)
+  val singleResponse = ShiftRegister(memResp.io.deq.fire, cfg.cacheLatency)
+  val pairResponse = ShiftRegister(pairReq, cfg.cacheLatency)
+  val memRespBits = ShiftRegister(memResp.io.deq.bits, cfg.cacheLatency)
+  memResp.io.deq.ready := pipeline.mem.data.req.valid && !pairReq
+  pipeline.mem.data.req.ready := !pairReq
+  pipeline.mem.data.resp.valid := singleResponse || pairResponse
+  pipeline.mem.data.resp.bits.dirty := false.B
+  pipeline.mem.data.resp.bits.hit := false.B
+  pipeline.mem.data.resp.bits.thread_id := 0.U
+  pipeline.mem.data.resp.bits.data := memRespBits.memReq(0).data
+  when(pairResponse) {
+    pipeline.mem.data.resp.bits.data := RegNext(memRespBits.memReq(1).data)
   }
-  
+
   // TODO Simulate memory misses?
   pipeline.mem.wake := DontCare
   pipeline.mem.wake foreach (_.valid := false.B)
@@ -208,10 +233,10 @@ class PipelineHardDriverModule(implicit val cfg: ProcConfig) extends MultiIOModu
     printf("  Success Issue\n")
   }
   when(memResp.io.deq.fire) {
-    assert(memResp.io.deq.bits.memReq(0).addr === pipeline.mem.data.req.bits.memReq(0).addr)
-    when(pipeline.mem.data.req.bits.isPair) {
-      assert(memResp.io.deq.bits.memReq(1).addr === pipeline.mem.data.req.bits.memReq(1).addr)
-    }
+    assert(memResp.io.deq.bits.memReq(0).addr === pipeline.mem.data.req.bits.addr)
+  }
+  when(pairReq) {
+    assert(RegNext(memResp.io.deq.bits.memReq(1).addr) === pipeline.mem.data.req.bits.addr)
   }
   when(commit.io.deq.fire) {
     printf(

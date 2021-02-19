@@ -4,8 +4,6 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.{requireIsChiselType, DataMirror, Direction}
 
-import DecoupledTools._
-
 class ValidTag[T1 <: UInt, T2 <: Data](genTag: T1, genData: Option[T2]) extends Bundle {
   val valid = Bool()
   val bits = genData
@@ -19,16 +17,16 @@ object ValidTag {
   def apply[T <: UInt](genTag:              T): ValidTag[T, T] = new ValidTag(genTag, None)
 }
 
-object DecoupledTools {
-  class DecoupledTag[T1 <: UInt, T2 <: Data](genTag: T1, genData: T2) extends DecoupledIO[T2](genData) {
-    val tag = Output(genTag.cloneType)
-    override def cloneType: this.type = DecoupledTag(genTag, genData).asInstanceOf[this.type]
-  }
+class DecoupledTag[T1 <: UInt, T2 <: Data](genTag: T1, genData: T2) extends DecoupledIO[T2](genData) {
+  val tag = Output(genTag.cloneType)
+  override def cloneType: this.type = DecoupledTag(genTag, genData).asInstanceOf[this.type]
+}
 
-  object DecoupledTag {
-    def apply[T1 <: UInt, T2 <: Data](genTag: T1, genData: T2): DecoupledTag[T1, T2] = new DecoupledTag(genTag, genData)
-  }
+object DecoupledTag {
+  def apply[T1 <: UInt, T2 <: Data](genTag: T1, genData: T2): DecoupledTag[T1, T2] = new DecoupledTag(genTag, genData)
+}
 
+object ExtraUtils {
   implicit class AddMethodsToDecoupled[T <: Data](self: DecoupledIO[T]) {
     def handshake[T <: Data](target: DecoupledIO[T]): Unit = {
       target.ready <> self.ready
@@ -40,8 +38,6 @@ object DecoupledTools {
       }
     }
   }
-
-
 
   implicit class AddMethodsToDecoupledTag[T1 <: UInt, T2 <: Data](self: DecoupledTag[T1, T2])
       extends AddMethodsToDecoupled[T2](self) {
@@ -57,7 +53,6 @@ object DecoupledTools {
   }
 
 }
-
 
 /** An I/O Bundle for FlushReg (FlushRegister)
   * @param gen The type of data of the Reg
@@ -94,19 +89,18 @@ class FlushReg[T1 <: UInt, T2 <: Data](private val genTag: T1, private val gen: 
   io.deq.valid := valid && !flush
 }
 
-class RoundRobinArbiter(arbN: Int)
-    extends Module {
+class RoundRobinArbiter(arbN: Int) extends Module {
 
   val io = IO(new Bundle {
-           // Ready threads
-           val ready = Input(UInt(arbN.W))
-           // Next thread to issue
-           val next  = Decoupled(UInt(log2Ceil(arbN).W))
-         })
+    // Ready threads
+    val ready = Input(UInt(arbN.W))
+    // Next thread to issue
+    val next = Decoupled(UInt(log2Ceil(arbN).W))
+  })
 
-  def rotateRight[T <: Data](norm: UInt, rot : UInt) : UInt = {
+  def rotateRight[T <: Data](norm: UInt, rot: UInt): UInt = {
     val right = norm >> rot
-    val left  = norm << ~rot + 1.U;
+    val left = norm << ~rot + 1.U;
     val res = left | right
     res(arbN - 1, 0)
   }
@@ -121,30 +115,30 @@ class RoundRobinArbiter(arbN: Int)
    * next       Thread being issued on this cycle if next stage ready
    */
   val valid = io.ready.orR
-  val curr = RegInit(0.U(log2Ceil(arbN).W))  // Last thread issued
+  val curr = RegInit(0.U(log2Ceil(arbN).W)) // Last thread issued
   val ready_ofst = rotateRight(io.ready, curr)
   val ofst = PriorityEncoder(ready_ofst)
   val next = curr + ofst
 
   io.next.bits := next
   io.next.valid := valid
-  when(io.next.ready && valid) { curr := next + 1.U}
+  when(io.next.ready && valid) { curr := next + 1.U }
 }
 
-class FlushQueueIO[T <: Data](private val gen: T) extends Bundle
-{
+class FlushQueueIO[T <: Data](private val gen: T) extends Bundle {
   val enq = Flipped(Decoupled(gen))
   val deq = Decoupled(gen)
+
   /** Flush */
   val flush = Input(Bool())
 }
 
 class FlushQueue[T <: Data](
-  gen: T, 
+  gen:     T,
   entries: Int = 2,
-  pipe: Boolean = false,
-  flow: Boolean = false
-) extends Module {
+  pipe:    Boolean = false,
+  flow:    Boolean = false)
+    extends Module {
 
   val io = IO(new FlushQueueIO(gen))
 
@@ -159,14 +153,14 @@ class FlushQueue[T <: Data](
   val do_enq = WireDefault(io.enq.fire())
   val do_deq = WireDefault(io.deq.fire())
 
-  when (do_enq) {
+  when(do_enq) {
     ram(enq_ptr.value) := io.enq.bits
     enq_ptr.inc()
   }
-  when (do_deq) {
+  when(do_deq) {
     deq_ptr.inc()
   }
-  when (do_enq =/= do_deq) {
+  when(do_enq =/= do_deq) {
     maybe_full := do_enq
   }
 
@@ -175,16 +169,16 @@ class FlushQueue[T <: Data](
   io.deq.bits := ram(deq_ptr.value)
 
   if (flow) {
-    when (io.enq.valid) { io.deq.valid := true.B }
-    when (empty) {
+    when(io.enq.valid) { io.deq.valid := true.B }
+    when(empty) {
       io.deq.bits := io.enq.bits
       do_deq := false.B
-      when (io.deq.ready) { do_enq := false.B }
+      when(io.deq.ready) { do_enq := false.B }
     }
   }
 
   if (pipe) {
-    when (io.deq.ready) { io.enq.ready := true.B }
+    when(io.deq.ready) { io.enq.ready := true.B }
   }
 
   when(io.flush) {
@@ -199,11 +193,18 @@ class FlushQueue[T <: Data](
 
 object FlushQueue {
   def apply[T <: Data](genTag: T, entries: Int): FlushQueue[T] = new FlushQueue(genTag, entries)
-  def apply[T <: Data](in: DecoupledIO[T], entries: Int = 2, pipe: Boolean = false, flow: Boolean = false, flush: Bool = false.B)(name: String): DecoupledIO[T] = {
-    if(entries == 0){
+  def apply[T <: Data](
+    in:      DecoupledIO[T],
+    entries: Int = 2,
+    pipe:    Boolean = false,
+    flow:    Boolean = false,
+    flush:   Bool = false.B
+  )(name:    String
+  ): DecoupledIO[T] = {
+    if (entries == 0) {
       val res = Wire(Decoupled(in.bits.cloneType))
       res.bits := in.bits
-      when(flush){
+      when(flush) {
         res.valid := false.B
         in.ready := false.B
       }.otherwise {
@@ -213,7 +214,7 @@ object FlushQueue {
       res
     } else {
       val m = Module(new FlushQueue(in.bits.cloneType, entries, pipe, flow))
-      val u_queue = if(name.nonEmpty) m.suggestName(name) else m
+      val u_queue = if (name.nonEmpty) m.suggestName(name) else m
       u_queue.io.enq <> in
       u_queue.io.flush := flush
       u_queue.io.deq

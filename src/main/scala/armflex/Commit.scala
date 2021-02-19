@@ -5,7 +5,7 @@ import chisel3.util._
 
 import arm.PROCESSOR_TYPES._
 import armflex.util._
-import armflex.util.DecoupledTools._
+import armflex.util.ExtraUtils._
 
 class CommitInst[T <: UInt](gen: T) extends Bundle {
   // Update State
