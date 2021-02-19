@@ -18,12 +18,10 @@ class PipelineMemoryIO(implicit val cfg: ProcConfig) extends Bundle {
       Decoupled(new CacheFrontendRequestPacket(DATA_SZ, cfg.NB_THREADS_W, cfg.BLOCK_SIZE))
     val resp =
       Input(Valid(new FrontendReplyPacket(cfg.BLOCK_SIZE, cfg.NB_THREADS_W)))
-    val latency = 1
   }
   val data = new Bundle {
-    val req = Decoupled(new MInst)
-    val resp = Input(Valid(DATA_T))
-    val latency = 2
+    val req = Decoupled(new CacheFrontendRequestPacket(DATA_SZ, cfg.NB_THREADS_W, cfg.BLOCK_SIZE))
+    val resp = Input(Valid(new FrontendReplyPacket(cfg.BLOCK_SIZE, cfg.NB_THREADS_W)))
   }
   val wake = Input(Vec(4, ValidTag(cfg.TAG_T)))
 }
@@ -81,7 +79,8 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   val brancher = Module(new BranchUnit())
   val ldstU = Module(new LDSTUnit())
   // (MemInst || Issuer) -> CommitReg
-  val memInstReq = Module(new FlushReg(cfg.TAG_T, new MInst))
+
+  val memHandler = Module(new MemoryAdaptor)
   // Commit
   val commitU = Module(new CommitUnit(cfg.TAG_T, cfg.NB_THREADS))
 
@@ -165,9 +164,10 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   ldstU.io.pstate := archstate.issue.regs.curr
 
   // ------ Pack Execute/LDST result
-  memInstReq.io.enq.bits := ldstU.io.minst.bits
-  memInstReq.io.enq.tag := issuer.io.deq.tag
-  mem.data.req.bits := memInstReq.io.deq.bits
+  memHandler.pipe.req.bits := ldstU.io.minst.bits
+  memHandler.pipe.req.bits.tag := issuer.io.deq.tag
+  mem.data.req <> memHandler.mem.req
+  memHandler.mem.resp <> mem.data.resp
 
   // - Exceptions -
   val memException = WireInit(
@@ -218,74 +218,38 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   commitNext.tag := issuer.io.deq.tag
 
   // Memory Resp
-  val memLatency = mem.data.latency
-  val commitLDSTNext = WireInit(CommitInst(cfg.TAG_T))
-  val memInstReqSingle = ShiftRegister(memInstReq.io.deq.bits, memLatency)
-  val memInstReqPair = RegNext(memInstReqSingle) // One more cycle for Pair
-  val memInstReqSingleTag = ShiftRegister(memInstReq.io.deq.tag, memLatency)
-  val memInstReqPairTag = RegNext(memInstReqSingleTag)
-  val pairFired = ShiftRegister(memInstReq.io.deq.fire && memInstReq.io.deq.bits.isPair, memLatency)
-  // LD Single
-  commitLDSTNext.rd(0) := memInstReqSingle.rd
-  commitLDSTNext.res(0) := memInstReqSingle.rd_res
-  commitLDSTNext.res(1) := mem.data.resp.bits
-  commitLDSTNext.rd(1).valid := memInstReqSingle.isLoad
-  commitLDSTNext.rd(1).bits := memInstReqSingle.memReq(0).reg
-  commitLDSTNext.tag := memInstReqSingleTag
-  commitLDSTNext.is32bit := memInstReqSingle.is32bit
-  // LD Pair
-  commitLDSTNext.rd(2).bits := memInstReqPair.memReq(1).reg
-  commitLDSTNext.res(2) := mem.data.resp.bits
-  when(RegNext(pairFired) && mem.data.resp.valid) {
-    commitLDSTNext.rd(2).valid := memInstReqPair.isLoad
-    commitLDSTNext.rd(0) := memInstReqPair.rd
-    commitLDSTNext.res(0) := memInstReqPair.rd_res
-    commitLDSTNext.res(1) := RegNext(mem.data.resp.bits)
-    commitLDSTNext.rd(1).valid := memInstReqPair.isLoad
-    commitLDSTNext.rd(1).bits := memInstReqPair.memReq(0).reg
-    commitLDSTNext.rd(2).bits := memInstReqPair.memReq(1).reg
-    commitLDSTNext.tag := memInstReqPairTag
-    commitLDSTNext.is32bit := memInstReqPair.is32bit
-  }
+
 
   // ----- Control Execute Stage Handshakes -----
   // Handle response from Memory Hierarchy before Issued Inst
   // Handshakes of IssuerDeq, memInst and CommitReg
   issuer.io.deq.ready := false.B
-  memInstReq.io.enq.valid := false.B
-  memInstReq.io.deq.ready := false.B
+  memHandler.pipe.req.valid := false.B
   mem.data.req.valid := false.B
   commitU.enq.valid := false.B
 
-  memInstReq.io.deq.handshake(mem.data.req)
+  val ldstInstruction = ldstU.io.minst.valid && !ldstU.io.minst.bits.exceptions.valid
   val commitAsIssue = commitU.commit.commited.valid && issuer.io.deq.tag === commitU.commit.commited.tag
-  val memoryReqAsIssue = memInstReq.io.deq.valid && issuer.io.deq.tag === memInstReq.io.deq.tag
-  commitU.enq.bits := Mux(mem.data.resp.valid, commitLDSTNext, commitNext)
-  when(mem.data.resp.valid) {
+  commitU.enq.bits := Mux(mem.data.resp.valid, memHandler.pipe.resp.bits, commitNext)
+  when(memHandler.pipe.resp.valid) {
     // When memory response arrives, don't take from issue but from response
-    commitU.enq.valid := !pairFired // Ditch first valid on pair instruction
-  }.elsewhen(!(commitAsIssue || memoryReqAsIssue)) {
-    // Can only issue when not commiting same thread
-    when(ldstU.io.minst.valid && !ldstU.io.minst.bits.exceptions.valid) {
-      issuer.io.deq.handshake(memInstReq.io.enq, archstate.issue.ready)
-    }.otherwise {
-      issuer.io.deq.handshake(commitU.enq, archstate.issue.ready)
-    }
+    commitU.enq.valid := true.B
+  }.otherwise {
+    commitU.enq.handshake(issuer.io.deq, archstate.issue.ready && !ldstInstruction)
+  }
+  when(ldstInstruction) {
+    issuer.io.deq.handshake(memHandler.pipe.req, archstate.issue.ready)
   }
 
   // Assertions:  Issuer Deq | memInst Req&Resp | CommitReg Enq
   when(issuer.io.deq.fire) {
-    assert(commitU.enq.fire || memInstReq.io.enq.fire)
-    assert(!(commitU.enq.fire && memInstReq.io.enq.fire))
+    assert(commitU.enq.fire || memHandler.pipe.req.fire)
+    assert(!(commitU.enq.fire && memHandler.pipe.req.fire))
     when(commitU.commit.commited.valid) { assert(issuer.io.deq.tag =/= commitU.commit.commited.tag) }
-    when(memInstReq.io.deq.valid) { assert(issuer.io.deq.tag =/= memInstReq.io.deq.tag) }
   }
   when(commitU.enq.fire) {
     assert(mem.data.resp.valid || issuer.io.deq.fire)
     assert(!(mem.data.resp.valid && issuer.io.deq.fire))
-  }
-  when(memInstReq.io.deq.fire) {
-    assert(mem.data.req.fire)
   }
 
   // ------ Commit Stage ------
@@ -295,13 +259,9 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
 
   // Flushing ----------------------------------------------------------------
   // No speculative state is kept in the pipeline in current version
-  // The Flush signal is not needed
-  fetchReg.io.flush.valid := false.B
+  // The Flush signal is no longer needed
   decReg.io.flush.valid := false.B
   issuer.io.flush.valid := false.B
-  memInstReq.io.flush.valid := false.B
-
-  memInstReq.io.flush.tag := DontCare
   fetchReg.io.flush.tag := DontCare
   decReg.io.flush.tag := DontCare
   issuer.io.flush.tag := DontCare

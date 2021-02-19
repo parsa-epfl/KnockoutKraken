@@ -16,6 +16,7 @@ class ProcConfig(
   // Chisel Generator configs
   val NB_THREADS:   Int = 2,
   val BLOCK_SIZE:   Int = 512,
+  val pAddressWidth: Int = 36,
   // Simulation settings
   val DebugSignals: Boolean = false,
   val rtlVerbose:   Boolean = false,
@@ -28,6 +29,9 @@ class ProcConfig(
   val TAG_X = 0.U(NB_THREADS_W.W)
   val TAG_VEC_X = 0.U(NB_THREADS.W)
   def TAG_VEC_T = UInt(NB_THREADS.W)
+
+  // Memory
+  val cacheLatency = 1
 
   // BRAM Generator configs
   val bramConfigState = new BRAMConfig(8, 8, 1024, "", false, false)

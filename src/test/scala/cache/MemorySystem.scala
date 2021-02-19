@@ -19,7 +19,7 @@ class RequestAdaptorTester extends FreeSpec with ChiselScalatestTester {
 
   "Normal read" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/memory_request_adaptor/normal"), WriteVcdAnnotation)
-    test(new CacheRequestAdaptor(param)()).withAnnotations(anno){ dut =>
+    test(new CacheRequestAdaptor(param)).withAnnotations(anno){ dut =>
 
       dut.o.ready.poke(true.B)
 
@@ -27,7 +27,7 @@ class RequestAdaptorTester extends FreeSpec with ChiselScalatestTester {
       dut.i.bits.isLoad.poke(true.B)
       dut.i.bits.isPair.poke(false.B)
       dut.i.bits.size.poke(SIZE64)
-      dut.i.bits.threadID.poke(0.U)
+      dut.i.bits.tag.get.poke(0.U)
       dut.i.bits.memReq(0).addr.poke(0.U)
       dut.i.bits.memReq(0).data.poke(0.U)
       dut.i.bits.memReq(1).addr.poke(0.U)
@@ -51,7 +51,7 @@ class RequestAdaptorTester extends FreeSpec with ChiselScalatestTester {
 
   "Pair Load" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/memory_request_adaptor/pair"), WriteVcdAnnotation)
-    test(new CacheRequestAdaptor(param)()).withAnnotations(anno){ dut =>
+    test(new CacheRequestAdaptor(param)).withAnnotations(anno){ dut =>
       dut.o.ready.poke(true.B)
 
       dut.i.bits.isLoad.poke(true.B)
@@ -96,14 +96,14 @@ class RequestAdaptorTester extends FreeSpec with ChiselScalatestTester {
 
   "Data placement" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/memory_request_adaptor/data_placement"), WriteVcdAnnotation)
-    test(new CacheRequestAdaptor(param)()).withAnnotations(anno){ dut =>
+    test(new CacheRequestAdaptor(param)).withAnnotations(anno){ dut =>
       dut.o.ready.poke(true.B)
 
       // a normal read request
       dut.i.bits.isLoad.poke(false.B)
       dut.i.bits.isPair.poke(false.B)
       dut.i.bits.size.poke(SIZEB)
-      dut.i.bits.threadID.poke(0.U)
+      dut.i.bits.tag.poke(0.U)
       dut.i.bits.memReq(0).addr.poke(3.U)
       dut.i.bits.memReq(0).data.poke(128.U)
       dut.i.bits.memReq(1).addr.poke(0.U)
@@ -132,7 +132,7 @@ class ReplyAdaptorTester extends FreeSpec with ChiselScalatestTester {
 
   "Pair" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/memory_reply_adaptor/pair"), WriteVcdAnnotation)
-    test(new CacheReplyAdaptor(param)()).withAnnotations(anno){ dut =>
+    test(new CacheReplyAdaptor(param)).withAnnotations(anno){ dut =>
       // setup the sync_message_i
       //dut.sync_message_i.setSinkClock(dut.clock)
       dut.sync_message_i.bits.bias_addr.poke(2.U)
