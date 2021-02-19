@@ -64,7 +64,7 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   // Pipeline -----------------------------------------------
   //val fetch = IO(Flipped(Decoupled(INST_T)))
   val fetch = Module(new FetchUnit)
-  val fetchReg = Module(new FlushReg(cfg.TAG_T, INST_T))
+  val fetchQueue = Module(new Queue(new Tagged(cfg.TAG_T, INST_T), cfg.NB_THREADS, true, false))
   // Decode
   val decoder = Module(new DecodeUnit)
   val decReg = Module(new FlushReg(cfg.TAG_T, new DInst))
@@ -103,21 +103,21 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   mem.inst.req.bits.wData := DontCare
   mem.inst.req.bits.wMask := DontCare
 
-  // 3 Way handshake fetch || mem.inst.req || fetchRegResp
   fetch.mem.ready := false.B
-  fetch.mem.handshake(mem.inst.req, fetchReg.io.enq.ready)
+  fetch.mem.handshake(mem.inst.req)
+  when(mem.inst.req.fire) {
+    assert(fetchQueue.io.enq.ready)
+  }
 
-  // TODO Ready signal from the fetching register has 1 cycle delay -> potential data error
-  val fetchLatency = mem.inst.latency
-  fetchReg.io.enq.valid := ShiftRegister(fetch.mem.fire, fetchLatency)
-  fetchReg.io.enq.tag := ShiftRegister(fetch.mem.tag, fetchLatency)
-  fetchReg.io.enq.bits := mem.inst.resp.bits.data
-  fetchReg.io.enq.valid := mem.inst.resp.valid
+  val fetchTag = ShiftRegister(fetch.mem.tag, cfg.cacheLatency)
+  fetchQueue.io.enq.valid := mem.inst.resp.valid
+  fetchQueue.io.enq.bits := Tagged(fetchTag, mem.inst.resp.bits.data)
 
   // Fetch -> Decode
-  decoder.inst := fetchReg.io.deq.bits
+  decoder.inst := fetchQueue.io.deq.bits.data
   decReg.io.enq.bits := decoder.dinst
-  decReg.io.enq.handshake(fetchReg.io.deq)
+  decReg.io.enq.tag := fetchQueue.io.deq.bits.tag
+  decReg.io.enq.handshake(fetchQueue.io.deq)
 
   // Decode -> Issue
   issuer.io.enq <> decReg.io.deq
@@ -125,8 +125,7 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   // Execute : Issue -> Execute
   val issued_dinst = WireInit(issuer.io.deq.bits)
 
-  /** Execute */
-
+  // Issue ---------------------------
   // connect rfile read(address) interface
   archstate.issue.sel.tag :=  issuer.io.deq.tag
   archstate.issue.sel.valid := issuer.io.deq.fire
@@ -138,6 +137,7 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
     // archstate.issue.rd.port(0).addr := issued_dinst.imm(4, 0)
   }
 
+  // Execute ---------------------------
   // Read register data from rfile
   val rVal1 = archstate.issue.rd.port(0).data
   val rVal2 = archstate.issue.rd.port(1).data
@@ -262,7 +262,6 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   // The Flush signal is no longer needed
   decReg.io.flush.valid := false.B
   issuer.io.flush.valid := false.B
-  fetchReg.io.flush.tag := DontCare
   decReg.io.flush.tag := DontCare
   issuer.io.flush.tag := DontCare
 

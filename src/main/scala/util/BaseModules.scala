@@ -11,6 +11,21 @@ class ValidTag[T1 <: UInt, T2 <: Data](genTag: T1, genData: Option[T2]) extends 
   override def cloneType: this.type = ValidTag(genTag, genData).asInstanceOf[this.type]
 }
 
+class Tagged[T1 <: UInt, T2 <: Data](genTag: T1, genData: T2) extends Bundle {
+  val tag = genTag.cloneType
+  val data = genData.cloneType
+  override def cloneType: this.type = new Tagged(genTag, genData).asInstanceOf[this.type]
+}
+
+object Tagged {
+  def apply[T1 <: UInt, T2 <: Data](genTag: T1, genData: T2): Tagged[T1, T2] = {
+    val wire = Wire(new Tagged(genTag, genData))
+    wire.tag := genTag
+    wire.data := genData
+    wire
+  }
+}
+
 object ValidTag {
   def apply[T1 <: UInt, T2 <: Data](genTag: T1, genData: Option[T2]): ValidTag[T1, T2] = new ValidTag(genTag, genData)
   def apply[T1 <: UInt, T2 <: Data](genTag: T1, genData: T2): ValidTag[T1, T2] = new ValidTag(genTag, Some(genData))
