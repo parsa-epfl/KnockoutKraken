@@ -12,7 +12,7 @@ class FetchUnit(implicit val cfg: ProcConfig) extends MultiIOModule {
   val ctrl = IO(new Bundle {
     val start = Input(ValidTag(cfg.TAG_T, DATA_T))
     val commit = Input(ValidTag(cfg.TAG_T, DATA_T))
-    val memWake = Vec(4, ValidTag(cfg.TAG_T))
+    val memWake = Input(Vec(4, ValidTag(cfg.TAG_T)))
   })
 
   val mem = IO(DecoupledTag(cfg.TAG_T, DATA_T))
