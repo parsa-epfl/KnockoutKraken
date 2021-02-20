@@ -447,7 +447,10 @@ class MemoryAdaptor(implicit cfg: ProcConfig) extends MultiIOModule {
   val memResp = Module(new Queue(new MInstTag(cfg.TAG_T), cfg.cacheLatency, true, false))
   val cacheAdaptorReq = Module(new CacheRequestAdaptor(cfg.NB_THREADS, DATA_SZ, cfg.BLOCK_SIZE))
   val cacheAdaptorResp = Module(new CacheReplyAdaptor(cfg.NB_THREADS, DATA_SZ, cfg.BLOCK_SIZE))
-  cacheAdaptorResp.sync_message_i <> cacheAdaptorReq.sync_message_o
+  val synq = Module(new Queue(cacheAdaptorReq.sync_message.bits.cloneType, 1, true, false))
+  synq.io.enq <> cacheAdaptorReq.sync_message_o
+  cacheAdaptorResp.sync_message_i <> synq.io.deq
+
   val cacheResp = cacheAdaptorResp.data_o
   val singleDone = WireInit(!memResp.io.deq.bits.isPair)
   val pairDone = RegNext(memResp.io.deq.bits.isPair)
