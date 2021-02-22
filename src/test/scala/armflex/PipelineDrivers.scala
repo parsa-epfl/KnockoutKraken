@@ -37,25 +37,17 @@ object PipelineDrivers {
     }
 
     def transplantAndStart(tag: Int, pstate: PState): Unit = {
-      val statePort: BRAMPort = pipeline.transplantIO.state
-      for (i <- ARCH_XREGS_OFFST until ARCH_XREGS_OFFST + 32) {
-        statePort.wr(pstate.xregs(i), i)
+      pipeline.transplantIO.port.wr(tag, pstate)
+      timescope {
+        pipeline.transplantIO.done.valid.poke(true.B)
+        pipeline.transplantIO.done.tag.poke(tag.U)
+        clock.step()
       }
-      statePort.wr(pstate.nzcv, ARCH_PSTATE_OFFST)
     }
 
-    def getTransplantOut: PState = {
-      val statePort: BRAMPort = pipeline.transplantIO.state
-      val xregs = for (reg <- ARCH_XREGS_OFFST until ARCH_XREGS_OFFST + 32) yield {
-        val regVal = statePort.rd(reg)
-        regVal
-      }
-      val pc = statePort.rd(ARCH_PC_OFFST)
-      val sp = statePort.rd(ARCH_SP_OFFST)
-      val nzcv = statePort.rd(ARCH_PSTATE_OFFST)
-
-      val pstate = new PState(xregs.toList: List[BigInt], pc: BigInt, sp: BigInt, nzcv.toInt: Int)
-      pstate
+    def getTransplantOut(tag: Int): PState = {
+      val state = pipeline.transplantIO.port.rdState(tag)
+      state
     }
 
     def traceIn(trace: CommitTrace): Unit =
