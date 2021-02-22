@@ -2,10 +2,11 @@ package armflex
 
 import chisel3._
 
-import chisel3.util.{Cat, Decoupled, Valid}
+import chisel3.util.{Cat, Decoupled, Valid, Fill}
 import arm.PROCESSOR_TYPES._
-import armflex.util.BRAMConfig
 import chisel3.util.log2Ceil
+
+import armflex.util._
 
 /*
  * The 64-bit Execution state. This Execution state:
@@ -49,7 +50,7 @@ class PStateRegs extends Bundle {
 }
 
 object PStateRegs {
-  def apply()(implicit cfg: ProcConfig): PStateRegs = {
+  def apply(): PStateRegs = {
     val wire = Wire(new PStateRegs())
     wire.PC := DATA_X
     wire.SP := DATA_X
@@ -58,171 +59,111 @@ object PStateRegs {
     wire
   }
 }
-
-class RFileIO(implicit val cfg: ProcConfig) extends Bundle {
-  val rs1_addr = Input(REG_T)
-  val rs1_data = Output(DATA_T)
-  val rs2_addr = Input(REG_T)
-  val rs2_data = Output(DATA_T)
-
-  val w1_addr = Input(REG_T)
-  val w1_data = Input(DATA_T)
-  val w1_en = Input(Bool())
-
-  // ReadWritePort
-  val rw_addr = Input(REG_T)
-  val rw_di = Input(DATA_T)
-  val rw_wen = Input(Bool())
-  val rw_do = Output(DATA_T)
-
-  val rfileVec =
-    if (cfg.DebugSignals) Some(Output(Vec(REG_N, DATA_T))) else None
-}
-
-/**  Register file for each thread.
-  *  single write port and two read ports
-  */
-class RFile(implicit val cfg: ProcConfig) extends Module {
-  val io = IO(new RFileIO())
-
-  val regfile = Mem(REG_N, DATA_T)
-
-  io.rs1_data := regfile(io.rs1_addr)
-  io.rs2_data := regfile(io.rs2_addr)
-
-  when(io.w1_en) {
-    regfile(io.w1_addr) := io.w1_data
-  }
-
-  // ReadWirePort
-  when(io.rw_wen) {
-    regfile(io.rw_addr) := io.rw_di
-  }
-  io.rw_do := regfile(io.rw_addr)
-
-  // DEBUG Signals ------------------------------------------------------------
-  if (cfg.DebugSignals) {
-    val vecRFile = Wire(Vec(REG_N, DATA_T))
-    for (reg <- 0 until REG_N) vecRFile(reg) := regfile(reg)
-    io.rfileVec.get := vecRFile
-  }
-}
-
-class RFile3IO(val with3: Boolean, val withDbg: Boolean) extends Bundle {
-  val rs1_addr = Input(REG_T)
-  val rs1_data = Output(DATA_T)
-  val rs2_addr = Input(REG_T)
-  val rs2_data = Output(DATA_T)
-
-  val w_addr = Input(REG_T)
-  val w_data = Input(DATA_T)
-  val w_en = Input(Bool())
-
-  // ReadWritePort, disables RFile for a cycle
-  val rw =
-    if (with3) Some(new Bundle {
-      val port = Flipped(Decoupled(new Bundle {
-        val addr = REG_T
-        val data = DATA_T
-        val wen = Bool()
-      }))
-      val resp = Valid(DATA_T)
-    })
-    else None
-}
-
-/**  Register file for each thread.
-  *  single write port and two read ports
-  */
-class RFile3Arbiter(val withDbg: Boolean) extends MultiIOModule {
-  val rfile3 = IO(new RFile3IO(true, false))
-  val rfile2 = IO(Flipped(new RFile3IO(false, false)))
-
-  val port1_addr = WireInit(rfile3.rs1_addr)
-  val port2_addr = WireInit(rfile3.rs2_addr)
-  val port1_data = WireInit(rfile2.rs1_data)
-  val port2_data = WireInit(rfile2.rs2_data)
-
-  val portWr_en = WireInit(rfile3.w_en)
-  val portWr_addr = WireInit(rfile3.w_addr)
-  val portWr_data = WireInit(rfile3.w_data)
-
-  rfile2.rs1_addr := port1_addr
-  rfile2.rs2_addr := port2_addr
-  rfile3.rs1_data := port1_data
-  rfile3.rs2_data := port2_data
-  rfile2.w_en := portWr_en
-  rfile2.w_data := portWr_data
-  rfile2.w_addr := portWr_addr
-
-  // Arbiter Extra port
-  val isReady = RegInit(true.B)
-  isReady := true.B
-  when(rfile3.rw.get.port.valid) {
-    isReady := false.B
-  }
-
-  when(!isReady) {
-    portWr_en := RegNext(rfile3.rw.get.port.bits.wen)
-    portWr_addr := RegNext(rfile3.rw.get.port.bits.addr)
-    portWr_data := RegNext(rfile3.rw.get.port.bits.data)
-    port2_addr := RegNext(rfile3.rw.get.port.bits.addr)
-  }
-  rfile3.rw.get.port.ready := isReady
-  rfile3.rw.get.resp.valid := !isReady
-  rfile3.rw.get.resp.bits := port2_data
-}
-
-object RFileSingleIO {
-  class RDPort[T <: Data](gen: T) extends Bundle {
+object RFileIO {
+  class RDPort(nbThreads: Int) extends Bundle {
     val port = Vec(2, new Bundle {
         val addr = Input(REG_T)
         val data = Output(DATA_T)
       }
     )
-    val tag = Input(gen)
-    override def cloneType: this.type = new RDPort(gen).asInstanceOf[this.type]
-
+    val tag = Input(UInt(log2Ceil(nbThreads).W))
+    override def cloneType: this.type = new RDPort(nbThreads).asInstanceOf[this.type]
   }
 
-  class WRPort[T <: Data](gen: T) extends Bundle {
+  class WRPort(nbThreads: Int) extends Bundle {
     val addr = Input(REG_T)
     val data = Input(DATA_T)
     val en = Input(Bool())
-    val tag = Input(gen)
-    override def cloneType: this.type = new WRPort(gen).asInstanceOf[this.type]
+    val tag = Input(UInt(log2Ceil(nbThreads).W))
+    override def cloneType: this.type = new WRPort(nbThreads).asInstanceOf[this.type]
+  }
 
+  def wr2BRAM(port: BRAMPort, wr: WRPort) {
+    port.ADDR := wr.addr
+    port.DI := wr.data
+    port.EN := wr.en.asUInt
+    port.WE := Fill(port.cfg.NB_COL, wr.en.asUInt)
+  }
+
+  def rdBRAM(rd: RDPort, rdPort: Int, port: BRAMPort):UInt = {
+    port.WE := 0.U
+    port.DI := 0.U
+    port.EN := true.B
+    port.ADDR := Cat(rd.tag, rd.port(rdPort).addr)
+    port.DO
   }
 }
 
-class RFileSingle[T <: Data](nbThreads: Int, gen: T, withDbg: Boolean = false) extends MultiIOModule {
-  val rd = IO(new RFileSingleIO.RDPort(gen))
-  val wr = IO(new RFileSingleIO.WRPort(gen))
+class RFileBRAM[T <: UInt](nbThreads: Int) extends MultiIOModule {
+  val rd = IO(new RFileIO.RDPort(nbThreads))
+  val wr = IO(new RFileIO.WRPort(nbThreads))
 
+  private val bramConfig = new BRAMConfig(DATA_SZ/8, 8, nbThreads * REG_N, "", false, false, true, false)
+  private val rd1_mem = Module(new BRAM()(bramConfig))
+  private val rd2_mem = Module(new BRAM()(bramConfig))
   private val rd_addr = Seq(
-    Cat(rd.tag.asUInt, rd.port(0).addr),
-    Cat(rd.tag.asUInt, rd.port(1).addr)
+    Cat(rd.tag, rd.port(0).addr),
+    Cat(rd.tag, rd.port(1).addr)
   )
-  private val wr_addr = Cat(wr.tag.asUInt, wr.addr)
+  private val wr_addr = Cat(wr.tag, wr.addr)
   private val regfile = Mem(nbThreads * REG_N, DATA_T)
 
-  rd.port(0).data := regfile(rd_addr(0))
-  rd.port(1).data := regfile(rd_addr(1))
+  rd.port(0).data := RFileIO.rdBRAM(rd, 0, rd1_mem.portA)
+  rd.port(1).data := RFileIO.rdBRAM(rd, 1, rd2_mem.portA)
 
-  when(wr.en) {
-    regfile(wr_addr) := wr.data
+  RFileIO.wr2BRAM(rd1_mem.portB, wr)
+  RFileIO.wr2BRAM(rd2_mem.portB, wr)
+}
+
+class PStateRegsIO(val nbThreads: Int) extends Bundle {
+  val commit = new Bundle {
+    val curr = Output(new PStateRegs)
+    val next = Input(ValidTag(nbThreads, new PStateRegs))
+  }
+  val transplant = new Bundle {
+    val thread = Input(UInt(log2Ceil(nbThreads).W))
+    val pregs = Output(new PStateRegs)
+  }
+  val issue = new Bundle {
+    val thread = Input(UInt(log2Ceil(nbThreads).W))
+    val pregs = Output(new PStateRegs)
+  }
+}
+
+class ArchState(nbThreads: Int, withDbg: Boolean) extends MultiIOModule {
+  val rfile_rd = IO(new RFileIO.RDPort(nbThreads))
+  val rfile_wr = IO(new RFileIO.WRPort(nbThreads))
+  val pstate = IO(new PStateRegsIO(nbThreads))
+
+  private val rfile = Module(new RFileBRAM(nbThreads))
+  private val pregsVec = RegInit(VecInit(Seq.fill(nbThreads)(PStateRegs())))
+
+  rfile.rd <> rfile_rd
+  rfile.wr <> rfile_wr
+
+  pstate.issue.pregs := pregsVec(pstate.issue.thread)
+  pstate.commit.curr := pregsVec(pstate.commit.next.tag)
+  pstate.transplant.pregs := pregsVec(pstate.transplant.thread)
+  when(pstate.commit.next.valid) {
+    pregsVec(pstate.commit.next.tag) := pstate.commit.next.bits.get
   }
 
   val dbg = IO(new Bundle {
-    val rfileVec =
-      if (withDbg) Some(Output(Vec(nbThreads, Vec(REG_N, DATA_T))))
-      else None
+    val vecState = if(withDbg) Some(Output(Vec(nbThreads, new FullStateBundle))) else None
   })
-  if (withDbg) {
-    for (thread <- 0 until nbThreads) {
-      val vecRFile = Wire(Vec(REG_N, DATA_T))
-      for (reg <- 0 until REG_N) vecRFile(reg) := regfile(Cat(thread.U, reg.U))
-      dbg.rfileVec.get(thread) := vecRFile
+  if(withDbg) {
+    // Copy of BRAM RegFile states
+    val dbgRFile = Mem(nbThreads * REG_N, DATA_T)
+    val wrAddr = WireInit(Cat(rfile.wr.tag,rfile.wr.addr))
+    when(rfile.wr.en) {
+      dbgRFile(wrAddr) := rfile.wr.data
+    }
+    for(thread <- 0 until nbThreads) {
+      for(reg <- 0 until REG_N) {
+        // RegNext because BRAM has rd delay of 1
+        dbg.vecState.get(thread).rfile(reg) := dbgRFile(((thread << log2Ceil(REG_N))+reg).U)
+      }
+      dbg.vecState.get(thread).regs := pregsVec(thread)
     }
   }
 }

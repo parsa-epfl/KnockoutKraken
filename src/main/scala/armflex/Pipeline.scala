@@ -29,7 +29,7 @@ class PipelineMemoryIO(implicit val cfg: ProcConfig) extends Bundle {
 class IssueArchStateIO[T <: UInt](gen: T) extends Bundle {
   val sel = Output(ValidTag(gen))
   val regs = new Bundle { val curr = Input(new PStateRegs) }
-  val rd = Flipped(new RFileSingleIO.RDPort(gen))
+  val rd = Flipped(new RFileIO.RDPort(nbThreads))
   val ready = Input(Bool())
 }
 
@@ -118,18 +118,20 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   decReg.io.enq.handshake(fetchQueue.io.deq)
 
   // Decode -> Issue
+  // Read from RFile, 1 cycle delay 
+  archstate.issue.sel.tag := decReg.io.deq.tag
+  archstate.issue.sel.valid := decReg.io.deq.fire
+  archstate.issue.rd.tag := decReg.io.deq.tag
+  archstate.issue.rd.port(0).addr := decReg.io.deq.bits.rs1
+  archstate.issue.rd.port(1).addr := decReg.io.deq.bits.rs2
   issuer.io.enq <> decReg.io.deq
-
+  // TODO When Issuer io deq ! ready -> register RFile RD output
+ 
   // Execute : Issue -> Execute
   val issued_dinst = WireInit(issuer.io.deq.bits)
 
   // Issue ---------------------------
   // connect rfile read(address) interface
-  archstate.issue.sel.tag :=  issuer.io.deq.tag
-  archstate.issue.sel.valid := issuer.io.deq.fire
-  archstate.issue.rd.tag := issuer.io.deq.tag
-  archstate.issue.rd.port(0).addr := issued_dinst.rs1
-  archstate.issue.rd.port(1).addr := issued_dinst.rs2
   when(issued_dinst.itype === I_DP3S) {
     // TODO Triple register instruction
     // archstate.issue.rd.port(0).addr := issued_dinst.imm(4, 0)

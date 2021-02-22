@@ -181,7 +181,8 @@ class BRAMConfig(
   val implementedWithRegister: Boolean = false
 ) {
 
-  private val NB_ELE_PER_BRAM = 1024*4/NB_COL
+  // TODO Size inference of BRAM might be broken
+  private val NB_ELE_PER_BRAM = scala.math.max(1024, 1024*4/NB_COL)
   private val nbBlocks = {
     val size = NB_ELE/NB_ELE_PER_BRAM
     if(size == 0) 1 else size
@@ -228,7 +229,7 @@ class BRAMPort(implicit val cfg: BRAMConfig) extends Bundle {
   }
 }
 
-class BRAM(implicit cfg: BRAMConfig) extends MultiIOModule {
+class BRAM(implicit val cfg: BRAMConfig) extends MultiIOModule {
   val portA = IO(new BRAMPort)
   val portB = IO(new BRAMPort)
   private val bramTDP = Module(new BRAMTDP)

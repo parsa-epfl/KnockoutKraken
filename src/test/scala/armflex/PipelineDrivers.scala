@@ -10,7 +10,7 @@ import chiseltest.experimental.TestOptionBuilder._
 import chisel3.util.DecoupledIO
 import chisel3.experimental.BundleLiterals._
 
-import armflex.TPU2STATE._
+import armflex.Trans2State._
 import armflex.TestDriversExtra._
 
 import armflex.util._
@@ -32,8 +32,8 @@ object PipelineDrivers {
       pipeline.traceIn.valid.poke(false.B)
       pipeline.traceExpect.valid.poke(false.B)
 
-      pipeline.transplantIO.state.init
-      pipeline.transplantIO.ctrl.fire.valid.poke(false.B)
+      pipeline.transplantIO.port.init
+      pipeline.transplantIO.done.valid.poke(false.B)
     }
 
     def transplantAndStart(tag: Int, pstate: PState): Unit = {
@@ -41,10 +41,7 @@ object PipelineDrivers {
       for (i <- ARCH_XREGS_OFFST until ARCH_XREGS_OFFST + 32) {
         statePort.wr(pstate.xregs(i), i)
       }
-      statePort.wr(pstate.pc, ARCH_PC_OFFST)
-      statePort.wr(pstate.sp, ARCH_SP_OFFST)
       statePort.wr(pstate.nzcv, ARCH_PSTATE_OFFST)
-      pipeline.transplantIO.ctrl.fire(tag)
     }
 
     def getTransplantOut: PState = {
@@ -132,13 +129,6 @@ object TestDriversExtra {
     }
   }
 
-  implicit class TransplantUnitHostIODriver(target: TransplantUnitHostIO) {
-    def fire(tag: Int)(implicit clock: Clock) = timescope {
-      target.fire.valid.poke(true.B)
-      target.fire.tag.poke(tag.U)
-      clock.step()
-    }
-  }
   implicit class CommitTraceDecoupledDriver[T <: CommitTraceBundle](target: DecoupledIO[T])
       extends DecoupledDriver[T](target) {
     def enqueue(trace: CommitTrace): Unit = timescope {

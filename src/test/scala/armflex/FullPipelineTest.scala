@@ -38,7 +38,7 @@ class PipelineTest(val dut: PipelineHardDriverModule, traceDrv: VerificationDriv
         trace = dut.transplantOut.state.bits.peek()
         transplantInsts.enqueue(dut.transplantOut.inst.peek().litValue)
       }
-      if (dut.transplantIO.ctrl.done.valid.peek.litToBoolean) {
+      if (dut.transplantIO.transOut.valid.peek.litToBoolean) {
         dut.transplantAndStart(0, trace.state)
       }
       dut.clock.step()

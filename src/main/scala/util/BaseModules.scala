@@ -30,6 +30,8 @@ object ValidTag {
   def apply[T1 <: UInt, T2 <: Data](genTag: T1, genData: Option[T2]): ValidTag[T1, T2] = new ValidTag(genTag, genData)
   def apply[T1 <: UInt, T2 <: Data](genTag: T1, genData: T2): ValidTag[T1, T2] = new ValidTag(genTag, Some(genData))
   def apply[T <: UInt](genTag:              T): ValidTag[T, T] = new ValidTag(genTag, None)
+  def apply[T <: Data](nbThreads: Int, genData: T): ValidTag[UInt, T] = ValidTag(UInt(log2Ceil(nbThreads).W), genData)
+  def apply[T <: Data](nbThreads: Int): ValidTag[UInt, T] = ValidTag(UInt(log2Ceil(nbThreads).W), None)
 }
 
 class DecoupledTag[T1 <: UInt, T2 <: Data](genTag: T1, genData: T2) extends DecoupledIO[T2](genData) {

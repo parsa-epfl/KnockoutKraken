@@ -38,77 +38,61 @@ class ProcConfig(
 }
 
 class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule {
-  val pipeline = Module(new Pipeline)
 
+  // Pipeline
+  val pipeline = Module(new Pipeline)
+  // State
   // Memory
   val mem = IO(pipeline.mem.cloneType)
   mem <> pipeline.mem
-  // Transplants
-  val transplantIO = IO(new Bundle {
-    val state = new BRAMPort()(cfg.bramConfigState)
-    val ctrl = new TransplantUnitHostIO
-  })
-
-  val rfile = Module(new RFileSingle(cfg.NB_THREADS, cfg.TAG_T, cfg.DebugSignals))
-  val pregsVec = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(PStateRegs())))
+  val archstate = Module(new ArchState(cfg.NB_THREADS, cfg.DebugSignals))
 
   // -------- Pipeline ---------
   // Get state from Issue
-  pipeline.archstate.issue.regs.curr <> pregsVec(pipeline.archstate.issue.sel.tag)
-  pipeline.archstate.issue.rd <> rfile.rd
+  pipeline.archstate.issue.ready := true.B
+  pipeline.archstate.issue.sel.tag <> archstate.pstate.issue.thread
+  pipeline.archstate.issue.regs.curr <> archstate.pstate.issue.pregs
+  pipeline.archstate.issue.rd <> archstate.rfile_rd
 
   // Writeback state from commit
-  pipeline.archstate.commit.regs.curr <> pregsVec(pipeline.archstate.commit.sel.tag)
-  pipeline.archstate.commit.regs.next <> pregsVec(pipeline.archstate.commit.sel.tag)
-  pipeline.archstate.commit.wr <> rfile.wr
+  archstate.pstate.commit.curr <> pipeline.archstate.commit.regs.curr
+  archstate.pstate.commit.next.valid := pipeline.archstate.commit.sel.valid
+  archstate.pstate.commit.next.tag := pipeline.archstate.commit.sel.tag
+  archstate.pstate.commit.next.bits.get := pipeline.archstate.commit.regs.next
+  archstate.rfile_wr <> pipeline.archstate.commit.wr
 
   // -------- Stats ------
-  //pipeline.io.resetStats := 0.U
+  // TODO Performance counter stats
 
   // -------- Transplant ---------
-  val stateBRAM = Module(new BRAM()(cfg.bramConfigState))
-  val transplant = Module(new TransplantUnit)
-  transplantIO.state <> stateBRAM.portA
-  transplant.io.host2tpu <> transplantIO.ctrl
-  transplant.io.stateBRAM <> stateBRAM.portB
-  // Default Inputs
-  transplant.io.rfile := DontCare
-  transplant.io.tpu2cpu.done := pipeline.transplantIO.done
-
-  pipeline.transplantIO.start.valid := transplant.io.tpu2cpu.fire.valid
-  pipeline.transplantIO.start.tag := transplant.io.tpu2cpu.fire.tag
-  pipeline.transplantIO.start.bits.get := pregsVec(transplant.io.tpu2cpu.fire.tag).PC
-  // When working
-  transplant.io.cpu2tpuState := pregsVec(transplant.io.tpu2cpu.freeze.tag)
-  // TODO When HOST -> FPGA, commit unready
-  // TODO When FPGA -> HOST, issue unready
-  pipeline.archstate.commit.ready := !transplant.io.tpu2cpu.freeze.valid
-  pipeline.archstate.issue.ready := !transplant.io.tpu2cpu.freeze.valid
-  when(transplant.io.tpu2cpu.freeze.valid) {
-    // Redirect freezed cpu to transplant
-    transplant.io.tpu2cpu.freeze.tag <> rfile.rd.tag
-    transplant.io.rfile.rs1_addr <> rfile.rd.port(0).addr
-    transplant.io.rfile.rs2_addr <> rfile.rd.port(1).addr
-    transplant.io.rfile.rs1_data <> rfile.rd.port(0).data
-    transplant.io.rfile.rs2_data <> rfile.rd.port(1).data
-
-    transplant.io.tpu2cpu.freeze.tag <> rfile.wr.tag
-    transplant.io.rfile.w1_addr <> rfile.wr.addr
-    transplant.io.rfile.w1_data <> rfile.wr.data
-    transplant.io.rfile.w1_en <> rfile.wr.en
-
-    // Freeze PSTATE, When not written by TPU
-    pregsVec(transplant.io.tpu2cpu.freeze.tag) := pregsVec(transplant.io.tpu2cpu.freeze.tag)
-    when(transplant.io.tpu2cpuStateReg.valid) {
-      when(transplant.io.tpu2cpuStateReg.bits === TPU2STATE.r_PC) {
-        pregsVec(transplant.io.tpu2cpu.freeze.tag).PC := transplant.io.tpu2cpuState.PC
-      }.elsewhen(transplant.io.tpu2cpuStateReg.bits === TPU2STATE.r_SP) {
-        pregsVec(transplant.io.tpu2cpu.freeze.tag).SP := transplant.io.tpu2cpuState.SP
-      }.elsewhen(transplant.io.tpu2cpuStateReg.bits === TPU2STATE.r_NZCV) {
-        pregsVec(transplant.io.tpu2cpu.freeze.tag).NZCV := transplant.io.tpu2cpuState.NZCV
-      }
-    }
+  val transplantU = Module(new TransplantUnit(cfg.NB_THREADS))
+  val transplantIO = IO(new Bundle {
+    val port = transplantU.hostBramPort.cloneType
+    val done = Input(ValidTag(cfg.NB_THREADS))
+    val transOut = Output(ValidTag(cfg.NB_THREADS))
+  })
+  // Update State - Highjack commit ports from pipeline
+  archstate.pstate.transplant.thread := transplantU.trans2cpu.thread
+  pipeline.archstate.commit.ready := !transplantU.trans2cpu.updatingPState
+  transplantU.cpu2trans.rfile_wr <> pipeline.archstate.commit.wr
+  transplantU.cpu2trans.done := pipeline.transplantIO.done
+  when(transplantU.trans2cpu.updatingPState) {
+    archstate.rfile_wr <> transplantU.trans2cpu.rfile_wr
+    archstate.pstate.commit.next.valid := true.B
+    archstate.pstate.commit.next.tag := transplantU.trans2cpu.thread
+    archstate.pstate.commit.next.bits.get := transplantU.trans2cpu.pregs
+    transplantU.cpu2trans.pregs := archstate.pstate.commit.curr
+  }.otherwise {
+    // Read State for Host
+   transplantU.cpu2trans.pregs := archstate.pstate.transplant.pregs
   }
+  pipeline.transplantIO.start.valid := transplantU.trans2cpu.start
+  pipeline.transplantIO.start.tag := transplantU.trans2cpu.thread
+  pipeline.transplantIO.start.bits.get := transplantU.trans2cpu.pregs.PC
+  // Transplant from Host
+  transplantIO.port <> transplantU.hostBramPort
+  transplantU.host2trans.done := transplantIO.done
+  transplantIO.transOut := transplantU.trans2host.done
 
   //* DBG
   val dbg = IO(Output(new Bundle {
@@ -121,20 +105,17 @@ class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule
 
   dbg.fetch.valid := pipeline.mem.inst.req.valid
   dbg.fetch.tag := pipeline.mem.inst.req.bits.thread_id
-  dbg.fetch.bits.get.rfile := rfile.dbg.rfileVec.get(dbg.fetch.tag)
-  dbg.fetch.bits.get.regs := pregsVec(dbg.fetch.tag)
+  dbg.fetch.bits.get := archstate.dbg.vecState.get(dbg.fetch.tag)
 
   dbg.issue.tag := pipeline.archstate.issue.sel.tag
   dbg.issue.valid := pipeline.archstate.issue.sel.valid
-  dbg.issue.bits.get.rfile := rfile.dbg.rfileVec.get(dbg.issue.tag)
-  dbg.issue.bits.get.regs := pregsVec(dbg.issue.tag)
+  dbg.issue.bits.get := archstate.dbg.vecState.get(dbg.issue.tag)
   dbg.issuingMem := pipeline.dbg.issuingMem
 
   dbg.commit.tag := pipeline.archstate.commit.sel.tag
   dbg.commit.valid := pipeline.archstate.commit.sel.valid
-  dbg.commit.bits.get.rfile := rfile.dbg.rfileVec.get(dbg.commit.tag)
-  dbg.commit.bits.get.regs := pregsVec(dbg.commit.tag)
+  dbg.commit.bits.get := archstate.dbg.vecState.get(dbg.commit.tag)
   dbg.commitTransplant.valid := pipeline.transplantIO.done.valid
   dbg.commitTransplant.bits := pipeline.transplantIO.done.bits.get
- // */
+  // */
 }

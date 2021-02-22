@@ -44,7 +44,7 @@ class CommitArchStateIO[T <: UInt](gen: T) extends Bundle {
     val curr = Input(new PStateRegs)
     val next = Output(new PStateRegs)
   }
-  val wr = Flipped(new RFileSingleIO.WRPort(gen))
+  val wr = Flipped(new RFileIO.WRPort(nbThreads))
   val ready = Input(Bool())
 }
 
