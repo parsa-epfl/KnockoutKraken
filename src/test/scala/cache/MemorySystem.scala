@@ -27,7 +27,7 @@ class RequestAdaptorTester extends FreeSpec with ChiselScalatestTester {
       dut.i.bits.isLoad.poke(true.B)
       dut.i.bits.isPair.poke(false.B)
       dut.i.bits.size.poke(SIZE64)
-      dut.i.bits.tag.get.poke(0.U)
+      dut.i.bits.tag.poke(0.U)
       dut.i.bits.memReq(0).addr.poke(0.U)
       dut.i.bits.memReq(0).data.poke(0.U)
       dut.i.bits.memReq(1).addr.poke(0.U)

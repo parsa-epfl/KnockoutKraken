@@ -38,17 +38,22 @@ class PageDemander(
   // TODO: Split this module to two part: the MMU and the real Page demander.
   // TODO: Add AXI arbiter for these module.
   // TLB Message receiver
+
+  val reset_done = Wire(Bool()) // whether the reset process is done.
+
   val u_itlb_mconv = Module(new TLBMessageConverter(param.toTLBParameter(), 2.U))
   val itlb_backend_request_i = IO(Flipped(u_itlb_mconv.tlb_backend_request_i.cloneType))
   u_itlb_mconv.tlb_backend_request_i.bits := itlb_backend_request_i.bits
-
+  u_itlb_mconv.tlb_backend_request_i.valid := itlb_backend_request_i.valid && reset_done
+  itlb_backend_request_i.ready := u_itlb_mconv.tlb_backend_request_i.ready && reset_done
 
   val u_dtlb_mconv = Module(new TLBMessageConverter(param.toTLBParameter(), 0.U))
   val dtlb_backend_request_i = IO(Flipped(u_dtlb_mconv.tlb_backend_request_i.cloneType))
   u_dtlb_mconv.tlb_backend_request_i.bits := dtlb_backend_request_i.bits
+  u_dtlb_mconv.tlb_backend_request_i.valid := dtlb_backend_request_i.valid && reset_done
+  dtlb_backend_request_i.ready := u_dtlb_mconv.tlb_backend_request_i.ready && reset_done
 
   // QEMU Message Decoder
-  // TODO: Separate the message type here.
   val u_qmd = Module(new QEMUMessageDecoder(messageFIFODepth))
   // DRAM Resetter.
   val M_AXI_RESET = IO(new AXI4(
@@ -59,11 +64,7 @@ class PageDemander(
   if(enableDRAMResetter){
     val u_dram_resetter = Module(new DRAMResster())
     u_dram_resetter.M_AXI <> M_AXI_RESET
-    u_itlb_mconv.tlb_backend_request_i.valid := itlb_backend_request_i.valid && u_dram_resetter.ready_o
-    itlb_backend_request_i.ready := u_itlb_mconv.tlb_backend_request_i.ready && u_dram_resetter.ready_o
-
-    u_dtlb_mconv.tlb_backend_request_i.valid := dtlb_backend_request_i.valid && u_dram_resetter.ready_o
-    dtlb_backend_request_i.ready := u_dtlb_mconv.tlb_backend_request_i.ready && u_dram_resetter.ready_o
+    reset_done := u_dram_resetter.ready_o
   } else {
     u_itlb_mconv.tlb_backend_request_i.valid := itlb_backend_request_i.valid 
     itlb_backend_request_i.ready := u_itlb_mconv.tlb_backend_request_i.ready 
@@ -75,6 +76,8 @@ class PageDemander(
     M_AXI_RESET.aw <> AXI4AW.tieOff(ParameterConstants.dram_addr_width)
     M_AXI_RESET.w <> AXI4W.tieOff(ParameterConstants.dram_data_width)
     M_AXI_RESET.b <> AXI4B.tieOff()
+
+    reset_done := true.B
   }
 
   // Hardware page walker
@@ -265,8 +268,9 @@ class PageDemander(
   val S_AXIL_QEMU_MQ = IO(u_qemu_mq.S_AXIL.cloneType)
   u_qemu_mq.S_AXIL <> S_AXIL_QEMU_MQ
   u_qemu_mq.fifo_i <> u_qme.o
-  u_qemu_mq.fifo_o <> u_qmd.message_i
-
+  u_qmd.message_i.bits := u_qemu_mq.fifo_o.bits
+  u_qmd.message_i.valid := u_qemu_mq.fifo_o.valid & reset_done
+  u_qemu_mq.fifo_o.ready := u_qmd.message_i.ready & reset_done
   // For interrupt
   val qemu_message_available_o = IO(Output(Bool()))
   qemu_message_available_o := u_qme.o.valid
