@@ -26,38 +26,32 @@ class PipelineMemoryIO(implicit val cfg: ProcConfig) extends Bundle {
   val wake = Input(Vec(4, ValidTag(cfg.TAG_T)))
 }
 
-class IssueArchStateIO[T <: UInt](gen: T) extends Bundle {
-  val sel = Output(ValidTag(gen))
+class IssueArchStateIO(nbThreads: Int) extends Bundle {
+  val sel = Output(ValidTag(nbThreads))
   val regs = new Bundle { val curr = Input(new PStateRegs) }
   val rd = Flipped(new RFileIO.RDPort(nbThreads))
   val ready = Input(Bool())
 }
 
-class PipeArchStateIO[T <: UInt](gen: T) extends Bundle {
-  val issue = new IssueArchStateIO(gen)
-  val commit = new CommitArchStateIO(gen)
-  override def cloneType: this.type = new PipeArchStateIO[T](gen).asInstanceOf[this.type]
+class PipeArchStateIO(nbThreads: Int) extends Bundle {
+  val issue = new IssueArchStateIO(nbThreads)
+  val commit = new CommitArchStateIO(nbThreads)
+  override def cloneType: this.type = new PipeArchStateIO(nbThreads).asInstanceOf[this.type]
 }
 
 /** Processor
   */
 class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   // --------- IO -----------
-  // Device communication
-  //val io = IO(new Bundle {
-  //  val perfStats = Output(new PerfStats)
-  //  val resetStats = Input(UInt(8.W))
-  //})
   // Memory Hierarchy
   val mem = IO(new PipelineMemoryIO)
-
   // Transplant case
   val transplantIO = IO(new Bundle {
     val start = Input(ValidTag(cfg.TAG_T, DATA_T))
     val done = Output(ValidTag(cfg.TAG_T, INST_T))
   })
   // ISA State
-  val archstate = IO(new PipeArchStateIO(cfg.TAG_T))
+  val archstate = IO(new PipeArchStateIO(cfg.NB_THREADS))
 
   // ----- System modules ------
 
@@ -82,7 +76,7 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
 
   val memHandler = Module(new MemoryAdaptor)
   // Commit
-  val commitU = Module(new CommitUnit(cfg.TAG_T, cfg.NB_THREADS))
+  val commitU = Module(new CommitUnit(cfg.NB_THREADS))
 
   // Interconnect -------------------------------------------
 
@@ -187,7 +181,7 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   )
 
   // CommitReg
-  val commitNext = WireInit(CommitInst(cfg.TAG_T))
+  val commitNext = WireInit(CommitInst(cfg.NB_THREADS))
   when(brancher.io.pcrel.valid) {
     commitNext.rd(0).valid := true.B
     commitNext.rd(0).bits := brancher.io.pcrel.bits.rd

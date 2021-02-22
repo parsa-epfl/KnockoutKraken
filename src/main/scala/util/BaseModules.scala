@@ -4,21 +4,21 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.{requireIsChiselType, DataMirror, Direction}
 
-class ValidTag[T1 <: UInt, T2 <: Data](genTag: T1, genData: Option[T2]) extends Bundle {
+class ValidTag[T <: Data](genTag: UInt, genData: Option[T]) extends Bundle {
   val valid = Bool()
   val bits = genData
   val tag = genTag.cloneType
   override def cloneType: this.type = ValidTag(genTag, genData).asInstanceOf[this.type]
 }
 
-class Tagged[T1 <: UInt, T2 <: Data](genTag: T1, genData: T2) extends Bundle {
+class Tagged[T <: Data](genTag: UInt, genData: T) extends Bundle {
   val tag = genTag.cloneType
   val data = genData.cloneType
   override def cloneType: this.type = new Tagged(genTag, genData).asInstanceOf[this.type]
 }
 
 object Tagged {
-  def apply[T1 <: UInt, T2 <: Data](genTag: T1, genData: T2): Tagged[T1, T2] = {
+  def apply[T <: Data](genTag: UInt, genData: T): Tagged[T] = {
     val wire = Wire(new Tagged(genTag, genData))
     wire.tag := genTag
     wire.data := genData
@@ -27,11 +27,11 @@ object Tagged {
 }
 
 object ValidTag {
-  def apply[T1 <: UInt, T2 <: Data](genTag: T1, genData: Option[T2]): ValidTag[T1, T2] = new ValidTag(genTag, genData)
-  def apply[T1 <: UInt, T2 <: Data](genTag: T1, genData: T2): ValidTag[T1, T2] = new ValidTag(genTag, Some(genData))
-  def apply[T <: UInt](genTag:              T): ValidTag[T, T] = new ValidTag(genTag, None)
-  def apply[T <: Data](nbThreads: Int, genData: T): ValidTag[UInt, T] = ValidTag(UInt(log2Ceil(nbThreads).W), genData)
-  def apply[T <: Data](nbThreads: Int): ValidTag[UInt, T] = ValidTag(UInt(log2Ceil(nbThreads).W), None)
+  def apply[T <: Data](genTag:    UInt, genData: Option[T]): ValidTag[T] = new ValidTag(genTag, genData)
+  def apply[T <: Data](genTag:    UInt, genData: T): ValidTag[T] = new ValidTag(genTag, Some(genData))
+  def apply[T <: Data](genTag:    UInt): ValidTag[T] = new ValidTag(genTag, None)
+  def apply[T <: Data](nbThreads: Int, genData: T): ValidTag[T] = ValidTag(UInt(log2Ceil(nbThreads).W), genData)
+  def apply[T <: Data](nbThreads: Int): ValidTag[T] = ValidTag(UInt(log2Ceil(nbThreads).W), None)
 }
 
 class DecoupledTag[T1 <: UInt, T2 <: Data](genTag: T1, genData: T2) extends DecoupledIO[T2](genData) {

@@ -454,7 +454,7 @@ class MemoryAdaptor(implicit cfg: ProcConfig) extends MultiIOModule {
   val cacheResp = cacheAdaptorResp.data_o
   val singleDone = WireInit(!memResp.io.deq.bits.isPair)
   val pairDone = RegNext(memResp.io.deq.bits.isPair)
-  val commitWire = WireInit(CommitInst(cfg.TAG_T))
+  val commitWire = WireInit(CommitInst(cfg.NB_THREADS))
 
   memReq.io.enq <> pipe.req
   memResp.io.enq.valid := memReq.io.deq.fire

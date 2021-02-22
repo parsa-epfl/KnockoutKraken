@@ -7,9 +7,9 @@ import arm.PROCESSOR_TYPES._
 import armflex.util._
 import armflex.util.ExtraUtils._
 
-class CommitInst[T <: UInt](gen: T) extends Bundle {
+class CommitInst(nbThreads: Int) extends Bundle {
   // Update State
-  val tag = Output(gen.cloneType)
+  val tag = Output(UInt(log2Ceil(nbThreads).W))
   val inst = Output(INST_T)
   val rd = Output(Vec(3, Valid(REG_T)))
   val res = Output(Vec(3, DATA_T))
@@ -18,12 +18,12 @@ class CommitInst[T <: UInt](gen: T) extends Bundle {
   val exceptions = Valid(UInt(1.W))
   val undef = Output(Bool())
   val is32bit = Output(Bool())
-  override def cloneType: this.type = new CommitInst[T](gen).asInstanceOf[this.type]
+  override def cloneType: this.type = new CommitInst(nbThreads).asInstanceOf[this.type]
 }
 
 object CommitInst {
-  def apply[T <: UInt](gen: T): CommitInst[T] = {
-    val wire = Wire(new CommitInst(gen))
+  def apply(nbThreads: Int): CommitInst = {
+    val wire = Wire(new CommitInst(nbThreads))
     // DontCare data
     wire := DontCare
     // Invalidate signals
@@ -38,8 +38,8 @@ object CommitInst {
   }
 }
 
-class CommitArchStateIO[T <: UInt](gen: T) extends Bundle {
-  val sel = Output(ValidTag(gen))
+class CommitArchStateIO(nbThreads: Int) extends Bundle {
+  val sel = Output(ValidTag(nbThreads))
   val regs = new Bundle {
     val curr = Input(new PStateRegs)
     val next = Output(new PStateRegs)
@@ -48,16 +48,16 @@ class CommitArchStateIO[T <: UInt](gen: T) extends Bundle {
   val ready = Input(Bool())
 }
 
-class CommitUnit[T <: UInt](gen: T, nbThreads: Int) extends MultiIOModule {
-  val enq = IO(Flipped(Decoupled(new CommitInst(gen))))
+class CommitUnit(nbThreads: Int) extends MultiIOModule {
+  val enq = IO(Flipped(Decoupled(new CommitInst(nbThreads))))
   val commit = IO(new Bundle {
-    val archstate = new CommitArchStateIO(gen)
-    val transplant = Output(ValidTag(gen, INST_T))
-    val commited = Output(ValidTag(gen))
-    val count = Output(gen.cloneType)
+    val archstate = new CommitArchStateIO(nbThreads)
+    val transplant = Output(ValidTag(nbThreads, INST_T))
+    val commited = Output(ValidTag(nbThreads))
+    val count = Output(UInt(log2Ceil(nbThreads).W))
   })
 
-  val commitQueue = Module(new Queue(new CommitInst(gen), nbThreads, true, false))
+  val commitQueue = Module(new Queue(new CommitInst(nbThreads), nbThreads, true, false))
   commitQueue.io.enq <> enq
   commit.count := commitQueue.io.count
 

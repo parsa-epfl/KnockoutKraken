@@ -96,10 +96,10 @@ class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule
 
   //* DBG
   val dbg = IO(Output(new Bundle {
-    val fetch = ValidTag(cfg.TAG_T, new FullStateBundle)
-    val issue = ValidTag(cfg.TAG_T, new FullStateBundle)
+    val fetch = ValidTag(cfg.NB_THREADS, new FullStateBundle)
+    val issue = ValidTag(cfg.NB_THREADS, new FullStateBundle)
     val issuingMem = Output(Bool())
-    val commit = ValidTag(cfg.TAG_T, new FullStateBundle)
+    val commit = ValidTag(cfg.NB_THREADS, new FullStateBundle)
     val commitTransplant = Output(Valid(INST_T))
   }))
 
