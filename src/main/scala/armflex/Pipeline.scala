@@ -96,15 +96,13 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   fetch.ctrl.commit.tag := commitU.commit.commited.tag
   fetch.ctrl.commit.bits.get := commitU.commit.archstate.regs.next.PC
 
-  mem.inst.req.valid := false.B
   mem.inst.req.bits.thread_id := fetch.mem.tag
   mem.inst.req.bits.addr := fetch.mem.bits
   mem.inst.req.bits.w_v := false.B
   mem.inst.req.bits.wData := DontCare
   mem.inst.req.bits.wMask := DontCare
+  mem.inst.req.handshake(fetch.mem)
 
-  fetch.mem.ready := false.B
-  fetch.mem.handshake(mem.inst.req)
   when(mem.inst.req.fire) {
     assert(fetchQueue.io.enq.ready)
   }

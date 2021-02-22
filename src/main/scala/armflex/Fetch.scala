@@ -18,7 +18,7 @@ class FetchUnit(implicit val cfg: ProcConfig) extends MultiIOModule {
   val mem = IO(DecoupledTag(cfg.TAG_T, DATA_T))
 
   val pc = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(DATA_X)))
-  val en = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(DATA_X)))
+  val en = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(false.B)))
   val rra = Module(new RoundRobinArbiter(cfg.NB_THREADS))
 
   rra.io.ready := en.asUInt
