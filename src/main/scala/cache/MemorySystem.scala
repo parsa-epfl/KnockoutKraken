@@ -64,17 +64,11 @@ class TLBPlusCache(
   val u_cache = Module(BaseCache.generateCache(cacheParam, cacheLRUCore))
   val u_tlb = Module(new BaseTLB(tlbParam, tlbLRUCore))
 
-  val frontend_request_i = IO(
-    Flipped(
-      Decoupled(
-        new CacheFrontendRequestPacket(
+  val frontend_request_i = IO(Flipped(Decoupled(new CacheFrontendRequestPacket(
           param.vAddressWidth - param.blockBiasWidth(), // virtual address with index rid
           log2Ceil(param.threadNumber),
           param.cacheBlockSize
-        )
-      )
-    )
-  )
+        ))))
 
   u_tlb.frontend_request_i.bits.tag.thread_id := frontend_request_i.bits.thread_id
   u_tlb.frontend_request_i.bits.tag.vpage := frontend_request_i.bits.addr(
@@ -240,7 +234,10 @@ object CacheInterfaceAdaptors {
     // val i = IO(Flipped(Decoupled(new MInst)))
 
     val i = IO(Flipped(Decoupled(new MInstTag(UInt(log2Ceil(param.threadNumber).W)))))
-    val o = IO(Decoupled(new CacheFrontendRequestPacket(param.toCacheParameter())))
+    val o = IO(Decoupled(new CacheFrontendRequestPacket(
+      param.vAddressWidth - param.blockBiasWidth(), 
+      log2Ceil(param.threadNumber), 
+      param.cacheBlockSize)))
 
     class internal_memory_request_t extends Bundle {
       val size = UInt(2.W)

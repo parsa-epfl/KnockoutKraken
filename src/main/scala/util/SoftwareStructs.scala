@@ -82,6 +82,9 @@ object SoftwareStructs {
   case class CommitTrace(
     val state:    PState,
     val inst:     BigInt,
+    val inst_block: BigInt,
     val mem_addr: List[BigInt],
-    val mem_data: List[BigInt])
+    val mem_data: List[BigInt],
+    val mem_block: List[BigInt]
+    )
 }

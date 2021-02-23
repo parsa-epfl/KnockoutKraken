@@ -4,6 +4,7 @@ import SoftwareStructs._
 import armflex_p.armflex_p
 import armflex_p.ArmflexArchState_p
 import armflex_p.ArmflexCommitTrace_p
+import com.google.protobuf.ByteString
 
 object ArmflexProtoBuf {
   private def state2proto(state: PState): ArmflexArchState_p =
@@ -19,7 +20,9 @@ object ArmflexProtoBuf {
       Some(state2proto(trace.state)),
       toInt(trace.inst),
       trace.mem_addr.map(toLong),
-      trace.mem_data.map(toLong)
+      trace.mem_data.map(toLong),
+      ByteString.copyFrom(trace.inst_block.toByteArray),
+      trace.mem_block.map(bigint => ByteString.copyFrom(bigint.toByteArray)),
     )
 
   private def proto2state(state_p: ArmflexArchState_p): PState = PState(
@@ -33,8 +36,10 @@ object ArmflexProtoBuf {
     CommitTrace(
       proto2state(trace_p.state.get),
       asU(trace_p.inst),
+      BigInt(0.toByte +: trace_p.instBlockData.toByteArray.reverse),
       trace_p.memAddr.map(asU _).toList,
-      trace_p.memData.map(asU _).toList
+      trace_p.memData.map(asU _).toList,
+      trace_p.memBlockData.map(bytestring => BigInt(0.toByte +: bytestring.toByteArray.reverse)).toList
     )
 
   def proto2state(proto: Array[Byte]): PState = {

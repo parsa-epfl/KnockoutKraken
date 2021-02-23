@@ -102,8 +102,11 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   }
 
   val fetchTag = ShiftRegister(fetch.mem.tag, cfg.cacheLatency)
+  val fetchPC = ShiftRegister(fetch.mem.bits, cfg.cacheLatency)
+  val blockInsts = VecInit.tabulate(cfg.BLOCK_SIZE/32) { idx => mem.inst.resp.bits.data((idx + 1) * 32 - 1, idx * 32) }
   fetchQueue.io.enq.valid := mem.inst.resp.valid
-  fetchQueue.io.enq.bits := Tagged(fetchTag, mem.inst.resp.bits.data)
+  val selectBlock = WireInit(fetchPC >> 2.U)
+  fetchQueue.io.enq.bits := Tagged(fetchTag, blockInsts(selectBlock))
 
   // Fetch -> Decode
   decoder.inst := fetchQueue.io.deq.bits.data
@@ -219,7 +222,6 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   // Handshakes of IssuerDeq, memInst and CommitReg
   issuer.io.deq.ready := false.B
   memHandler.pipe.req.valid := false.B
-  mem.data.req.valid := false.B
   commitU.enq.valid := false.B
 
   val ldstInstruction = ldstU.io.minst.valid && !ldstU.io.minst.bits.exceptions.valid
@@ -242,8 +244,8 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
     when(commitU.commit.commited.valid) { assert(issuer.io.deq.tag =/= commitU.commit.commited.tag) }
   }
   when(commitU.enq.fire) {
-    assert(mem.data.resp.valid || issuer.io.deq.fire)
-    assert(!(mem.data.resp.valid && issuer.io.deq.fire))
+    assert(memHandler.pipe.resp.valid || issuer.io.deq.fire)
+    assert(!(memHandler.pipe.resp.valid && issuer.io.deq.fire))
   }
 
   // ------ Commit Stage ------
@@ -261,35 +263,21 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
 
   // DEBUG Signals ------------------------------------------------------------
   val dbg = IO(new Bundle {
-    val issuingMem = Output(Bool())
+    val issue = Output(new Bundle {
+      val valid = Bool()
+      val thread = cfg.TAG_T
+      val mem = Bool()
+      val transplant = Bool()
+    })
   })
-  dbg.issuingMem := ldstU.io.minst.valid
+  dbg.issue.valid := issuer.io.deq.fire
+  dbg.issue.thread := issuer.io.deq.tag
+  dbg.issue.mem := ldstU.io.minst.valid
+  dbg.issue.transplant := commitU.enq.bits.exceptions.valid || commitU.enq.bits.undef
 }
 
 import chisel3.util.{Cat, Queue, ShiftRegister}
-import chisel3.experimental.BundleLiterals._
-
 class FullStateBundle extends Bundle {
   val rfile = Vec(REG_N, DATA_T)
   val regs = new PStateRegs
-}
-
-object FullStateBundle {
-  def apply(state: armflex.util.SoftwareStructs.PState): FullStateBundle = {
-    // TODO No way to Vec.lit yet
-    val rfile = state.xregs.map { _.U }
-    val vec = Vec(REG_N, DATA_T)
-    //.getElements zip rfile map {
-    //  case (ele, xreg) => ele -> xreg
-    //}
-    val regs = (new PStateRegs).Lit(
-      _.PC -> state.pc.U,
-      _.SP -> state.sp.U,
-      _.NZCV -> state.nzcv.U
-    )
-    (new FullStateBundle).Lit(
-      _.rfile -> vec,
-      _.regs -> regs.litValue.U
-    )
-  }
 }

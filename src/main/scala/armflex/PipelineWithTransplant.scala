@@ -99,6 +99,7 @@ class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule
     val fetch = ValidTag(cfg.NB_THREADS, new FullStateBundle)
     val issue = ValidTag(cfg.NB_THREADS, new FullStateBundle)
     val issuingMem = Output(Bool())
+    val issuingTransplant = Output(Bool())
     val commit = ValidTag(cfg.NB_THREADS, new FullStateBundle)
     val commitTransplant = Output(Valid(INST_T))
   }))
@@ -107,10 +108,11 @@ class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule
   dbg.fetch.tag := pipeline.mem.inst.req.bits.thread_id
   dbg.fetch.bits.get := archstate.dbg.vecState.get(dbg.fetch.tag)
 
-  dbg.issue.tag := pipeline.archstate.issue.sel.tag
-  dbg.issue.valid := pipeline.archstate.issue.sel.valid
+  dbg.issue.tag := pipeline.dbg.issue.thread
   dbg.issue.bits.get := archstate.dbg.vecState.get(dbg.issue.tag)
-  dbg.issuingMem := pipeline.dbg.issuingMem
+  dbg.issuingMem := pipeline.dbg.issue.mem
+  dbg.issuingTransplant := pipeline.dbg.issue.transplant
+  dbg.issue.valid := pipeline.dbg.issue.valid
 
   dbg.commit.tag := pipeline.archstate.commit.sel.tag
   dbg.commit.valid := pipeline.archstate.commit.sel.valid

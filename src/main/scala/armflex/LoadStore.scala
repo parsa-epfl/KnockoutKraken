@@ -435,7 +435,7 @@ import armflex.util.ExtraUtils._
 class MemoryAdaptor(implicit cfg: ProcConfig) extends MultiIOModule {
   val pipe = IO(new Bundle {
     val req = Flipped(Decoupled(new MInstTag(cfg.TAG_T)))
-    val resp = Valid(new CommitInst(cfg.TAG_T))
+    val resp = Valid(new CommitInst(cfg.NB_THREADS))
   })
 
   val mem = IO(new Bundle {
@@ -444,12 +444,11 @@ class MemoryAdaptor(implicit cfg: ProcConfig) extends MultiIOModule {
   })
 
   val memReq = Module(new Queue(new MInstTag(cfg.TAG_T), 1, true, false))
-  val memResp = Module(new Queue(new MInstTag(cfg.TAG_T), cfg.cacheLatency, true, false))
+  val memResp = Module(new Queue(new MInstTag(cfg.TAG_T), cfg.cacheLatency + 1, true, false))
   val cacheAdaptorReq = Module(new CacheRequestAdaptor(cfg.NB_THREADS, DATA_SZ, cfg.BLOCK_SIZE))
   val cacheAdaptorResp = Module(new CacheReplyAdaptor(cfg.NB_THREADS, DATA_SZ, cfg.BLOCK_SIZE))
-  val synq = Module(new Queue(cacheAdaptorReq.sync_message.bits.cloneType, 1, true, false))
-  synq.io.enq <> cacheAdaptorReq.sync_message_o
-  cacheAdaptorResp.sync_message_i <> synq.io.deq
+  cacheAdaptorResp.sync_message_i <> cacheAdaptorReq.sync_message_o
+
 
   val cacheResp = cacheAdaptorResp.data_o
   val singleDone = WireInit(!memResp.io.deq.bits.isPair)
@@ -459,6 +458,9 @@ class MemoryAdaptor(implicit cfg: ProcConfig) extends MultiIOModule {
   memReq.io.enq <> pipe.req
   memResp.io.enq.valid := memReq.io.deq.fire
   memResp.io.enq.bits := memReq.io.deq.bits
+  when(memReq.io.deq.fire && memReq.io.deq.bits.isPair) {
+    printf("Pair Instruction detected")
+  }
   cacheAdaptorReq.i <> memReq.io.deq
   mem.req <> cacheAdaptorReq.o
   cacheAdaptorResp.cache_reply_i <> mem.resp
@@ -481,4 +483,7 @@ class MemoryAdaptor(implicit cfg: ProcConfig) extends MultiIOModule {
   commitWire.tag := memResp.io.deq.bits.tag
 
   assert(memResp.io.enq.ready)
+  when(replyArrived) {
+    assert(cacheAdaptorResp.data_o.valid)
+  } 
 }
