@@ -35,6 +35,12 @@ class ProcConfig(
 
   // BRAM Generator configs
   val bramConfigState = new BRAMConfig(8, 8, 1024, "", false, false)
+
+  def simLog(str: Printable) {
+    if(simVerbose) {
+      printf(str)
+    }
+  }
 }
 
 class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule {

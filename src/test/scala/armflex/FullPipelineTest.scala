@@ -26,7 +26,7 @@ import org.scalatest.exceptions.TestFailedException
 class PipelineTest(val dut: PipelineHardDriverModule, traceDrv: VerificationDriver) {
   private val init: Unit = {
     dut.initIO
-    dut.clock.setTimeout(10000)
+    dut.clock.setTimeout(1000)
   }
   var running = true
   val transplantInsts = new Queue[BigInt]()
@@ -36,6 +36,7 @@ class PipelineTest(val dut: PipelineHardDriverModule, traceDrv: VerificationDriv
     while (running) {
       if (dut.transplantOut.state.valid.peek.litToBoolean) {
         trace = dut.transplantOut.state.bits.peek()
+        println("PC:" + trace.state.pc.toString(16))
         transplantInsts.enqueue(dut.transplantOut.inst.peek().litValue)
       }
       if (dut.transplantIO.transOut.valid.peek.litToBoolean) {
@@ -76,31 +77,35 @@ class PipelineTest(val dut: PipelineHardDriverModule, traceDrv: VerificationDriv
         running = false
       }
       .joinAndStep(dut.clock)
-     println("Done simulating")
-     dut.clock.step(100)
-     traceDrv.writeInstsToFile(transplantInsts.iterator)
+    println("Done simulating")
+    dut.clock.step(10)
+    traceDrv.writeInstsToFile(transplantInsts.iterator)
+    println("Done writing transplanted instructions")
   }
 }
 
 class FullPipelineTest extends FreeSpec with ChiselScalatestTester {
-  val traceName: String = "binary100_0"
-  val cfgProc:   ProcConfig = new ProcConfig(NB_THREADS = 2, DebugSignals = true)
-  val annos = Seq(
-    VerilatorBackendAnnotation,
-    TargetDirAnnotation("test/TraceBase/" + traceName + "/"),
-    WriteVcdAnnotation
-  )
+  val cfgProc: ProcConfig = new ProcConfig(NB_THREADS = 2, DebugSignals = true, simVerbose = false)
+  def runExample(traceName: String, rerun: Boolean = false, pc: BigInt = BigInt("0000000000000000", 16)) {
+    val annos = Seq(
+      VerilatorBackendAnnotation,
+      TargetDirAnnotation("test/TraceBase/" + traceName + "/")
+      ,WriteVcdAnnotation
+    )
+    val traceDrv = new VerificationDriver(traceName)
+    "Will verify pipeline's correctness with "+traceName+" file " in {
 
-  val rerun = false
-  val pc: BigInt = BigInt("ffff0000080838c0", 16)
-
-  val traceDrv = new VerificationDriver(traceName)
-  "Will verify correctness of the pipeline" in {
-
-    test(new PipelineHardDriverModule()(cfgProc))
-      .withAnnotations(annos) { dut =>
-        val drv = new PipelineTest(dut, traceDrv)
-        drv.run(rerun, pc)
-      }
+      test(new PipelineHardDriverModule()(cfgProc))
+        .withAnnotations(annos) { dut =>
+          val drv = new PipelineTest(dut, traceDrv)
+          drv.run(rerun, pc)
+        }
+    }
   }
+
+  //runExample("binary10000")
+  //runExample("binary10000_0")
+  //runExample("binary10000_1")
+  //runExample("binary10000_2")
+  runExample("binary10000_3")
 }
