@@ -181,9 +181,9 @@ class PipelineHardDriverModule(implicit val cfg: ProcConfig) extends MultiIOModu
   issue.io.enq.valid := fetch.io.deq.fire
   issue.io.enq.bits := fetch.io.deq.bits
 
-  issue.io.deq.ready := pipeline.dbg.issue.valid
+  issue.io.deq.ready := pipeline.dbg.bits.get.issue.valid
   memResp.io.enq.bits := issue.io.deq.bits
-  memResp.io.enq.valid := issue.io.deq.fire && pipeline.dbg.issuingMem && !pipeline.dbg.issuingTransplant
+  memResp.io.enq.valid := issue.io.deq.fire && pipeline.dbg.bits.get.issuingMem && !pipeline.dbg.bits.get.issuingTransplant
 
   val pairJustFired = memResp.io.deq.fire && memResp.io.deq.bits.memReq(1).addr =/= 0.U
   val pairReqIn = RegNext(pairJustFired)
@@ -210,20 +210,20 @@ class PipelineHardDriverModule(implicit val cfg: ProcConfig) extends MultiIOModu
   val commit = Module(new Queue(new CommitTraceBundle(cfg.BLOCK_SIZE), 128, true, true))
   commit.io.enq <> traceExpect
   // 1 Cycle after commit singnal is rised, state is fully updated
-  commit.io.deq.ready := ShiftRegister(pipeline.dbg.commit.valid, 1)
-  val commitTransplant = ShiftRegister(pipeline.dbg.commitTransplant, 1)
+  commit.io.deq.ready := ShiftRegister(pipeline.dbg.bits.get.commit.valid, 1)
+  val commitTransplant = ShiftRegister(pipeline.dbg.bits.get.commitTransplant, 1)
 
   when(issue.io.deq.fire) {
-    cfg.simLog(p"Issuing:0x${Hexadecimal(pipeline.dbg.issue.bits.get.regs.PC)}\n")
-    issue.io.deq.bits.state.compareAssert(pipeline.dbg.issue.bits.get)
+    cfg.simLog(p"Issuing:0x${Hexadecimal(pipeline.dbg.bits.get.issue.bits.get.regs.PC)}\n")
+    issue.io.deq.bits.state.compareAssert(pipeline.dbg.bits.get.issue.bits.get)
     cfg.simLog("  Success Issue\n")
   }
   when(commit.io.deq.fire) {
     cfg.simLog(
-      p"Commit :0x${Hexadecimal(pipeline.dbg.commit.bits.get.regs.PC)}:${Hexadecimal(pipeline.dbg.commit.bits.get.regs.PC)}\n"
+      p"Commit :0x${Hexadecimal(pipeline.dbg.bits.get.commit.bits.get.regs.PC)}:${Hexadecimal(pipeline.dbg.bits.get.commit.bits.get.regs.PC)}\n"
     )
     when(!commitTransplant.valid) {
-      commit.io.deq.bits.state.compareAssert(pipeline.dbg.commit.bits.get)
+      commit.io.deq.bits.state.compareAssert(pipeline.dbg.bits.get.commit.bits.get)
       cfg.simLog("  Success Commit\n")
     }.otherwise {
       printf(" Detected Transplant!\n")

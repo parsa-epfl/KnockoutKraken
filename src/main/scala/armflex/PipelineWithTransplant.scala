@@ -14,14 +14,13 @@ import Chisel.debug
 
 class ProcConfig(
   // Chisel Generator configs
-  val NB_THREADS:   Int = 2,
-  val BLOCK_SIZE:   Int = 512,
+  val NB_THREADS:    Int = 2,
+  val BLOCK_SIZE:    Int = 512,
   val pAddressWidth: Int = 36,
   // Simulation settings
   val DebugSignals: Boolean = false,
   val rtlVerbose:   Boolean = false,
-  val simVerbose:   Boolean = false
-  ) {
+  val simVerbose:   Boolean = false) {
   // Threads
   // val NB_THREADS
   val NB_THREADS_W = log2Ceil(NB_THREADS) // 4 Threads
@@ -37,7 +36,7 @@ class ProcConfig(
   val bramConfigState = new BRAMConfig(8, 8, 1024, "", false, false)
 
   def simLog(str: Printable) {
-    if(simVerbose) {
+    if (simVerbose) {
       printf(str)
     }
   }
@@ -90,7 +89,7 @@ class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule
     transplantU.cpu2trans.pregs := archstate.pstate.commit.curr
   }.otherwise {
     // Read State for Host
-   transplantU.cpu2trans.pregs := archstate.pstate.transplant.pregs
+    transplantU.cpu2trans.pregs := archstate.pstate.transplant.pregs
   }
   pipeline.transplantIO.start.valid := transplantU.trans2cpu.start
   pipeline.transplantIO.start.tag := transplantU.trans2cpu.thread
@@ -101,29 +100,35 @@ class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule
   transplantIO.transOut := transplantU.trans2host.done
 
   //* DBG
-  val dbg = IO(Output(new Bundle {
-    val fetch = ValidTag(cfg.NB_THREADS, new FullStateBundle)
-    val issue = ValidTag(cfg.NB_THREADS, new FullStateBundle)
-    val issuingMem = Output(Bool())
-    val issuingTransplant = Output(Bool())
-    val commit = ValidTag(cfg.NB_THREADS, new FullStateBundle)
-    val commitTransplant = Output(Valid(INST_T))
-  }))
+  val dbg = IO(new Bundle {
+    val bits =
+      if (cfg.DebugSignals) Some(Output(new Bundle {
+        val fetch = ValidTag(cfg.NB_THREADS, new FullStateBundle)
+        val issue = ValidTag(cfg.NB_THREADS, new FullStateBundle)
+        val issuingMem = Output(Bool())
+        val issuingTransplant = Output(Bool())
+        val commit = ValidTag(cfg.NB_THREADS, new FullStateBundle)
+        val commitTransplant = Output(Valid(INST_T))
+      }))
+      else None
+  })
 
-  dbg.fetch.valid := pipeline.mem.inst.req.valid
-  dbg.fetch.tag := pipeline.mem.inst.req.bits.thread_id
-  dbg.fetch.bits.get := archstate.dbg.vecState.get(dbg.fetch.tag)
+  if(cfg.DebugSignals) {
+    dbg.bits.get.fetch.valid := pipeline.mem.inst.req.valid
+    dbg.bits.get.fetch.tag := pipeline.mem.inst.req.bits.thread_id
+    dbg.bits.get.fetch.bits.get := archstate.dbg.vecState.get(dbg.bits.get.fetch.tag)
 
-  dbg.issue.tag := pipeline.dbg.issue.thread
-  dbg.issue.bits.get := archstate.dbg.vecState.get(dbg.issue.tag)
-  dbg.issuingMem := pipeline.dbg.issue.mem
-  dbg.issuingTransplant := pipeline.dbg.issue.transplant
-  dbg.issue.valid := pipeline.dbg.issue.valid
+    dbg.bits.get.issue.tag := pipeline.dbg.issue.thread
+    dbg.bits.get.issue.bits.get := archstate.dbg.vecState.get(dbg.bits.get.issue.tag)
+    dbg.bits.get.issuingMem := pipeline.dbg.issue.mem
+    dbg.bits.get.issuingTransplant := pipeline.dbg.issue.transplant
+    dbg.bits.get.issue.valid := pipeline.dbg.issue.valid
 
-  dbg.commit.tag := pipeline.archstate.commit.sel.tag
-  dbg.commit.valid := pipeline.archstate.commit.sel.valid
-  dbg.commit.bits.get := archstate.dbg.vecState.get(dbg.commit.tag)
-  dbg.commitTransplant.valid := pipeline.transplantIO.done.valid
-  dbg.commitTransplant.bits := pipeline.transplantIO.done.bits.get
+    dbg.bits.get.commit.tag := pipeline.archstate.commit.sel.tag
+    dbg.bits.get.commit.valid := pipeline.archstate.commit.sel.valid
+    dbg.bits.get.commit.bits.get := archstate.dbg.vecState.get(dbg.bits.get.commit.tag)
+    dbg.bits.get.commitTransplant.valid := pipeline.transplantIO.done.valid
+    dbg.bits.get.commitTransplant.bits := pipeline.transplantIO.done.bits.get
+  }
   // */
 }
