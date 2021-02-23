@@ -121,9 +121,9 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   archstate.issue.rd.tag := decReg.io.deq.tag
   archstate.issue.rd.port(0).addr := decReg.io.deq.bits.rs1
   archstate.issue.rd.port(1).addr := decReg.io.deq.bits.rs2
-  issuer.io.enq <> decReg.io.deq
+  issuer.io.enq <> decReg.io.deq // Issue is always ready, so no check for archstate.issue.ready necessary
   // TODO When Issuer io deq ! ready -> register RFile RD output
- 
+
   // Execute : Issue -> Execute
   val issued_dinst = WireInit(issuer.io.deq.bits)
 
@@ -136,9 +136,20 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
 
   // Execute ---------------------------
   // Read register data from rfile
-  val rVal1 = archstate.issue.rd.port(0).data
-  val rVal2 = archstate.issue.rd.port(1).data
-  val rVal3 = archstate.issue.rd.port(0).data // TODO Triple source
+  val rfileReadArrives = RegNext(decReg.io.deq.fire)
+  val rVal1_reg = RegInit(DATA_X)
+  val rVal2_reg = RegInit(DATA_X)
+  val rVal3_reg = RegInit(DATA_X)
+  val rVal1 = Mux(rfileReadArrives, archstate.issue.rd.port(0).data, rVal1_reg)
+  val rVal2 = Mux(rfileReadArrives, archstate.issue.rd.port(1).data, rVal2_reg)
+  val rVal3 = Mux(rfileReadArrives, archstate.issue.rd.port(0).data, rVal3_reg) // TODO Triple source
+  when(RegNext(decReg.io.deq.fire)) { 
+    // Read Register arrived
+    rVal1_reg := archstate.issue.rd.port(0).data
+    rVal2_reg := archstate.issue.rd.port(1).data
+    rVal3_reg := archstate.issue.rd.port(0).data
+  }
+ 
 
   // connect executeUnit interface
   executer.io.dinst := issued_dinst
