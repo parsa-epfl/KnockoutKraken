@@ -166,7 +166,7 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   // - Exceptions -
   val memException = WireInit(
     ldstU.io.minst.valid &&
-      !ldstU.io.minst.bits.exceptions.valid
+      ldstU.io.minst.bits.exceptions.valid
   )
   val unalignedExcpData = WireInit(
     ldstU.io.minst.bits.exceptions.bits.unalignedExcp
