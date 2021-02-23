@@ -128,5 +128,8 @@ class ARMFlexTop extends MultiIOModule {
 
 object ARMFlexTopVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
-  c.emitVerilog(new ARMFlexTop)
+  import java.io._
+  val fr = new FileWriter(new File("ARMFlexTop.v"))
+  fr.write(c.emitVerilog(new ARMFlexTop))
+  fr.close()
 }
