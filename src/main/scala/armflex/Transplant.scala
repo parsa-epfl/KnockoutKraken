@@ -22,6 +22,10 @@ object TransplantIO extends Bundle {
     val pregs = Input(new PStateRegs)
     val done = Input(ValidTag(nbThreads))
   }
+  class Mem2Trans(val nbThreads: Int) extends Bundle {
+    val instFault = Input(ValidTag(nbThreads))
+    val dataFault = Input(ValidTag(nbThreads))
+  }
   class Host2Trans(val nbThreads: Int) extends Bundle {
     val done = Input(ValidTag(nbThreads))
   }
@@ -37,6 +41,7 @@ class TransplantUnit(nbThreads: Int) extends MultiIOModule {
   val host2trans = IO(new TransplantIO.Host2Trans(nbThreads))
   val trans2host = IO(new TransplantIO.Trans2Host(nbThreads, hostBRAMConfig))
   val hostBramPort = IO(new BRAMPort()(hostBRAMConfig))
+  val mem2trans = IO(new TransplantIO.Mem2Trans(nbThreads))
 
   // Mantains always the latest state of the rfile
   private val stateBuffer = Module(
@@ -63,10 +68,19 @@ class TransplantUnit(nbThreads: Int) extends MultiIOModule {
 
   private val hostReqQueue = Module(new Queue(UInt(log2Ceil(nbThreads).W), nbThreads, true))
   private val cpuReqQueue = Module(new Queue(UInt(log2Ceil(nbThreads).W), nbThreads, true))
+  // memFaultInstQueue -> memFaultQueue -> cpuReqQueue -> Transplant CPU2HOST
+  private val memFaultInstQueue = Module(new Queue(UInt(log2Ceil(nbThreads).W), 4, true))
+  private val memFaultQueue = Module(new Queue(UInt(log2Ceil(nbThreads).W), 4, true))
+  memFaultInstQueue.io.enq.valid := mem2trans.instFault.valid
+  memFaultInstQueue.io.enq.bits := mem2trans.instFault.tag
+  memFaultQueue.io.enq.valid := mem2trans.dataFault.valid
+  memFaultQueue.io.enq.bits := mem2trans.dataFault.tag
   cpuReqQueue.io.enq.valid := cpu2trans.done.valid
   cpuReqQueue.io.enq.bits := cpu2trans.done.tag
   hostReqQueue.io.enq.valid := host2trans.done.valid
   hostReqQueue.io.enq.bits := host2trans.done.tag
+  when(!cpu2trans.done.valid) { cpuReqQueue.io.enq <> memFaultQueue.io.deq }.otherwise { memFaultQueue.io.deq.ready := false.B}
+  when(!mem2trans.dataFault.valid) { memFaultQueue.io.enq <> memFaultInstQueue.io.deq }.otherwise{ memFaultInstQueue.io.deq.ready := false.B }
 
   hostReqQueue.io.deq.ready := state === s_IDLE
   cpuReqQueue.io.deq.ready := state === s_IDLE && !hostReqQueue.io.deq.valid

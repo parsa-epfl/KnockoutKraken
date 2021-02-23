@@ -76,6 +76,9 @@ class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule
     val done = Input(ValidTag(cfg.NB_THREADS))
     val transOut = Output(ValidTag(cfg.NB_THREADS))
   })
+  // Mem Fault - Transplant
+  transplantU.mem2trans.instFault := mem.instFault
+  transplantU.mem2trans.dataFault := mem.dataFault
   // Update State - Highjack commit ports from pipeline
   archstate.pstate.transplant.thread := transplantU.trans2cpu.thread
   pipeline.archstate.commit.ready := !transplantU.trans2cpu.updatingPState

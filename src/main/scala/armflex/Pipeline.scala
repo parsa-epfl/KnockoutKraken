@@ -24,6 +24,8 @@ class PipelineMemoryIO(implicit val cfg: ProcConfig) extends Bundle {
     val resp = Input(Valid(new FrontendReplyPacket(cfg.BLOCK_SIZE, cfg.NB_THREADS_W)))
   }
   val wake = Input(Vec(4, ValidTag(cfg.TAG_T)))
+  val dataFault = Input(ValidTag(cfg.NB_THREADS))
+  val instFault = Input(ValidTag(cfg.NB_THREADS))
 }
 
 class IssueArchStateIO(nbThreads: Int) extends Bundle {
