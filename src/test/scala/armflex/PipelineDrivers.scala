@@ -31,21 +31,21 @@ object PipelineDrivers {
       pipeline.traceIn.valid.poke(false.B)
       pipeline.traceExpect.valid.poke(false.B)
 
-      pipeline.transplantIO.port.init
-      pipeline.transplantIO.done.valid.poke(false.B)
+      pipeline.hostIO.port.init
+      pipeline.hostIO.done.valid.poke(false.B)
     }
 
     def transplantAndStart(tag: Int, pstate: PState): Unit = {
-      pipeline.transplantIO.port.wr(tag, pstate)
+      pipeline.hostIO.port.wr(tag, pstate)
       timescope {
-        pipeline.transplantIO.done.valid.poke(true.B)
-        pipeline.transplantIO.done.tag.poke(tag.U)
+        pipeline.hostIO.done.valid.poke(true.B)
+        pipeline.hostIO.done.tag.poke(tag.U)
         clock.step()
       }
     }
 
     def getTransplantOut(tag: Int): PState = {
-      val state = pipeline.transplantIO.port.rdState(tag)
+      val state = pipeline.hostIO.port.rdState(tag)
       state
     }
 
@@ -154,10 +154,29 @@ class CommitTraceBundle(val blockSize: Int) extends Bundle {
   )
 }
 
+import antmicro.CSR.ClearReg
 class PipelineHardDriverModule(implicit val cfg: ProcConfig) extends MultiIOModule {
   val pipeline = Module(new PipelineWithTransplant)
-  val transplantIO = IO(pipeline.transplantIO.cloneType)
-  transplantIO <> pipeline.transplantIO
+  val hostIO = IO(new Bundle {
+    val port = pipeline.hostIO.port.cloneType
+    val done = Input(ValidTag(cfg.NB_THREADS))
+    val transOut = Output(ValidTag(cfg.NB_THREADS))
+  })
+  pipeline.hostIO.port <> hostIO.port
+  val set = Wire(Valid(cfg.TAG_T))
+  set.bits := hostIO.done.tag
+  set.valid := hostIO.done.valid
+  val clear = Wire(Valid(cfg.TAG_T))
+  clear.bits := pipeline.hostIO.trans2host.clear.tag
+  clear.valid := pipeline.hostIO.trans2host.clear.valid
+  val pendingHost = ClearReg(set, clear, cfg.NB_THREADS)
+  pipeline.hostIO.host2trans.pending := pendingHost
+
+  hostIO.transOut := pipeline.hostIO.trans2host.done
+  //val setCpu = Wire(Valid(cfg.TAG_T))
+  //setCpu.valid := pipeline.hostIO.trans2host.done.valid
+  //setCpu.bits := pipeline.hostIO.trans2host.done.tag
+  //val pendingCpu = ClearReg(setCpu, set, cfg.NB_THREADS)
 
   val traceIn = IO(Flipped(Decoupled(new CommitTraceBundle(cfg.BLOCK_SIZE))))
   val traceExpect = IO(Flipped(Decoupled(new CommitTraceBundle(cfg.BLOCK_SIZE))))

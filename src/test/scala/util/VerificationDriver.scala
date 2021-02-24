@@ -64,7 +64,7 @@ class VerificationDriver(val filename: String) {
 }
 
 object TraceAssemblyGenerator extends App {
-  val filename = if (args.length == 1) args(0) else "binary10_0"
+  val filename = if (args.length == 1) args(0) else "binary100"
   val traceDrv = new VerificationDriver(filename)
   val file = new BufferedOutputStream(new FileOutputStream("/dev/shm/insts"))
   println("Start")

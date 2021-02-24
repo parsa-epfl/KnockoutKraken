@@ -27,10 +27,11 @@ object TransplantIO extends Bundle {
     val dataFault = Input(ValidTag(nbThreads))
   }
   class Host2Trans(val nbThreads: Int) extends Bundle {
-    val done = Input(ValidTag(nbThreads))
+    val pending = Input(UInt(nbThreads.W))
   }
   class Trans2Host(val nbThreads: Int, val bramCfg: BRAMConfig) extends Bundle {
     val done = Output(ValidTag(nbThreads))
+    val clear = Output(ValidTag(nbThreads))
   }
 }
 class TransplantUnit(nbThreads: Int) extends MultiIOModule {
@@ -61,46 +62,45 @@ class TransplantUnit(nbThreads: Int) extends MultiIOModule {
   private val stateDir = RegInit(s_CPU2BRAM) // Reads from BRAM, pushes to State
 
   private val thread = RegInit(0.U(log2Ceil(nbThreads).W))
+  private val thread_next = WireInit(thread)
+  thread := thread_next
 
   private val stateRegType = RegInit(r_DONE)
   private val bramOFFST = RegInit(0.U(log2Ceil(hostBuffer.cfg.NB_ELE).W))
   private val currReg = RegInit(0.U(log2Ceil(ARCH_MAX_OFFST).W))
 
-  private val hostReqQueue = Module(new Queue(UInt(log2Ceil(nbThreads).W), nbThreads, true))
-  private val cpuReqQueue = Module(new Queue(UInt(log2Ceil(nbThreads).W), nbThreads, true))
-  // memFaultInstQueue -> memFaultQueue -> cpuReqQueue -> Transplant CPU2HOST
-  private val memFaultInstQueue = Module(new Queue(UInt(log2Ceil(nbThreads).W), 4, true))
-  private val memFaultQueue = Module(new Queue(UInt(log2Ceil(nbThreads).W), 4, true))
-  memFaultInstQueue.io.enq.valid := mem2trans.instFault.valid
-  memFaultInstQueue.io.enq.bits := mem2trans.instFault.tag
-  memFaultQueue.io.enq.valid := mem2trans.dataFault.valid
-  memFaultQueue.io.enq.bits := mem2trans.dataFault.tag
-  cpuReqQueue.io.enq.valid := cpu2trans.done.valid
-  cpuReqQueue.io.enq.bits := cpu2trans.done.tag
-  hostReqQueue.io.enq.valid := host2trans.done.valid
-  hostReqQueue.io.enq.bits := host2trans.done.tag
-  when(!cpu2trans.done.valid) { cpuReqQueue.io.enq <> memFaultQueue.io.deq }.otherwise { memFaultQueue.io.deq.ready := false.B}
-  when(!mem2trans.dataFault.valid) { memFaultQueue.io.enq <> memFaultInstQueue.io.deq }.otherwise{ memFaultInstQueue.io.deq.ready := false.B }
+  private val cpu2transPending = RegInit(0.U(nbThreads.W))
+  private val cpu2transCpuTrans = Wire(UInt(nbThreads.W))
+  private val cpu2transInstFault = Wire(UInt(nbThreads.W))
+  private val cpu2transDataFault = Wire(UInt(nbThreads.W))
+  private val cpu2transInsert = WireInit(cpu2transCpuTrans | cpu2transDataFault | cpu2transInstFault)
+  private val cpu2transClear = WireInit(0.U(log2Ceil(nbThreads).W))
+  private val cpu2transClearBit = (cpu2transClear =/= 0.U).asUInt << cpu2transClear
 
-  hostReqQueue.io.deq.ready := state === s_IDLE
-  cpuReqQueue.io.deq.ready := state === s_IDLE && !hostReqQueue.io.deq.valid
+  cpu2transInstFault := Mux(mem2trans.instFault.valid, 1.U << mem2trans.instFault.tag, 0.U)
+  cpu2transDataFault := Mux(mem2trans.dataFault.valid, 1.U << mem2trans.dataFault.tag, 0.U)
+  cpu2transCpuTrans  := Mux(cpu2trans.done.valid, 1.U << cpu2trans.done.tag, 0.U)
+  cpu2transPending := (cpu2transPending & ~cpu2transClear) | cpu2transInsert
 
   trans2host.done.valid := false.B
+  trans2host.clear.valid := false.B
   trans2cpu.start := false.B
   switch(state) {
     is(s_IDLE) {
-      when(hostReqQueue.io.deq.fire || cpuReqQueue.io.deq.fire) {
+      when(host2trans.pending =/= 0.U || cpu2transPending =/= 0.U) {
         state := s_TRANS
         stateRegType := r_XREGS
-        bramOFFST := cpuReqQueue.io.deq.bits << log2Ceil(ARCH_MAX_OFFST)
+        bramOFFST := thread_next << log2Ceil(ARCH_MAX_OFFST)
         currReg := 0.U
       }
-      when(hostReqQueue.io.deq.fire) {
+      when(host2trans.pending =/= 0.U) {
         stateDir := s_BRAM2CPU
-        thread := hostReqQueue.io.deq.bits
-      }.elsewhen(cpuReqQueue.io.deq.fire) {
+        thread_next := PriorityEncoder(host2trans.pending)
+        trans2host.clear.valid := true.B
+      }.elsewhen(cpu2transPending =/= 0.U) {
         stateDir := s_CPU2BRAM
-        thread := cpuReqQueue.io.deq.bits
+        thread_next := PriorityEncoder(cpu2transPending)
+        cpu2transClear := thread_next
       }
     }
     is(s_TRANS) {
@@ -127,6 +127,7 @@ class TransplantUnit(nbThreads: Int) extends MultiIOModule {
   }
 
   trans2host.done.tag := thread
+  trans2host.clear.tag := thread_next
   trans2cpu.thread := thread
   trans2cpu.pregs := cpu2trans.pregs
   trans2cpu.updatingPState := state === s_TRANS && stateDir === s_BRAM2CPU

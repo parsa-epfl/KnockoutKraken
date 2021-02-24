@@ -12,6 +12,9 @@ import armflex.util._
 import armflex.util.ExtraUtils._
 import Chisel.debug
 
+import antmicro.CSR._
+import firrtl.PrimOps.Mul
+
 class ProcConfig(
   // Chisel Generator configs
   val NB_THREADS:    Int = 2,
@@ -42,6 +45,26 @@ class ProcConfig(
   }
 }
 
+class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
+  val axiDataWidth = 32
+  val regCount = 2
+  val pipeline = Module(new PipelineWithTransplant)
+  val axiLiteCSR = Module(new AXI4LiteCSR(axiDataWidth, regCount))
+  val csr = Module(new CSR(axiDataWidth, regCount))
+  csr.io.bus <> axiLiteCSR.io.bus
+
+  val mem = IO(pipeline.mem.cloneType)
+  val transplantIO = IO(new Bundle {
+    val port = pipeline.hostIO.port.cloneType
+    val ctl = axiLiteCSR.io.ctl.cloneType
+  })
+  val trans2host = WireInit(Mux(pipeline.hostIO.trans2host.done.valid, 1.U << pipeline.hostIO.trans2host.done.tag, 0.U))
+  val host2transClear = WireInit(Mux(pipeline.hostIO.trans2host.clear.valid, 1.U << pipeline.hostIO.trans2host.clear.tag, 0.U))
+
+  SetCSR(trans2host, csr.io.csr(0), axiDataWidth)
+  val pendingHostTrans = ClearCSR(host2transClear, csr.io.csr(1), axiDataWidth)
+  pipeline.hostIO.host2trans.pending := pendingHostTrans
+}
 class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule {
 
   // Pipeline
@@ -71,10 +94,10 @@ class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule
 
   // -------- Transplant ---------
   val transplantU = Module(new TransplantUnit(cfg.NB_THREADS))
-  val transplantIO = IO(new Bundle {
+  val hostIO = IO(new Bundle {
     val port = transplantU.hostBramPort.cloneType
-    val done = Input(ValidTag(cfg.NB_THREADS))
-    val transOut = Output(ValidTag(cfg.NB_THREADS))
+    val trans2host = transplantU.trans2host.cloneType
+    val host2trans = transplantU.host2trans.cloneType
   })
   // Mem Fault - Transplant
   transplantU.mem2trans.instFault := mem.instFault
@@ -98,9 +121,9 @@ class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule
   pipeline.transplantIO.start.tag := transplantU.trans2cpu.thread
   pipeline.transplantIO.start.bits.get := transplantU.trans2cpu.pregs.PC
   // Transplant from Host
-  transplantIO.port <> transplantU.hostBramPort
-  transplantU.host2trans.done := transplantIO.done
-  transplantIO.transOut := transplantU.trans2host.done
+  transplantU.host2trans <> hostIO.host2trans
+  transplantU.trans2host <> hostIO.trans2host
+  transplantU.hostBramPort <> hostIO.port
 
   //* DBG
   val dbg = IO(new Bundle {

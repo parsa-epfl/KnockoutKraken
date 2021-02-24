@@ -364,8 +364,8 @@ object DECODE_MATCHING_TABLES
       DP2S_LSRV    -> List(I_DP2S,  LSR,      Y, Y, N, N, N),
       DP2S_ASRV    -> List(I_DP2S,  ASR,      Y, Y, N, N, N),
       DP2S_RORV    -> List(I_DP2S,  ROR,      Y, Y, N, N, N),
-      // Data-processing (3 sources)
-      DP3S_MADD32  -> List(I_DP3S,  OP_MADD,  Y, N, N, N, Y),
+      // Data-processing (3 sources) // TODO, support 3 read registers
+      //DP3S_MADD32  -> List(I_DP3S,  OP_MADD,  Y, N, N, N, Y),
       // Unconditional branch (immediate)
       BImm_B       -> List(I_BImm,  OP_B,     N, N, N, N, N),
       BImm_BL      -> List(I_BImm,  OP_BL,    N, N, N, N, N),

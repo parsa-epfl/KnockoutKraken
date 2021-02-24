@@ -39,7 +39,7 @@ class PipelineTest(val dut: PipelineHardDriverModule, traceDrv: VerificationDriv
         println("PC:" + trace.state.pc.toString(16))
         transplantInsts.enqueue(dut.transplantOut.inst.peek().litValue)
       }
-      if (dut.transplantIO.transOut.valid.peek.litToBoolean) {
+      if (dut.hostIO.transOut.valid.peek.litToBoolean) {
         dut.transplantAndStart(0, trace.state)
       }
       dut.clock.step()
@@ -107,5 +107,5 @@ class FullPipelineTest extends FreeSpec with ChiselScalatestTester {
   //runExample("binary10000_0")
   //runExample("binary10000_1")
   //runExample("binary10000_2")
-  runExample("binary10000_3")
+  runExample("binary100")
 }
