@@ -93,8 +93,8 @@ class ARMFlexTop extends MultiIOModule {
   u_pd.M_AXI_TLBWB <> M_AXI_TLBWB
   val S_AXI_PAGE = IO(Flipped(u_pd.S_AXI_PAGE.cloneType))
   u_pd.S_AXI_PAGE <> S_AXI_PAGE
-  val S_AXI_TT = IO(u_pd.S_AXI_TT.cloneType)
-  u_pd.S_AXI_TT <> S_AXI_TT
+  val S_AXIL_TT = IO(u_pd.S_AXI_TT.cloneType)
+  u_pd.S_AXI_TT <> S_AXIL_TT
 
   // u_pd.dcache_flush_request_o
   u_pd.dcache_flush_request_o <> u_data_path.cache_flush_request_i
