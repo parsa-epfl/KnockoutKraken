@@ -230,7 +230,7 @@ class AXI4(val addrWidth : Int, val dataWidth : Int) extends Bundle{
 }
 
 object AXI4 {
-  val idWidth = 4
+  val idWidth = 6
   val lenWidth = 8
   val sizeWidth = 3
   val burstWidth = 2

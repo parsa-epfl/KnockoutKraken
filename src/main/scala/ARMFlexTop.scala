@@ -13,10 +13,10 @@ class ARMFlexTop extends MultiIOModule {
   implicit val pipelineCfg = new ProcConfig()
   val memoryParameter = new MemorySystemParameter()
 
-  val u_pipeline = Module(new PipelineWithTransplant)
+  val u_pipeline = Module(new PipelineAxi)
 
-  val pipelineTransplantIO = IO(u_pipeline.transplantIO.cloneType)
-  pipelineTransplantIO <> u_pipeline.transplantIO
+  val transplantIO = IO(u_pipeline.transplantIO.cloneType)
+  transplantIO <> u_pipeline.transplantIO
 
   val u_inst_path = Module(new TLBPlusCache(
     memoryParameter,
