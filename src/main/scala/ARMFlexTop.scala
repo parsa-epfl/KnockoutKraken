@@ -10,8 +10,8 @@ import armflex.cache.CacheBackendToAXIInterface
 import armflex.demander.PageDemander
 
 class ARMFlexTop extends MultiIOModule {
-  implicit val pipelineCfg = new ProcConfig()
-  val memoryParameter = new MemorySystemParameter()
+  implicit val pipelineCfg = new ProcConfig(NB_THREADS = 8)
+  val memoryParameter = new MemorySystemParameter(threadNumber = 8)
 
   val u_pipeline = Module(new PipelineAxi)
 
