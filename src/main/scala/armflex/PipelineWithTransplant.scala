@@ -45,6 +45,7 @@ class ProcConfig(
   }
 }
 
+import antmicro.Bus.AXI4Lite
 class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
   val axiDataWidth = 32
   val regCount = 2
@@ -56,8 +57,12 @@ class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
   val mem = IO(pipeline.mem.cloneType)
   val transplantIO = IO(new Bundle {
     val port = pipeline.hostIO.port.cloneType
-    val ctl = axiLiteCSR.io.ctl.cloneType
+    val ctl = Flipped(new AXI4Lite(4, axiDataWidth))
   })
+  transplantIO.ctl <> axiLiteCSR.io.ctl
+  pipeline.mem <> mem
+  pipeline.hostIO.port <> transplantIO.port
+
   val trans2host = WireInit(Mux(pipeline.hostIO.trans2host.done.valid, 1.U << pipeline.hostIO.trans2host.done.tag, 0.U))
   val host2transClear = WireInit(Mux(pipeline.hostIO.trans2host.clear.valid, 1.U << pipeline.hostIO.trans2host.clear.tag, 0.U))
 

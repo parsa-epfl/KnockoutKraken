@@ -28,7 +28,7 @@ import chisel3._
 import chisel3.util._
 
 class AXI4LiteCSR(dataWidth: Int, regCount: Int) extends Module {
-  val addrWidth = log2Ceil(regCount)
+  val addrWidth = log2Ceil(regCount) + 2 // Byte addressed
   val io = IO(new Bundle{
     val ctl = Flipped(new AXI4Lite(addrWidth, dataWidth))
     val bus = new CSRBusBundle(dataWidth, regCount)
@@ -68,12 +68,12 @@ class AXI4LiteCSR(dataWidth: Int, regCount: Int) extends Module {
     is(sIdle){
       when(io.ctl.aw.awvalid){
         state := sWriteAddr
-        addr := io.ctl.aw.awaddr(5, 2)
+        addr := io.ctl.aw.awaddr >> 2.U // TODO Is this correct instead of (5,2)?
         awready := true.B
 
       }.elsewhen(io.ctl.ar.arvalid){
         state := sReadAddr
-        addr := io.ctl.ar.araddr(5, 2)
+        addr := io.ctl.ar.araddr >> 2.U // TODO Is this correct instead of (5,2)?
         arready := true.B
       }
     }
