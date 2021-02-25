@@ -136,3 +136,57 @@ object ARMFlexTopVerilogEmitter extends App {
   fr.write(c.emitVerilog(new ARMFlexTop))
   fr.close()
 }
+
+// This module is wraps all Pipeline ports with a AxiLite register
+class PipelineAxiHacked(implicit val cfg: ProcConfig) extends MultiIOModule {
+  import antmicro.CSR._
+  import antmicro.Bus._
+  val axiDataWidth = 32
+  val regCount = 2
+  val pipeline = Module(new PipelineWithTransplant)
+  val axiLiteCSR = Module(new AXI4LiteCSR(axiDataWidth, 40))
+  val csr = Module(new CSR(axiDataWidth, 40))
+  csr.io.bus <> axiLiteCSR.io.bus
+
+  val transplantIO = IO(new Bundle {
+    val port = pipeline.hostIO.port.cloneType
+    val ctl = Flipped(new AXI4Lite(4, axiDataWidth))
+  })
+  transplantIO.ctl <> axiLiteCSR.io.ctl
+  pipeline.hostIO.port <> transplantIO.port
+
+  val trans2host = WireInit(Mux(pipeline.hostIO.trans2host.done.valid, 1.U << pipeline.hostIO.trans2host.done.tag, 0.U))
+  val host2transClear = WireInit(Mux(pipeline.hostIO.trans2host.clear.valid, 1.U << pipeline.hostIO.trans2host.clear.tag, 0.U))
+
+  SetCSR(trans2host, csr.io.csr(0), axiDataWidth)
+  val pendingHostTrans = ClearCSR(host2transClear, csr.io.csr(1), axiDataWidth)
+  pipeline.hostIO.host2trans.pending := pendingHostTrans
+
+  // Hacked port
+  pipeline.mem.dataFault := SimpleCSR(csr.io.csr(2), axiDataWidth).asTypeOf(pipeline.mem.dataFault)
+  pipeline.mem.instFault := SimpleCSR(csr.io.csr(3), axiDataWidth).asTypeOf(pipeline.mem.instFault)
+  val handshakeReg = WireInit(SimpleCSR(csr.io.csr(4), axiDataWidth))
+  pipeline.mem.inst.req.ready := handshakeReg(0)
+  pipeline.mem.inst.resp.valid := handshakeReg(1)
+  pipeline.mem.data.req.ready := handshakeReg(2)
+  pipeline.mem.data.resp.valid := handshakeReg(3)
+  pipeline.mem.wake.zipWithIndex.foreach {
+    case (bits, idx) => 
+      bits.valid := handshakeReg(3+idx)
+      bits.tag := SimpleCSR(csr.io.csr(4+idx), axiDataWidth)
+  }
+  val currIdx = 4 + pipeline.mem.wake.length
+  val regsPerBlock = cfg.BLOCK_SIZE/axiDataWidth
+  pipeline.mem.inst.resp.bits := Cat(for (idx <- 0 until regsPerBlock) yield SimpleCSR(csr.io.csr(currIdx+idx), axiDataWidth)).asTypeOf(pipeline.mem.inst.resp.bits)
+  pipeline.mem.data.resp.bits := Cat(for (idx <- 0 until regsPerBlock) yield SimpleCSR(csr.io.csr(currIdx+regsPerBlock+idx), axiDataWidth)).asTypeOf(pipeline.mem.data.resp.bits)
+ 
+}
+
+object PipelineFakeTopVerilogEmitter extends App {
+  val c = new chisel3.stage.ChiselStage
+  import java.io._
+  val fr = new FileWriter(new File("Pipeline.v"))
+  val proc = new ProcConfig(NB_THREADS = 16)
+  fr.write(c.emitVerilog(new PipelineAxiHacked()(proc)))
+  fr.close()
+}
