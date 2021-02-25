@@ -63,7 +63,7 @@ object TestDriversExtra {
         self.rfile(reg).poke(state.xregs(reg).U)
       }
       self.regs.PC.poke(state.pc.U)
-      self.regs.SP.poke(state.sp.U)
+      //self.regs.SP.poke(state.sp.U)
       self.regs.NZCV.poke(state.nzcv.U)
     }
     def peek(): PState = {
@@ -72,7 +72,7 @@ object TestDriversExtra {
 
       val xregs = for (reg <- 0 until 32) yield rfile(reg).peek.litValue
       val pc = pstate.PC.peek.litValue
-      val sp = pstate.SP.peek.litValue
+      val sp = 0 //pstate.SP.peek.litValue
       val nzcv = pstate.NZCV.peek.litValue.toInt
       new PState(xregs.toList: List[BigInt], pc: BigInt, sp: BigInt, nzcv: Int)
     }

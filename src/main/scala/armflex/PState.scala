@@ -29,7 +29,7 @@ import armflex.util._
 
 class PStateRegs extends Bundle {
   val PC = DATA_T
-  val SP = DATA_T // Normaly 4 levels 32 bits
+  //val SP = DATA_T // Normaly 4 levels 32 bits
   // NOTE: QEMU uses Reg[31] as SP, so this is actually not used
   //val EL = INST_T // Normaly 4 levels 32 bits
 
@@ -53,7 +53,7 @@ object PStateRegs {
   def apply(): PStateRegs = {
     val wire = Wire(new PStateRegs())
     wire.PC := DATA_X
-    wire.SP := DATA_X
+    //wire.SP := DATA_X
     //wire.EL := DATA_X
     wire.NZCV := NZCV_X
     wire
@@ -136,22 +136,41 @@ class ArchState(nbThreads: Int, withDbg: Boolean) extends MultiIOModule {
   val pstate = IO(new PStateRegsIO(nbThreads))
 
   private val rfile = Module(new RFileBRAM(nbThreads))
-  private val pregsVec = RegInit(VecInit(Seq.fill(nbThreads)(PStateRegs())))
-
   rfile.rd <> rfile_rd
   rfile.wr <> rfile_wr
 
-  pstate.issue.pregs := pregsVec(pstate.issue.thread)
-  pstate.commit.curr := pregsVec(pstate.commit.next.tag)
-  pstate.transplant.pregs := pregsVec(pstate.transplant.thread)
+  private val pcMem = Mem(nbThreads, DATA_T)
+
+  // This could be further optimized by using 2 BRAMs instead
+  private val pcMem_rd1 = pcMem(pstate.issue.thread)    // Both of these can be optimized 
+  private val pcMem_rd2 = pcMem(pstate.commit.next.tag) // by carring in the pipeline on fetch
+  private val pcMem_rd3 = pcMem(pstate.transplant.thread)
+  // pcMem_wr
+  pstate.issue.pregs.PC := pcMem_rd1
+  pstate.commit.curr.PC := pcMem_rd2
+  pstate.transplant.pregs.PC := pcMem_rd3
   when(pstate.commit.next.valid) {
-    pregsVec(pstate.commit.next.tag) := pstate.commit.next.bits.get
+    pcMem(pstate.commit.next.tag) := pstate.commit.next.bits.get.PC
   }
+
+  private val nzcvMem = Mem(nbThreads, NZCV_T)
+  private val nzcvMem_rd1 = nzcvMem(pstate.issue.thread)    // Both of these can be optimized
+  private val nzcvMem_rd2 = nzcvMem(pstate.commit.next.tag) // by carring them in the pipeline on fetch
+  private val nzcvMem_rd3 = nzcvMem(pstate.transplant.thread)
+  // pcMem_wr
+  pstate.issue.pregs.NZCV := nzcvMem_rd1
+  pstate.commit.curr.NZCV := nzcvMem_rd2
+  pstate.transplant.pregs.NZCV := nzcvMem_rd3
+  when(pstate.commit.next.valid) {
+    nzcvMem(pstate.commit.next.tag) := pstate.commit.next.bits.get.NZCV
+  }
+  
 
   val dbg = IO(new Bundle {
     val vecState = if(withDbg) Some(Output(Vec(nbThreads, new FullStateBundle))) else None
   })
   if(withDbg) {
+    val pregsVec = Wire(Vec(nbThreads, new PStateRegs))
     // Copy of BRAM RegFile states
     val dbgRFile = Mem(nbThreads * REG_N, DATA_T)
     val wrAddr = WireInit(Cat(rfile.wr.tag,rfile.wr.addr))
@@ -163,6 +182,8 @@ class ArchState(nbThreads: Int, withDbg: Boolean) extends MultiIOModule {
         // RegNext because BRAM has rd delay of 1
         dbg.vecState.get(thread).rfile(reg) := dbgRFile(((thread << log2Ceil(REG_N))+reg).U)
       }
+      pregsVec(thread).PC := pcMem(thread)
+      pregsVec(thread).NZCV := nzcvMem(thread)
       dbg.vecState.get(thread).regs := pregsVec(thread)
     }
   }

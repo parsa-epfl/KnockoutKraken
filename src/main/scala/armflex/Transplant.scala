@@ -148,8 +148,9 @@ class TransplantUnit(nbThreads: Int) extends MultiIOModule {
     hostTransPort.DI := cpu2trans.pregs.PC
     trans2cpu.pregs.PC := hostTransPort.DO
   }.elsewhen(stateRegTypeCurr === r_SP) {
-    hostTransPort.DI := cpu2trans.pregs.SP
-    trans2cpu.pregs.SP := hostTransPort.DO
+    // TODO SP is not used yet
+    //hostTransPort.DI := cpu2trans.pregs.SP // 
+    //trans2cpu.pregs.SP := hostTransPort.DO //
   }.elsewhen(stateRegTypeCurr === r_NZCV) {
     hostTransPort.DI := PStateGet_NZCV(cpu2trans.pregs.NZCV)
     trans2cpu.pregs.NZCV := PStateGet_NZCV(hostTransPort.DO)
@@ -329,7 +330,7 @@ class TransplantUnitLegacy(implicit val cfg: ProcConfig) extends Module {
   }.elsewhen(stateRegType === r_PC) {
     io.stateBRAM.DI := io.cpu2tpuState.PC
   }.elsewhen(stateRegType === r_SP) {
-    io.stateBRAM.DI := io.cpu2tpuState.SP
+    //io.stateBRAM.DI := io.cpu2tpuState.SP
   }.elsewhen(stateRegType === r_NZCV) {
     io.stateBRAM.DI := Cat(0.U, io.cpu2tpuState.NZCV(3, 0))
   }.otherwise {
@@ -342,7 +343,7 @@ class TransplantUnitLegacy(implicit val cfg: ProcConfig) extends Module {
   io.rfile.wr.data := bramOut
 
   io.tpu2cpuState.PC := bramOut
-  io.tpu2cpuState.SP := bramOut
+  //io.tpu2cpuState.SP := bramOut
   io.tpu2cpuState.NZCV := PStateGet_NZCV(bramOut)
   // One cycle delay from BRAM read
   io.tpu2cpuStateReg.bits := RegNext(stateRegType)
