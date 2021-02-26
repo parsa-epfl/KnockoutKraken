@@ -59,7 +59,7 @@ class TransplantUnit(nbThreads: Int) extends MultiIOModule {
   private val s_IDLE :: s_TRANS :: Nil = Enum(2)
   private val s_BRAM2CPU :: s_CPU2BRAM :: Nil = Enum(2)
   private val state = RegInit(s_IDLE) // Reads from State, pushes to BRAM
-  private val stateDir = RegInit(s_CPU2BRAM) // Reads from BRAM, pushes to State
+  private val stateDir = RegInit(s_BRAM2CPU) // Reads from BRAM, pushes to State
 
   private val thread = RegInit(0.U(log2Ceil(nbThreads).W))
   private val thread_next = WireInit(thread)
@@ -139,9 +139,9 @@ class TransplantUnit(nbThreads: Int) extends MultiIOModule {
 
   hostTransPort.EN := state === s_TRANS
   hostTransPort.WE := Fill(hostTransPort.cfg.NB_COL, stateDir === s_CPU2BRAM)
-  hostTransPort.ADDR := bramOFFST
+  hostTransPort.ADDR := Mux(stateDir === s_BRAM2CPU, bramOFFST, RegNext(bramOFFST))
   hostTransPort.DI := stateBufferRdPort.DO
-  private val stateRegTypeCurr = WireInit(Mux(stateDir === s_CPU2BRAM, stateRegType, RegNext(stateRegType)))
+  private val stateRegTypeCurr = WireInit(RegNext(stateRegType))
   when(stateRegType === r_XREGS) {
     hostTransPort.DI := stateBufferRdPort.DO
   }.elsewhen(stateRegTypeCurr === r_PC) {

@@ -22,6 +22,7 @@ import armflex.util.SoftwareStructs.CommitTrace
 import armflex.TestDriversExtra._
 import armflex.PipelineDrivers._
 import org.scalatest.exceptions.TestFailedException
+import armflex.util.SoftwareStructs._
 
 class PipelineTest(val dut: PipelineHardDriverModule, traceDrv: VerificationDriver) {
   private val init: Unit = {
@@ -32,15 +33,19 @@ class PipelineTest(val dut: PipelineHardDriverModule, traceDrv: VerificationDriv
   val transplantInsts = new Queue[BigInt]()
 
   def transplanter: Unit = {
-    var trace: CommitTrace = null
+    var expected: CommitTrace = null
+    var actual: PState = null
     while (running) {
-      if (dut.transplantOut.state.valid.peek.litToBoolean) {
-        trace = dut.transplantOut.state.bits.peek()
-        println("PC:" + trace.state.pc.toString(16))
+      if (dut.transplantOut.expected.valid.peek.litToBoolean) {
+        expected = dut.transplantOut.expected.bits.peek()
+        actual = dut.transplantOut.actual.peek
+        println("PC:" + expected.state.pc.toString(16))
         transplantInsts.enqueue(dut.transplantOut.inst.peek().litValue)
       }
       if (dut.hostIO.transOut.valid.peek.litToBoolean) {
-        dut.transplantAndStart(0, trace.state)
+        val transplant = dut.getTransplantOut(0)
+        println(actual.matches(transplant).getOrElse("Matched"))
+        dut.transplantAndStart(0, expected.state)
       }
       dut.clock.step()
     }

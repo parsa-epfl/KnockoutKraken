@@ -253,11 +253,13 @@ class PipelineHardDriverModule(implicit val cfg: ProcConfig) extends MultiIOModu
   }
 
   val transplantOut = IO(new Bundle {
-    val state = Valid(new CommitTraceBundle(cfg.BLOCK_SIZE))
+    val expected = Valid(new CommitTraceBundle(cfg.BLOCK_SIZE))
+    val actual = Output(new FullStateBundle)
     val inst = Output(INST_T)
   })
-  transplantOut.state.bits := commit.io.deq.bits
-  transplantOut.state.valid := commit.io.deq.fire && commitTransplant.valid
+  transplantOut.expected.bits := commit.io.deq.bits
+  transplantOut.expected.valid := commit.io.deq.fire && commitTransplant.valid
+  transplantOut.actual := pipeline.dbg.bits.get.stateVec(0)
   transplantOut.inst := commitTransplant.bits
 
   done := commit.io.count === 0.U

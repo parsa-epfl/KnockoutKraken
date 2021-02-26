@@ -140,11 +140,13 @@ class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule
         val issuingTransplant = Output(Bool())
         val commit = ValidTag(cfg.NB_THREADS, new FullStateBundle)
         val commitTransplant = Output(Valid(INST_T))
+        val stateVec = archstate.dbg.vecState.get.cloneType
       }))
       else None
   })
 
   if(cfg.DebugSignals) {
+    dbg.bits.get.stateVec := archstate.dbg.vecState.get
     dbg.bits.get.fetch.valid := pipeline.mem.inst.req.valid
     dbg.bits.get.fetch.tag := pipeline.mem.inst.req.bits.thread_id
     dbg.bits.get.fetch.bits.get := archstate.dbg.vecState.get(dbg.bits.get.fetch.tag)
