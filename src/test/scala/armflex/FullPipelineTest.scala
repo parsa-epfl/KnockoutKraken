@@ -52,13 +52,12 @@ class PipelineTest(val dut: PipelineHardDriverModule, traceDrv: VerificationDriv
     println("Done Transplanting")
   }
 
-  def run(rerun: Boolean = false, pc: BigInt = 0): Unit = {
+  def run(start: Int = 0, end: Int): Unit = {
     var trace = traceDrv.next
-
-    if (rerun) {
-      while (trace._1.state.pc != pc) {
-        trace = traceDrv.next
-      }
+    var instCount = 0
+    while (traceDrv.hasNext && instCount < start) {
+      trace = traceDrv.next
+      instCount += 1
     }
 
     dut.transplantAndStart(0, trace._1.state)
@@ -67,7 +66,7 @@ class PipelineTest(val dut: PipelineHardDriverModule, traceDrv: VerificationDriv
         transplanter
       }
       .fork {
-        while (traceDrv.hasNext) {
+        while (traceDrv.hasNext && instCount < end) {
           // Fetch
           dut.traceIn(trace._1)
           if (trace._2.isDefined) {
@@ -75,6 +74,7 @@ class PipelineTest(val dut: PipelineHardDriverModule, traceDrv: VerificationDriv
           }
           // Next Inst
           trace = traceDrv.next
+          instCount += 1
         }
         while (!dut.done.peek.litToBoolean) {
           dut.clock.step(1)
@@ -91,11 +91,11 @@ class PipelineTest(val dut: PipelineHardDriverModule, traceDrv: VerificationDriv
 
 class FullPipelineTest extends FreeSpec with ChiselScalatestTester {
   val cfgProc: ProcConfig = new ProcConfig(NB_THREADS = 2, DebugSignals = true, simVerbose = false)
-  def runExample(traceName: String, rerun: Boolean = false, pc: BigInt = BigInt("0000000000000000", 16)) {
+  def runExample(traceName: String, start: Int = 0, end: Int = Integer.MAX_VALUE) {
     val annos = Seq(
       VerilatorBackendAnnotation,
       TargetDirAnnotation("test/TraceBase/" + traceName + "/")
-      ,WriteVcdAnnotation
+      //,WriteVcdAnnotation
     )
     val traceDrv = new VerificationDriver(traceName)
     "Will verify pipeline's correctness with "+traceName+" file " in {
@@ -103,14 +103,16 @@ class FullPipelineTest extends FreeSpec with ChiselScalatestTester {
       test(new PipelineHardDriverModule()(cfgProc))
         .withAnnotations(annos) { dut =>
           val drv = new PipelineTest(dut, traceDrv)
-          drv.run(rerun, pc)
+          drv.run(start, end)
         }
     }
   }
 
-  //runExample("binary10000")
+  //runExample("binary100_1") // User
+  //runExample("binary1000")
+  runExample("binary10000", 4000, 5000)
   //runExample("binary10000_0")
   //runExample("binary10000_1")
   //runExample("binary10000_2")
-  runExample("binary100")
+  //runExample("binary100_1") // Kernel
 }
