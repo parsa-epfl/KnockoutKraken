@@ -106,7 +106,7 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   val fetchTag = ShiftRegister(fetch.mem.tag, cfg.cacheLatency)
   val fetchPC = ShiftRegister(fetch.mem.bits, cfg.cacheLatency)
   val blockInsts = VecInit.tabulate(cfg.BLOCK_SIZE/32) { idx => mem.inst.resp.bits.data((idx + 1) * 32 - 1, idx * 32) }
-  fetchQueue.io.enq.valid := mem.inst.resp.valid
+  fetchQueue.io.enq.valid := mem.inst.resp.valid && mem.inst.resp.bits.hit
   val selectBlock = WireInit(fetchPC >> 2.U)
   fetchQueue.io.enq.bits := Tagged(fetchTag, blockInsts(selectBlock))
 

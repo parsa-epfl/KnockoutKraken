@@ -196,6 +196,7 @@ class PipelineHardDriverModule(implicit val cfg: ProcConfig) extends MultiIOModu
   pipeline.mem.inst.resp.valid := ShiftRegister(fetch.io.deq.fire, fetchLatency)
   pipeline.mem.inst.resp.bits := DontCare // TODO
   pipeline.mem.inst.resp.bits.data := ShiftRegister(fetch.io.deq.bits.inst_block, fetchLatency)
+  pipeline.mem.inst.resp.bits.hit := true.B
 
   issue.io.enq.valid := fetch.io.deq.fire
   issue.io.enq.bits := fetch.io.deq.bits
@@ -240,6 +241,7 @@ class PipelineHardDriverModule(implicit val cfg: ProcConfig) extends MultiIOModu
     issue.io.deq.bits.state.compareAssert(pipeline.dbg.bits.get.issue.bits.get)
     cfg.simLog("  Success Issue\n")
   }
+  val commitCnt = RegInit(0.U(32.W))
   when(commit.io.deq.fire) {
     cfg.simLog(
       p"Commit :0x${Hexadecimal(pipeline.dbg.bits.get.commit.bits.get.regs.PC)}:${Hexadecimal(pipeline.dbg.bits.get.commit.bits.get.regs.PC)}\n"
@@ -247,6 +249,10 @@ class PipelineHardDriverModule(implicit val cfg: ProcConfig) extends MultiIOModu
     when(!commitTransplant.valid) {
       commit.io.deq.bits.state.compareAssert(pipeline.dbg.bits.get.commit.bits.get)
       cfg.simLog("  Success Commit\n")
+      if(!cfg.simVerbose) {
+        commitCnt := commitCnt + 1.U
+        printf(p"Commit Success:${Hexadecimal(pipeline.dbg.bits.get.commit.bits.get.regs.PC)}${commitCnt}\n")
+      }
     }.otherwise {
       printf(" Detected Transplant!\n")
     }

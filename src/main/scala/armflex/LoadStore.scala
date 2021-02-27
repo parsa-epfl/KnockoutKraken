@@ -467,7 +467,7 @@ class MemoryAdaptor(implicit cfg: ProcConfig) extends MultiIOModule {
   val replyArrived = ShiftRegister(memReq.io.deq.fire, cfg.cacheLatency)
   memResp.io.deq.ready := Mux(memResp.io.deq.bits.isPair, RegNext(replyArrived), replyArrived)
 
-  pipe.resp.valid := memResp.io.deq.fire
+  pipe.resp.valid := memResp.io.deq.fire && cacheResp.bits.hit
   pipe.resp.bits := commitWire
 
   // LD Single
