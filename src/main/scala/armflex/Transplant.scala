@@ -75,12 +75,13 @@ class TransplantUnit(nbThreads: Int) extends MultiIOModule {
   private val cpu2transDataFault = Wire(UInt(nbThreads.W))
   private val cpu2transInsert = WireInit(cpu2transCpuTrans | cpu2transDataFault | cpu2transInstFault)
   private val cpu2transClear = WireInit(0.U(log2Ceil(nbThreads).W))
-  private val cpu2transClearBit = (cpu2transClear =/= 0.U).asUInt << cpu2transClear
+  private val cpu2transClearEn = WireInit(false.B)
+  private val cpu2transClearBit = WireInit(cpu2transClearEn.asUInt << cpu2transClear)
 
   cpu2transInstFault := Mux(mem2trans.instFault.valid, 1.U << mem2trans.instFault.tag, 0.U)
   cpu2transDataFault := Mux(mem2trans.dataFault.valid, 1.U << mem2trans.dataFault.tag, 0.U)
   cpu2transCpuTrans  := Mux(cpu2trans.done.valid, 1.U << cpu2trans.done.tag, 0.U)
-  cpu2transPending := (cpu2transPending & ~cpu2transClear) | cpu2transInsert
+  cpu2transPending := (cpu2transPending & ~cpu2transClearBit) | cpu2transInsert
 
   trans2host.done.valid := false.B
   trans2host.clear.valid := false.B
@@ -100,6 +101,7 @@ class TransplantUnit(nbThreads: Int) extends MultiIOModule {
       }.elsewhen(cpu2transPending =/= 0.U) {
         stateDir := s_CPU2BRAM
         thread_next := PriorityEncoder(cpu2transPending)
+        cpu2transClearEn := true.B
         cpu2transClear := thread_next
       }
     }
@@ -168,199 +170,6 @@ class TransplantUnit(nbThreads: Int) extends MultiIOModule {
     RFileIO.wr2BRAM(stateBufferWrPort, trans2cpu.rfile_wr)
   }
 
-}
-
-/*
- * Transplant Unit (TPU):
- * 0. Beforehand STATE -> BRAM by HOST
- * 1. When host2cpu fire
- *    1. freeze CPU (tpu2cpu.freeze)
- *    2. transplant state BRAM -> CPU
- *    3. unfreeze CPU
- *    4. fire CPU   (tpu2cpu.fire)
- * 2. When tpu2cpu done
- *    1. freeze CPU (tpu2cpu.freeze)
- *    2. transplant state CPU -> BRAM
- *    3. unfreeze CPU
- *    4. flush CPU
- *    5. Set host2cpu done
- * 3. Afterhand by HOST
- *    1. Read BRAM -> HOST
- */
-class TransplantUnitIO(implicit val cfg: ProcConfig) extends Bundle {
-  val host2tpu = new TransplantUnitHostIO
-  val tpu2cpu = new TransplantUnitCPUIO
-
-  val tpu2cpuStateReg = Output(Valid(r_DONE.cloneType)) // Current state reg being written
-  val tpu2cpuState = Output(new PStateRegs)
-  val cpu2tpuState = Input(new PStateRegs)
-  val rfile = new Bundle {
-    val rd = Flipped(new RFileIO.RDPort(cfg.NB_THREADS))
-    val wr = Flipped(new RFileIO.WRPort(cfg.NB_THREADS))
-  }
-
-  val stateBRAM = Flipped(new BRAMPort()(cfg.bramConfigState))
-}
-
-/*
- * Fire    : Host prepared state in BRAM and fires to tp start the transplant,
- *           completed HOST -> BRAM, now BRAM -> CPU by TPU
- * FireTag : Which Thread to transplant.
- * Done    : CPU hit a transplant condition
- *           TPU has completed the CPU -> BRAM
- *           Now instruct HOST to perform BRAM -> HOST
- *
- * Note: Fire and FireTag are expected to be Pulsed
- */
-class TransplantUnitHostIO(implicit val cfg: ProcConfig) extends Bundle {
-  val fire = Input(ValidTag(cfg.TAG_T))
-  val done = Output(ValidTag(cfg.TAG_T))
-  val getState = Input(ValidTag(cfg.TAG_T))
-}
-
-/*
- * Freeze : Freezes thread which state's is being transplanted (CPU -> BRAM or BRAM -> CPU)
- * Fire : TPU has complted state transfer : BRAM -> CPU
- *        Now instruct CPU to start processing
- * Done : CPU has hit a transplant condition
- *        Now TPU has to bring state to BRAM : CPU -> BRAM
- * Flush : Clears the CPU pipeline
- */
-class TransplantUnitCPUIO(implicit val cfg: ProcConfig) extends Bundle {
-  val flush = Output(ValidTag(cfg.TAG_T))
-  val fire = Output(ValidTag(cfg.TAG_T))
-  val freeze = Output(ValidTag(cfg.TAG_T))
-  val done = Input(ValidTag(cfg.TAG_T))
-}
-
-class TransplantUnitLegacy(implicit val cfg: ProcConfig) extends Module {
-  val io = IO(new TransplantUnitIO)
-
-  val bramOFFST = RegInit(0.U(log2Ceil(ARCH_MAX_OFFST).W))
-  val bramOut = WireInit(io.stateBRAM.DO)
-
-  // Only port rs1 of RFILE is used
-  val regDataIn = io.rfile.rd.port(0).data
-  val regAddr = bramOFFST // First 32 word are registers
-  io.rfile.rd.port(0).addr := regAddr
-  io.rfile.rd.port(1).addr := 0.U
-
-  val s_IDLE :: s_TRANS :: Nil = Enum(2)
-  val s_BRAM2CPU :: s_CPU2BRAM :: Nil = Enum(2)
-  val state = RegInit(s_IDLE)
-  val stateDir = RegInit(s_BRAM2CPU)
-  val stateRegType = RegInit(r_DONE)
-
-  // Freeze toggles till transplant is done (when resetState is called)
-  val freeze = RegInit(false.B)
-  val freezeTag = RegInit(cfg.TAG_X)
-  // Flush when transplant to host is done (when resetState is called)
-  val flushSig = WireInit(false.B)
-  val flushReg = RegInit(false.B)
-  // Fire pulses for a cycle when fireSig is set true.
-  val fireSig = WireInit(false.B)
-  // Done pulses for a cycle when doneSig is set true.
-  val doneSig = WireInit(false.B)
-
-  def resetState = {
-    bramOFFST := 0.U
-    stateRegType := r_DONE
-    freeze := false.B
-
-    state := s_IDLE
-  }
-
-  switch(state) {
-    is(s_IDLE) {
-      when(io.host2tpu.fire.valid) {
-        freeze := true.B
-        freezeTag := io.host2tpu.fire.tag
-        stateDir := s_BRAM2CPU
-        stateRegType := r_XREGS
-        bramOFFST := ARCH_XREGS_OFFST.U
-
-        state := s_TRANS
-      }.elsewhen(io.tpu2cpu.done.valid) {
-        freeze := true.B
-        freezeTag := io.tpu2cpu.done.tag
-        stateDir := s_CPU2BRAM
-        stateRegType := r_XREGS
-        bramOFFST := ARCH_XREGS_OFFST.U
-        flushSig := true.B
-
-        state := s_TRANS
-      }.elsewhen(io.host2tpu.getState.valid) {
-        freeze := true.B
-        freezeTag := io.host2tpu.getState.tag
-        stateDir := s_CPU2BRAM
-        stateRegType := r_XREGS
-        bramOFFST := ARCH_XREGS_OFFST.U
-        flushSig := true.B
-
-        state := s_TRANS
-      }
-    }
-
-    is(s_TRANS) {
-      bramOFFST := bramOFFST + 1.U
-      when(bramOFFST === (ARCH_PC_OFFST - 1).U) {
-        stateRegType := r_PC
-      }.elsewhen(bramOFFST === (ARCH_SP_OFFST - 1).U) {
-        stateRegType := r_SP
-      }.elsewhen(bramOFFST === (ARCH_PSTATE_OFFST - 1).U) {
-        stateRegType := r_NZCV
-      }.elsewhen(bramOFFST === (ARCH_MAX_OFFST - 1).U) {
-        stateRegType := r_DONE
-      }.elsewhen(stateRegType === r_DONE) {
-        when(stateDir === s_BRAM2CPU) {
-          fireSig := true.B
-        }.elsewhen(stateDir === s_CPU2BRAM) {
-          doneSig := true.B
-        }
-        resetState
-      }
-    }
-  }
-
-  io.stateBRAM.EN := true.B
-  io.stateBRAM.WE := Fill(8, stateDir === s_CPU2BRAM && stateRegType =/= r_DONE)
-  io.stateBRAM.ADDR := bramOFFST
-  when(stateRegType === r_XREGS) {
-    io.stateBRAM.DI := regDataIn
-  }.elsewhen(stateRegType === r_PC) {
-    io.stateBRAM.DI := io.cpu2tpuState.PC
-  }.elsewhen(stateRegType === r_SP) {
-    //io.stateBRAM.DI := io.cpu2tpuState.SP
-  }.elsewhen(stateRegType === r_NZCV) {
-    io.stateBRAM.DI := Cat(0.U, io.cpu2tpuState.NZCV(3, 0))
-  }.otherwise {
-    io.stateBRAM.DI := 0.U
-  }
-
-  // One cycle delay from BRAM read
-  io.rfile.wr.en := RegNext(stateDir === s_BRAM2CPU && stateRegType === r_XREGS)
-  io.rfile.wr.addr := RegNext(regAddr)
-  io.rfile.wr.data := bramOut
-
-  io.tpu2cpuState.PC := bramOut
-  //io.tpu2cpuState.SP := bramOut
-  io.tpu2cpuState.NZCV := PStateGet_NZCV(bramOut)
-  // One cycle delay from BRAM read
-  io.tpu2cpuStateReg.bits := RegNext(stateRegType)
-  io.tpu2cpuStateReg.valid := RegNext(stateDir === s_BRAM2CPU)
-
-  // Signals come with 1 cycle delay as cmd signals start when State machine is back to IDLE
-  val freezeTag1D = RegNext(freezeTag)
-  io.rfile.rd.tag := freezeTag1D
-  io.rfile.wr.tag := freezeTag1D
-  io.tpu2cpu.fire.valid := RegNext(fireSig)
-  io.tpu2cpu.fire.tag := freezeTag1D
-  io.tpu2cpu.freeze.valid := freeze
-  io.tpu2cpu.freeze.tag := freezeTag
-  io.tpu2cpu.flush.valid := RegNext(flushSig)
-  io.tpu2cpu.flush.tag := freezeTag1D
-  io.host2tpu.done.valid := RegNext(doneSig)
-  io.host2tpu.done.tag := freezeTag1D
 }
 
 // In parsa-epfl/qemu/fa-qflex
