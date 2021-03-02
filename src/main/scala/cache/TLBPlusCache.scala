@@ -15,9 +15,9 @@ case class MemorySystemParameter(
   vAddressWidth:  Int = 64, // byte address
   pAddressWidth:  Int = 36, // 64GB
   pageSize:       Int = 4096, // page size
-  threadNumber:   Int = 4,
+  threadNumber:   Int = 8,
   tlbSetNumber:   Int = 16,
-  tlbWayNumber:   Int = 8,
+  tlbWayNumber:   Int = 4,
   cacheSetNumber: Int = 1024,
   cacheWayNumber: Int = 4,
   cacheBlockSize: Int = 512 // the size

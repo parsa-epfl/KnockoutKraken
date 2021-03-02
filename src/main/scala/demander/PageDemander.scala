@@ -56,27 +56,17 @@ class PageDemander(
   // QEMU Message Decoder
   val u_qmd = Module(new QEMUMessageDecoder(messageFIFODepth))
   // DRAM Resetter.
-  val M_AXI_RESET = IO(new AXI4(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width
-  ))
+  
 
   if(enableDRAMResetter){
+    val M_AXI_RESET = IO(new AXI4(
+      ParameterConstants.dram_addr_width,
+      ParameterConstants.dram_data_width
+    ))
     val u_dram_resetter = Module(new DRAMResster())
     u_dram_resetter.M_AXI <> M_AXI_RESET
     reset_done := u_dram_resetter.ready_o
   } else {
-    u_itlb_mconv.tlb_backend_request_i.valid := itlb_backend_request_i.valid 
-    itlb_backend_request_i.ready := u_itlb_mconv.tlb_backend_request_i.ready 
-    u_dtlb_mconv.tlb_backend_request_i.valid := dtlb_backend_request_i.valid 
-    dtlb_backend_request_i.ready := u_dtlb_mconv.tlb_backend_request_i.ready
-
-    M_AXI_RESET.ar <> AXI4AR.tieOff(ParameterConstants.dram_addr_width)
-    M_AXI_RESET.r <> AXI4R.tieOff(ParameterConstants.dram_data_width)
-    M_AXI_RESET.aw <> AXI4AW.tieOff(ParameterConstants.dram_addr_width)
-    M_AXI_RESET.w <> AXI4W.tieOff(ParameterConstants.dram_data_width)
-    M_AXI_RESET.b <> AXI4B.tieOff()
-
     reset_done := true.B
   }
 

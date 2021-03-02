@@ -28,16 +28,14 @@ class PageBuffer extends MultiIOModule {
   val normal_read_reply_o = IO(Decoupled(UInt(512.W)))
 
   // S_AXI base address: 
-  val S_AXI = IO(Flipped(new AXI4(64, 512))) // TODO: Restrict the address rage of this AXI bus.
+  val S_AXI = IO(Flipped(new AXI4(16, 512))) // TODO: Restrict the address rage of this AXI bus.
 
-  val u_converter = Module(new AXIRAMController(64, 512))
+  val u_converter = Module(new AXIRAMController(16, 512))
   u_converter.S_AXI <> S_AXI
 
   // BRAM Internal Address| Meaning| AXI Page number
   // 0-63|Page to QEMU|0
   // 64-127|Page from QEMU|1
-  // 128|QEMU fetch page ack|2
-  // 129|QEMU push page valid|3
 
   val bramCfg = new BRAMConfig(
     512 / 8,

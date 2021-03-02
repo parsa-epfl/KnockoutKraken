@@ -87,8 +87,8 @@ class ARMFlexTop extends MultiIOModule {
   u_pd.M_AXI_QEMU_MISS <> M_AXI_QEMU_MISS
   val M_AXI_QEMU_PAGE_EVICT = IO(u_pd.M_AXI_QEMU_PAGE_EVICT.cloneType)
   u_pd.M_AXI_QEMU_PAGE_EVICT <> M_AXI_QEMU_PAGE_EVICT
-  val M_AXI_RESET = IO(u_pd.M_AXI_RESET.cloneType)
-  u_pd.M_AXI_RESET <> M_AXI_RESET
+  // val M_AXI_RESET = IO(u_pd.M_AXI_RESET.cloneType)
+  // u_pd.M_AXI_RESET <> M_AXI_RESET
   val M_AXI_TLBWB = IO(u_pd.M_AXI_TLBWB.cloneType)
   u_pd.M_AXI_TLBWB <> M_AXI_TLBWB
   val S_AXI_PAGE = IO(Flipped(u_pd.S_AXI_PAGE.cloneType))
@@ -148,12 +148,11 @@ class PipelineAxiHacked(implicit val cfg: ProcConfig) extends MultiIOModule {
   val csr = Module(new CSR(axiDataWidth, 40))
   csr.io.bus <> axiLiteCSR.io.bus
 
-  val transplantIO = IO(new Bundle {
-    val port = pipeline.hostIO.port.cloneType
-    val ctl = Flipped(new AXI4Lite(4, axiDataWidth))
-  })
-  transplantIO.ctl <> axiLiteCSR.io.ctl
-  pipeline.hostIO.port <> transplantIO.port
+  val S_AXIL_TRANSPLANT = IO(Flipped(axiLiteCSR.io.ctl.cloneType))
+  S_AXIL_TRANSPLANT <> axiLiteCSR.io.ctl
+
+  val transplant_ram = IO(pipeline.hostIO.port.cloneType)
+  transplant_ram <> pipeline.hostIO.port
 
   val trans2host = WireInit(Mux(pipeline.hostIO.trans2host.done.valid, 1.U << pipeline.hostIO.trans2host.done.tag, 0.U))
   val host2transClear = WireInit(Mux(pipeline.hostIO.trans2host.clear.valid, 1.U << pipeline.hostIO.trans2host.clear.tag, 0.U))
