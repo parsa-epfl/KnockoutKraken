@@ -526,12 +526,12 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
   dataProcessing.io.is32bit := io.dinst.is32bit
 
   // Data-Processing 3
-  val dataProc3S = Module(new DataProc3S)
-  dataProc3S.io.op := io.dinst.op
-  dataProc3S.io.rVal1 := rVal1
-  dataProc3S.io.rVal2 := rVal2
-  dataProc3S.io.rVal3 := rVal3
-  dataProc3S.io.is32bit := io.dinst.is32bit
+  // val dataProc3S = Module(new DataProc3S)
+  // dataProc3S.io.op := io.dinst.op
+  // dataProc3S.io.rVal1 := rVal1
+  // dataProc3S.io.rVal2 := rVal2
+  // dataProc3S.io.rVal3 := rVal3
+  // dataProc3S.io.is32bit := io.dinst.is32bit
 
   val addWithCarry = Module(new AddWithCarry)
   // I_ASSR || I_ASImm
@@ -560,7 +560,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
     I_LogI  -> logicALU.io.res,
     I_DP1S  -> dataProcessing.io.res,
     I_DP2S  -> shiftALU.io.res,
-    I_DP3S  -> dataProc3S.io.res,
+//    I_DP3S  -> dataProc3S.io.res,
     I_ASSR  -> addWithCarry.io.res,
     I_ASER  -> addWithCarry.io.res,
     I_ASImm -> addWithCarry.io.res,
@@ -587,7 +587,7 @@ class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
     I_BitF  -> true.B,
     I_DP1S  -> true.B,
     I_DP2S  -> true.B,
-    I_DP3S  -> true.B,
+//    I_DP3S  -> true.B,
     I_CCImm -> true.B,
     I_CCReg -> true.B,
     I_ASImm -> true.B,
