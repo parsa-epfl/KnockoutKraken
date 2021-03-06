@@ -41,7 +41,16 @@ class TransplantUnit(nbThreads: Int) extends MultiIOModule {
   val trans2cpu = IO(new TransplantIO.Trans2CPU(nbThreads))
   val host2trans = IO(new TransplantIO.Host2Trans(nbThreads))
   val trans2host = IO(new TransplantIO.Trans2Host(nbThreads, hostBRAMConfig))
-  val hostBramPort = IO(new BRAMPort()(hostBRAMConfig))
+  // val hostBramPort = IO(new BRAMPort()(hostBRAMConfig))
+  
+  val u_transplant_axi = Module(new AXIRAMController(
+    log2Ceil(hostBRAMConfig.RAM_DEPTH) + 3,
+    DATA_SZ
+  ))
+
+  val S_AXI_TRANSPLANT = IO(Flipped(u_transplant_axi.S_AXI.cloneType))
+  u_transplant_axi.S_AXI <> S_AXI_TRANSPLANT
+
   val mem2trans = IO(new TransplantIO.Mem2Trans(nbThreads))
 
   // Mantains always the latest state of the rfile
@@ -53,7 +62,38 @@ class TransplantUnit(nbThreads: Int) extends MultiIOModule {
 
   // Buffer to communicate with Host by exposing BRAM Port
   private val hostBuffer = Module(new BRAM()(hostBRAMConfig))
-  hostBramPort <> hostBuffer.portB
+  // arbiter
+  class request_t extends Bundle {
+    val addr = UInt(log2Ceil(hostBRAMConfig.RAM_DEPTH).W)
+    val data = UInt(DATA_SZ.W)
+    val mask = UInt((DATA_SZ / 8).W)
+  }
+
+  val u_arb = Module(new RRArbiter(new request_t, 2))
+
+  // Read path
+  u_arb.io.in(0).bits.addr := u_transplant_axi.read_request_o.bits(log2Ceil(hostBRAMConfig.RAM_DEPTH) + 2, 3)
+  u_arb.io.in(0).bits.data := DontCare
+  u_arb.io.in(0).bits.mask := 0.U
+  u_arb.io.in(0).valid := u_transplant_axi.read_request_o.valid
+  u_transplant_axi.read_request_o.ready := u_arb.io.in(0).ready
+
+  // Write path
+  u_arb.io.in(1).bits.addr := u_transplant_axi.write_request_o.bits.addr(log2Ceil(hostBRAMConfig.RAM_DEPTH) + 2, 3)
+  u_arb.io.in(1).bits.data := u_transplant_axi.write_request_o.bits.data
+  u_arb.io.in(1).bits.mask := u_transplant_axi.write_request_o.bits.mask
+  u_arb.io.in(1).valid := u_transplant_axi.write_request_o.valid
+  u_transplant_axi.write_request_o.ready := u_arb.io.in(1).ready
+
+  hostBuffer.portB.ADDR := u_arb.io.out.bits.addr
+  hostBuffer.portB.DI := u_arb.io.out.bits.data
+  hostBuffer.portB.EN := u_arb.io.out.valid
+  hostBuffer.portB.WE := u_arb.io.out.bits.mask
+  u_arb.io.out.ready := true.B
+
+  u_transplant_axi.read_reply_i.bits := hostBuffer.portB.DO
+  u_transplant_axi.read_reply_i.valid := RegNext(u_transplant_axi.read_request_o.fire())
+
   private val hostTransPort = hostBuffer.portA
 
   private val s_IDLE :: s_TRANS :: Nil = Enum(2)

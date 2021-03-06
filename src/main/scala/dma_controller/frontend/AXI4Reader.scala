@@ -60,6 +60,7 @@ class AXI4Reader(val addrWidth : Int, val dataWidth : Int) extends Module{
   io.dataOut.valid := valid
   io.dataOut.bits := io.bus.r.rdata
   io.xfer.done := state === sDone
+  io.xfer.ready := state === sIdle
 
   switch(state){
     is(sIdle){

@@ -5,6 +5,7 @@ import chisel3.util._
 import DMAController.Frontend._
 import DMAController.Bus._
 import armflex.demander.software_bundle.ParameterConstants
+import armflex.util._
 
 /**
  * This module basically is a buffer of a stack located in DRAM.
@@ -52,46 +53,30 @@ class FreeList(
   // The policy is that store back when full and fetch new when empty.
   val state_r = RegInit(sFetch)
 
-  val u_axi_reader = Module(new AXI4Reader(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width,
-  ))
-  val u_axi_writer = Module(new AXI4Writer(
+  // AXI DMA Read channel
+  val M_DMA_R = IO(new AXIReadMasterIF(
     ParameterConstants.dram_addr_width,
     ParameterConstants.dram_data_width
   ))
 
-  // The DMA's port.
-  val M_AXI = IO(new AXI4(
+  // AXI DMA Write channel
+  val M_DMA_W = IO(new AXIWriteMasterIF(
     ParameterConstants.dram_addr_width,
     ParameterConstants.dram_data_width
   ))
 
-  M_AXI.ar <> u_axi_reader.io.bus.ar
-  M_AXI.r <> u_axi_reader.io.bus.r
-  u_axi_reader.io.bus.aw <> AXI4AW.stub(ParameterConstants.dram_addr_width)
-  u_axi_reader.io.bus.w <> AXI4W.stub(ParameterConstants.dram_data_width)
-  u_axi_reader.io.bus.b <> AXI4B.stub()
+  M_DMA_R.req.bits.address := Cat(dram_read_ptr_r + 0x300000.U, 0.U(6.W))
+  M_DMA_R.req.bits.length := 1.U
+  M_DMA_R.req.valid := state_r === sFetch && dram_read_ptr_r =/= dram_history_ptr_r
 
-  M_AXI.aw <> u_axi_writer.io.bus.aw
-  M_AXI.w <> u_axi_writer.io.bus.w
-  M_AXI.b <> u_axi_writer.io.bus.b
-  u_axi_writer.io.bus.ar <> AXI4AR.stub(ParameterConstants.dram_addr_width)
-  u_axi_writer.io.bus.r <> AXI4R.stub(ParameterConstants.dram_data_width)
+  M_DMA_W.req.bits.address := Cat(dram_write_ptr_r + 0x300000.U, 0.U(6.W))
+  M_DMA_W.req.bits.length := 1.U
+  M_DMA_W.req.valid := state_r === sStore
 
-  u_axi_reader.io.xfer.address := Cat(dram_read_ptr_r + 0x300000.U, 0.U(6.W))
-  u_axi_reader.io.xfer.length := 1.U
-  u_axi_reader.io.xfer.valid := state_r === sFetch && dram_read_ptr_r =/= dram_history_ptr_r
+  M_DMA_R.data.ready := state_r === sFetch
 
-  u_axi_writer.io.xfer.address := Cat(dram_write_ptr_r + 0x300000.U, 0.U(6.W))
-  u_axi_writer.io.xfer.length := 1.U
-  u_axi_writer.io.xfer.valid := state_r === sStore
-
-  //u_axi_writer.io.dataIn.bits.
-  u_axi_reader.io.dataOut.ready := state_r === sFetch
-
-  u_axi_writer.io.dataIn.bits := chunk_r.asUInt()
-  u_axi_writer.io.dataIn.valid := state_r === sStore
+  M_DMA_W.data.bits := chunk_r.asUInt()
+  M_DMA_W.data.valid := state_r === sStore
 
   // The state machine.
   switch(state_r){
@@ -105,12 +90,12 @@ class FreeList(
       }
     }
     is(sFetch){
-      when(u_axi_reader.io.xfer.done || dram_read_ptr_r === dram_history_ptr_r){
+      when(M_DMA_R.done || dram_read_ptr_r === dram_history_ptr_r){
         state_r := sIdle
       }
     }
     is(sStore){
-      when(u_axi_writer.io.xfer.done){
+      when(M_DMA_W.done){
         state_r := sIdle
       }
     }
@@ -139,11 +124,11 @@ class FreeList(
   }
 
   // update the dram counter
-  when(state_r === sFetch && (dram_read_ptr_r === dram_history_ptr_r || u_axi_reader.io.xfer.done)){
+  when(state_r === sFetch && (dram_read_ptr_r === dram_history_ptr_r || M_DMA_R.done)){
     dram_read_ptr_r := dram_read_ptr_r + 1.U
     dram_write_ptr_r := dram_write_ptr_r + 1.U
     dram_history_ptr_r := dram_history_ptr_r + 1.U
-  }.elsewhen(state_r === sStore && u_axi_writer.io.xfer.done){
+  }.elsewhen(state_r === sStore && M_DMA_W.done){
     dram_read_ptr_r := dram_read_ptr_r - 1.U
     dram_write_ptr_r := dram_write_ptr_r - 1.U
   }
@@ -156,9 +141,9 @@ class FreeList(
       Cat(dram_read_ptr_r,i.U(log2Ceil(chunkSize).W))
     })
     chunk_r := VecInit(sequence)
-  }.elsewhen(u_axi_reader.io.dataOut.fire()){
-    chunk_r := u_axi_reader.io.dataOut.bits.asTypeOf(chunk_r.cloneType)
-  }.elsewhen(u_axi_writer.io.dataIn.fire()){
+  }.elsewhen(M_DMA_R.data.fire()){
+    chunk_r := M_DMA_R.data.bits.asTypeOf(chunk_r.cloneType)
+  }.elsewhen(M_DMA_W.data.fire()){
     val leaveOne = Seq.fill(chunkSize-1)(0.U(32.W)) :+ last_push_r
     chunk_r := VecInit(leaveOne)
   }

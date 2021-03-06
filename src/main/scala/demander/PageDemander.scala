@@ -19,6 +19,8 @@ import armflex.demander.peripheral.DRAMResster
 import armflex.demander.software_bundle.PageTableItem
 import armflex.cache.TLBTagPacket
 import armflex.util.AXIControlledMessageQueue
+import armflex.util.AXIReadMasterIF
+import armflex.util.AXIWriteMasterIF
 
 
 /**
@@ -26,7 +28,6 @@ import armflex.util.AXIControlledMessageQueue
  * 
  * @param param the parameter of the memory system for communication with TLB and cache.
  * @param messageFIFODepth the depth of all FIFOs that contains messages.
- * @param enableDRAMResetter whether to enable DRAM resterr. This is necessary for a real DRAM since it's not fully initialized. Make it to zero is necessary.
  * 
  * @note In the paper this module contains two parts: the MMU and page demander. In reality they're combined.
  */ 
@@ -35,12 +36,25 @@ class PageDemander(
   messageFIFODepth: Int = 2,
   enableDRAMResetter: Boolean = true
 ) extends MultiIOModule {
-  // TODO: Split this module to two part: the MMU and the real Page demander.
-  // TODO: Add AXI arbiter for these module.
-  // TLB Message receiver
+  // TODO: split this module to two part: the MMU and the real Page demander.
+  // TODO: Combine all AXI slave and AXI lite slave internally.
+
+
+  // AXI DMA Access ports
+  val M_DMA_R = IO(Vec(6, new AXIReadMasterIF(
+    ParameterConstants.dram_addr_width,
+    ParameterConstants.dram_data_width
+  )))
+
+  val M_DMA_W = IO(Vec(4, new AXIWriteMasterIF(
+    ParameterConstants.dram_addr_width,
+    ParameterConstants.dram_data_width
+  )))
 
   val reset_done = Wire(Bool()) // whether the reset process is done.
+  reset_done := true.B
 
+  // TLB Message receiver
   val u_itlb_mconv = Module(new TLBMessageConverter(param.toTLBParameter(), 2.U))
   val itlb_backend_request_i = IO(Flipped(u_itlb_mconv.tlb_backend_request_i.cloneType))
   u_itlb_mconv.tlb_backend_request_i.bits := itlb_backend_request_i.bits
@@ -55,31 +69,12 @@ class PageDemander(
 
   // QEMU Message Decoder
   val u_qmd = Module(new QEMUMessageDecoder(messageFIFODepth))
-  // DRAM Resetter.
-  
 
-  if(enableDRAMResetter){
-    val M_AXI_RESET = IO(new AXI4(
-      ParameterConstants.dram_addr_width,
-      ParameterConstants.dram_data_width
-    ))
-    val u_dram_resetter = Module(new DRAMResster())
-    u_dram_resetter.M_AXI <> M_AXI_RESET
-    reset_done := u_dram_resetter.ready_o
-  } else {
-    reset_done := true.B
-  }
 
   // Hardware page walker
   // TODO: Page walker and TLB writer back handler should be merged into one module in order to keep the consistency.
   val u_page_walker = Module(new PageWalker(param.toTLBParameter()))
-
-  // Hardware page walker
-  val M_AXI_PW = IO(new AXI4(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width
-  ))
-  u_page_walker.M_AXI <> M_AXI_PW // To DRAM. Read-only
+  u_page_walker.M_DMA_R <> M_DMA_R(0)
   
   u_page_walker.tlb_miss_req_i(0) <> u_itlb_mconv.miss_request_o
   u_page_walker.tlb_miss_req_i(1) <> u_dtlb_mconv.miss_request_o
@@ -96,9 +91,8 @@ class PageDemander(
 
   // TLB writeback handler
   val u_tlb_wb = Module(new TLBWritebackHandler(param.toTLBParameter(), 2))
-  // AXI for write back handler
-  val M_AXI_TLBWB = IO(u_tlb_wb.M_AXI.cloneType)
-  u_tlb_wb.M_AXI <> M_AXI_TLBWB
+  u_tlb_wb.M_DMA_R <> M_DMA_R(1)
+  u_tlb_wb.M_DMA_W <> M_DMA_W(0)
 
   u_tlb_wb.tlb_evict_req_i(0) <> u_itlb_mconv.eviction_request_o
   u_tlb_wb.tlb_evict_req_i(1) <> u_dtlb_mconv.eviction_request_o
@@ -108,15 +102,14 @@ class PageDemander(
 
   // Miss request handler
   val u_qemu_miss = Module(new QEMUMissReplyHandler(param.toTLBParameter()))
+  u_qemu_miss.M_DMA_R <> M_DMA_R(2)
+  u_qemu_miss.M_DMA_W <> M_DMA_W(1)
+
   u_qemu_miss.tt_pid_o <> u_tt.pid_i(0)
   u_qemu_miss.tt_tid_i <> u_tt.tid_o(0)
-  val M_AXI_QEMU_MISS = IO(u_qemu_miss.M_AXI.cloneType)
-  M_AXI_QEMU_MISS <> u_qemu_miss.M_AXI
-
   // Page Evict Handler
   val u_qemu_page_evict = Module(new QEMUPageEvictHandler)
-  val M_AXI_QEMU_PAGE_EVICT = IO(u_qemu_page_evict.M_AXI.cloneType)
-  u_qemu_page_evict.M_AXI <> M_AXI_QEMU_PAGE_EVICT
+  u_qemu_page_evict.M_DMA_R <> M_DMA_R(3)
 
   u_qemu_page_evict.evict_request_i <> u_qmd.qemu_evict_page_req_o
 
@@ -149,18 +142,9 @@ class PageDemander(
   
   u_qemu_miss.qemu_miss_reply_i <> u_qmd.qemu_miss_reply_o
 
-  val M_AXI_PAGE = IO(new AXI4(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width
-  ))
-
   // Page Deleter
   val u_page_deleter = Module(new PageDeletor(param))
-  u_page_deleter.M_AXI.r <> M_AXI_PAGE.r
-  u_page_deleter.M_AXI.ar <> M_AXI_PAGE.ar
-  u_page_deleter.M_AXI.aw <> AXI4AW.stub(ParameterConstants.dram_addr_width)
-  u_page_deleter.M_AXI.w <> AXI4W.stub(ParameterConstants.dram_data_width)
-  u_page_deleter.M_AXI.b <> AXI4B.stub()
+  u_page_deleter.M_DMA_R <> M_DMA_R(4)
 
   val dcache_flush_request_o = IO(u_page_deleter.dcache_flush_request_o.cloneType)
   u_page_deleter.dcache_flush_request_o <> dcache_flush_request_o
@@ -213,11 +197,7 @@ class PageDemander(
 
   // Page Inserter
   val u_page_inserter = Module(new PageInserter())
-  u_page_inserter.M_AXI.aw <> M_AXI_PAGE.aw
-  u_page_inserter.M_AXI.w <> M_AXI_PAGE.w
-  u_page_inserter.M_AXI.b <> M_AXI_PAGE.b
-  u_page_inserter.M_AXI.ar <> AXI4AR.stub(ParameterConstants.dram_addr_width)
-  u_page_inserter.M_AXI.r <> AXI4R.stub(ParameterConstants.dram_data_width)
+  u_page_inserter.M_DMA_W <> M_DMA_W(2)
   u_page_inserter.done_o <> u_qemu_miss.page_insert_done_i
   u_page_inserter.req_i <> u_qemu_miss.page_insert_req_o
 
@@ -231,8 +211,8 @@ class PageDemander(
   
   // the PA Pool
   val u_pool = Module(new FreeList)
-  val M_AXI_PAPOOL = IO(u_pool.M_AXI.cloneType)
-  M_AXI_PAPOOL <> u_pool.M_AXI
+  u_pool.M_DMA_R <> M_DMA_R(5)
+  u_pool.M_DMA_W <> M_DMA_W(3)
 
   val pa_pool_empty_o = IO(Output(Bool()))
   pa_pool_empty_o := u_pool.empty_o

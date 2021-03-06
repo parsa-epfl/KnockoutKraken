@@ -13,6 +13,7 @@ import armflex.cache.{
   TLBFrontendReplyPacket
 }
 import armflex.cache.MemorySystemParameter
+import armflex.util._
 
 
 /**
@@ -138,24 +139,26 @@ class PageDeletor(
   }
   val page_buffer_write_o = IO(Decoupled(new page_buffer_write_request_t))
 
-  val u_read_dma = Module(new DMAController.Frontend.AXI4Reader(36, 512))
-  val M_AXI = IO(new DMAController.Bus.AXI4(36, 512))
-  u_read_dma.io.bus <> M_AXI
-  u_read_dma.io.xfer.address := Cat(item_r.entry.ppn, Fill(12, 0.U(1.W)))
-  u_read_dma.io.xfer.length := 64.U
-  u_read_dma.io.xfer.valid := state_r === sMove
-  val dma_data_q = Queue(u_read_dma.io.dataOut, 2) // shrink the critical path.
+  // AXI DMA Read Channel
+  val M_DMA_R = IO(new AXIReadMasterIF(
+    ParameterConstants.dram_addr_width,
+    ParameterConstants.dram_data_width
+  ))
+
+  M_DMA_R.req.bits.address := Cat(item_r.entry.ppn, Fill(12, 0.U(1.W)))
+  M_DMA_R.req.bits.length := 64.U
+  M_DMA_R.req.valid := state_r === sMove
 
   // A counter to control the address of the output
   // ? What if I want to delete more than one page at the same time?
   // TODO: We need a method to assign addresses to the page buffer. Maybe a stack or something else.
   // ? Actually I prefer a pointer.
   val page_buffer_addr_cnt_r = RegInit(0.U(6.W)) 
-  page_buffer_write_o.bits.data := dma_data_q.bits
+  page_buffer_write_o.bits.data := M_DMA_R.data.bits
   page_buffer_write_o.bits.addr := page_buffer_addr_cnt_r
   page_buffer_write_o.bits.last_v := page_buffer_addr_cnt_r === 63.U
-  page_buffer_write_o.valid := dma_data_q.valid
-  dma_data_q.ready := page_buffer_write_o.ready
+  page_buffer_write_o.valid := M_DMA_R.data.valid
+  M_DMA_R.data.ready := page_buffer_write_o.ready
 
   when(state_r === sIdle){
     page_buffer_addr_cnt_r := 0.U
@@ -201,7 +204,7 @@ class PageDeletor(
       )
     }
     is(sMove){
-      state_r := Mux(u_read_dma.io.xfer.done, sSend, sMove)
+      state_r := Mux(M_DMA_R.done, sSend, sMove)
     }
     is(sSend){
       state_r := Mux(done_message_o.fire(), sIdle, sSend)

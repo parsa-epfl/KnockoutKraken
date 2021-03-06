@@ -13,6 +13,7 @@ import DMAController.Frontend._
 import chisel3.experimental.Param
 import armflex.demander.software_bundle.PageTableItem
 import armflex.demander.software_bundle.QEMUPageEvictRequest
+import armflex.util._
 
 class QEMUPageEvictHandler extends MultiIOModule {
   val evict_request_i = IO(Flipped(Decoupled(new QEMUPageEvictRequest())))
@@ -21,24 +22,19 @@ class QEMUPageEvictHandler extends MultiIOModule {
   val state_r = RegInit(sIdle)
 
   val u_buffer = Module(new PageTableSetBuffer(new PageTableSetPacket))
-  val u_axi_read = Module(new AXI4Reader(
+
+  // AXI DMA Read channels
+  val M_DMA_R = IO(new AXIReadMasterIF(
     ParameterConstants.dram_addr_width,
     ParameterConstants.dram_data_width
   ))
-  u_buffer.dma_data_i <> u_axi_read.io.dataOut
+  
+  u_buffer.dma_data_i <> M_DMA_R.data
   u_buffer.dma_data_o.ready := false.B
 
   u_buffer.write_request_i.valid := false.B
   u_buffer.write_request_i.bits := DontCare
 
-
-  // AXI Bus
-  val M_AXI = IO(new AXI4(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width
-  ))
-
-  M_AXI <> u_axi_read.io.bus
   // sIdle
   evict_request_i.ready := state_r === sIdle
   val request_r = Reg(new QEMUPageEvictRequest)
@@ -47,9 +43,9 @@ class QEMUPageEvictHandler extends MultiIOModule {
   }
 
   // sLoadSet
-  u_axi_read.io.xfer.address := ParameterConstants.getPageTableAddressByVPN(request_r.tag.vpn)
-  u_axi_read.io.xfer.length := u_buffer.requestPacketNumber.U
-  u_axi_read.io.xfer.valid := state_r === sLoadSet
+  M_DMA_R.req.bits.address := ParameterConstants.getPageTableAddressByVPN(request_r.tag.vpn)
+  M_DMA_R.req.bits.length := u_buffer.requestPacketNumber.U
+  M_DMA_R.req.valid := state_r === sLoadSet
 
   val victim_r = Reg(new PageTableItem)
   u_buffer.lookup_request_i := request_r.tag
@@ -71,7 +67,7 @@ class QEMUPageEvictHandler extends MultiIOModule {
       state_r := Mux(evict_request_i.fire(), sLoadSet, sIdle)
     }
     is(sLoadSet){
-      state_r := Mux(u_axi_read.io.xfer.done, sGetEntry, sLoadSet)
+      state_r := Mux(M_DMA_R.done, sGetEntry, sLoadSet)
     }
     is(sGetEntry){
       state_r := sDeletePageReq

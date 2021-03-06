@@ -34,33 +34,33 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
         0xEF
       )
       // 1.1. wait for the response of fetching PTEs and response with nothing.
-      dut.sendPageTableSet(dut.M_AXI_QEMU_MISS, (0xAB * 64 * 3).U)
+      dut.sendPageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
       // 1.2. It should allocate Free PPN
 
       // 1.3. It should inserting pages.
-      dut.waitForSignalToBe(dut.M_AXI_PAGE.aw.awvalid)
-      dut.M_AXI_PAGE.aw.awaddr.expect(0x10000000.U)
-      dut.M_AXI_PAGE.aw.awlen.expect(63.U)
+      dut.waitForSignalToBe(dut.M_AXI.aw.awvalid)
+      dut.M_AXI.aw.awaddr.expect(0x10000000.U)
+      dut.M_AXI.aw.awlen.expect(63.U)
       timescope {
-        dut.M_AXI_PAGE.aw.awready.poke(true.B)
+        dut.M_AXI.aw.awready.poke(true.B)
         dut.tk()
       }
 
       for (i <- 0 until 64) timescope {
-        dut.M_AXI_PAGE.w.wready.poke(true.B)
-        dut.waitForSignalToBe(dut.M_AXI_PAGE.w.wvalid)
-        dut.M_AXI_PAGE.w.wdata.expect(0x01234567.U)
+        dut.M_AXI.w.wready.poke(true.B)
+        dut.waitForSignalToBe(dut.M_AXI.w.wvalid)
+        dut.M_AXI.w.wdata.expect(0x01234567.U)
         dut.tk()
       }
 
       timescope {
-        dut.M_AXI_PAGE.b.bvalid.poke(true.B)
-        dut.waitForSignalToBe(dut.M_AXI_PAGE.b.bready)
+        dut.M_AXI.b.bvalid.poke(true.B)
+        dut.waitForSignalToBe(dut.M_AXI.b.bready)
         dut.tk()
       }
       
       // 1.4. It should insert the PTE to page table
-      dut.receivePageTableSet(dut.M_AXI_QEMU_MISS, (0xAB * 64 * 3).U)
+      dut.receivePageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
       dut.pageset_packet_o.ptes(0).ppn.expect(0x10000.U)
       dut.pageset_packet_o.ptes(0).modified.expect(false.B)
       dut.pageset_packet_o.ptes(0).permission.expect(1.U)
@@ -93,7 +93,7 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
       dut.pageset_packet_i.tags(0).process_id.poke(0x10.U)
       dut.pageset_packet_i.tags(0).vpn.poke(0xABC.U)
       dut.pageset_packet_i.valids.poke(1.U)
-      dut.sendPageTableSet(dut.M_AXI_QEMU_PAGE_EVICT, (0xAB * 64 * 3).U)
+      dut.sendPageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
 
       // 3. wait for TLB eviction. Let's assume not hit this time.
       dut.waitForSignalToBe(dut.dtlb_flush_request_o.valid)

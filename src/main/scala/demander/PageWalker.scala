@@ -7,6 +7,7 @@ import chisel3.util._
 import armflex.cache._
 import armflex.demander.software_bundle.ParameterConstants
 import armflex.demander.software_bundle.PTEntry
+import armflex.util._
 
 /**
  * A hardware page walker. 
@@ -37,17 +38,15 @@ class PageWalker(
   tt_tid_o := u_miss_arb.io.out.bits.tag.thread_id
   val tt_pid_i = IO(Flipped(Valid((UInt(ParameterConstants.process_id_width.W)))))
 
-  // Activate signal to the Page 
-  val u_axi_reader = Module(new AXI4Reader(
-    ParameterConstants.dram_addr_width, 
+  // AXI DMA Read Channels
+  val M_DMA_R = IO(new AXIReadMasterIF(
+    ParameterConstants.dram_addr_width,
     ParameterConstants.dram_data_width
   ))
 
-  val M_AXI = IO(u_axi_reader.io.bus.cloneType)
-  M_AXI <> u_axi_reader.io.bus
   // The Page table set buffer.
   val u_buffer = Module(new PageTableSetBuffer(new PageTableSetPacket()))
-  u_buffer.dma_data_i <> u_axi_reader.io.dataOut
+  u_buffer.dma_data_i <> M_DMA_R.data
   u_buffer.dma_data_o.ready := false.B
   // u_buffer.lru_element_i.valid := false.B
   // u_buffer.lru_element_i.bits := DontCare
@@ -97,9 +96,9 @@ class PageWalker(
   
 
   // IO assignment of AXI Read DMA
-  u_axi_reader.io.xfer.address := ParameterConstants.getPageTableAddressByVPN(request_r.vpn)
-  u_axi_reader.io.xfer.length := u_buffer.requestPacketNumber.U
-  u_axi_reader.io.xfer.valid := state_r === sMove
+  M_DMA_R.req.bits.address := ParameterConstants.getPageTableAddressByVPN(request_r.vpn)
+  M_DMA_R.req.bits.length := u_buffer.requestPacketNumber.U
+  M_DMA_R.req.valid := state_r === sMove
 
   // IO assignment of tlb_backend_reply_o
   for(i <- 0 until tlbNumber){
@@ -123,7 +122,7 @@ class PageWalker(
       state_r := Mux(u_miss_arb.io.out.fire(), sMove, sIdle)
     }
     is(sMove){
-      state_r := Mux(u_axi_reader.io.xfer.done, sLookup, sMove)
+      state_r := Mux(M_DMA_R.done, sLookup, sMove)
     }
     is(sLookup){
       state_r := sReply

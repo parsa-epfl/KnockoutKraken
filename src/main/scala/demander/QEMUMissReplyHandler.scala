@@ -12,6 +12,9 @@ import DMAController.Bus._
 import DMAController.Frontend._
 import chisel3.experimental.Param
 import armflex.demander.software_bundle.PageTableItem
+import armflex.util.AXIDMARequestPacket
+import armflex.util.AXIReadMasterIF
+import armflex.util.AXIWriteMasterIF
 
 class QEMUMissReplyHandler(
   param: TLBParameter
@@ -22,37 +25,26 @@ class QEMUMissReplyHandler(
   val state_r = RegInit(sIdle)
 
   val u_buffer = Module(new PageTableSetBuffer(new PageTableSetPacket))
-  val u_axi_read = Module(new AXI4Reader(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width
-  ))
-  u_buffer.dma_data_i <> u_axi_read.io.dataOut
 
-  val u_axi_write = Module(new AXI4Writer(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width
-  ))
-  u_buffer.dma_data_o <> u_axi_write.io.dataIn
-
-  // AXI Bus
-  val M_AXI = IO(new AXI4(
+  // AXI DMA Read Channels
+  val M_DMA_R = IO(new AXIReadMasterIF(
     ParameterConstants.dram_addr_width,
     ParameterConstants.dram_data_width
   ))
 
-  M_AXI.ar <> u_axi_read.io.bus.ar
-  M_AXI.r <> u_axi_read.io.bus.r
+  u_buffer.dma_data_i <> M_DMA_R.data
 
-  u_axi_read.io.bus.aw <> AXI4AW.stub(ParameterConstants.dram_addr_width)
-  u_axi_read.io.bus.w <> AXI4W.stub(ParameterConstants.dram_data_width)
-  u_axi_read.io.bus.b <> AXI4B.stub()
-  
-  M_AXI.aw <> u_axi_write.io.bus.aw
-  M_AXI.w <> u_axi_write.io.bus.w
-  M_AXI.b <> u_axi_write.io.bus.b
+  // AXI DMA Write Channels
+  val M_DMA_W = IO(new AXIWriteMasterIF(
+    ParameterConstants.dram_addr_width,
+    ParameterConstants.dram_data_width
+  ))
 
-  u_axi_write.io.bus.ar <> AXI4AR.stub(ParameterConstants.dram_addr_width)
-  u_axi_write.io.bus.r <> AXI4R.stub(ParameterConstants.dram_data_width)
+  val move_out_enq = Wire(Decoupled(UInt(ParameterConstants.dram_data_width.W)))
+  move_out_enq.bits := u_buffer.dma_data_o.bits
+  move_out_enq.valid := u_buffer.dma_data_o.valid && state_r === sMoveback
+  u_buffer.dma_data_o.ready := move_out_enq.ready && state_r === sMoveback
+  M_DMA_W.data <> move_out_enq
 
   // sIdle
   val tt_pid_o = IO(Output(UInt(ParameterConstants.process_id_width.W)))
@@ -86,13 +78,13 @@ class QEMUMissReplyHandler(
   }
 
   // sLoadSet
-  u_axi_read.io.xfer.address := Mux(
+  M_DMA_R.req.bits.address := Mux(
     state_r === sCheckAndLoadSynonym,
     ParameterConstants.getPageTableAddressByVPN(request_r.synonym_tag.vpn),
     ParameterConstants.getPageTableAddressByVPN(request_r.tag.vpn)
   )
-  u_axi_read.io.xfer.length := u_buffer.requestPacketNumber.U
-  u_axi_read.io.xfer.valid := Mux(
+  M_DMA_R.req.bits.length := u_buffer.requestPacketNumber.U
+  M_DMA_R.req.valid := Mux(
     state_r === sCheckAndLoadSynonym,
     request_r.synonym_v,
     state_r === sLoadSet
@@ -123,16 +115,15 @@ class QEMUMissReplyHandler(
 
   // sInsertPage
   // TODO: RAW Hazard detected. You have to wait for the Page deletor to complete before inserting pages.
-  // TODO: Reuse the AXI DMA.
   val page_insert_req_o = IO(Decoupled(UInt(ParameterConstants.ppn_width.W)))
   page_insert_req_o.bits := ppn_r
   page_insert_req_o.valid := state_r === sInsertPage
   val page_insert_done_i = IO(Input(Bool()))
 
   // sMoveback
-  u_axi_write.io.xfer.address := ParameterConstants.getPageTableAddressByVPN(request_r.tag.vpn)
-  u_axi_write.io.xfer.length := u_buffer.requestPacketNumber.U
-  u_axi_write.io.xfer.valid := state_r === sMoveback
+  M_DMA_W.req.bits.address := ParameterConstants.getPageTableAddressByVPN(request_r.tag.vpn)
+  M_DMA_W.req.bits.length := u_buffer.requestPacketNumber.U
+  M_DMA_W.req.valid := state_r === sMoveback
 
   // sReplyTLB
   val tlb_backend_reply_o = IO(Decoupled(new TLBBackendReplyPacket(param)))
@@ -152,14 +143,14 @@ class QEMUMissReplyHandler(
       state_r := Mux(
         !request_r.synonym_v, 
         Mux(ppn_pop_i.fire(), sLoadSet, sCheckAndLoadSynonym),
-        Mux(u_axi_read.io.xfer.done, sGetSynonym, sCheckAndLoadSynonym)
+        Mux(M_DMA_R.done, sGetSynonym, sCheckAndLoadSynonym)
       )
     }
     is(sGetSynonym){
       state_r := sLoadSet
     }
     is(sLoadSet){
-      state_r := Mux(u_axi_read.io.xfer.done, sGetEvict, sLoadSet)
+      state_r := Mux(M_DMA_R.done, sGetEvict, sLoadSet)
     }
     is(sGetEvict){
       state_r := Mux(u_buffer.lru_element_o.lru_v, sDeletePageReq, sReplace)
@@ -182,7 +173,7 @@ class QEMUMissReplyHandler(
     }
     is(sMoveback){
       state_r := Mux(
-        u_axi_write.io.xfer.done,
+        M_DMA_W.done,
         Mux(tid_r.valid, sReplyToTLB, sIdle),
         sMoveback
       )

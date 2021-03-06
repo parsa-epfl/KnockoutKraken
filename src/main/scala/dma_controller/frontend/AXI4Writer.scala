@@ -67,6 +67,7 @@ class AXI4Writer(val addrWidth : Int, val dataWidth : Int) extends Module{
   io.dataIn.ready := ready
 
   io.xfer.done := dataState === sDataDone
+  io.xfer.ready := dataState === sDataIdle
 
   last := length === 1.U
 
@@ -121,4 +122,10 @@ class AXI4Writer(val addrWidth : Int, val dataWidth : Int) extends Module{
       }
     }
   }
+
+  // when data state is idle, the addr state should be ready as well
+  when(dataState === sDataIdle){
+    assert(addrState === sAddrIdle)
+  }
+
 }

@@ -5,6 +5,7 @@ import chisel3.util._
 
 import armflex.demander.software_bundle
 import armflex.demander.software_bundle.ParameterConstants
+import armflex.util._
 
 
 /**
@@ -12,13 +13,7 @@ import armflex.demander.software_bundle.ParameterConstants
  * 
  * implementing function: insertPageFromQEMU
  */ 
-class PageInserter extends MultiIOModule {
-  import DMAController.Bus._
-  val M_AXI = IO(new AXI4(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width
-  ))
-  
+class PageInserter extends MultiIOModule {  
   val req_i = IO(Flipped(Decoupled(UInt(
     ParameterConstants.ppn_width.W
   ))))
@@ -31,14 +26,14 @@ class PageInserter extends MultiIOModule {
   val sIdle :: sBusy :: Nil = Enum(2)
   val state_r = RegInit(sIdle)
 
-  val u_write_dma = Module(new DMAController.Frontend.AXI4Writer(
+  val M_DMA_W = IO(new AXIWriteMasterIF(
     ParameterConstants.dram_addr_width,
     ParameterConstants.dram_data_width
   ))
-  u_write_dma.io.xfer.address := Cat(ppn_r, Fill(12, 0.U(1.W)))
-  u_write_dma.io.xfer.length := 64.U
-  u_write_dma.io.xfer.valid := state_r === sBusy
-  u_write_dma.io.bus <> M_AXI
+
+  M_DMA_W.req.bits.address := Cat(ppn_r, Fill(12, 0.U(1.W)))
+  M_DMA_W.req.bits.length := 64.U
+  M_DMA_W.req.valid := state_r === sBusy
 
   // TODO: logic to send read request to the Page buffer.
   val read_request_o = IO(Decoupled(UInt(10.W)))
@@ -54,7 +49,7 @@ class PageInserter extends MultiIOModule {
       addr_cnt_r := 64.U // TODO: Make the initial address as an external parameter
     }
     is(sBusy){
-      when(read_request_o.fire() && u_write_dma.io.dataIn.ready){
+      when(read_request_o.fire() && M_DMA_W.data.ready){
         addr_cnt_r := Mux(read_done_r, addr_cnt_r, addr_cnt_r + 1.U)
         read_done_r := addr_cnt_r === 127.U
       }
@@ -62,16 +57,16 @@ class PageInserter extends MultiIOModule {
   }
   // It's possible that the read result has the back pressure.
   val read_reply_i = IO(Flipped(Decoupled(UInt(ParameterConstants.dram_data_width.W))))
-  u_write_dma.io.dataIn <> read_reply_i
+  M_DMA_W.data <> read_reply_i
 
   when(req_i.fire()){
     state_r := sBusy
-  }.elsewhen(state_r === sBusy && u_write_dma.io.xfer.done){
+  }.elsewhen(state_r === sBusy && M_DMA_W.done){
     state_r := sIdle
   }
 
   val done_o = IO(Output(Bool()))
-  done_o := u_write_dma.io.xfer.done
+  done_o := M_DMA_W.done
   req_i.ready := state_r === sIdle
 }
 

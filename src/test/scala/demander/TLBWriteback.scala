@@ -46,9 +46,9 @@ class TLBWritebackTester extends FreeSpec with ChiselScalatestTester {
       dut.pageset_packet_i.ptes(0).ppn.poke(0xCBA.U)
       dut.pageset_packet_i.ptes(0).modified.poke(false.B)
       dut.pageset_packet_i.ptes(0).permission.poke(1.U)
-      dut.sendPageTableSet(dut.M_AXI_TLBWB, (0xAB * 3 * 64).U)
+      dut.sendPageTableSet(dut.M_AXI, (0xAB * 3 * 64).U)
       
-      dut.receivePageTableSet(dut.M_AXI_TLBWB, (0xAB * 3 * 64).U)
+      dut.receivePageTableSet(dut.M_AXI, (0xAB * 3 * 64).U)
       // verify the update
       dut.pageset_packet_o.tags(0).vpn.expect(0xABC.U)
       dut.pageset_packet_o.tags(0).process_id.expect(10.U)

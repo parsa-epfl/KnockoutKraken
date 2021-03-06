@@ -56,7 +56,7 @@ class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
 
   val mem = IO(pipeline.mem.cloneType)
   val transplantIO = IO(new Bundle {
-    val port = pipeline.hostIO.port.cloneType
+    val port = Flipped(pipeline.hostIO.port.cloneType)
     val ctl = Flipped(new AXI4Lite(4, axiDataWidth))
   })
   transplantIO.ctl <> axiLiteCSR.io.ctl
@@ -100,7 +100,7 @@ class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule
   // -------- Transplant ---------
   val transplantU = Module(new TransplantUnit(cfg.NB_THREADS))
   val hostIO = IO(new Bundle {
-    val port = transplantU.hostBramPort.cloneType
+    val port = Flipped(transplantU.S_AXI_TRANSPLANT.cloneType)
     val trans2host = transplantU.trans2host.cloneType
     val host2trans = transplantU.host2trans.cloneType
   })
@@ -128,7 +128,7 @@ class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule
   // Transplant from Host
   transplantU.host2trans <> hostIO.host2trans
   transplantU.trans2host <> hostIO.trans2host
-  transplantU.hostBramPort <> hostIO.port
+  transplantU.S_AXI_TRANSPLANT <> hostIO.port
 
   //* DBG
   val dbg = IO(new Bundle {

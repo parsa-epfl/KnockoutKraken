@@ -6,6 +6,7 @@ import chisel3.util._
 import chiseltest._
 import chiseltest.experimental._
 import armflex.cache.MemorySystemParameter
+import armflex.util._
 
 import DMAController.Bus._
 import armflex.demander.software_bundle.ParameterConstants
@@ -71,34 +72,10 @@ class PageDemanderDUT(
   val dtlb_flush_reply_i = IO(Input(u_page_demander.dtlb_flush_reply_i.cloneType))
   dtlb_flush_reply_i <> u_page_demander.dtlb_flush_reply_i
 
-  // AXI Bus for Free PA List
-  val M_AXI_PAPOOL = IO(u_page_demander.M_AXI_PAPOOL.cloneType)
-  M_AXI_PAPOOL <> u_page_demander.M_AXI_PAPOOL
-
   val pa_pool_empty_o = IO(Output(Bool()))
   pa_pool_empty_o := u_page_demander.pa_pool_empty_o
   val pa_pool_full_o = IO(Output(Bool()))
   pa_pool_full_o := u_page_demander.pa_pool_full_o
-
-  // AXI Bus for Page Walker
-  val M_AXI_PW = IO(u_page_demander.M_AXI_PW.cloneType)
-  M_AXI_PW <> u_page_demander.M_AXI_PW
-
-  // AXI Bus for Page Fault resolution
-  val M_AXI_QEMU_MISS = IO(u_page_demander.M_AXI_QEMU_MISS.cloneType)
-  M_AXI_QEMU_MISS <> u_page_demander.M_AXI_QEMU_MISS
-
-  // AXI Bus for Page Eviction
-  val M_AXI_QEMU_PAGE_EVICT = IO(u_page_demander.M_AXI_QEMU_PAGE_EVICT.cloneType)
-  M_AXI_QEMU_PAGE_EVICT <> u_page_demander.M_AXI_QEMU_PAGE_EVICT
-
-  // AXI Bus for TLB Writeback
-  val M_AXI_TLBWB = IO(u_page_demander.M_AXI_TLBWB.cloneType)
-  M_AXI_TLBWB <> u_page_demander.M_AXI_TLBWB
-
-  // AXI Bus for fetching / pushing page to DRAM
-  val M_AXI_PAGE = IO(u_page_demander.M_AXI_PAGE.cloneType)
-  M_AXI_PAGE <> u_page_demander.M_AXI_PAGE
   // D Cache flush request
   val dcache_flush_request_o = IO(u_page_demander.dcache_flush_request_o.cloneType)
   dcache_flush_request_o <> u_page_demander.dcache_flush_request_o
@@ -127,12 +104,39 @@ class PageDemanderDUT(
   val S_AXIL_QEMU_MQ = IO(u_page_demander.S_AXIL_QEMU_MQ.cloneType)
   S_AXIL_QEMU_MQ <> u_page_demander.S_AXIL_QEMU_MQ
 
-  // DRAM Resetter
-  u_page_demander.M_AXI_RESET.ar <> AXI4AR.stub(ParameterConstants.dram_addr_width)
-  u_page_demander.M_AXI_RESET.aw <> AXI4AW.stub(ParameterConstants.dram_addr_width)
-  u_page_demander.M_AXI_RESET.b <> AXI4B.stub()
-  u_page_demander.M_AXI_RESET.r <> AXI4R.stub(ParameterConstants.dram_data_width) 
-  u_page_demander.M_AXI_RESET.w <> AXI4W.stub(ParameterConstants.dram_data_width)
+  val M_AXI = IO(new AXI4(
+    ParameterConstants.dram_addr_width, 
+    ParameterConstants.dram_data_width
+  ))
+
+  val u_axi_read = Module(new AXIReadMultiplexer(
+    ParameterConstants.dram_addr_width,
+    ParameterConstants.dram_data_width,
+    6
+  ))
+
+  for(i <- 0 until 6) u_axi_read.S_IF(i) <> u_page_demander.M_DMA_R(i)
+
+  M_AXI.ar <> u_axi_read.M_AXI.ar
+  M_AXI.r <> u_axi_read.M_AXI.r
+  u_axi_read.M_AXI.aw <> AXI4AW.stub(ParameterConstants.dram_addr_width)
+  u_axi_read.M_AXI.w <> AXI4W.stub(ParameterConstants.dram_data_width)
+  u_axi_read.M_AXI.b <> AXI4B.stub()
+
+  val u_axi_write = Module(new AXIWriteMultiplexer(
+    ParameterConstants.dram_addr_width,
+    ParameterConstants.dram_data_width,
+    4
+  ))
+
+  for(i <- 0 until 4) u_axi_write.S_IF(i) <> u_page_demander.M_DMA_W(i)
+
+  M_AXI.aw <> u_axi_write.M_AXI.aw
+  M_AXI.w <> u_axi_write.M_AXI.w
+  M_AXI.b <> u_axi_write.M_AXI.b
+
+  u_axi_write.M_AXI.ar <> AXI4AR.stub(ParameterConstants.dram_addr_width)
+  u_axi_write.M_AXI.r <> AXI4R.stub(ParameterConstants.dram_data_width)
 
   // Helper 1: the page set converter
   val u_helper_page_set_converter = Module(new PageDemanderTestHelper.PageSetConverter)

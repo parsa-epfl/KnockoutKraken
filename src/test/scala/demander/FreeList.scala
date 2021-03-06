@@ -1,10 +1,12 @@
 package armflex.demander
 
 import peripheral._
+import armflex.util._
 
 import chisel3._
 import chisel3.util._
 import chisel3.experimental.BundleLiterals._
+import DMAController.Bus._
 
 import chiseltest._
 import chiseltest.experimental._
@@ -17,6 +19,53 @@ import firrtl.options.TargetDirAnnotation
 
 import org.scalatest.FreeSpec
 import armflex.cache.MemorySystemParameter
+import armflex.demander.software_bundle.ParameterConstants
+
+class FreeListDUT extends MultiIOModule {
+  val u_fl = Module(new FreeList)
+  val u_axi_read = Module(new AXIReadMultiplexer(
+    ParameterConstants.dram_addr_width,
+    ParameterConstants.dram_data_width,
+    1
+  ))
+
+  u_fl.M_DMA_R <> u_axi_read.S_IF(0)
+
+  val u_axi_write = Module(new AXIWriteMultiplexer(
+    ParameterConstants.dram_addr_width,
+    ParameterConstants.dram_data_width,
+    1
+  ))
+
+  u_fl.M_DMA_W <> u_axi_write.S_IF(0)
+
+  val push_i = IO(Flipped(Decoupled(UInt(32.W))))
+  u_fl.push_i <> push_i
+  val pop_o = IO(Decoupled(UInt(32.W)))
+  u_fl.pop_o <> pop_o
+  val full_o = IO(Output(Bool()))
+  u_fl.full_o <> full_o
+  val empty_o = IO(Output(Bool()))
+  u_fl.empty_o <> empty_o
+
+  val M_AXI = IO(new AXI4(
+    ParameterConstants.dram_addr_width, 
+    ParameterConstants.dram_data_width
+  ))
+
+  M_AXI.ar <> u_axi_read.M_AXI.ar
+  M_AXI.r <> u_axi_read.M_AXI.r
+  u_axi_read.M_AXI.aw <> AXI4AW.stub(ParameterConstants.dram_addr_width)
+  u_axi_read.M_AXI.w <> AXI4W.stub(ParameterConstants.dram_data_width)
+  u_axi_read.M_AXI.b <> AXI4B.stub()
+
+  M_AXI.aw <> u_axi_write.M_AXI.aw
+  M_AXI.w <> u_axi_write.M_AXI.w
+  M_AXI.b <> u_axi_write.M_AXI.b
+  u_axi_write.M_AXI.ar <> AXI4AR.stub(ParameterConstants.dram_addr_width)
+  u_axi_write.M_AXI.r <> AXI4R.stub(ParameterConstants.dram_data_width)
+
+}
 
 class FreeListTest extends FreeSpec with ChiselScalatestTester {
   import scala.collection.mutable.Queue
@@ -30,7 +79,7 @@ class FreeListTest extends FreeSpec with ChiselScalatestTester {
 
   "Fetch" in {
     val anno = Seq(TargetDirAnnotation("test/freelist/fetch"), VerilatorBackendAnnotation, WriteVcdAnnotation)
-    test(new FreeList).withAnnotations(anno){ dut =>
+    test(new FreeListDUT).withAnnotations(anno){ dut =>
       // extract 64 elements
       val elementQueue = new Queue[BigInt]()
       dut.clock.step(5)

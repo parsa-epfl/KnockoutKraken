@@ -34,33 +34,33 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
         0xEF
       )
       // 1. wait for the response of fetching PTEs and response with nothing.
-      dut.sendPageTableSet(dut.M_AXI_QEMU_MISS, (0xAB * 64 * 3).U)
+      dut.sendPageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
       // 2. It should allocate Free PPN
 
       // 3. It should inserting pages.
-      dut.waitForSignalToBe(dut.M_AXI_PAGE.aw.awvalid)
-      dut.M_AXI_PAGE.aw.awaddr.expect(0x10000000.U)
-      dut.M_AXI_PAGE.aw.awlen.expect(63.U)
+      dut.waitForSignalToBe(dut.M_AXI.aw.awvalid)
+      dut.M_AXI.aw.awaddr.expect(0x10000000.U)
+      dut.M_AXI.aw.awlen.expect(63.U)
       timescope {
-        dut.M_AXI_PAGE.aw.awready.poke(true.B)
+        dut.M_AXI.aw.awready.poke(true.B)
         dut.tk()
       }
 
       for (i <- 0 until 64) timescope {
-        dut.M_AXI_PAGE.w.wready.poke(true.B)
-        dut.waitForSignalToBe(dut.M_AXI_PAGE.w.wvalid)
-        dut.M_AXI_PAGE.w.wdata.expect(0x01234567.U)
+        dut.M_AXI.w.wready.poke(true.B)
+        dut.waitForSignalToBe(dut.M_AXI.w.wvalid)
+        dut.M_AXI.w.wdata.expect(0x01234567.U)
         dut.tk()
       }
 
       timescope {
-        dut.M_AXI_PAGE.b.bvalid.poke(true.B)
-        dut.waitForSignalToBe(dut.M_AXI_PAGE.b.bready)
+        dut.M_AXI.b.bvalid.poke(true.B)
+        dut.waitForSignalToBe(dut.M_AXI.b.bready)
         dut.tk()
       }
       
       // 4. It should insert the PTE to page table
-      dut.receivePageTableSet(dut.M_AXI_QEMU_MISS, (0xAB * 64 * 3).U)
+      dut.receivePageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
       dut.pageset_packet_o.ptes(0).ppn.expect(0x10000.U)
       dut.pageset_packet_o.ptes(0).modified.expect(false.B)
       dut.pageset_packet_o.ptes(0).permission.expect(1.U)
@@ -101,7 +101,7 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
         dut.pageset_packet_i.tags(i).vpn.poke((0x20 + i).U)
       }
       // 1. wait for the response of fetching PTEs and response with nothing.
-      dut.sendPageTableSet(dut.M_AXI_QEMU_MISS, (0xAB * 64 * 3).U)
+      dut.sendPageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
       // 2. It should allocate Free PPN
 
       // 3. The page deletor should be activated.
@@ -140,20 +140,20 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
       dut.dcache_wb_queue_empty_i.poke(true.B)
 
       // 3.5 Move Page out of the DRAM
-      dut.waitForSignalToBe(dut.M_AXI_PAGE.ar.arvalid)
-      dut.M_AXI_PAGE.ar.araddr.expect((0x10 * 4096).U)
+      dut.waitForSignalToBe(dut.M_AXI.ar.arvalid)
+      dut.M_AXI.ar.araddr.expect((0x10 * 4096).U)
       timescope {
-        dut.M_AXI_PAGE.ar.arready.poke(true.B)
+        dut.M_AXI.ar.arready.poke(true.B)
         dut.tk()
       }
 
       for(i <- 0 until 64){
-        dut.M_AXI_PAGE.r.rdata.poke(0x0ABCDEF.U)
-        dut.M_AXI_PAGE.r.rresp.poke(0.U)
-        dut.M_AXI_PAGE.r.rlast.poke((i == 63).B)
-        dut.waitForSignalToBe(dut.M_AXI_PAGE.r.rready)
+        dut.M_AXI.r.rdata.poke(0x0ABCDEF.U)
+        dut.M_AXI.r.rresp.poke(0.U)
+        dut.M_AXI.r.rlast.poke((i == 63).B)
+        dut.waitForSignalToBe(dut.M_AXI.r.rready)
         timescope {
-          dut.M_AXI_PAGE.r.rvalid.poke(true.B)
+          dut.M_AXI.r.rvalid.poke(true.B)
           dut.tk()
         }
       }
@@ -165,29 +165,29 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
       )
 
       // 4. It should inserting pages.
-      dut.waitForSignalToBe(dut.M_AXI_PAGE.aw.awvalid)
-      dut.M_AXI_PAGE.aw.awaddr.expect(0x10000000.U)
-      dut.M_AXI_PAGE.aw.awlen.expect(63.U)
+      dut.waitForSignalToBe(dut.M_AXI.aw.awvalid)
+      dut.M_AXI.aw.awaddr.expect(0x10000000.U)
+      dut.M_AXI.aw.awlen.expect(63.U)
       timescope {
-        dut.M_AXI_PAGE.aw.awready.poke(true.B)
+        dut.M_AXI.aw.awready.poke(true.B)
         dut.tk()
       }
 
       for (i <- 0 until 64) timescope {
-        dut.M_AXI_PAGE.w.wready.poke(true.B)
-        dut.waitForSignalToBe(dut.M_AXI_PAGE.w.wvalid)
-        dut.M_AXI_PAGE.w.wdata.expect(0x01234567.U)
+        dut.M_AXI.w.wready.poke(true.B)
+        dut.waitForSignalToBe(dut.M_AXI.w.wvalid)
+        dut.M_AXI.w.wdata.expect(0x01234567.U)
         dut.tk()
       }
 
       timescope {
-        dut.M_AXI_PAGE.b.bvalid.poke(true.B)
-        dut.waitForSignalToBe(dut.M_AXI_PAGE.b.bready)
+        dut.M_AXI.b.bvalid.poke(true.B)
+        dut.waitForSignalToBe(dut.M_AXI.b.bready)
         dut.tk()
       }
       
       // 5. It should insert the PTE to page table
-      dut.receivePageTableSet(dut.M_AXI_QEMU_MISS, (0xAB * 64 * 3).U)
+      dut.receivePageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
       dut.pageset_packet_o.ptes(0).ppn.expect(0x10000.U)
       dut.pageset_packet_o.ptes(0).modified.expect(false.B)
       dut.pageset_packet_o.ptes(0).permission.expect(1.U)
@@ -228,14 +228,14 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
         dut.pageset_packet_i.ptes(0).ppn.poke(0x0FF.U)
 
         // It will fetch the synonym's set
-        dut.sendPageTableSet(dut.M_AXI_QEMU_MISS, (0xCC * 64 * 3).U)
+        dut.sendPageTableSet(dut.M_AXI, (0xCC * 64 * 3).U)
       }
       
       // Then fetch the target set
-      dut.sendPageTableSet(dut.M_AXI_QEMU_MISS, (0xAB * 64 * 3).U)
+      dut.sendPageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
 
       // and write it back
-      dut.receivePageTableSet(dut.M_AXI_QEMU_MISS, (0xAB * 64 * 3).U)
+      dut.receivePageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
       dut.pageset_packet_o.ptes(0).ppn.expect(0x0FF.U)
       dut.pageset_packet_o.ptes(0).permission.expect(1.U)
       dut.pageset_packet_o.ptes(0).modified.expect(false.B)

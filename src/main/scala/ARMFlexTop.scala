@@ -8,6 +8,10 @@ import armflex.cache.MatrixLRUCore
 import armflex.cache.PseudoTreeLRUCore
 import armflex.cache.CacheBackendToAXIInterface
 import armflex.demander.PageDemander
+import armflex.util._
+import armflex.demander.software_bundle.ParameterConstants
+
+import DMAController.Bus._
 
 class ARMFlexTop extends MultiIOModule {
   implicit val pipelineCfg = new ProcConfig(NB_THREADS = 8)
@@ -18,8 +22,8 @@ class ARMFlexTop extends MultiIOModule {
   val S_AXIL_TRANSPLANT = IO(Flipped(u_pipeline.transplantIO.ctl.cloneType))
   S_AXIL_TRANSPLANT <> u_pipeline.transplantIO.ctl
 
-  val transplant_ram = IO(u_pipeline.transplantIO.port.cloneType)
-  transplant_ram <> u_pipeline.transplantIO.port
+  val S_AXI_TRANSPlANT = IO(Flipped(u_pipeline.transplantIO.port.cloneType))
+  S_AXI_TRANSPlANT <> u_pipeline.transplantIO.port
 
   val u_inst_path = Module(new TLBPlusCache(
     memoryParameter,
@@ -40,9 +44,7 @@ class ARMFlexTop extends MultiIOModule {
   u_pipeline.mem.instFault.valid := u_inst_path.tlb_violation_o.valid
 
   val u_inst_axi = Module(new CacheBackendToAXIInterface.CacheBackendAXIAdaptors(memoryParameter))
-  val M_AXI_IPATH = IO(u_inst_axi.M_AXI.cloneType)
-  u_inst_axi.M_AXI <> M_AXI_IPATH
-  // u_inst_axi.pending_queue_empty_o
+  
   u_inst_axi.cache_backend_reply_o <> u_inst_path.cache_backend_reply_i
   u_inst_axi.cache_backend_request_i <> u_inst_path.cache_backend_request_o // TODO: Add FIFO here to buffer the backend request if timing is not good then.
 
@@ -65,36 +67,20 @@ class ARMFlexTop extends MultiIOModule {
   u_pipeline.mem.dataFault.valid := u_data_path.tlb_violation_o.valid
 
   val u_data_axi = Module(new CacheBackendToAXIInterface.CacheBackendAXIAdaptors(memoryParameter))
-  val M_AXI_DPATH = IO(u_data_axi.M_AXI.cloneType)
-  u_data_axi.M_AXI <> M_AXI_DPATH
-  // u_data_axi.pending_queue_empty_o
+  
   u_data_axi.cache_backend_reply_o <> u_data_path.cache_backend_reply_i
   u_data_axi.cache_backend_request_i <> u_data_path.cache_backend_request_o
 
   val u_pd = Module(new PageDemander(memoryParameter, 2, false))
   // ports of the page demander
-  val M_AXI_PAGE = IO(u_pd.M_AXI_PAGE.cloneType)
-  u_pd.M_AXI_PAGE <> M_AXI_PAGE
-  val M_AXI_PAPOOL = IO(u_pd.M_AXI_PAPOOL.cloneType)
-  u_pd.M_AXI_PAPOOL <> M_AXI_PAPOOL
-  val M_AXI_PW = IO(u_pd.M_AXI_PW.cloneType)
-  u_pd.M_AXI_PW <> M_AXI_PW
-  val S_AXI_QEMU_MQ = IO(Flipped(u_pd.S_AXI_QEMU_MQ.cloneType))
-  u_pd.S_AXI_QEMU_MQ <> S_AXI_QEMU_MQ
-  val S_AXIL_QEMU_MQ = IO(u_pd.S_AXIL_QEMU_MQ.cloneType)
-  u_pd.S_AXIL_QEMU_MQ <> S_AXIL_QEMU_MQ
-  val M_AXI_QEMU_MISS = IO(u_pd.M_AXI_QEMU_MISS.cloneType)
-  u_pd.M_AXI_QEMU_MISS <> M_AXI_QEMU_MISS
-  val M_AXI_QEMU_PAGE_EVICT = IO(u_pd.M_AXI_QEMU_PAGE_EVICT.cloneType)
-  u_pd.M_AXI_QEMU_PAGE_EVICT <> M_AXI_QEMU_PAGE_EVICT
-  // val M_AXI_RESET = IO(u_pd.M_AXI_RESET.cloneType)
-  // u_pd.M_AXI_RESET <> M_AXI_RESET
-  val M_AXI_TLBWB = IO(u_pd.M_AXI_TLBWB.cloneType)
-  u_pd.M_AXI_TLBWB <> M_AXI_TLBWB
   val S_AXI_PAGE = IO(Flipped(u_pd.S_AXI_PAGE.cloneType))
   u_pd.S_AXI_PAGE <> S_AXI_PAGE
   val S_AXIL_TT = IO(u_pd.S_AXI_TT.cloneType)
   u_pd.S_AXI_TT <> S_AXIL_TT
+  val S_AXIL_QEMU_MQ = IO(u_pd.S_AXIL_QEMU_MQ.cloneType)
+  S_AXIL_QEMU_MQ <> u_pd.S_AXIL_QEMU_MQ
+  val S_AXI_QEMU_MQ = IO(Flipped(u_pd.S_AXI_QEMU_MQ.cloneType))
+  u_pd.S_AXI_QEMU_MQ <> S_AXI_QEMU_MQ
 
   // u_pd.dcache_flush_request_o
   u_pd.dcache_flush_request_o <> u_data_path.cache_flush_request_i
@@ -127,7 +113,47 @@ class ARMFlexTop extends MultiIOModule {
   u_pd.itlb_flush_reply_i <> u_inst_path.tlb_flush_reply_o
   // u_pd.itlb_flush_request_o
   u_pd.itlb_flush_request_o <> u_inst_path.tlb_flush_request_i
+
+  val M_AXI = IO(new AXI4(
+    ParameterConstants.dram_addr_width, 
+    ParameterConstants.dram_data_width
+  ))
+
+  val u_axi_read = Module(new AXIReadMultiplexer(
+    ParameterConstants.dram_addr_width,
+    ParameterConstants.dram_data_width,
+    8
+  ))
+
+  for(i <- 0 until 6) u_axi_read.S_IF(i) <> u_pd.M_DMA_R(i)
+  u_axi_read.S_IF(6) <> u_inst_axi.M_DMA_R
+  u_axi_read.S_IF(7) <> u_data_axi.M_DMA_R
+
+  M_AXI.ar <> u_axi_read.M_AXI.ar
+  M_AXI.r <> u_axi_read.M_AXI.r
+  u_axi_read.M_AXI.aw <> AXI4AW.stub(ParameterConstants.dram_addr_width)
+  u_axi_read.M_AXI.w <> AXI4W.stub(ParameterConstants.dram_data_width)
+  u_axi_read.M_AXI.b <> AXI4B.stub()
+
+  val u_axi_write = Module(new AXIWriteMultiplexer(
+    ParameterConstants.dram_addr_width,
+    ParameterConstants.dram_data_width,
+    6
+  ))
+
+  for(i <- 0 until 4) u_axi_write.S_IF(i) <> u_pd.M_DMA_W(i)
+  u_axi_write.S_IF(4) <> u_inst_axi.M_DMA_W
+  u_axi_write.S_IF(5) <> u_data_axi.M_DMA_W
+
+  M_AXI.aw <> u_axi_write.M_AXI.aw
+  M_AXI.w <> u_axi_write.M_AXI.w
+  M_AXI.b <> u_axi_write.M_AXI.b
+
+  u_axi_write.M_AXI.ar <> AXI4AR.stub(ParameterConstants.dram_addr_width)
+  u_axi_write.M_AXI.r <> AXI4R.stub(ParameterConstants.dram_data_width)
 }
+
+
 
 object ARMFlexTopVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
@@ -151,7 +177,7 @@ class PipelineAxiHacked(implicit val cfg: ProcConfig) extends MultiIOModule {
   val S_AXIL_TRANSPLANT = IO(Flipped(axiLiteCSR.io.ctl.cloneType))
   S_AXIL_TRANSPLANT <> axiLiteCSR.io.ctl
 
-  val transplant_ram = IO(pipeline.hostIO.port.cloneType)
+  val transplant_ram = IO(Flipped(pipeline.hostIO.port.cloneType))
   transplant_ram <> pipeline.hostIO.port
 
   val trans2host = WireInit(Mux(pipeline.hostIO.trans2host.done.valid, 1.U << pipeline.hostIO.trans2host.done.tag, 0.U))

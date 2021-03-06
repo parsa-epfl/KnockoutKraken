@@ -3,6 +3,7 @@ package armflex.demander
 import chisel3._
 import chisel3.util._
 import armflex.cache._
+import armflex.util._
 
 class TLBWritebackHandler(
   param: TLBParameter,
@@ -28,37 +29,21 @@ class TLBWritebackHandler(
   // Add page table set buffer and axi dma
   val u_buffer = Module(new peripheral.PageTableSetBuffer(new peripheral.PageTableSetPacket))
 
-  val u_axi_read = Module(new AXI4Reader(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width
-  ))
-  u_buffer.dma_data_i <> u_axi_read.io.dataOut
-
-  val u_axi_write = Module(new AXI4Writer(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width
-  ))
-  u_buffer.dma_data_o <> u_axi_write.io.dataIn
-
-  // AXI Bus
-  val M_AXI = IO(new AXI4(
+  // AXI DMA Read channels
+  val M_DMA_R = IO(new AXIReadMasterIF(
     ParameterConstants.dram_addr_width,
     ParameterConstants.dram_data_width
   ))
 
-  M_AXI.ar <> u_axi_read.io.bus.ar
-  M_AXI.r <> u_axi_read.io.bus.r
+  u_buffer.dma_data_i <> M_DMA_R.data
 
-  u_axi_read.io.bus.aw <> AXI4AW.stub(ParameterConstants.dram_addr_width)
-  u_axi_read.io.bus.w <> AXI4W.stub(ParameterConstants.dram_data_width)
-  u_axi_read.io.bus.b <> AXI4B.stub()
-  
-  M_AXI.aw <> u_axi_write.io.bus.aw
-  M_AXI.w <> u_axi_write.io.bus.w
-  M_AXI.b <> u_axi_write.io.bus.b
+  // AXI DMA Write channels
+  val M_DMA_W = IO(new AXIWriteMasterIF(
+    ParameterConstants.dram_addr_width,
+    ParameterConstants.dram_data_width
+  ))
 
-  u_axi_write.io.bus.ar <> AXI4AR.stub(ParameterConstants.dram_addr_width)
-  u_axi_write.io.bus.r <> AXI4R.stub(ParameterConstants.dram_data_width)
+  M_DMA_W.data <> u_buffer.dma_data_o
 
   val sIdle :: sMoveIn :: sPick :: sUpdatePT :: sMoveOut :: Nil = Enum(5)
   val state_r = RegInit(sIdle)
@@ -85,9 +70,9 @@ class TLBWritebackHandler(
   u_buffer.lookup_request_i := request_r.tag
 
   // sMoveIn
-  u_axi_read.io.xfer.address := ParameterConstants.getPageTableAddressByVPN(request_r.tag.vpn)
-  u_axi_read.io.xfer.length := u_buffer.requestPacketNumber.U
-  u_axi_read.io.xfer.valid := state_r === sMoveIn
+  M_DMA_R.req.bits.address := ParameterConstants.getPageTableAddressByVPN(request_r.tag.vpn)
+  M_DMA_R.req.bits.length := u_buffer.requestPacketNumber.U
+  M_DMA_R.req.valid := state_r === sMoveIn
 
   // sPick
   val victim_index_r = RegInit(0.U(u_buffer.entryNumber.W))
@@ -104,16 +89,16 @@ class TLBWritebackHandler(
 
 
   // sMoveOut
-  u_axi_write.io.xfer.address := u_axi_read.io.xfer.address
-  u_axi_write.io.xfer.length := u_buffer.requestPacketNumber.U
-  u_axi_write.io.xfer.valid := state_r === sMoveOut
+  M_DMA_W.req.bits.address := M_DMA_R.req.bits.address
+  M_DMA_W.req.bits.length := u_buffer.requestPacketNumber.U
+  M_DMA_W.req.valid := state_r === sMoveOut
 
   switch(state_r){
     is(sIdle){
       state_r := Mux(u_arb.io.out.fire() && tt_pid_i.valid, sMoveIn, sIdle)
     }
     is(sMoveIn){
-      state_r := Mux(u_axi_read.io.xfer.done, sPick, sMoveIn)
+      state_r := Mux(M_DMA_R.done, sPick, sMoveIn)
     }
     is(sPick){
       state_r := sUpdatePT
@@ -122,7 +107,7 @@ class TLBWritebackHandler(
       state_r := Mux(u_buffer.write_request_i.fire(), sMoveOut, sUpdatePT)
     }
     is(sMoveOut){
-      state_r := Mux(u_axi_write.io.xfer.done, sIdle, sMoveOut)
+      state_r := Mux(M_DMA_W.done, sIdle, sMoveOut)
     }
   }
 }

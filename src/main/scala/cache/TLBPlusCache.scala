@@ -5,7 +5,7 @@ import chisel3.util._
 import chisel3.experimental._
 import armflex.ProcConfig
 import armflex.MInst
-import armflex.util.FlushQueue
+import armflex.util._
 import arm.PROCESSOR_TYPES
 import arm.DECODE_CONTROL_SIGNALS._
 
@@ -382,17 +382,9 @@ object CacheBackendToAXIInterface {
     backend_reply_i.ready := refill_o.ready && !(miss_request_q.bits.not_sync_with_data_v && backend_reply_i.valid)
   }
 
-  import DMAController.Bus._
-  import DMAController.Worker.XferDescBundle
-  import DMAController.Frontend.{AXI4Reader, AXI4Writer}
-
   class CacheBackendAXIAdaptors(param: MemorySystemParameter) extends MultiIOModule {
-    val M_AXI = IO(
-      new AXI4(
-        param.pAddressWidth,
-        param.cacheBlockSize
-      )
-    )
+    assert(param.cacheBlockSize == 512, "Only 512bit AXI transactions is supported.")
+    assert(param.pAddressWidth == 36, "Only 36bit memory addres is supported.")
 
     val cache_backend_request_i = IO(Flipped(Decoupled(new MergedBackendRequestPacket(param.toCacheParameter()))))
 
@@ -402,51 +394,46 @@ object CacheBackendToAXIInterface {
 
     val cache_backend_reply_o = IO(Decoupled(new MissResolveReplyPacket(param.toCacheParameter())))
 
-    val u_axi_read_engine = Module(new AXI4Reader(param.pAddressWidth, param.cacheBlockSize))
-
-    M_AXI.ar <> u_axi_read_engine.io.bus.ar
-    M_AXI.r <> u_axi_read_engine.io.bus.r
-    u_axi_read_engine.io.bus.b <> AXI4B.stub()
-    u_axi_read_engine.io.bus.aw <> AXI4AW.stub(param.pAddressWidth)
-    u_axi_read_engine.io.bus.w <> AXI4W.stub(param.cacheBlockSize)
-
-    u_axi_read_engine.io.xfer.length := 1.U
-    u_axi_read_engine.io.xfer.address := Cat(
+    // AXI Read request
+    val M_DMA_R = IO(new AXIReadMasterIF(
+      param.pAddressWidth, 
+      param.cacheBlockSize
+    ))
+    M_DMA_R.req.bits.length := 1.U
+    M_DMA_R.req.bits.address := Cat(
       q_cache_backend_request.bits.addr,
       Fill(log2Ceil(param.cacheBlockSize), 0.U)
     )
-    u_axi_read_engine.io.xfer.valid := !q_cache_backend_request.bits.w_v && q_cache_backend_request.valid
+    M_DMA_R.req.valid := !q_cache_backend_request.bits.w_v && q_cache_backend_request.valid
 
     cache_backend_reply_o.bits.addr := q_cache_backend_request.bits.addr
-    cache_backend_reply_o.bits.data := u_axi_read_engine.io.dataOut.bits // FIXME: Add FIFO here to shrink the critical path?
+    cache_backend_reply_o.bits.data := M_DMA_R.data.bits
     cache_backend_reply_o.bits.not_sync_with_data_v := false.B
     cache_backend_reply_o.bits.thread_id := q_cache_backend_request.bits.thread_id
-    cache_backend_reply_o.valid := u_axi_read_engine.io.dataOut.valid
-    u_axi_read_engine.io.dataOut.ready := cache_backend_reply_o.ready
+    cache_backend_reply_o.valid := M_DMA_R.data.valid
+    M_DMA_R.data.ready := cache_backend_reply_o.ready
 
-    val u_axi_write_engine = Module(new AXI4Writer(param.pAddressWidth, param.cacheBlockSize))
+    // AXI Write Request
+    val M_DMA_W = IO(new AXIWriteMasterIF(
+      param.pAddressWidth,
+      param.cacheBlockSize
+    ))
 
-    u_axi_write_engine.io.xfer.address := Cat(
+    M_DMA_W.req.bits.address := Cat(
       q_cache_backend_request.bits.addr,
       Fill(log2Ceil(param.cacheBlockSize), 0.U)
     )
-    u_axi_write_engine.io.xfer.length := 1.U
-    u_axi_write_engine.io.xfer.valid := q_cache_backend_request.bits.w_v && q_cache_backend_request.valid
+    M_DMA_W.req.bits.length := 1.U
+    M_DMA_W.req.valid := q_cache_backend_request.bits.w_v && q_cache_backend_request.valid
 
-    u_axi_write_engine.io.dataIn.bits := q_cache_backend_request.bits.data
-    u_axi_write_engine.io.dataIn.valid := u_axi_write_engine.io.xfer.valid
+    M_DMA_W.data.bits := q_cache_backend_request.bits.data
+    M_DMA_W.data.valid := M_DMA_W.req.fire()
 
     q_cache_backend_request.ready := Mux(
       q_cache_backend_request.bits.w_v,
-      u_axi_write_engine.io.xfer.done,
-      u_axi_read_engine.io.xfer.done
+      M_DMA_W.done,
+      M_DMA_R.done
     )
-
-    M_AXI.aw <> u_axi_write_engine.io.bus.aw
-    M_AXI.w <> u_axi_write_engine.io.bus.w
-    M_AXI.b <> u_axi_write_engine.io.bus.b
-    u_axi_write_engine.io.bus.ar <> AXI4AR.stub(param.pAddressWidth)
-    u_axi_write_engine.io.bus.r <> AXI4R.stub(param.cacheBlockSize)
   }
 
 }

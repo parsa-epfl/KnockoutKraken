@@ -45,7 +45,7 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
       dut.pageset_packet_i.ptes(0).modified.poke(false.B)
       dut.pageset_packet_i.ptes(0).permission.poke(2.U)
 
-      dut.sendPageTableSet(dut.M_AXI_PW, (0xAB * 3 * 64).U)
+      dut.sendPageTableSet(dut.M_AXI, (0xAB * 3 * 64).U)
       // wait for the reply to the TLB
       dut.waitForSignalToBe(dut.itlb_backend_reply_o.valid)
       dut.itlb_backend_reply_o.bits.tag.thread_id.expect(0.U)
@@ -72,7 +72,7 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
         dut.dtlb_backend_request_i.ready.expect(true.B)
         dut.tk()
       }
-      dut.sendPageTableSet(dut.M_AXI_PW, (0xAB * 3 * 64).U)
+      dut.sendPageTableSet(dut.M_AXI, (0xAB * 3 * 64).U)
       // This will trigger an page fault.
       println("Page fault should have been triggered. Check it now.")
       
