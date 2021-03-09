@@ -55,7 +55,7 @@ class PipelineTest(val dut: PipelineHardDriverModule, traceDrv: VerificationDriv
   def run(start: Int = 0, end: Int): Unit = {
     var trace = traceDrv.next
     var instCount = 0
-    while (traceDrv.hasNext && instCount < start) {
+    while (traceDrv.hasNext && instCount <= start) {
       trace = traceDrv.next
       instCount += 1
     }
@@ -66,7 +66,7 @@ class PipelineTest(val dut: PipelineHardDriverModule, traceDrv: VerificationDriv
         transplanter
       }
       .fork {
-        while (traceDrv.hasNext && instCount < end) {
+        while (traceDrv.hasNext && instCount <= end) {
           // Fetch
           dut.traceIn(trace._1)
           if (trace._2.isDefined) {
@@ -98,7 +98,7 @@ class FullPipelineTest extends FreeSpec with ChiselScalatestTester {
       //,WriteVcdAnnotation
     )
     val traceDrv = new VerificationDriver(traceName)
-    "Will verify pipeline's correctness with "+traceName+" file " in {
+    "Will verify pipeline's correctness with " + traceName + " file " + start + "" in {
 
       test(new PipelineHardDriverModule()(cfgProc))
         .withAnnotations(annos) { dut =>
