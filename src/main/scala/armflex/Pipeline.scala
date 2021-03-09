@@ -138,40 +138,42 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
 
   // Execute ---------------------------
   // Read register data from rfile
-  val rfileReadArrives = RegNext(decReg.io.deq.fire)
+  val stateReadArrives = RegNext(decReg.io.deq.fire)
   val rVal1_reg = RegInit(DATA_X)
   val rVal2_reg = RegInit(DATA_X)
   val rVal3_reg = RegInit(DATA_X)
-  val rVal1 = Mux(rfileReadArrives, archstate.issue.rd.port(0).data, rVal1_reg)
-  val rVal2 = Mux(rfileReadArrives, archstate.issue.rd.port(1).data, rVal2_reg)
-  val rVal3 = Mux(rfileReadArrives, archstate.issue.rd.port(0).data, rVal3_reg) // TODO Triple source
-  when(RegNext(decReg.io.deq.fire)) { 
+  val state_reg = RegInit(PStateRegs())
+  val rVal1 = Mux(stateReadArrives, archstate.issue.rd.port(0).data, rVal1_reg)
+  val rVal2 = Mux(stateReadArrives, archstate.issue.rd.port(1).data, rVal2_reg)
+  val rVal3 = Mux(stateReadArrives, archstate.issue.rd.port(0).data, rVal3_reg) // TODO Triple source
+  val curr_state = Mux(stateReadArrives, RegNext(archstate.issue.regs.curr), state_reg) // TODO Triple source
+  when(stateReadArrives) { 
     // Read Register arrived
     rVal1_reg := archstate.issue.rd.port(0).data
     rVal2_reg := archstate.issue.rd.port(1).data
     rVal3_reg := archstate.issue.rd.port(0).data
+    state_reg := archstate.issue.regs.curr
   }
- 
 
   // connect executeUnit interface
   executer.io.dinst := issued_dinst
-  executer.io.rVal1 := Mux(issued_dinst.itype === I_DP3S, RegNext(rVal1), rVal1)
-  executer.io.rVal2 := Mux(issued_dinst.itype === I_DP3S, RegNext(rVal2), rVal2)
+  executer.io.rVal1 := rVal1
+  executer.io.rVal2 := rVal2
   executer.io.rVal3 := rVal3 // rVal3 takes an extra cycle to arrive -> Take RegNext()
-  executer.io.nzcv := archstate.issue.regs.curr.NZCV
+  executer.io.nzcv := curr_state.NZCV
 
   // connect BranchUnit interface
   brancher.io.dinst := issued_dinst
   brancher.io.rVal1 := rVal1
   brancher.io.rVal2 := rVal2
   brancher.io.cond := executer.io.condRes
-  brancher.io.pc := archstate.issue.regs.curr.PC
+  brancher.io.pc := curr_state.PC
 
   // connect LDSTUnit interface
   ldstU.io.dinst := issued_dinst
   ldstU.io.rVal1 := rVal1
   ldstU.io.rVal2 := rVal2
-  ldstU.io.pstate := archstate.issue.regs.curr
+  ldstU.io.pstate := curr_state
 
   // ------ Pack Execute/LDST result
   memHandler.pipe.req.bits := ldstU.io.minst.bits
@@ -244,10 +246,10 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
     // When memory response arrives, don't take from issue but from response
     commitU.enq.valid := true.B
   }.otherwise {
-    commitU.enq.handshake(issuer.io.deq, archstate.issue.ready && !ldstInstruction)
+    commitU.enq.handshake(issuer.io.deq, !ldstInstruction)
   }
   when(ldstInstruction) {
-    issuer.io.deq.handshake(memHandler.pipe.req, archstate.issue.ready)
+    issuer.io.deq.handshake(memHandler.pipe.req)
   }
 
   // Assertions:  Issuer Deq | memInst Req&Resp | CommitReg Enq
