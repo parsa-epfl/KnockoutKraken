@@ -53,3 +53,20 @@ class CSR(val dataWidth: Int, val regCount: Int) extends Module{
     }
   }
 }
+
+import armflex.util.{BRAMPort, BRAMConfig}
+import chisel3.util.{Cat, Fill}
+class CSR2BRAM(val cfg: BRAMConfig) extends Module{
+  assert(cfg.NB_COL == 8)
+  val io = IO(new Bundle{
+    val bus = Flipped(new CSRBusBundle(32, cfg.RAM_DEPTH))
+    val port = Flipped(new BRAMPort()(cfg))
+  })
+
+  io.port.ADDR := io.bus.addr >> 1.U // Take upper bits
+  io.port.EN := io.bus.read || io.bus.write
+  io.port.DI := Cat(io.bus.dataOut, io.bus.dataOut)
+  val mask = Fill(4, io.bus.write.asUInt)
+  io.port.WE := Mux(io.bus.addr(0), mask << 4, mask)
+  io.bus.dataIn := Mux(RegNext(io.bus.addr(0)), io.port.DO(63,32) , io.port.DO(31, 0))
+}

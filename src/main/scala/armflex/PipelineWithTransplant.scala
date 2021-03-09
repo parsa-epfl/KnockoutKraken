@@ -46,28 +46,29 @@ class ProcConfig(
 }
 
 import antmicro.Bus.AXI4Lite
+
 class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
   val axiDataWidth = 32
   val regCount = 2
+  val bramRegCount = 2*1024
   val pipeline = Module(new PipelineWithTransplant)
-  val axiLiteCSR = Module(new AXI4LiteCSR(axiDataWidth, regCount))
+  val axiLiteCSR = Module(new AXI4LiteCSR(axiDataWidth, bramRegCount + regCount))
   val csr = Module(new CSR(axiDataWidth, regCount))
-  csr.io.bus <> axiLiteCSR.io.bus
-
-  val hostBRAMConfig = pipeline.transplantU.hostBRAMConfig
-  val u_transplant_axi = Module(new AXIRAMController(
-     log2Ceil(hostBRAMConfig.RAM_DEPTH) + 3,
-     DATA_SZ
-   ))
+  val csrBRAM = Module(new CSR2BRAM(pipeline.transplantU.hostBRAMConfig))
+  csrBRAM.io.bus <> 0.U.asTypeOf(csrBRAM.io.bus.cloneType)
+  csr.io.bus <> 0.U.asTypeOf(csr.io.bus)
+  when(axiLiteCSR.io.bus.addr < bramRegCount.U) {
+    csrBRAM.io.bus <> axiLiteCSR.io.bus
+  }.otherwise{
+    csr.io.bus <> axiLiteCSR.io.bus
+  }
 
   val mem = IO(pipeline.mem.cloneType)
   val transplantIO = IO(new Bundle {
-    val port = Flipped(u_transplant_axi.S_AXI.cloneType)
     val ctl = Flipped(new AXI4Lite(4, axiDataWidth))
   })
   transplantIO.ctl <> axiLiteCSR.io.ctl
   pipeline.mem <> mem
-  pipeline.hostIO.port <> transplantIO.port
 
   val trans2host = WireInit(Mux(pipeline.hostIO.trans2host.done.valid, 1.U << pipeline.hostIO.trans2host.done.tag, 0.U))
   val host2transClear = WireInit(Mux(pipeline.hostIO.trans2host.clear.valid, 1.U << pipeline.hostIO.trans2host.clear.tag, 0.U))
@@ -75,39 +76,9 @@ class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
   SetCSR(trans2host, csr.io.csr(0), axiDataWidth)
   val pendingHostTrans = ClearCSR(host2transClear, csr.io.csr(1), axiDataWidth)
   pipeline.hostIO.host2trans.pending := pendingHostTrans
-
-  // Transplants BRAM port Arbiter
-  // arbiter
-   class request_t extends Bundle {
-     val addr = UInt(log2Ceil(hostBRAMConfig.RAM_DEPTH).W)
-     val data = UInt(DATA_SZ.W)
-     val mask = UInt((DATA_SZ / 8).W)
-   }
-
-   val u_arb = Module(new RRArbiter(new request_t, 2))
-
-   // Read path
-   u_arb.io.in(0).bits.addr := u_transplant_axi.read_request_o.bits(log2Ceil(hostBRAMConfig.RAM_DEPTH) + 2, 3)
-   u_arb.io.in(0).bits.data := DontCare
-   u_arb.io.in(0).bits.mask := 0.U
-   u_arb.io.in(0).valid := u_transplant_axi.read_request_o.valid
-   u_transplant_axi.read_request_o.ready := u_arb.io.in(0).ready
-
-   // Write path
-   u_arb.io.in(1).bits.addr := u_transplant_axi.write_request_o.bits.addr(log2Ceil(hostBRAMConfig.RAM_DEPTH) + 2, 3)
-   u_arb.io.in(1).bits.data := u_transplant_axi.write_request_o.bits.data
-   u_arb.io.in(1).bits.mask := u_transplant_axi.write_request_o.bits.mask
-   u_arb.io.in(1).valid := u_transplant_axi.write_request_o.valid
-   u_transplant_axi.write_request_o.ready := u_arb.io.in(1).ready
-
-   pipeline.hostIO.port.ADDR := u_arb.io.out.bits.addr
-   pipeline.hostIO.port.DI := u_arb.io.out.bits.data
-   pipeline.hostIO.port.EN := u_arb.io.out.valid
-   pipeline.hostIO.port.WE := u_arb.io.out.bits.mask
-   u_arb.io.out.ready := true.B
-
-   u_transplant_axi.read_reply_i.bits := pipeline.hostIO.port.DO
-   u_transplant_axi.read_reply_i.valid := RegNext(u_transplant_axi.read_request_o.fire())
+  
+  // BRAM
+  pipeline.hostIO.port <> csrBRAM.io.port
 }
 
 class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule {
