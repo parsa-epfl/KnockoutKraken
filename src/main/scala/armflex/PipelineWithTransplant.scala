@@ -54,9 +54,15 @@ class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
   val csr = Module(new CSR(axiDataWidth, regCount))
   csr.io.bus <> axiLiteCSR.io.bus
 
+  val hostBRAMConfig = pipeline.transplantU.hostBRAMConfig
+  val u_transplant_axi = Module(new AXIRAMController(
+     log2Ceil(hostBRAMConfig.RAM_DEPTH) + 3,
+     DATA_SZ
+   ))
+
   val mem = IO(pipeline.mem.cloneType)
   val transplantIO = IO(new Bundle {
-    val port = Flipped(pipeline.hostIO.port.cloneType)
+    val port = Flipped(u_transplant_axi.S_AXI.cloneType)
     val ctl = Flipped(new AXI4Lite(4, axiDataWidth))
   })
   transplantIO.ctl <> axiLiteCSR.io.ctl
@@ -69,7 +75,41 @@ class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
   SetCSR(trans2host, csr.io.csr(0), axiDataWidth)
   val pendingHostTrans = ClearCSR(host2transClear, csr.io.csr(1), axiDataWidth)
   pipeline.hostIO.host2trans.pending := pendingHostTrans
+
+  // Transplants BRAM port Arbiter
+  // arbiter
+   class request_t extends Bundle {
+     val addr = UInt(log2Ceil(hostBRAMConfig.RAM_DEPTH).W)
+     val data = UInt(DATA_SZ.W)
+     val mask = UInt((DATA_SZ / 8).W)
+   }
+
+   val u_arb = Module(new RRArbiter(new request_t, 2))
+
+   // Read path
+   u_arb.io.in(0).bits.addr := u_transplant_axi.read_request_o.bits(log2Ceil(hostBRAMConfig.RAM_DEPTH) + 2, 3)
+   u_arb.io.in(0).bits.data := DontCare
+   u_arb.io.in(0).bits.mask := 0.U
+   u_arb.io.in(0).valid := u_transplant_axi.read_request_o.valid
+   u_transplant_axi.read_request_o.ready := u_arb.io.in(0).ready
+
+   // Write path
+   u_arb.io.in(1).bits.addr := u_transplant_axi.write_request_o.bits.addr(log2Ceil(hostBRAMConfig.RAM_DEPTH) + 2, 3)
+   u_arb.io.in(1).bits.data := u_transplant_axi.write_request_o.bits.data
+   u_arb.io.in(1).bits.mask := u_transplant_axi.write_request_o.bits.mask
+   u_arb.io.in(1).valid := u_transplant_axi.write_request_o.valid
+   u_transplant_axi.write_request_o.ready := u_arb.io.in(1).ready
+
+   pipeline.hostIO.port.ADDR := u_arb.io.out.bits.addr
+   pipeline.hostIO.port.DI := u_arb.io.out.bits.data
+   pipeline.hostIO.port.EN := u_arb.io.out.valid
+   pipeline.hostIO.port.WE := u_arb.io.out.bits.mask
+   u_arb.io.out.ready := true.B
+
+   u_transplant_axi.read_reply_i.bits := pipeline.hostIO.port.DO
+   u_transplant_axi.read_reply_i.valid := RegNext(u_transplant_axi.read_request_o.fire())
 }
+
 class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule {
 
   // Pipeline
@@ -100,7 +140,7 @@ class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule
   // -------- Transplant ---------
   val transplantU = Module(new TransplantUnit(cfg.NB_THREADS))
   val hostIO = IO(new Bundle {
-    val port = Flipped(transplantU.S_AXI_TRANSPLANT.cloneType)
+    val port = transplantU.hostBramPort.cloneType
     val trans2host = transplantU.trans2host.cloneType
     val host2trans = transplantU.host2trans.cloneType
   })
@@ -128,7 +168,7 @@ class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule
   // Transplant from Host
   transplantU.host2trans <> hostIO.host2trans
   transplantU.trans2host <> hostIO.trans2host
-  transplantU.S_AXI_TRANSPLANT <> hostIO.port
+  transplantU.hostBramPort <> hostIO.port
 
   //* DBG
   val dbg = IO(new Bundle {
