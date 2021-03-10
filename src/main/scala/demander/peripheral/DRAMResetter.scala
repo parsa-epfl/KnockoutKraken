@@ -3,8 +3,8 @@ package armflex.demander.peripheral
 import chisel3._
 import chisel3.util._
 
-import DMAController.Bus._
-import DMAController.Frontend.AXI4Writer
+import antmicro.Bus._
+import antmicro.Frontend.AXI4Writer
 import armflex.demander.software_bundle.ParameterConstants
 
 class DRAMResster extends MultiIOModule {

@@ -15,7 +15,7 @@ import armflex.cache.{
  * It contains a normal R/W port(For page deleater and page inserter) and a AXI slave port(for QEMU)
  */ 
 class PageBuffer extends MultiIOModule {
-  import DMAController.Bus._
+  import antmicro.Bus._
   import armflex.util._
 
   class page_buffer_write_request_t extends Bundle {

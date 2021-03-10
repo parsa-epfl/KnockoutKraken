@@ -3,7 +3,7 @@ package armflex.util
 import chisel3._
 import chisel3.util._
 
-import DMAController.Bus.AXI4
+import antmicro.Bus.AXI4
 
 /**
  * Adaptor from AXI4 to normal memory port, with only INCR burst support.

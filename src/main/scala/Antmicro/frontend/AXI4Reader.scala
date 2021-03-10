@@ -21,10 +21,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
-package DMAController.Frontend
+package antmicro.Frontend
 
-import DMAController.Bus._
-import DMAController.Worker.XferDescBundle
+import antmicro.Bus._
+import antmicro.Worker.XferDescBundle
 import chisel3._
 import chisel3.util._
 

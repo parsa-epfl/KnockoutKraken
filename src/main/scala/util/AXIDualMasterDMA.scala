@@ -3,8 +3,8 @@ package armflex.util
 import chisel3._
 import chisel3.util._
 
-import DMAController.Bus._
-import DMAController.Frontend._
+import antmicro.Bus._
+import antmicro.Frontend._
 
 /**
  * A DMA with two AXI Master ports. The destination port writes what the source ports reads.

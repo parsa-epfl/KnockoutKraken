@@ -11,7 +11,7 @@ import armflex.demander.PageDemander
 import armflex.util._
 import armflex.demander.software_bundle.ParameterConstants
 
-import DMAController.Bus._
+import antmicro.Bus._
 
 class ARMFlexTop extends MultiIOModule {
   implicit val pipelineCfg = new ProcConfig(NB_THREADS = 8)

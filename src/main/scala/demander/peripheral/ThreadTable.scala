@@ -2,10 +2,7 @@ package armflex.demander.peripheral
 
 import chisel3._
 import chisel3.util._
-import armflex.util.{
-  AxiLiteSlave,
-  AxiLiteConfig
-}
+import antmicro.Bus.AXI4Lite
 
 import chisel3.experimental.BundleLiterals._
 
@@ -24,55 +21,55 @@ class ThreadTable(
   lookupPIDPortNumber: Int = 1,
   lookupTIDPortNumber: Int = 1,
 ) extends MultiIOModule {
-  val S_AXI = IO(AxiLiteSlave(new AxiLiteConfig(32)))
+  val S_AXI = IO(Flipped(new AXI4Lite(32, 32)))
 
   val table = RegInit(
     Vec(threadNumber, Valid(UInt(processIDWidth.W))),
     0.U.asTypeOf(Vec(threadNumber, Valid(UInt(processIDWidth.W))))
   )
 
-  val axi_internal_read_address = S_AXI.araddr(1 + log2Ceil(threadNumber),2)
-  val axi_internal_write_address = S_AXI.awaddr(1 + log2Ceil(threadNumber),2)
+  val axi_internal_read_address = S_AXI.ar.araddr(1 + log2Ceil(threadNumber),2)
+  val axi_internal_write_address = S_AXI.aw.awaddr(1 + log2Ceil(threadNumber),2)
 
   val axi_read_addr_r = RegInit(
     Valid(UInt(log2Ceil(threadNumber).W)),
     0.U.asTypeOf(Valid(UInt(log2Ceil(threadNumber).W)))
   )
   
-  when(S_AXI.rready && S_AXI.rvalid){
+  when(S_AXI.r.rready && S_AXI.r.rvalid){
     axi_read_addr_r.valid := false.B
-  }.elsewhen(S_AXI.arready && S_AXI.arvalid){
+  }.elsewhen(S_AXI.ar.arready && S_AXI.ar.arvalid){
     axi_read_addr_r.valid := true.B
     axi_read_addr_r.bits := axi_internal_read_address
   }
 
-  S_AXI.arready := !axi_read_addr_r.valid
+  S_AXI.ar.arready := !axi_read_addr_r.valid
 
-  S_AXI.rvalid := axi_read_addr_r.valid
-  S_AXI.rdata := table(axi_read_addr_r.bits).bits
-  S_AXI.rresp := 0.U
+  S_AXI.r.rvalid := axi_read_addr_r.valid
+  S_AXI.r.rdata := table(axi_read_addr_r.bits).bits
+  S_AXI.r.rresp := 0.U
 
   val axi_write_addr_r = Reg(Valid(UInt(log2Ceil(threadNumber).W)))
   axi_write_addr_r.valid := false.B
 
-  when(S_AXI.wvalid && S_AXI.wready){
-    table(axi_write_addr_r.bits).bits := S_AXI.wdata
+  when(S_AXI.w.wvalid && S_AXI.w.wready){
+    table(axi_write_addr_r.bits).bits := S_AXI.w.wdata
     table(axi_write_addr_r.bits).valid := true.B
     axi_write_addr_r.valid := false.B
-  }.elsewhen(S_AXI.awvalid && S_AXI.awready){
+  }.elsewhen(S_AXI.aw.awvalid && S_AXI.aw.awready){
     axi_write_addr_r.valid := true.B
     axi_write_addr_r.bits := axi_internal_write_address
   }
 
-  S_AXI.awready := !axi_write_addr_r.valid
-  S_AXI.wready := axi_write_addr_r.valid
+  S_AXI.aw.awready := !axi_write_addr_r.valid
+  S_AXI.w.wready := axi_write_addr_r.valid
 
-  S_AXI.bresp := 0.U
+  S_AXI.b.bresp := 0.U
   val bvalid_r = RegInit(false.B)
-  S_AXI.bvalid := bvalid_r
-  when(S_AXI.bready && S_AXI.bvalid){
+  S_AXI.b.bvalid := bvalid_r
+  when(S_AXI.b.bready && S_AXI.b.bvalid){
     bvalid_r := false.B
-  }.elsewhen(S_AXI.wvalid && S_AXI.wready){
+  }.elsewhen(S_AXI.w.wvalid && S_AXI.w.wready){
     bvalid_r := true.B
   }
 

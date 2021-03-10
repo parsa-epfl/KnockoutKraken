@@ -2,8 +2,9 @@ package armflex.util
 
 import chisel3._
 import chisel3.util._
+import antmicro.Bus.AXI4Lite
 
-import DMAController.Bus._
+import antmicro.Bus._
 import armflex.demander.software_bundle.ParameterConstants
 
 class AXIControlledMessageQueue extends MultiIOModule {
@@ -16,28 +17,28 @@ class AXIControlledMessageQueue extends MultiIOModule {
    *  0x4     | in queue is not empty (can read message)
    */ 
   // TODO: add interrupt here when there is a message available
-  val S_AXIL = IO(AxiLiteSlave(new AxiLiteConfig(13)))
+  val S_AXIL = IO(Flipped(new AXI4Lite(32, 32)))
   // write signals are not included.
-  S_AXIL.awready := false.B
-  S_AXIL.wready := false.B
-  S_AXIL.bresp := 0.U
-  S_AXIL.bvalid := false.B
+  S_AXIL.aw.awready := false.B
+  S_AXIL.w.wready := false.B
+  S_AXIL.b.bresp := 0.U
+  S_AXIL.b.bvalid := false.B
 
   val addr_r = RegInit(0.U(3.W))
   val addr_vr = RegInit(false.B)
   
-  when(S_AXIL.arready && S_AXIL.arvalid){
-    addr_r := S_AXIL.araddr(2, 0)
+  when(S_AXIL.ar.arready && S_AXIL.ar.arvalid){
+    addr_r := S_AXIL.ar.araddr(2, 0)
     addr_vr := true.B
-  }.elsewhen(S_AXIL.rready && S_AXIL.rvalid){
+  }.elsewhen(S_AXIL.r.rready && S_AXIL.r.rvalid){
     addr_vr := false.B
   }
 
-  S_AXIL.arready := !addr_vr
+  S_AXIL.ar.arready := !addr_vr
   
-  S_AXIL.rdata := Mux(addr_r(2), fifo_i.valid, fifo_o.ready)
-  S_AXIL.rresp := 0.U
-  S_AXIL.rvalid := addr_vr
+  S_AXIL.r.rdata := Mux(addr_r(2), fifo_i.valid, fifo_o.ready)
+  S_AXIL.r.rresp := 0.U
+  S_AXIL.r.rvalid := addr_vr
 
   // Read from any address will trigger a pop
   // write to any address will trigger a insersion.
