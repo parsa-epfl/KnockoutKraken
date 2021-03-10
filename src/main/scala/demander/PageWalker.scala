@@ -20,8 +20,8 @@ class PageWalker(
 ) extends MultiIOModule {
   import software_bundle.TLBMissRequestMessage
   import software_bundle.PageFaultNotification
-  import DMAController.Bus._
-  import DMAController.Frontend._
+  import antmicro.Bus._
+  import antmicro.Frontend._
 
   // IO of TLB miss.
   val tlb_miss_req_i = IO(Vec(

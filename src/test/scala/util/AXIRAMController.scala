@@ -14,8 +14,8 @@ import firrtl.options.TargetDirAnnotation
 
 import org.scalatest.FreeSpec
 
-import DMAController.Bus._
-import DMAController.Frontend._
+import antmicro.Bus._
+import antmicro.Frontend._
 
 class AXIRAMControllerDUT extends MultiIOModule {
   val u_read_dma = Module(new AXI4Reader(32, 32))

@@ -8,7 +8,7 @@ import chiseltest.experimental._
 import armflex.cache.MemorySystemParameter
 import armflex.util._
 
-import DMAController.Bus._
+import antmicro.Bus._
 import armflex.demander.software_bundle.ParameterConstants
 import armflex.demander.peripheral.PageTableSetPacket
 
@@ -179,21 +179,21 @@ implicit class PageDemanderDriver(target: PageDemanderDUT){
   
   def registerThreadTable(thread_id: Int, process_id: Int) = timescope {
     // Send write request
-    target.S_AXI_TT.awaddr.poke((thread_id * 4).U)
-    target.S_AXI_TT.awvalid.poke(true.B)
-    target.S_AXI_TT.awready.expect(true.B)
+    target.S_AXI_TT.aw.awaddr.poke((thread_id * 4).U)
+    target.S_AXI_TT.aw.awvalid.poke(true.B)
+    target.S_AXI_TT.aw.awready.expect(true.B)
     target.tk()
-    target.S_AXI_TT.awvalid.poke(false.B)
+    target.S_AXI_TT.aw.awvalid.poke(false.B)
     // Send write data
-    target.S_AXI_TT.wdata.poke(process_id.U)
-    target.S_AXI_TT.wvalid.poke(true.B)
+    target.S_AXI_TT.w.wdata.poke(process_id.U)
+    target.S_AXI_TT.w.wvalid.poke(true.B)
     // Wait for it ready.
-    target.S_AXI_TT.wready.expect(true.B)
+    target.S_AXI_TT.w.wready.expect(true.B)
     target.tk()
     // Wait for write reply
-    target.S_AXI_TT.wvalid.poke(false.B)
-    target.S_AXI_TT.bvalid.expect(true.B)
-    target.S_AXI_TT.bready.poke(true.B)
+    target.S_AXI_TT.w.wvalid.poke(false.B)
+    target.S_AXI_TT.b.bvalid.expect(true.B)
+    target.S_AXI_TT.b.bready.poke(true.B)
     target.tk()
   }
 
@@ -242,18 +242,18 @@ implicit class PageDemanderDriver(target: PageDemanderDUT){
     do{
       println("Access S_AXIL_QEMU_MQ by 0x4")
       timescope {
-        target.S_AXIL_QEMU_MQ.araddr.poke(0x4.U)
-        target.S_AXIL_QEMU_MQ.arvalid.poke(true.B)
-        waitForSignalToBe(target.S_AXIL_QEMU_MQ.arready)
+        target.S_AXIL_QEMU_MQ.ar.araddr.poke(0x4.U)
+        target.S_AXIL_QEMU_MQ.ar.arvalid.poke(true.B)
+        waitForSignalToBe(target.S_AXIL_QEMU_MQ.ar.arready)
         tk()
       }
-      target.S_AXIL_QEMU_MQ.rvalid.expect(true.B)
-      val result = target.S_AXIL_QEMU_MQ.rdata.peek.litValue()
+      target.S_AXIL_QEMU_MQ.r.rvalid.expect(true.B)
+      val result = target.S_AXIL_QEMU_MQ.r.rdata.peek.litValue()
       if(result != 0){
         message_available = true
       }
       timescope {
-        target.S_AXIL_QEMU_MQ.rready.poke(true.B)
+        target.S_AXIL_QEMU_MQ.r.rready.poke(true.B)
         tk()
       }
     } while(!message_available);
