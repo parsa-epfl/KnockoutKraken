@@ -2,8 +2,8 @@ package armflex.demander.peripheral
 
 import chisel3._
 import chisel3.util._
-import DMAController.Frontend._
-import DMAController.Bus._
+import antmicro.Frontend._
+import antmicro.Bus._
 import armflex.demander.software_bundle.ParameterConstants
 import armflex.util._
 

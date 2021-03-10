@@ -3,7 +3,7 @@ package armflex.demander.peripheral
 import chisel3._
 import chisel3.util._
 
-import DMAController.Bus._
+import antmicro.Bus._
 import armflex.util.AXIRAMController
 import armflex.demander.software_bundle.QEMUTxMessage
 import armflex.demander.software_bundle.QEMUEvictReply
