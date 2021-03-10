@@ -10,8 +10,8 @@ class TLBWritebackHandler(
   tlbNumber: Int = 2
 ) extends MultiIOModule {
   import software_bundle._
-  import DMAController.Frontend._
-  import DMAController.Bus._
+  import antmicro.Frontend._
+  import antmicro.Bus._
 
   // the eviction request of the TLB
   val tlb_evict_req_i = IO(Vec(

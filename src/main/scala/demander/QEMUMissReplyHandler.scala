@@ -8,8 +8,8 @@ import armflex.demander.software_bundle.ParameterConstants
 import armflex.demander.peripheral.PageTableSetBuffer
 import armflex.demander.peripheral.PageTableSetPacket
 import armflex.demander.peripheral.ThreadLookupResultPacket
-import DMAController.Bus._
-import DMAController.Frontend._
+import antmicro.Bus._
+import antmicro.Frontend._
 import chisel3.experimental.Param
 import armflex.demander.software_bundle.PageTableItem
 import armflex.util.AXIDMARequestPacket
