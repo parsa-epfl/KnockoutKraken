@@ -72,8 +72,8 @@ class ARMFlexTop extends MultiIOModule {
   // ports of the page demander
   val S_AXI_PAGE = IO(Flipped(u_pd.S_AXI_PAGE.cloneType))
   u_pd.S_AXI_PAGE <> S_AXI_PAGE
-  val S_AXIL_TT = IO(u_pd.S_AXI_TT.cloneType)
-  u_pd.S_AXI_TT <> S_AXIL_TT
+  val S_AXIL_TT = IO(u_pd.S_AXIL_TT.cloneType)
+  u_pd.S_AXIL_TT <> S_AXIL_TT
   val S_AXIL_QEMU_MQ = IO(u_pd.S_AXIL_QEMU_MQ.cloneType)
   S_AXIL_QEMU_MQ <> u_pd.S_AXIL_QEMU_MQ
   val S_AXI_QEMU_MQ = IO(Flipped(u_pd.S_AXI_QEMU_MQ.cloneType))

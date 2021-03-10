@@ -48,8 +48,8 @@ class PageDemanderDUT(
 ) extends MultiIOModule {
   val u_page_demander = Module(new PageDemander(param, 2, false))
   // AXI Bus for thread table
-  val S_AXI_TT = IO(u_page_demander.S_AXI_TT.cloneType)
-  S_AXI_TT <> u_page_demander.S_AXI_TT
+  val S_AXIL_TT = IO(Flipped(u_page_demander.S_AXIL_TT.cloneType))
+  S_AXIL_TT <> u_page_demander.S_AXIL_TT
   // AXI Bus for Page table set
   // val M_AXI_PTSet = IO(u_page_demander.M_AXI_PTSet.cloneType)
   // M_AXI_PTSet <> u_page_demander.M_AXI_PTSet
@@ -101,7 +101,7 @@ class PageDemanderDUT(
   // AXI Slave for receiving message to QEMU
   val S_AXI_QEMU_MQ = IO(Flipped(u_page_demander.S_AXI_QEMU_MQ.cloneType))
   S_AXI_QEMU_MQ <> u_page_demander.S_AXI_QEMU_MQ
-  val S_AXIL_QEMU_MQ = IO(u_page_demander.S_AXIL_QEMU_MQ.cloneType)
+  val S_AXIL_QEMU_MQ = IO(Flipped(u_page_demander.S_AXIL_QEMU_MQ.cloneType))
   S_AXIL_QEMU_MQ <> u_page_demander.S_AXIL_QEMU_MQ
 
   val M_AXI = IO(new AXI4(
@@ -179,21 +179,21 @@ implicit class PageDemanderDriver(target: PageDemanderDUT){
   
   def registerThreadTable(thread_id: Int, process_id: Int) = timescope {
     // Send write request
-    target.S_AXI_TT.aw.awaddr.poke((thread_id * 4).U)
-    target.S_AXI_TT.aw.awvalid.poke(true.B)
-    target.S_AXI_TT.aw.awready.expect(true.B)
+    target.S_AXIL_TT.aw.awaddr.poke((thread_id * 4).U)
+    target.S_AXIL_TT.aw.awvalid.poke(true.B)
+    target.S_AXIL_TT.aw.awready.expect(true.B)
     target.tk()
-    target.S_AXI_TT.aw.awvalid.poke(false.B)
+    target.S_AXIL_TT.aw.awvalid.poke(false.B)
     // Send write data
-    target.S_AXI_TT.w.wdata.poke(process_id.U)
-    target.S_AXI_TT.w.wvalid.poke(true.B)
+    target.S_AXIL_TT.w.wdata.poke(process_id.U)
+    target.S_AXIL_TT.w.wvalid.poke(true.B)
     // Wait for it ready.
-    target.S_AXI_TT.w.wready.expect(true.B)
+    target.S_AXIL_TT.w.wready.expect(true.B)
     target.tk()
     // Wait for write reply
-    target.S_AXI_TT.w.wvalid.poke(false.B)
-    target.S_AXI_TT.b.bvalid.expect(true.B)
-    target.S_AXI_TT.b.bready.poke(true.B)
+    target.S_AXIL_TT.w.wvalid.poke(false.B)
+    target.S_AXIL_TT.b.bvalid.expect(true.B)
+    target.S_AXIL_TT.b.bready.poke(true.B)
     target.tk()
   }
 

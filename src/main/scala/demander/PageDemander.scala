@@ -82,8 +82,8 @@ class PageDemander(
   // Thread table
   val u_tt = Module(new ThreadTable(param.threadNumber, ParameterConstants.process_id_width, 2, 2))
 
-  val S_AXI_TT = IO(u_tt.S_AXI.cloneType)
-  S_AXI_TT <> u_tt.S_AXI
+  val S_AXIL_TT = IO(Flipped(u_tt.S_AXI.cloneType))
+  S_AXIL_TT <> u_tt.S_AXI
 
   u_page_walker.tt_pid_i <> u_tt.pid_o(0)
   u_page_walker.tt_tid_o <> u_tt.tid_i(0)
@@ -235,7 +235,7 @@ class PageDemander(
   val u_qemu_mq = Module(new AXIControlledMessageQueue)
   val S_AXI_QEMU_MQ = IO(Flipped(u_qemu_mq.S_AXI.cloneType))
   u_qemu_mq.S_AXI <> S_AXI_QEMU_MQ
-  val S_AXIL_QEMU_MQ = IO(u_qemu_mq.S_AXIL.cloneType)
+  val S_AXIL_QEMU_MQ = IO(Flipped(u_qemu_mq.S_AXIL.cloneType))
   u_qemu_mq.S_AXIL <> S_AXIL_QEMU_MQ
   u_qemu_mq.fifo_i <> u_qme.o
   u_qmd.message_i.bits := u_qemu_mq.fifo_o.bits
