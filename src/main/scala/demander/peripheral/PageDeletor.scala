@@ -81,7 +81,7 @@ class PageDeletor(
   // sNotify
   // Port to send a starting message.
   val start_message_o = IO(Decoupled(new PageEvictNotification(QEMUMessagesType.sEvictNotify)))
-  start_message_o.bits.pte := item_r.entry
+  start_message_o.bits.item := item_r
   start_message_o.valid := state_r === sNotify
 
   // sFlush
@@ -169,7 +169,7 @@ class PageDeletor(
   // sSend
   // Port to send message to QEMU
   val done_message_o = IO(Decoupled(new PageEvictNotification(QEMUMessagesType.sEvictDone)))
-  done_message_o.bits.pte := item_r.entry
+  done_message_o.bits.item := item_r
   done_message_o.valid := state_r === sSend
 
   // Update logic of the state machine

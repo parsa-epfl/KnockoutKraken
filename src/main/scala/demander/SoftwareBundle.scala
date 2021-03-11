@@ -275,13 +275,13 @@ class PageFaultNotification extends MessageUnionSubtype(new QEMUTxMessage) {
 }
 
 class PageEvictNotification(message_type: UInt) extends MessageUnionSubtype(new QEMUTxMessage) {
-  val pte = new PTEntry
+  val item = new PageTableItem
 
-  def asVec(width: Int): Vec[UInt] = pte.asVec(width)
+  def asVec(width: Int): Vec[UInt] = item.asVec(width)
 
   def parseFromVec(f: Vec[UInt]): this.type = {
     val res = Wire(this.cloneType)
-    res.pte := pte.parseFromVec(f)
+    res.item := item.parseFromVec(f)
     return res.asInstanceOf[this.type]
   }
 

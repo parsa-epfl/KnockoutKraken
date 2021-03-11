@@ -106,7 +106,7 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
       // 4. send start message
       dut.expectQEMUMessage(
         5,
-        Seq(0x10000, 1, 0)
+        Seq(0xABC, 0x0, 0x10, 0x10000, 1, 0)
       )
 
       // 5. flush cache
