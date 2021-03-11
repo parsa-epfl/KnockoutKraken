@@ -19,8 +19,8 @@ class ARMFlexTop extends MultiIOModule {
 
   val u_pipeline = Module(new PipelineAxi)
 
-  val S_AXIL_TRANSPLANT = IO(Flipped(u_pipeline.transplantIO.ctl.cloneType))
-  S_AXIL_TRANSPLANT <> u_pipeline.transplantIO.ctl
+  // val S_AXIL_TRANSPLANT = IO(Flipped(u_pipeline.transplantIO.ctl.cloneType))
+  // S_AXIL_TRANSPLANT <> u_pipeline.transplantIO.ctl
 
   val u_inst_path = Module(new TLBPlusCache(
     memoryParameter,
@@ -70,14 +70,13 @@ class ARMFlexTop extends MultiIOModule {
 
   val u_pd = Module(new PageDemander(memoryParameter, 2, false))
   // ports of the page demander
-  val S_AXI_PAGE = IO(Flipped(u_pd.S_AXI_PAGE.cloneType))
-  u_pd.S_AXI_PAGE <> S_AXI_PAGE
-  val S_AXIL_TT = IO(u_pd.S_AXIL_TT.cloneType)
-  u_pd.S_AXIL_TT <> S_AXIL_TT
-  val S_AXIL_QEMU_MQ = IO(u_pd.S_AXIL_QEMU_MQ.cloneType)
-  S_AXIL_QEMU_MQ <> u_pd.S_AXIL_QEMU_MQ
-  val S_AXI_QEMU_MQ = IO(Flipped(u_pd.S_AXI_QEMU_MQ.cloneType))
-  u_pd.S_AXI_QEMU_MQ <> S_AXI_QEMU_MQ
+  val S_AXI = IO(Flipped(u_pd.S_AXI.cloneType))
+  u_pd.S_AXI <> S_AXI
+  
+  //val S_AXIL_TT = IO(u_pd.S_AXIL_TT.cloneType)
+  // u_pd.S_AXIL_TT <> S_AXIL_TT
+  // val S_AXIL_QEMU_MQ = IO(u_pd.S_AXIL_QEMU_MQ.cloneType)
+  // S_AXIL_QEMU_MQ <> u_pd.S_AXIL_QEMU_MQ
 
   // u_pd.dcache_flush_request_o
   u_pd.dcache_flush_request_o <> u_data_path.cache_flush_request_i
@@ -148,6 +147,17 @@ class ARMFlexTop extends MultiIOModule {
 
   u_axi_write.M_AXI.ar <> AXI4AR.stub(ParameterConstants.dram_addr_width)
   u_axi_write.M_AXI.r <> AXI4R.stub(ParameterConstants.dram_data_width)
+
+  val u_axil_inter = Module(new AXILInterconnector(
+    Seq(0x0000, 0x4000, 0x8000), Seq(0xC000, 0xC000, 0xC000), 32, 32
+  ))
+
+  val S_AXIL = IO(Flipped(u_axil_inter.S_AXIL.cloneType))
+  S_AXIL <> u_axil_inter.S_AXIL
+
+  u_axil_inter.M_AXIL(0) <> u_pipeline.transplantIO.ctl
+  u_axil_inter.M_AXIL(1) <> u_pd.S_AXIL_TT
+  u_axil_inter.M_AXIL(2) <> u_pd.S_AXIL_QEMU_MQ
 }
 
 

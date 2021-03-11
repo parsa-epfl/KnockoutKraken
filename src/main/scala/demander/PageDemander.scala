@@ -21,6 +21,7 @@ import armflex.cache.TLBTagPacket
 import armflex.util.AXIControlledMessageQueue
 import armflex.util.AXIReadMasterIF
 import armflex.util.AXIWriteMasterIF
+import armflex.util.AXIInterconnector
 
 
 /**
@@ -203,8 +204,8 @@ class PageDemander(
 
   // Page Buffer
   val u_page_buffer = Module(new PageBuffer())
-  val S_AXI_PAGE = IO(Flipped(u_page_buffer.S_AXI.cloneType))
-  u_page_buffer.S_AXI <> S_AXI_PAGE
+  // val S_AXI_PAGE = IO(Flipped(u_page_buffer.S_AXI.cloneType))
+  // u_page_buffer.S_AXI <> S_AXI_PAGE
   u_page_buffer.normal_read_request_i <> u_page_inserter.read_request_o
   u_page_buffer.normal_read_reply_o <> u_page_inserter.read_reply_i
   u_page_buffer.normal_write_request_i <> u_page_deleter.page_buffer_write_o
@@ -233,8 +234,8 @@ class PageDemander(
 
   // QEMU Message FIFO
   val u_qemu_mq = Module(new AXIControlledMessageQueue)
-  val S_AXI_QEMU_MQ = IO(Flipped(u_qemu_mq.S_AXI.cloneType))
-  u_qemu_mq.S_AXI <> S_AXI_QEMU_MQ
+  // val S_AXI_QEMU_MQ = IO(Flipped(u_qemu_mq.S_AXI.cloneType))
+  // u_qemu_mq.S_AXI <> S_AXI_QEMU_MQ
   val S_AXIL_QEMU_MQ = IO(Flipped(u_qemu_mq.S_AXIL.cloneType))
   u_qemu_mq.S_AXIL <> S_AXIL_QEMU_MQ
   u_qemu_mq.fifo_i <> u_qme.o
@@ -244,6 +245,19 @@ class PageDemander(
   // For interrupt
   val qemu_message_available_o = IO(Output(Bool()))
   qemu_message_available_o := u_qme.o.valid
+
+  // AXI Slave interconnector
+  val u_s_axi_int = Module(new AXIInterconnector(
+    Seq(0x0000, 0x8000), Seq(0x8000, 0x8000), 16, 512
+  ))
+
+  val S_AXI = IO(Flipped(u_s_axi_int.S_AXI.cloneType))
+  S_AXI <> u_s_axi_int.S_AXI
+
+  u_s_axi_int.M_AXI(0) <> u_page_buffer.S_AXI // 0x0000 - 0x8000: Page
+  u_s_axi_int.M_AXI(1) <> u_qemu_mq.S_AXI // 0x8000 - 0xF000: message
+  
+
 }
 
 object PageDemanderVerilogEmitter extends App{
