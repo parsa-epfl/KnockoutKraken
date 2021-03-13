@@ -152,24 +152,24 @@ class ARMFlexTopSimulator(
 object ARMFlexTopSimulatorVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
   import java.io._
-  val fr = new FileWriter(new File("test/genFiles/ArmflexTopSim/ARMFlexTop_SIM.v"))
+  val fr = new FileWriter(new File("regression/rtl/ARMFlexTop.v"))
   fr.write(c.emitVerilog(
     new ARMFlexTopSimulator(
       new PipelineParams(thidN = 32, pAddrW =  24),
       new MemoryHierarchyParams(thidN = 32, pAddrW = 24)
-      ), annotations = Seq(TargetDirAnnotation("test/genFiles/ArmflexTopSim"))))
+      ), annotations = Seq(TargetDirAnnotation("regression/rtl/"))))
   fr.close()
 }
 
 object ARMFlexTopVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
   import java.io._
-  val fr = new FileWriter(new File("test/genFiles/ArmflexTop/ARMFlexTop_AWS.v"))
+  val fr = new FileWriter(new File("regression/rtl/ARMFlexTop.v"))
   fr.write(c.emitVerilog(
     new ARMFlexTopSimulator(
       new PipelineParams(thidN = 32, pAddrW =  34),
       new MemoryHierarchyParams(thidN = 32, pAddrW = 34)
-    ), annotations = Seq(TargetDirAnnotation("test/genFiles/ArmflexTop"))))
+    ), annotations = Seq(TargetDirAnnotation("regression/rtl/"))))
   fr.close()
 }
 
