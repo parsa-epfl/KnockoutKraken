@@ -1,0 +1,14 @@
+.cache
+.metals
+.vscode
+build
+CMakeFiles
+KnockoutTestGenerator
+KnockoutSimulator
+.gitignore
+CMakeCache.txt
+test.fst
+test.fst.hier
+Makefile
+cmake_install.cmake
+rtl/
