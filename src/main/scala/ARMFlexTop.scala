@@ -68,7 +68,7 @@ class ARMFlexTop extends MultiIOModule {
   u_data_axi.cache_backend_reply_o <> u_data_path.cache_backend_reply_i
   u_data_axi.cache_backend_request_i <> u_data_path.cache_backend_request_o
 
-  val u_pd = Module(new PageDemander(memoryParameter, 2, false))
+  val u_pd = Module(new PageDemander(memoryParameter, 2))
   // ports of the page demander
   val S_AXI = IO(Flipped(u_pd.S_AXI.cloneType))
   u_pd.S_AXI <> S_AXI
