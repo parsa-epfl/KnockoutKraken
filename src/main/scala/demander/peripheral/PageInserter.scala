@@ -41,7 +41,7 @@ class PageInserter extends MultiIOModule {
   val read_done_r = RegInit(false.B)
 
   read_request_o.bits := addr_cnt_r
-  read_request_o.valid := !read_done_r
+  read_request_o.valid := !read_done_r && state_r === sBusy && M_DMA_W.data.ready // not done, busy, and DMA is ready to accept data.
 
   switch(state_r){
     is(sIdle){
@@ -49,7 +49,7 @@ class PageInserter extends MultiIOModule {
       addr_cnt_r := 64.U // TODO: Make the initial address as an external parameter
     }
     is(sBusy){
-      when(read_request_o.fire() && M_DMA_W.data.ready){
+      when(read_request_o.fire()){
         addr_cnt_r := Mux(read_done_r, addr_cnt_r, addr_cnt_r + 1.U)
         read_done_r := addr_cnt_r === 127.U
       }

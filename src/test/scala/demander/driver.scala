@@ -46,7 +46,7 @@ class PageSetConverter extends MultiIOModule {
 class PageDemanderDUT(
   param: MemorySystemParameter
 ) extends MultiIOModule {
-  val u_page_demander = Module(new PageDemander(param, 2, false))
+  val u_page_demander = Module(new PageDemander(param, 2))
   // AXI Bus for thread table
   // val S_AXIL_TT = IO(Flipped(u_page_demander.S_AXIL_TT.cloneType))
   // S_AXIL_TT <> u_page_demander.S_AXIL_TT

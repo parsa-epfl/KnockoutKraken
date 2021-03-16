@@ -53,7 +53,7 @@ class AXIControlledMessageQueue extends MultiIOModule {
 
   u_axi_trans_converter.read_reply_i.bits := fifo_i.bits
   u_axi_trans_converter.read_reply_i.valid := u_axi_trans_converter.read_request_o.valid && fifo_i.valid
-  u_axi_trans_converter.read_request_o.ready := fifo_i.valid 
+  u_axi_trans_converter.read_request_o.ready := fifo_i.valid && u_axi_trans_converter.read_reply_i.ready
   fifo_i.ready := u_axi_trans_converter.read_reply_i.fire()
 
   fifo_o.bits := u_axi_trans_converter.write_request_o.bits.data
