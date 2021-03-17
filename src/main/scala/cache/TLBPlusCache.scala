@@ -17,6 +17,7 @@ case class MemorySystemParameter(
   pageSize:       Int = 4096, // page size
   threadNumber:   Int = 8,
   tlbSetNumber:   Int = 16,
+  processIDWidth: Int = 15,
   tlbWayNumber:   Int = 4,
   cacheSetNumber: Int = 1024,
   cacheWayNumber: Int = 4,
@@ -31,6 +32,8 @@ case class MemorySystemParameter(
     return new TLBParameter(
       vPageNumberWidth(),
       pPageNumberWidth(),
+      2,
+      processIDWidth,
       threadNumber,
       tlbSetNumber,
       tlbWayNumber,
@@ -384,7 +387,7 @@ object CacheBackendToAXIInterface {
 
   class CacheBackendAXIAdaptors(param: MemorySystemParameter) extends MultiIOModule {
     assert(param.cacheBlockSize == 512, "Only 512bit AXI transactions is supported.")
-    assert(param.pAddressWidth == 36, "Only 36bit memory addres is supported.")
+    //assert(param.pAddressWidth == 36, "Only 36bit memory addres is supported.")
 
     val cache_backend_request_i = IO(Flipped(Decoupled(new MergedBackendRequestPacket(param.toCacheParameter()))))
 

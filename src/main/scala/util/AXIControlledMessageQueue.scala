@@ -5,7 +5,6 @@ import chisel3.util._
 import antmicro.Bus.AXI4Lite
 
 import antmicro.Bus._
-import armflex.demander.software_bundle.ParameterConstants
 
 class AXIControlledMessageQueue extends MultiIOModule {
   val fifo_i = IO(Flipped(Decoupled(UInt(512.W))))

@@ -19,21 +19,20 @@ import firrtl.options.TargetDirAnnotation
 
 import org.scalatest.FreeSpec
 import armflex.cache.MemorySystemParameter
-import armflex.demander.software_bundle.ParameterConstants
 
-class FreeListDUT extends MultiIOModule {
-  val u_fl = Module(new FreeList)
+class FreeListDUT(param: PageDemanderParameter) extends MultiIOModule {
+  val u_fl = Module(new FreeList(param))
   val u_axi_read = Module(new AXIReadMultiplexer(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width,
+    param.dramAddrWidth,
+    param.dramDataWidth,
     1
   ))
 
   u_fl.M_DMA_R <> u_axi_read.S_IF(0)
 
   val u_axi_write = Module(new AXIWriteMultiplexer(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width,
+    param.dramAddrWidth,
+    param.dramDataWidth,
     1
   ))
 
@@ -49,21 +48,21 @@ class FreeListDUT extends MultiIOModule {
   u_fl.empty_o <> empty_o
 
   val M_AXI = IO(new AXI4(
-    ParameterConstants.dram_addr_width, 
-    ParameterConstants.dram_data_width
+    param.dramAddrWidth, 
+    param.dramDataWidth
   ))
 
   M_AXI.ar <> u_axi_read.M_AXI.ar
   M_AXI.r <> u_axi_read.M_AXI.r
-  u_axi_read.M_AXI.aw <> AXI4AW.stub(ParameterConstants.dram_addr_width)
-  u_axi_read.M_AXI.w <> AXI4W.stub(ParameterConstants.dram_data_width)
+  u_axi_read.M_AXI.aw <> AXI4AW.stub(param.dramAddrWidth)
+  u_axi_read.M_AXI.w <> AXI4W.stub(param.dramDataWidth)
   u_axi_read.M_AXI.b <> AXI4B.stub()
 
   M_AXI.aw <> u_axi_write.M_AXI.aw
   M_AXI.w <> u_axi_write.M_AXI.w
   M_AXI.b <> u_axi_write.M_AXI.b
-  u_axi_write.M_AXI.ar <> AXI4AR.stub(ParameterConstants.dram_addr_width)
-  u_axi_write.M_AXI.r <> AXI4R.stub(ParameterConstants.dram_data_width)
+  u_axi_write.M_AXI.ar <> AXI4AR.stub(param.dramAddrWidth)
+  u_axi_write.M_AXI.r <> AXI4R.stub(param.dramDataWidth)
 
 }
 
@@ -79,7 +78,7 @@ class FreeListTest extends FreeSpec with ChiselScalatestTester {
 
   "Fetch" in {
     val anno = Seq(TargetDirAnnotation("test/freelist/fetch"), VerilatorBackendAnnotation, WriteVcdAnnotation)
-    test(new FreeListDUT).withAnnotations(anno){ dut =>
+    test(new FreeListDUT(new PageDemanderParameter())).withAnnotations(anno){ dut =>
       // extract 64 elements
       val elementQueue = new Queue[BigInt]()
       dut.clock.step(5)

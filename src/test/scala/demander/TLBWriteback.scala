@@ -20,7 +20,7 @@ class TLBWritebackTester extends FreeSpec with ChiselScalatestTester {
   import PageDemanderDriver._
   "Normal" in {
     val anno = Seq(TargetDirAnnotation("test/demander/tlbwriteback/normal"), VerilatorBackendAnnotation, WriteVcdAnnotation)
-    test(new PageDemanderDUT(new MemorySystemParameter())).withAnnotations(anno){ dut =>
+    test(new PageDemanderDUT(new PageDemanderParameter())).withAnnotations(anno){ dut =>
       // apply a miss request
       // Set the thread table.
       dut.registerThreadTable(0, 10)

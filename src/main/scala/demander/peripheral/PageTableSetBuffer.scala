@@ -7,6 +7,7 @@ import armflex.demander.software_bundle
 
 import armflex.cache.PseudoTreeLRUCore
 import armflex.demander.software_bundle.PageTableItem
+import armflex.cache.TLBParameter
 
 
 // The purpose of this module is:
@@ -21,34 +22,37 @@ import armflex.demander.software_bundle.PageTableItem
  * @note the size of this bundle is 96 * entryNumber
  */ 
 class PageTableSetPacket(
+  param: TLBParameter,
   val entryNumber: Int = 16
 ) extends Bundle {
-  val tags = Vec(entryNumber, new software_bundle.PTTag)
-  val ptes = Vec(entryNumber, new software_bundle.PTEntry)
+  val tags = Vec(entryNumber, new software_bundle.PTTag(param))
+  val ptes = Vec(entryNumber, new software_bundle.PTEntry(param))
   
   val valids = UInt(entryNumber.W)
   val lru_bits = UInt(entryNumber.W)
 
-  override def cloneType: this.type = new PageTableSetPacket(entryNumber).asInstanceOf[this.type]
+  override def cloneType: this.type = new PageTableSetPacket(param, entryNumber).asInstanceOf[this.type]
 } 
 
 class PageSetBufferWriteRequestPacket(
+  param: TLBParameter,
   entryNumber: Int = 16
 ) extends Bundle {
-  val item = new PageTableItem
+  val item = new PageTableItem(param)
   val index = UInt(log2Ceil(entryNumber).W)
 
-  override def cloneType: this.type = new PageSetBufferWriteRequestPacket(entryNumber).asInstanceOf[this.type]
+  override def cloneType: this.type = new PageSetBufferWriteRequestPacket(param, entryNumber).asInstanceOf[this.type]
 }
 
 class PageSetBufferLookupReplyPacket(
+  param: TLBParameter,
   entryNumber: Int = 16
 ) extends Bundle {
-  val item = new PageTableItem
+  val item = new PageTableItem(param)
   val index = UInt(log2Ceil(entryNumber).W)
   val hit_v = Bool()
 
-  override def cloneType: this.type = new PageSetBufferLookupReplyPacket(entryNumber).asInstanceOf[this.type]
+  override def cloneType: this.type = new PageSetBufferLookupReplyPacket(param, entryNumber).asInstanceOf[this.type]
 }
 
 /**
@@ -57,6 +61,7 @@ class PageSetBufferLookupReplyPacket(
  * @param t the Chisel type of the PT Set
  */ 
 class PageTableSetBuffer(
+  param: TLBParameter,
   t: PageTableSetPacket,
 ) extends MultiIOModule {
   val dma_data_i = IO(Flipped(Decoupled(UInt(512.W))))
@@ -94,12 +99,12 @@ class PageTableSetBuffer(
   val u_lru_core = Module(new PseudoTreeLRUCore(t.entryNumber))
   u_lru_core.io.encoding_i := pt_set_r.lru_bits(t.entryNumber-2, 0)
   val lru_index = u_lru_core.io.lru_o
-  val lru_item = Wire(new software_bundle.PageTableItem)
+  val lru_item = Wire(new software_bundle.PageTableItem(param))
   lru_item.entry := pt_set_r.ptes(lru_index)
   lru_item.tag := pt_set_r.tags(lru_index)
 
   class get_lru_element_response_t extends Bundle {
-    val item = new software_bundle.PageTableItem
+    val item = new software_bundle.PageTableItem(param)
     val lru_v = Bool()
     val index = UInt(log2Ceil(t.entryNumber).W)
     // That lru_v is true means the item is valid. 
@@ -115,7 +120,7 @@ class PageTableSetBuffer(
   val updated_pt_set = WireInit(pt_set_r)
 
   // val lru_element_i = IO(Flipped(Decoupled(new software_bundle.PageTableItem)))
-  val write_request_i = IO(Flipped(Decoupled(new PageSetBufferWriteRequestPacket(t.entryNumber))))
+  val write_request_i = IO(Flipped(Decoupled(new PageSetBufferWriteRequestPacket(param, t.entryNumber))))
 
   updated_pt_set.ptes(write_request_i.bits.index) := write_request_i.bits.item.entry
   updated_pt_set.tags(write_request_i.bits.index) := write_request_i.bits.item.tag
@@ -124,7 +129,7 @@ class PageTableSetBuffer(
   updated_pt_set.lru_bits := u_lru_core.io.encoding_o
   updated_pt_set.valids := Cat(0.U(1.W), UIntToOH(write_request_i.bits.index))
 
-  val lookup_request_i = IO(Input(new software_bundle.PTTag))
+  val lookup_request_i = IO(Input(new software_bundle.PTTag(param)))
   val hit_vector = pt_set_r.tags.zip(pt_set_r.valids.asBools()).map({
     case (tag, valid) => 
     tag.process_id === lookup_request_i.process_id && 
@@ -136,7 +141,7 @@ class PageTableSetBuffer(
   assert(PopCount(hit_vector) === 1.U || PopCount(hit_vector) === 0.U, "There should be only one hit at most!!!")
 
   val hit_index = OHToUInt(hit_vector)
-  val lookup_reply_o = IO(Output(new PageSetBufferLookupReplyPacket))
+  val lookup_reply_o = IO(Output(new PageSetBufferLookupReplyPacket(param)))
   lookup_reply_o.hit_v := hit_v
   lookup_reply_o.item.entry := pt_set_r.ptes(hit_index)
   lookup_reply_o.item.tag := lookup_request_i
@@ -174,5 +179,5 @@ class PageTableSetBuffer(
 
 object PageTableSetBufferVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
-  println(c.emitVerilog(new PageTableSetBuffer(new PageTableSetPacket())))
+  println(c.emitVerilog(new PageTableSetBuffer(new TLBParameter, new PageTableSetPacket(new TLBParameter))))
 }

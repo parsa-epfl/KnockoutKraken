@@ -5,17 +5,16 @@ import peripheral._
 import chisel3._
 import chisel3.util._
 import armflex.cache._
-import armflex.demander.software_bundle.ParameterConstants
 import armflex.demander.software_bundle.PTEntry
 import armflex.util._
 
 /**
  * A hardware page walker. 
  * 
- * @param param the parameter of the TLB. 
+ * @param param the parameter of the MMU/Page demander. 
  */ 
 class PageWalker(
-  param: TLBParameter,
+  param: PageDemanderParameter,
   tlbNumber: Int = 2
 ) extends MultiIOModule {
   import software_bundle.TLBMissRequestMessage
@@ -25,37 +24,40 @@ class PageWalker(
 
   // IO of TLB miss.
   val tlb_miss_req_i = IO(Vec(
-    tlbNumber, Flipped(Decoupled(new TLBMissRequestMessage(param)))
+    tlbNumber, Flipped(Decoupled(new TLBMissRequestMessage(param.mem.toTLBParameter())))
   ))
 
-  val u_miss_arb = Module(new RRArbiter(new TLBMissRequestMessage(param), tlbNumber))
+  val u_miss_arb = Module(new RRArbiter(new TLBMissRequestMessage(param.mem.toTLBParameter()), tlbNumber))
   u_miss_arb.io.in <> tlb_miss_req_i
 
   // val selected_miss_req = u_miss_arb.io.out
 
   // lookup process id. Converting Thread ID to Process ID. TT means thread table.
-  val tt_tid_o = IO(Output(UInt(param.threadIDWidth().W)))
+  val tt_tid_o = IO(Output(UInt(param.mem.toTLBParameter().threadIDWidth().W)))
   tt_tid_o := u_miss_arb.io.out.bits.tag.thread_id
-  val tt_pid_i = IO(Flipped(Valid((UInt(ParameterConstants.process_id_width.W)))))
+  val tt_pid_i = IO(Flipped(Valid((UInt(param.mem.processIDWidth.W)))))
 
   // AXI DMA Read Channels
   val M_DMA_R = IO(new AXIReadMasterIF(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width
+    param.dramAddrWidth,
+    param.dramDataWidth
   ))
 
   // The Page table set buffer.
-  val u_buffer = Module(new PageTableSetBuffer(new PageTableSetPacket()))
+  val u_buffer = Module(new PageTableSetBuffer(
+    param.mem.toTLBParameter, 
+    new PageTableSetPacket(param.mem.toTLBParameter)
+  ))
   u_buffer.dma_data_i <> M_DMA_R.data
   u_buffer.dma_data_o.ready := false.B
   // u_buffer.lru_element_i.valid := false.B
   // u_buffer.lru_element_i.bits := DontCare
 
   // Reply to TLB
-  val tlb_backend_reply_o = IO(Vec(tlbNumber, Decoupled(new TLBBackendReplyPacket(param))))
+  val tlb_backend_reply_o = IO(Vec(tlbNumber, Decoupled(new TLBBackendReplyPacket(param.mem.toTLBParameter()))))
 
   // Message sent to QEMU
-  val page_fault_req_o = IO(Decoupled(new PageFaultNotification))
+  val page_fault_req_o = IO(Decoupled(new PageFaultNotification(param.mem.toTLBParameter())))
 
   // The state machine.
   val sIdle :: sMove :: sLookup :: sReply :: Nil = Enum(4)
@@ -65,10 +67,10 @@ class PageWalker(
 
   // The request packet
   class request_packet_t extends Bundle {
-    val vpn = UInt(param.vPageWidth.W)
-    val process_id = UInt(ParameterConstants.process_id_width.W)
-    val thread_id = UInt(param.threadIDWidth().W)
-    val permission = UInt(ParameterConstants.permission_bit_width.W)
+    val vpn = UInt(param.mem.vPageNumberWidth.W)
+    val process_id = UInt(param.pidWidth.W)
+    val thread_id = UInt(param.mem.toTLBParameter().threadIDWidth().W)
+    val permission = UInt(param.mem.toTLBParameter().permissionWidth.W)
     val source = UInt(log2Ceil(tlbNumber).W)
   }
 
@@ -81,7 +83,7 @@ class PageWalker(
     request_r.source := u_miss_arb.io.chosen
   }
 
-  val pte_r = Reg(Valid(new PTEntry))
+  val pte_r = Reg(Valid(new PTEntry(param.mem.toTLBParameter())))
   when(state_r === sLookup){
     pte_r.bits := u_buffer.lookup_reply_o.item.entry
     pte_r.valid := u_buffer.lookup_reply_o.hit_v
@@ -96,7 +98,7 @@ class PageWalker(
   
 
   // IO assignment of AXI Read DMA
-  M_DMA_R.req.bits.address := ParameterConstants.getPageTableAddressByVPN(request_r.vpn)
+  M_DMA_R.req.bits.address := param.getPageTableAddressByVPN(request_r.vpn)
   M_DMA_R.req.bits.length := u_buffer.requestPacketNumber.U
   M_DMA_R.req.valid := state_r === sMove
 
@@ -140,6 +142,6 @@ class PageWalker(
 
 object PageWalkerVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
-  println(c.emitVerilog(new PageWalker(new TLBParameter)))
+  println(c.emitVerilog(new PageWalker(new PageDemanderParameter())))
 }
 

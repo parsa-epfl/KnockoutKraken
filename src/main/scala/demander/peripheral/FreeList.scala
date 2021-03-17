@@ -4,19 +4,22 @@ import chisel3._
 import chisel3.util._
 import antmicro.Frontend._
 import antmicro.Bus._
-import armflex.demander.software_bundle.ParameterConstants
 import armflex.util._
+import armflex.demander.PageDemanderParameter
+import armflex.cache.MemorySystemParameter
 
 /**
  * This module basically is a buffer of a stack located in DRAM.
  * 
+ * @param param the parameter of the page demander / MMU
  */ 
 class FreeList(
+  param: PageDemanderParameter
 ) extends MultiIOModule {
   // each entry is 32 bit
   // 512 bit for each chunk -> 16 element.
   val chunkSize = 16
-  val entryNumberlog2 = ParameterConstants.dram_addr_width - 12
+  val entryNumberlog2 = param.mem.pPageNumberWidth()
   val entryNumber = 1 << (entryNumberlog2)
   assert(entryNumber % chunkSize == 0)
   val chunkNumber = entryNumber / chunkSize
@@ -55,14 +58,14 @@ class FreeList(
 
   // AXI DMA Read channel
   val M_DMA_R = IO(new AXIReadMasterIF(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width
+    param.dramAddrWidth,
+    param.dramDataWidth
   ))
 
   // AXI DMA Write channel
   val M_DMA_W = IO(new AXIWriteMasterIF(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width
+    param.dramAddrWidth,
+    param.dramDataWidth
   ))
 
   M_DMA_R.req.bits.address := Cat(dram_read_ptr_r + 0x300000.U, 0.U(6.W))
@@ -154,5 +157,5 @@ class FreeList(
 
 object FreeListVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
-  println(c.emitVerilog(new FreeList()))
+  println(c.emitVerilog(new FreeList(new PageDemanderParameter())))
 }

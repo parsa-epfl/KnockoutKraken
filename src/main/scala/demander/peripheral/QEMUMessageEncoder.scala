@@ -4,14 +4,22 @@ import chisel3._
 import chisel3.util._
 
 import armflex.demander.software_bundle._
+import armflex.cache.TLBParameter
 
 class QEMUMessageEncoder(
+  param: TLBParameter,
   fifoDepth: Int = 2
 ) extends MultiIOModule {
-  val evict_notify_req_i = IO(Flipped(Decoupled(new PageEvictNotification(QEMUMessagesType.sEvictNotify))))
-  val evict_done_req_i = IO(Flipped(Decoupled(new PageEvictNotification(QEMUMessagesType.sEvictDone))))
+  val evict_notify_req_i = IO(Flipped(Decoupled(new PageEvictNotification(
+    QEMUMessagesType.sEvictNotify,
+    param
+  ))))
+  val evict_done_req_i = IO(Flipped(Decoupled(new PageEvictNotification(
+    QEMUMessagesType.sEvictDone,
+    param
+  ))))
 
-  val page_fault_req_i = IO(Flipped(Decoupled(new PageFaultNotification)))
+  val page_fault_req_i = IO(Flipped(Decoupled(new PageFaultNotification(param))))
 
   val o = IO(Decoupled(UInt(512.W)))
 
@@ -45,5 +53,5 @@ class QEMUMessageEncoder(
 
 object QEMUMessageEncoderVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
-  println(c.emitVerilog(new QEMUMessageEncoder))
+  println(c.emitVerilog(new QEMUMessageEncoder(new TLBParameter)))
 }

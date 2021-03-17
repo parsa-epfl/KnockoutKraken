@@ -5,12 +5,13 @@ import chisel3.util._
 
 import antmicro.Bus._
 import antmicro.Frontend.AXI4Writer
-import armflex.demander.software_bundle.ParameterConstants
+import armflex.demander.PageDemanderParameter
+import armflex.cache.MemorySystemParameter
 
-class DRAMResster extends MultiIOModule {
+class DRAMResster(param: PageDemanderParameter) extends MultiIOModule {
   val M_AXI = IO(new AXI4(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width
+    param.dramAddrWidth,
+    param.dramDataWidth
   ))
   // When the restter is done.
   val ready_o = IO(Output(Bool()))
@@ -19,13 +20,13 @@ class DRAMResster extends MultiIOModule {
   ready_o := state_r === sIdle
 
   // TODO: Replace the constant with a function to FPGA DRAM Size.
-  val endAddress = 1 << (ParameterConstants.dram_addr_width - 12 + 4)
+  val endAddress = 1 << (param.dramAddrWidth - 12 + 4)
   val roundNumber = endAddress / (64 * 256)
   val round_cnt_r = RegInit(0.U(log2Ceil(roundNumber).W))
 
   val u_axi_write = Module(new AXI4Writer(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width
+    param.dramAddrWidth,
+    param.dramDataWidth
   ))
   u_axi_write.io.bus <> M_AXI
   u_axi_write.io.dataIn.bits := 0.U
@@ -46,6 +47,6 @@ class DRAMResster extends MultiIOModule {
 
 object DRAMResetterVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
-  println(c.emitVerilog(new DRAMResster()))
+  println(c.emitVerilog(new DRAMResster(new PageDemanderParameter())))
 }
 

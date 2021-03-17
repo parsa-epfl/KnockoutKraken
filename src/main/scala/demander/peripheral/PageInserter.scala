@@ -4,8 +4,9 @@ import chisel3._
 import chisel3.util._
 
 import armflex.demander.software_bundle
-import armflex.demander.software_bundle.ParameterConstants
 import armflex.util._
+import armflex.demander.PageDemanderParameter
+import armflex.cache.MemorySystemParameter
 
 
 /**
@@ -13,12 +14,14 @@ import armflex.util._
  * 
  * implementing function: insertPageFromQEMU
  */ 
-class PageInserter extends MultiIOModule {  
+class PageInserter(
+  param: PageDemanderParameter
+) extends MultiIOModule {  
   val req_i = IO(Flipped(Decoupled(UInt(
-    ParameterConstants.ppn_width.W
+    param.mem.pPageNumberWidth.W
   ))))
 
-  val ppn_r = RegInit(0.U(ParameterConstants.ppn_width.W))
+  val ppn_r = RegInit(0.U(param.mem.pPageNumberWidth.W))
   when(req_i.fire()){
     ppn_r := req_i.bits
   }
@@ -27,8 +30,8 @@ class PageInserter extends MultiIOModule {
   val state_r = RegInit(sIdle)
 
   val M_DMA_W = IO(new AXIWriteMasterIF(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width
+    param.dramAddrWidth,
+    param.dramDataWidth
   ))
 
   M_DMA_W.req.bits.address := Cat(ppn_r, Fill(12, 0.U(1.W)))
@@ -56,7 +59,7 @@ class PageInserter extends MultiIOModule {
     }
   }
   // It's possible that the read result has the back pressure.
-  val read_reply_i = IO(Flipped(Decoupled(UInt(ParameterConstants.dram_data_width.W))))
+  val read_reply_i = IO(Flipped(Decoupled(UInt(param.dramDataWidth.W))))
   M_DMA_W.data <> read_reply_i
 
   when(req_i.fire()){
@@ -72,5 +75,5 @@ class PageInserter extends MultiIOModule {
 
 object PageInserterVerilogEmitter extends App {
   val c = chisel3.stage.ChiselStage
-  println(c.emitVerilog(new PageInserter()))
+  println(c.emitVerilog(new PageInserter(new PageDemanderParameter())))
 }

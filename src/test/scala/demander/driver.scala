@@ -9,8 +9,8 @@ import armflex.cache.MemorySystemParameter
 import armflex.util._
 
 import antmicro.Bus._
-import armflex.demander.software_bundle.ParameterConstants
 import armflex.demander.peripheral.PageTableSetPacket
+import armflex.cache.TLBParameter
 
 object PageDemanderTestHelper {
 
@@ -19,14 +19,14 @@ object PageDemanderTestHelper {
  * This helper will convert a pageset packet to three 512bits raw data.
  * 
  */
-class PageSetConverter extends MultiIOModule {
+class PageSetConverter(param: TLBParameter) extends MultiIOModule {
   import peripheral.PageTableSetPacket
-  val pageset_packet_i = IO(Input(new PageTableSetPacket()))
+  val pageset_packet_i = IO(Input(new PageTableSetPacket(param)))
   val raw_o = IO(Output(Vec(3, UInt(512.W))))
   raw_o := VecInit(pageset_packet_i.asUInt().asBools().grouped(512).map(VecInit(_).asUInt()).toSeq)
   val raw_i = IO(Input(Vec(3, UInt(512.W))))
-  val pageset_packet_o = IO(Output(new PageTableSetPacket()))
-  pageset_packet_o := raw_i.asUInt().asTypeOf(new PageTableSetPacket())
+  val pageset_packet_o = IO(Output(new PageTableSetPacket(param)))
+  pageset_packet_o := raw_i.asUInt().asTypeOf(new PageTableSetPacket(param))
 }
 
 
@@ -44,7 +44,7 @@ class PageSetConverter extends MultiIOModule {
  * 
  */ 
 class PageDemanderDUT(
-  param: MemorySystemParameter
+  param: PageDemanderParameter
 ) extends MultiIOModule {
   val u_page_demander = Module(new PageDemander(param, 2))
   // AXI Bus for thread table
@@ -103,13 +103,13 @@ class PageDemanderDUT(
   // S_AXIL_QEMU_MQ <> u_page_demander.S_AXIL_QEMU_MQ
 
   val M_AXI = IO(new AXI4(
-    ParameterConstants.dram_addr_width, 
-    ParameterConstants.dram_data_width
+    param.dramAddrWidth, 
+    param.dramDataWidth
   ))
 
   val u_axi_read = Module(new AXIReadMultiplexer(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width,
+    param.dramAddrWidth,
+    param.dramDataWidth,
     6
   ))
 
@@ -117,13 +117,13 @@ class PageDemanderDUT(
 
   M_AXI.ar <> u_axi_read.M_AXI.ar
   M_AXI.r <> u_axi_read.M_AXI.r
-  u_axi_read.M_AXI.aw <> AXI4AW.stub(ParameterConstants.dram_addr_width)
-  u_axi_read.M_AXI.w <> AXI4W.stub(ParameterConstants.dram_data_width)
+  u_axi_read.M_AXI.aw <> AXI4AW.stub(param.dramAddrWidth)
+  u_axi_read.M_AXI.w <> AXI4W.stub(param.dramDataWidth)
   u_axi_read.M_AXI.b <> AXI4B.stub()
 
   val u_axi_write = Module(new AXIWriteMultiplexer(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width,
+    param.dramAddrWidth,
+    param.dramDataWidth,
     4
   ))
 
@@ -133,8 +133,8 @@ class PageDemanderDUT(
   M_AXI.w <> u_axi_write.M_AXI.w
   M_AXI.b <> u_axi_write.M_AXI.b
 
-  u_axi_write.M_AXI.ar <> AXI4AR.stub(ParameterConstants.dram_addr_width)
-  u_axi_write.M_AXI.r <> AXI4R.stub(ParameterConstants.dram_data_width)
+  u_axi_write.M_AXI.ar <> AXI4AR.stub(param.dramAddrWidth)
+  u_axi_write.M_AXI.r <> AXI4R.stub(param.dramDataWidth)
 
   val u_axil_inter = Module(new AXILInterconnector(
     Seq(0x4000, 0x8000), Seq(0xC000, 0xC000), 32, 32
@@ -147,13 +147,13 @@ class PageDemanderDUT(
   u_axil_inter.M_AXIL(1) <> u_page_demander.S_AXIL_QEMU_MQ
 
   // Helper 1: the page set converter
-  val u_helper_page_set_converter = Module(new PageDemanderTestHelper.PageSetConverter)
+  val u_helper_page_set_converter = Module(new PageDemanderTestHelper.PageSetConverter(param.mem.toTLBParameter()))
   val pageset_packet_i = IO(Input(u_helper_page_set_converter.pageset_packet_i.cloneType))
   pageset_packet_i <> u_helper_page_set_converter.pageset_packet_i
   val pageset_converter_raw_o = IO(Output(u_helper_page_set_converter.raw_o.cloneType))
   pageset_converter_raw_o <> u_helper_page_set_converter.raw_o
 
-  val pageset_packet_o = IO(Output(new PageTableSetPacket()))
+  val pageset_packet_o = IO(Output(new PageTableSetPacket(param.mem.toTLBParameter())))
   pageset_packet_o <> u_helper_page_set_converter.pageset_packet_o
   val pageset_converter_raw_i = IO(Input(Vec(3, UInt(512.W))))
   pageset_converter_raw_i <> u_helper_page_set_converter.raw_i

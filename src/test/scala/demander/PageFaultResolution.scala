@@ -21,7 +21,7 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
   "No synonym" in {
     import PageDemanderDriver._
     val anno = Seq(TargetDirAnnotation("test/demander/pagefault_resolution/no_synonym"), VerilatorBackendAnnotation, WriteVcdAnnotation)
-    test(new PageDemanderDUT(new MemorySystemParameter())).withAnnotations(anno){ dut=>
+    test(new PageDemanderDUT(new PageDemanderParameter())).withAnnotations(anno){ dut=>
       // send Page
       dut.registerThreadTable(0, 0x10)
       dut.movePageIn(0x01234567)
@@ -78,7 +78,7 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
   "Trigger Page Eviction" in {
     import PageDemanderDriver._
     val anno = Seq(TargetDirAnnotation("test/demander/pagefault_resolution/trigger_page_eviction"), VerilatorBackendAnnotation, WriteVcdAnnotation)
-    test(new PageDemanderDUT(new MemorySystemParameter())).withAnnotations(anno){ dut=>
+    test(new PageDemanderDUT(new PageDemanderParameter())).withAnnotations(anno){ dut=>
       // send Page
       dut.registerThreadTable(0, 0x10)
       dut.movePageIn(0x01234567)
@@ -206,7 +206,7 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
   "With Synonym" in {
     import PageDemanderDriver._
     val anno = Seq(TargetDirAnnotation("test/demander/pagefault_resolution/with_synonym"), VerilatorBackendAnnotation, WriteVcdAnnotation)
-    test(new PageDemanderDUT(new MemorySystemParameter())).withAnnotations(anno){ dut=>
+    test(new PageDemanderDUT(new PageDemanderParameter())).withAnnotations(anno){ dut=>
       dut.registerThreadTable(0, 0x10)
       dut.registerThreadTable(1, 0xEF)
       dut.sendPageFaultResponse(

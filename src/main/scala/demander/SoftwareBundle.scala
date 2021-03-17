@@ -3,6 +3,7 @@ package armflex.demander.software_bundle
 import chisel3._
 import chisel3.util._
 import armflex.cache._
+import armflex.demander._
 import armflex.demander.peripheral.TLBMessageConverter
 
 abstract class SoftwareControlledBundle extends Bundle {
@@ -15,36 +16,36 @@ abstract class SoftwareControlledBundle extends Bundle {
  */ 
 
 // TODO: Make it not global, and combined with MemorySystemParameter.
-object ParameterConstants {
-  val vpn_width = 52
-  val ppn_width = dram_addr_width - 12
-  val process_id_width = 15
-  val permission_bit_width = 2
+// object ParameterConstants {
+//   val dramAddrWidth = 24
+//   val dramDataWidth = 512
 
-  val dram_addr_width = 36
-  val dram_data_width = 512
+//   val vpn_width = 52
+//   val ppn_width = dramAddrWidth - 12
+//   val process_id_width = 15
+//   val permission_bit_width = 2
 
-  def getPageTableAddressByVPN(vpn: UInt) = {
-    // val res = Wire()
-    // TODO: Move this function to Page Table Buffer.
-    val pageset_number = vpn(23, 4)
-    Cat(pageset_number * 3.U(2.W), 0.U(6.W))
-  }
-}
+//   def getPageTableAddressByVPN(vpn: UInt) = {
+//     // val res = Wire()
+//     // TODO: Move this function to Page Table Buffer.
+//     val pageset_number = vpn(23, 4)
+//     Cat(pageset_number * 3.U(2.W), 0.U(6.W))
+//   }
+// }
 
 class TLBTag(param: TLBParameter) extends TLBTagPacket(param) {
   
 }
 
-class PTTag extends SoftwareControlledBundle {
-  val vpn = UInt(ParameterConstants.vpn_width.W) // 52
-  val process_id = UInt(ParameterConstants.process_id_width.W) // 16
+class PTTag(param: TLBParameter) extends SoftwareControlledBundle {
+  val vpn = UInt(param.vPageWidth.W) // 52
+  val process_id = UInt(param.pidWidth.W) // 16
 
   def asVec(width: Int): Vec[UInt] = {
     assert(width == 32)
     return VecInit(Seq(
       vpn(31, 0),
-      vpn(ParameterConstants.vpn_width-1, 32),
+      vpn(param.vPageWidth-1, 32),
       process_id
     ))
   }
@@ -55,12 +56,16 @@ class PTTag extends SoftwareControlledBundle {
     res.process_id := f(2)
     return res.asInstanceOf[this.type]
   }
+
+  override def cloneType: this.type = {
+    return new PTTag(param).asInstanceOf[this.type]
+  }
 }
 
 // FIXME: Make it compatible with TLBEntryPacket
-class PTEntry extends SoftwareControlledBundle {
-  val ppn = UInt(ParameterConstants.ppn_width.W) // 24
-  val permission = UInt(ParameterConstants.permission_bit_width.W) // 2
+class PTEntry(param: TLBParameter) extends SoftwareControlledBundle {
+  val ppn = UInt(param.pPageWidth.W) // 24
+  val permission = UInt(param.permissionWidth.W) // 2
   val modified = Bool() // 1
 
   def asVec(width: Int): Vec[UInt] = {
@@ -79,11 +84,17 @@ class PTEntry extends SoftwareControlledBundle {
     res.modified := f(2)
     return res.asInstanceOf[this.type]
   }
+
+  override def cloneType: this.type = {
+    return new PTEntry(param).asInstanceOf[this.type]
+  }
 }
 
-class PageTableItem extends SoftwareControlledBundle {
-  val tag = new PTTag     // 3
-  val entry = new PTEntry // 3
+
+// TODO: Merge pidWidth into TLBParameter, and get rid of the thread id from the whole memory system.
+class PageTableItem(param: TLBParameter) extends SoftwareControlledBundle {
+  val tag = new PTTag(param)     // 3
+  val entry = new PTEntry(param) // 3
 
   def asVec(width: Int): Vec[UInt] = {
     assert(width == 32)
@@ -96,12 +107,16 @@ class PageTableItem extends SoftwareControlledBundle {
     res.entry := res.entry.parseFromVec(VecInit(f.slice(3, 6)))
     return res.asInstanceOf[this.type]
   }
+
+  override def cloneType: this.type = {
+    return new PageTableItem(param).asInstanceOf[this.type]
+  }
 }
 
 
 class TLBMissRequestMessage(param: TLBParameter) extends Bundle {
   val tag = new TLBTag(param)
-  val permission = UInt(ParameterConstants.permission_bit_width.W)
+  val permission = UInt(param.permissionWidth.W)
 
   override def cloneType: this.type = {
     return new TLBMissRequestMessage(param).asInstanceOf[this.type]
@@ -110,7 +125,7 @@ class TLBMissRequestMessage(param: TLBParameter) extends Bundle {
 
 class TLBEvictionMessage(param: TLBParameter) extends Bundle {
   val tag = new TLBTag(param)
-  val entry = new PTEntry
+  val entry = new PTEntry(param)
 
   override def cloneType: this.type = {
     return new TLBEvictionMessage(param).asInstanceOf[this.type]
@@ -182,8 +197,8 @@ abstract class MessageUnionSubtype[T <: RawMessage](mess: T) extends SoftwareCon
   }
 }
 
-class QEMUPageEvictRequest extends MessageUnionSubtype(new QEMURxMessage){
-  val tag = new PTTag
+class QEMUPageEvictRequest(param: TLBParameter) extends MessageUnionSubtype(new QEMURxMessage){
+  val tag = new PTTag(param)
   def asVec(width: Int): Vec[UInt] = {
     return tag.asVec(width)
   }
@@ -194,15 +209,19 @@ class QEMUPageEvictRequest extends MessageUnionSubtype(new QEMURxMessage){
   }
 
   def messageType: UInt = QEMUMessagesType.sPageEvict
+
+  override def cloneType: this.type = {
+    return new QEMUPageEvictRequest(param).asInstanceOf[this.type]
+  }
 }
 
 
-class QEMUMissReply extends MessageUnionSubtype(new QEMURxMessage) {
-  val tag = new PTTag
-  val permission = UInt(ParameterConstants.permission_bit_width.W)
+class QEMUMissReply(param: TLBParameter) extends MessageUnionSubtype(new QEMURxMessage) {
+  val tag = new PTTag(param)
+  val permission = UInt(param.permissionWidth.W)
 
   val synonym_v = Bool()
-  val synonym_tag = new PTTag
+  val synonym_tag = new PTTag(param)
 
   def asVec(width: Int): Vec[UInt] = {
     assert(width == 32)
@@ -227,10 +246,14 @@ class QEMUMissReply extends MessageUnionSubtype(new QEMURxMessage) {
 
   def messageType: UInt = QEMUMessagesType.sMissReply
 
+  override def cloneType: this.type = {
+    return new QEMUMissReply(param).asInstanceOf[this.type]
+  }
+
 }
 
-class QEMUEvictReply extends MessageUnionSubtype(new QEMURxMessage) {
-  val tag = new PTTag
+class QEMUEvictReply(param: TLBParameter) extends MessageUnionSubtype(new QEMURxMessage) {
+  val tag = new PTTag(param)
   val old_ppn = UInt(24.W)
   val synonym_v = Bool()
   def asVec(width: Int): Vec[UInt] = {
@@ -253,13 +276,17 @@ class QEMUEvictReply extends MessageUnionSubtype(new QEMURxMessage) {
     return res.asInstanceOf[this.type]
   }
 
+  override def cloneType: this.type = {
+    return new QEMUEvictReply(param).asInstanceOf[this.type]
+  }
+
   def messageType: UInt = QEMUMessagesType.sEvictReply
 }
 
 
-class PageFaultNotification extends MessageUnionSubtype(new QEMUTxMessage) {
-  val tag = new PTTag
-  val permission = Bool()
+class PageFaultNotification(param: TLBParameter) extends MessageUnionSubtype(new QEMUTxMessage) {
+  val tag = new PTTag(param)
+  val permission = UInt(param.permissionWidth.W)
 
   def asVec(width: Int): Vec[UInt] = {
     assert(width == 32)
@@ -274,10 +301,14 @@ class PageFaultNotification extends MessageUnionSubtype(new QEMUTxMessage) {
   }
 
   def messageType: UInt = QEMUMessagesType.sPageFaultNotify
+
+  override def cloneType: this.type = {
+    return new PageFaultNotification(param).asInstanceOf[this.type]
+  }
 }
 
-class PageEvictNotification(message_type: UInt) extends MessageUnionSubtype(new QEMUTxMessage) {
-  val item = new PageTableItem
+class PageEvictNotification(message_type: UInt, param: TLBParameter) extends MessageUnionSubtype(new QEMUTxMessage) {
+  val item = new PageTableItem(param)
 
   def asVec(width: Int): Vec[UInt] = item.asVec(width)
 
@@ -288,7 +319,7 @@ class PageEvictNotification(message_type: UInt) extends MessageUnionSubtype(new 
   }
 
   override def cloneType: this.type = {
-    return new PageEvictNotification(message_type).asInstanceOf[this.type]
+    return new PageEvictNotification(message_type, param).asInstanceOf[this.type]
   }
 
   def messageType: UInt = message_type

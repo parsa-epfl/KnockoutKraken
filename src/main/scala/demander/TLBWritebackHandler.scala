@@ -6,7 +6,7 @@ import armflex.cache._
 import armflex.util._
 
 class TLBWritebackHandler(
-  param: TLBParameter,
+  param: PageDemanderParameter,
   tlbNumber: Int = 2
 ) extends MultiIOModule {
   import software_bundle._
@@ -15,32 +15,35 @@ class TLBWritebackHandler(
 
   // the eviction request of the TLB
   val tlb_evict_req_i = IO(Vec(
-    tlbNumber, Flipped(Decoupled(new TLBEvictionMessage(param)))
+    tlbNumber, Flipped(Decoupled(new TLBEvictionMessage(param.mem.toTLBParameter)))
   ))
   // arbiter to select the evict request
-  val u_arb = Module(new RRArbiter(new TLBEvictionMessage(param), tlbNumber))
+  val u_arb = Module(new RRArbiter(new TLBEvictionMessage(param.mem.toTLBParameter), tlbNumber))
   u_arb.io.in <> tlb_evict_req_i
 
   // lookup pid by tid
-  val tt_tid_o = IO(Output(UInt(param.threadIDWidth().W)))
+  val tt_tid_o = IO(Output(UInt(param.mem.toTLBParameter.threadIDWidth().W)))
   tt_tid_o := u_arb.io.out.bits.tag.thread_id
-  val tt_pid_i = IO(Input(Valid(UInt(ParameterConstants.process_id_width.W))))
+  val tt_pid_i = IO(Input(Valid(UInt(param.mem.pPageNumberWidth.W))))
 
   // Add page table set buffer and axi dma
-  val u_buffer = Module(new peripheral.PageTableSetBuffer(new peripheral.PageTableSetPacket))
+  val u_buffer = Module(new peripheral.PageTableSetBuffer(
+    param.mem.toTLBParameter,
+    new peripheral.PageTableSetPacket(param.mem.toTLBParameter)
+  ))
 
   // AXI DMA Read channels
   val M_DMA_R = IO(new AXIReadMasterIF(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width
+    param.dramAddrWidth,
+    param.dramDataWidth
   ))
 
   u_buffer.dma_data_i <> M_DMA_R.data
 
   // AXI DMA Write channels
   val M_DMA_W = IO(new AXIWriteMasterIF(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width
+    param.dramAddrWidth,
+    param.dramDataWidth
   ))
 
   M_DMA_W.data <> u_buffer.dma_data_o
@@ -51,9 +54,9 @@ class TLBWritebackHandler(
   // sIdle
   u_arb.io.out.ready := state_r === sIdle
   class request_t extends Bundle {
-    val tag = new PTTag
-    val evicted_pte = new PTEntry
-    val thread_id = UInt(param.threadIDWidth().W)
+    val tag = new PTTag(param.mem.toTLBParameter)
+    val evicted_pte = new PTEntry(param.mem.toTLBParameter)
+    val thread_id = UInt(param.mem.toTLBParameter.threadIDWidth().W)
     val source = UInt(log2Ceil(tlbNumber).W)
   }
 
@@ -70,7 +73,7 @@ class TLBWritebackHandler(
   u_buffer.lookup_request_i := request_r.tag
 
   // sMoveIn
-  M_DMA_R.req.bits.address := ParameterConstants.getPageTableAddressByVPN(request_r.tag.vpn)
+  M_DMA_R.req.bits.address := param.getPageTableAddressByVPN(request_r.tag.vpn)
   M_DMA_R.req.bits.length := u_buffer.requestPacketNumber.U
   M_DMA_R.req.valid := state_r === sMoveIn
 
@@ -114,5 +117,5 @@ class TLBWritebackHandler(
 
 object TLBWritebackHandlerVerilogEmitter extends App{
   val c = chisel3.stage.ChiselStage
-  println(c.emitVerilog(new TLBWritebackHandler(new TLBParameter)))
+  println(c.emitVerilog(new TLBWritebackHandler(new PageDemanderParameter())))
 }

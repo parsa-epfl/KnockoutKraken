@@ -4,7 +4,6 @@ import chisel3._
 import chisel3.util._
 import armflex.cache._
 import armflex.demander.software_bundle.QEMUMissReply
-import armflex.demander.software_bundle.ParameterConstants
 import armflex.demander.peripheral.PageTableSetBuffer
 import armflex.demander.peripheral.PageTableSetPacket
 import armflex.demander.peripheral.ThreadLookupResultPacket
@@ -15,18 +14,23 @@ import armflex.demander.software_bundle.PageTableItem
 import armflex.demander.software_bundle.QEMUPageEvictRequest
 import armflex.util._
 
-class QEMUPageEvictHandler extends MultiIOModule {
-  val evict_request_i = IO(Flipped(Decoupled(new QEMUPageEvictRequest())))
+class QEMUPageEvictHandler(
+  param: PageDemanderParameter
+) extends MultiIOModule {
+  val evict_request_i = IO(Flipped(Decoupled(new QEMUPageEvictRequest(param.mem.toTLBParameter))))
   
   val sIdle :: sLoadSet :: sGetEntry :: sDeletePageReq :: sDeletePage :: Nil = Enum(5)
   val state_r = RegInit(sIdle)
 
-  val u_buffer = Module(new PageTableSetBuffer(new PageTableSetPacket))
+  val u_buffer = Module(new PageTableSetBuffer(
+    param.mem.toTLBParameter,
+    new PageTableSetPacket(param.mem.toTLBParameter)
+  ))
 
   // AXI DMA Read channels
   val M_DMA_R = IO(new AXIReadMasterIF(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width
+    param.dramAddrWidth,
+    param.dramDataWidth
   ))
   
   u_buffer.dma_data_i <> M_DMA_R.data
@@ -37,17 +41,17 @@ class QEMUPageEvictHandler extends MultiIOModule {
 
   // sIdle
   evict_request_i.ready := state_r === sIdle
-  val request_r = Reg(new QEMUPageEvictRequest)
+  val request_r = Reg(new QEMUPageEvictRequest(param.mem.toTLBParameter))
   when(evict_request_i.fire()){
     request_r := evict_request_i.bits
   }
 
   // sLoadSet
-  M_DMA_R.req.bits.address := ParameterConstants.getPageTableAddressByVPN(request_r.tag.vpn)
+  M_DMA_R.req.bits.address := param.getPageTableAddressByVPN(request_r.tag.vpn)
   M_DMA_R.req.bits.length := u_buffer.requestPacketNumber.U
   M_DMA_R.req.valid := state_r === sLoadSet
 
-  val victim_r = Reg(new PageTableItem)
+  val victim_r = Reg(new PageTableItem(param.mem.toTLBParameter))
   u_buffer.lookup_request_i := request_r.tag
   when(state_r === sGetEntry){
     victim_r := u_buffer.lookup_reply_o.item
@@ -56,7 +60,7 @@ class QEMUPageEvictHandler extends MultiIOModule {
 
   // sDeletePage
   // Judge by done_o
-  val page_delete_req_o = IO(Decoupled(new PageTableItem))
+  val page_delete_req_o = IO(Decoupled(new PageTableItem(param.mem.toTLBParameter)))
   val page_delete_done_i = IO(Input(Bool()))
   page_delete_req_o.bits := victim_r
   page_delete_req_o.valid := state_r === sDeletePageReq
@@ -83,6 +87,6 @@ class QEMUPageEvictHandler extends MultiIOModule {
 
 object QEMUPageEvictHandlerrVerilogEmitter extends App {
   val c = new stage.ChiselStage
-  println(c.emitVerilog(new QEMUPageEvictHandler))
+  println(c.emitVerilog(new QEMUPageEvictHandler(new PageDemanderParameter())))
 }
 

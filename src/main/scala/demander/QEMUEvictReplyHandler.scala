@@ -4,9 +4,10 @@ import chisel3._
 import chisel3.util._
 
 import software_bundle._
+import armflex.cache.TLBParameter
 
-class QEMUEvictReplyHandler extends MultiIOModule {
-  val req_i = IO(Flipped(Decoupled(new QEMUEvictReply)))
+class QEMUEvictReplyHandler(param: TLBParameter) extends MultiIOModule {
+  val req_i = IO(Flipped(Decoupled(new QEMUEvictReply(param))))
   val free_o = IO(Decoupled(UInt()))
 
   free_o.bits := req_i.bits.old_ppn
@@ -20,5 +21,5 @@ class QEMUEvictReplyHandler extends MultiIOModule {
 
 object QEMUEvictReplyHandlerVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
-  println(c.emitVerilog(new QEMUEvictReplyHandler))
+  println(c.emitVerilog(new QEMUEvictReplyHandler(new TLBParameter)))
 }

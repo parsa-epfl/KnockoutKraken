@@ -9,13 +9,17 @@ import armflex.cache.PseudoTreeLRUCore
 import armflex.cache.CacheBackendToAXIInterface
 import armflex.demander.PageDemander
 import armflex.util._
-import armflex.demander.software_bundle.ParameterConstants
 
 import antmicro.Bus._
+import armflex.demander.PageDemanderParameter
 
 class ARMFlexTop extends MultiIOModule {
   implicit val pipelineCfg = new ProcConfig(NB_THREADS = 8)
-  val memoryParameter = new MemorySystemParameter(threadNumber = 8)
+  val memoryParameter = new MemorySystemParameter(
+    threadNumber = 8,
+    pAddressWidth = 24 // For scaling down
+  )
+  val pdParam = new PageDemanderParameter(memoryParameter)
 
   val u_pipeline = Module(new PipelineAxi)
 
@@ -68,7 +72,7 @@ class ARMFlexTop extends MultiIOModule {
   u_data_axi.cache_backend_reply_o <> u_data_path.cache_backend_reply_i
   u_data_axi.cache_backend_request_i <> u_data_path.cache_backend_request_o
 
-  val u_pd = Module(new PageDemander(memoryParameter, 2))
+  val u_pd = Module(new PageDemander(pdParam, 2))
   // ports of the page demander
   val S_AXI = IO(Flipped(u_pd.S_AXI.cloneType))
   u_pd.S_AXI <> S_AXI
@@ -111,13 +115,13 @@ class ARMFlexTop extends MultiIOModule {
   u_pd.itlb_flush_request_o <> u_inst_path.tlb_flush_request_i
 
   val M_AXI = IO(new AXI4(
-    ParameterConstants.dram_addr_width, 
-    ParameterConstants.dram_data_width
+    pdParam.dramAddrWidth, 
+    pdParam.dramDataWidth
   ))
 
   val u_axi_read = Module(new AXIReadMultiplexer(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width,
+    pdParam.dramAddrWidth,
+    pdParam.dramDataWidth,
     8
   ))
 
@@ -127,13 +131,13 @@ class ARMFlexTop extends MultiIOModule {
 
   M_AXI.ar <> u_axi_read.M_AXI.ar
   M_AXI.r <> u_axi_read.M_AXI.r
-  u_axi_read.M_AXI.aw <> AXI4AW.stub(ParameterConstants.dram_addr_width)
-  u_axi_read.M_AXI.w <> AXI4W.stub(ParameterConstants.dram_data_width)
+  u_axi_read.M_AXI.aw <> AXI4AW.stub(pdParam.dramAddrWidth)
+  u_axi_read.M_AXI.w <> AXI4W.stub(pdParam.dramDataWidth)
   u_axi_read.M_AXI.b <> AXI4B.stub()
 
   val u_axi_write = Module(new AXIWriteMultiplexer(
-    ParameterConstants.dram_addr_width,
-    ParameterConstants.dram_data_width,
+    pdParam.dramAddrWidth,
+    pdParam.dramDataWidth,
     6
   ))
 
@@ -145,8 +149,8 @@ class ARMFlexTop extends MultiIOModule {
   M_AXI.w <> u_axi_write.M_AXI.w
   M_AXI.b <> u_axi_write.M_AXI.b
 
-  u_axi_write.M_AXI.ar <> AXI4AR.stub(ParameterConstants.dram_addr_width)
-  u_axi_write.M_AXI.r <> AXI4R.stub(ParameterConstants.dram_data_width)
+  u_axi_write.M_AXI.ar <> AXI4AR.stub(pdParam.dramAddrWidth)
+  u_axi_write.M_AXI.r <> AXI4R.stub(pdParam.dramDataWidth)
 
   val u_axil_inter = Module(new AXILInterconnector(
     Seq(0x0000, 0x4000, 0x8000), Seq(0xC000, 0xC000, 0xC000), 32, 32
@@ -159,8 +163,6 @@ class ARMFlexTop extends MultiIOModule {
   u_axil_inter.M_AXIL(1) <> u_pd.S_AXIL_TT
   u_axil_inter.M_AXIL(2) <> u_pd.S_AXIL_QEMU_MQ
 }
-
-
 
 object ARMFlexTopVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage

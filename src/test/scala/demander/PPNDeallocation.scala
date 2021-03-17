@@ -21,7 +21,7 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
   "Normal case" in {
     import PageDemanderDriver._
     val anno = Seq(TargetDirAnnotation("test/demander/ppn_deallocation/normal"), VerilatorBackendAnnotation, WriteVcdAnnotation)
-    test(new PageDemanderDUT(new MemorySystemParameter())).withAnnotations(anno){ dut=>
+    test(new PageDemanderDUT(new PageDemanderParameter())).withAnnotations(anno){ dut=>
       // 1. push page.
       dut.registerThreadTable(0, 0x10)
       dut.movePageIn(0x01234567)

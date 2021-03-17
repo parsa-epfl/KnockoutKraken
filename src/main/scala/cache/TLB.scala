@@ -6,6 +6,8 @@ import chisel3.util._
 class TLBParameter(
   val vPageWidth: Int = 52,
   val pPageWidth: Int = 24,
+  val permissionWidth: Int = 2,
+  val pidWidth: Int = 15, // FIXME: This should appear here. But we have plan to merge TLBParam and Page Table param together.
   threadNumber: Int = 4,
   setNumber: Int = 1,
   associativity: Int = 32,
@@ -13,12 +15,11 @@ class TLBParameter(
 ) extends CacheParameter(
   setNumber,
   associativity,
-  pPageWidth + 2 + 1, // permission bits + pPageWidth + modifiedBit
+  pPageWidth + permissionWidth + 1, // permission bits + pPageWidth + modifiedBit
   vPageWidth + log2Ceil(threadNumber) , // VA + TID
   threadNumber,
   implementedWithRegister
 ){
-  
 }
 /**
  * The tag used to access a TLB entry
@@ -38,7 +39,7 @@ class TLBTagPacket(param: TLBParameter) extends Bundle {
  */ 
 class TLBEntryPacket(param: TLBParameter) extends Bundle {
   val pp = UInt(param.pPageWidth.W)
-  val permission = UInt(2.W)
+  val permission = UInt(param.permissionWidth.W)
   val modified = Bool()
 
   def isWritable(): Bool = {
