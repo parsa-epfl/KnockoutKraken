@@ -141,8 +141,8 @@ class DataBankManager(
   else 
     s1_frontend_request_n.valid := frontend_request_i.fire()
 
-  val s1_frontend_request_r = (if(param.implementedWithRegister) FlushQueue(s1_frontend_request_n, 0, true)("s1_frontend_request_r")
-  else FlushQueue(s1_frontend_request_n, 1, true)("s1_frontend_request_r"))
+  val s1_frontend_request_r = (if(param.implementedWithRegister) FlushQueue(s1_frontend_request_n, 0, true)
+  else FlushQueue(s1_frontend_request_n, 1, true))
   s1_frontend_request_r.ready := pipeline_state_ready(1)
 
   // pass to the bram
@@ -287,7 +287,7 @@ class DataBankManager(
     !full_writing_v &&  // full writing is not a miss
     !s1_frontend_request_r.bits.flush_v // flush is not a miss
 
-  val s2_miss_request_r = FlushQueue(s2_miss_request_n, 2, true)("s2_miss_request_r")
+  val s2_miss_request_r = FlushQueue(s2_miss_request_n, 2, true)
   miss_request_o <> s2_miss_request_r
 
 
@@ -326,7 +326,7 @@ class DataBankManager(
   u_wb_req_arb.io.in(1) <> flush_wb_req
 
   val s2_writeback_request_n = u_wb_req_arb.io.out
-  val s2_writeback_request_r = FlushQueue(s2_writeback_request_n, 2, true)("s2_writeback_request_r")
+  val s2_writeback_request_r = FlushQueue(s2_writeback_request_n, 2, true)
   writeback_request_o <> s2_writeback_request_r
   
   pipeline_state_ready(1) := true.B && //s2_miss_n.ready &&

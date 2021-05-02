@@ -113,7 +113,7 @@ class PageWalker(
   }
 
   // assignment of page_fault_req_o
-  page_fault_req_o.bits.permission := pte_r.bits.permission
+  page_fault_req_o.bits.permission := request_r.permission
   page_fault_req_o.bits.tag.process_id := request_r.process_id
   page_fault_req_o.bits.tag.vpn := request_r.vpn
   page_fault_req_o.valid := state_r === sReply && !pte_r.valid

@@ -93,7 +93,7 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   fetch.ctrl.commit.bits.get := commitU.commit.archstate.regs.next.PC
 
   mem.inst.req.bits.thread_id := fetch.mem.tag
-  mem.inst.req.bits.addr := fetch.mem.bits
+  mem.inst.req.bits.addr := fetch.mem.bits >> log2Ceil(cfg.BLOCK_SIZE / 8)
   mem.inst.req.bits.wData := DontCare
   mem.inst.req.bits.permission := 2.U // instruction permission
   mem.inst.req.bits.wMask := 0.U
@@ -107,7 +107,7 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   val fetchPC = ShiftRegister(fetch.mem.bits, cfg.cacheLatency)
   val blockInsts = VecInit.tabulate(cfg.BLOCK_SIZE/32) { idx => mem.inst.resp.bits.data((idx + 1) * 32 - 1, idx * 32) }
   fetchQueue.io.enq.valid := mem.inst.resp.valid && mem.inst.resp.bits.hit
-  val selectBlock = WireInit(fetchPC >> 2.U)
+  val selectBlock = WireInit(fetchPC(log2Ceil(cfg.BLOCK_SIZE / 8)-1, 0) >> 2.U)
   fetchQueue.io.enq.bits := Tagged(fetchTag, blockInsts(selectBlock))
 
   // Fetch -> Decode

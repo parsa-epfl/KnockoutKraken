@@ -155,7 +155,7 @@ class BaseTLB(
   u_cache.stall_request_vi := false.B
 
   // bind the frontend_request
-  u_cache.frontend_request_i.bits.addr := frontend_request_i.bits.asUInt()
+  u_cache.frontend_request_i.bits.addr := frontend_request_i.bits.tag.asUInt()
   u_cache.frontend_request_i.bits.thread_id := frontend_request_i.bits.tag.thread_id
   // mark it modified
   val modified_pte = Wire(new TLBEntryPacket(param))

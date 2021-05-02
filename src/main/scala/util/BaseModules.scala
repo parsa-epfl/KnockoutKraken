@@ -216,7 +216,6 @@ object FlushQueue {
     pipe:    Boolean = false,
     flow:    Boolean = false,
     flush:   Bool = false.B
-  )(name:    String
   ): DecoupledIO[T] = {
     if (entries == 0) {
       val res = Wire(Decoupled(in.bits.cloneType))
@@ -230,8 +229,7 @@ object FlushQueue {
       }
       res
     } else {
-      val m = Module(new FlushQueue(in.bits.cloneType, entries, pipe, flow))
-      val u_queue = if (name.nonEmpty) m.suggestName(name) else m
+      val u_queue = Module(new FlushQueue(in.bits.cloneType, entries, pipe, flow))
       u_queue.io.enq <> in
       u_queue.io.flush := flush
       u_queue.io.deq

@@ -93,6 +93,7 @@ class TLBPlusCache(
   u_cache.frontend_request_i.bits.thread_id := frontend_request_i.bits.thread_id
   u_cache.frontend_request_i.bits.wData := frontend_request_i.bits.wData
   u_cache.frontend_request_i.bits.wMask := frontend_request_i.bits.wMask
+  u_cache.frontend_request_i.bits.permission := frontend_request_i.bits.permission
   u_cache.frontend_request_i.valid := u_tlb.frontend_reply_o.valid &&
     u_tlb.frontend_reply_o.bits.hit && // TLB hit
     !u_tlb.frontend_reply_o.bits.violation // No violation
@@ -271,7 +272,7 @@ object CacheInterfaceAdaptors {
     s1_pair_context_n.bits.pair_order := 1.U // the second request
     s1_pair_context_n.bits.pair_v := true.B
     s1_pair_context_n.valid := from_pipeline.fire() && i.bits.isPair
-    val s1_pair_context_r = FlushQueue(s1_pair_context_n, 1, false)("s1_pair_context_r")
+    val s1_pair_context_r = FlushQueue(s1_pair_context_n, 1, false)
 
     val u_arb = Module(new Arbiter(new internal_memory_request_t, 2))
     u_arb.io.in(0) <> s1_pair_context_r
