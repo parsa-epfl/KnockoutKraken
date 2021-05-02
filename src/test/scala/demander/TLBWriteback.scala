@@ -27,7 +27,7 @@ class TLBWritebackTester extends FreeSpec with ChiselScalatestTester {
       // set TLB eviction up.
       timescope {
         dut.dtlb_backend_request_i.bits.flush_v.poke(false.B)
-        dut.dtlb_backend_request_i.bits.need_write_permission_v.poke(true.B)
+        dut.dtlb_backend_request_i.bits.permission.poke(1.U)
         dut.dtlb_backend_request_i.bits.w_v.poke(true.B)
         dut.dtlb_backend_request_i.bits.tag.thread_id.poke(0.U)
         dut.dtlb_backend_request_i.bits.tag.vpage.poke(0xABC.U)

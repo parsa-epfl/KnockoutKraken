@@ -10,11 +10,6 @@ import armflex.util.BRAMConfig
 import armflex.util.BRAMPort
 import armflex.util.BRAM
 import armflex.util.FlushQueue
-//import firrtl.PrimOps.Mul
-
-import scala.collection.mutable
-//import treadle.executable.DataType
-//import scala.xml.dtd.impl.Base
 
 class DataBankFrontendRequestPacket(
   addressWidth: Int,
@@ -23,7 +18,7 @@ class DataBankFrontendRequestPacket(
 ) extends Bundle{
   val addr = UInt(addressWidth.W) // access address.
   val thread_id = UInt(threadIDWidth.W)
-  val w_v = Bool()// write valid?
+  val permission = UInt(2.W)
   val wData = UInt(blockSize.W)
   val wMask = UInt(blockSize.W)
 
@@ -66,7 +61,8 @@ class FrontendReplyPacket(
 class MissRequestPacket(param: CacheParameter) extends Bundle{
   val addr = UInt(param.addressWidth.W)
   val thread_id = UInt(param.threadIDWidth().W)
-  val need_write_permission_v = Bool() // For TLB miss. This parameter will be passed to QEMU for sanity check.
+  val permission = UInt(2.W)
+
 
   val not_sync_with_data_v = Bool() 
 
@@ -103,11 +99,13 @@ class WriteBackRequestPacket(param: CacheParameter) extends Bundle{
 /**
  * The frontend manager.
  * @param param the Cache parameter
- * @param writableFunction a function that returns whether to perform writing. The two parameters are original value and new value.
+ * @param updateFunction specify how to override the hit entry with given request and hit entry. Return the updated hit entry that will be written to.
+ * 
+ * @note updateFunction will only be considered when it's a neither flushing nor refilling request, and return the old entry will not trigger a writing.
  */ 
 class DataBankManager(
   param: CacheParameter,
-  writableFunction: (CacheEntry, CacheEntry) => Bool // (CacheParameter: UInt, CacheParameter: UInt) => Bool
+  updateFunction: (DataBankFrontendRequestPacket, CacheEntry) => CacheEntry // (req: DataBankFrontendRequestPacket, entryToUpdate: CacheEntry) => result
 ) extends MultiIOModule {
   // Ports to frontend
   val frontend_request_i = IO(Flipped(Decoupled(new DataBankFrontendRequestPacket(param))))
@@ -172,7 +170,7 @@ class DataBankManager(
   }) // get all the comparison results
   assert(PopCount(match_bits) === 1.U || PopCount(match_bits) === 0.U, "It's impossible to hit multiple entries.")
 
-  val full_writing_v = s1_frontend_request_r.bits.w_v && s1_frontend_request_r.bits.wMask.andR()
+  val full_writing_v = s1_frontend_request_r.bits.wMask.andR()
   when(s1_frontend_request_r.bits.refill_v && s1_frontend_request_r.valid){
     assert(full_writing_v, "Refill must be a full writing. (Full mask!)")
   }
@@ -216,7 +214,10 @@ class DataBankManager(
   s2_bank_writing_n.bits.addr := s1_frontend_request_r.bits.addr
   s2_bank_writing_n.bits.thread_id := s1_frontend_request_r.bits.thread_id
   s2_bank_writing_n.bits.flush_v := s1_frontend_request_r.bits.flush_v
-  s2_bank_writing_n.valid := s1_frontend_request_r.valid && s1_frontend_request_r.bits.w_v && (hit_v || full_writing_v) //! No fire() required here because this register is in a branch instead of the main stream.
+  s2_bank_writing_n.valid := 
+    s1_frontend_request_r.valid && // Request is valid
+    (s1_frontend_request_r.bits.wMask.orR() || s1_frontend_request_r.bits.flush_v) && // write or flush.
+    (hit_v || full_writing_v) //! No fire() required here because this register is in a branch instead of the main stream.
 
   frontend_reply_o.valid := s1_frontend_request_r.fire() // Also return if miss
   frontend_reply_o.bits.thread_id := s1_frontend_request_r.bits.thread_id
@@ -227,31 +228,34 @@ class DataBankManager(
   // Hit, refill, and full writing will update the LRU bits. But flush won't update it.
   lru_index_o.valid := s1_frontend_request_r.valid && (hit_v || full_writing_v) && !s1_frontend_request_r.bits.flush_v
 
-  val frontend_write_to_bank = Wire(Decoupled(new BankWriteRequestPacket(param))) // normal writing
+  val frontend_write_to_bank = Wire(Decoupled(new BankWriteRequestPacket(param))) // normal writing (writing & flushing)
 
-  val updated_entry = Mux(s1_frontend_request_r.bits.w_v,
-    // how to determine the updated entry?
-    // - if normal write, update
-    // - if refill, keep original value if hit
-    // - otherwise, keep original value
-    hit_entry.write(
-      s1_frontend_request_r.bits.wData, 
-      s1_frontend_request_r.bits.wMask,
-      s1_frontend_request_r.bits.refill_v
-    ),
-    hit_entry
-  )
-
-  frontend_write_to_bank.bits.data := updated_entry
-  frontend_write_to_bank.bits.data.v := Mux(s1_frontend_request_r.bits.flush_v, false.B, true.B)
   if(param.setWidth() > 1)
     frontend_write_to_bank.bits.addr := s1_frontend_request_r.bits.addr(param.setWidth()-1, 0)
   else
     frontend_write_to_bank.bits.addr := 0.U
-  frontend_write_to_bank.bits.which := match_which
-  frontend_write_to_bank.valid := s1_frontend_request_r.valid && hit_v && !s1_frontend_request_r.bits.refill_v && s1_frontend_request_r.bits.w_v && writableFunction(hit_entry,updated_entry) // When flushing, write to bank.
 
-  frontend_reply_o.bits.dirty := frontend_write_to_bank.valid // This will trigger a writing.
+  val flush_entry = Wire(new CacheEntry(param))
+  flush_entry.d := false.B
+  flush_entry.data := DontCare
+  flush_entry.tag := DontCare
+  flush_entry.v := false.B
+
+  val updated_entry = Mux(
+    s1_frontend_request_r.bits.flush_v,  // Flush?
+    flush_entry,  // Flushed entry
+    updateFunction(s1_frontend_request_r.bits, hit_entry)
+  )
+
+  frontend_write_to_bank.bits.data := updated_entry
+  frontend_write_to_bank.bits.which := match_which
+  frontend_write_to_bank.valid := 
+    s1_frontend_request_r.valid && 
+    hit_v && 
+    !s1_frontend_request_r.bits.refill_v && 
+    updated_entry.asUInt =/= hit_entry.asUInt
+  
+  frontend_reply_o.bits.dirty := frontend_write_to_bank.valid && !s1_frontend_request_r.bits.flush_v // This will trigger a writing.
 
   s2_bank_writing_n.bits.dataBlock := updated_entry.read()
 
@@ -264,8 +268,6 @@ class DataBankManager(
   full_writing_request.bits.which := lru_which_i
   full_writing_request.valid := s1_frontend_request_r.valid && (!hit_v && full_writing_v)
 
-
-
   val u_bank_writing_arb = Module(new Arbiter(new BankWriteRequestPacket(param), 2))
   u_bank_writing_arb.io.in(0) <> full_writing_request
   u_bank_writing_arb.io.in(1) <> frontend_write_to_bank
@@ -276,12 +278,11 @@ class DataBankManager(
     "It's impossible that a request is 'missing' and 'writing' at the same time."
   )
 
-
   val s2_miss_request_n = Wire(Decoupled(new MissRequestPacket(param)))
   s2_miss_request_n.bits.addr := s1_frontend_request_r.bits.addr
   s2_miss_request_n.bits.thread_id := s1_frontend_request_r.bits.thread_id
   s2_miss_request_n.bits.not_sync_with_data_v := false.B
-  s2_miss_request_n.bits.need_write_permission_v := s1_frontend_request_r.bits.w_v
+  s2_miss_request_n.bits.permission := s1_frontend_request_r.bits.permission
   s2_miss_request_n.valid := !hit_v && s1_frontend_request_r.fire() && 
     !full_writing_v &&  // full writing is not a miss
     !s1_frontend_request_r.bits.flush_v // flush is not a miss
@@ -292,24 +293,27 @@ class DataBankManager(
 
   val replaced_entry = bank_ram_reply_data_i.bits(lru_which_i)
   val eviction_wb_req = Wire(Decoupled(new WriteBackRequestPacket(param))) // write back due to the eviction.
+
   if(param.setWidth() > 1)
     eviction_wb_req.bits.addr := replaced_entry.address(s1_frontend_request_r.bits.addr(param.setWidth-1, 0))
   else
     eviction_wb_req.bits.addr := replaced_entry.tag
+    
   eviction_wb_req.bits.data := replaced_entry.read()
   eviction_wb_req.bits.flush_v := false.B
   eviction_wb_req.valid := 
     replaced_entry.d && // evicted entry is dirty
     !hit_v && // miss occurs
+    s1_frontend_request_r.bits.refill_v && // a refilling request.
     s1_frontend_request_r.fire()
   
 
   val flush_wb_req = Wire(Decoupled(new WriteBackRequestPacket(param))) // write back due to the flushing
   flush_wb_req.bits.addr := s1_frontend_request_r.bits.addr
-  flush_wb_req.bits.data := updated_entry.read()
+  flush_wb_req.bits.data := hit_entry.read()
   flush_wb_req.bits.flush_v := true.B
   flush_wb_req.valid :=
-    updated_entry.d && // flushed is dirty
+    hit_entry.d && // flushed is dirty
     hit_v && s1_frontend_request_r.bits.flush_v && // flush confirmed.
     s1_frontend_request_r.fire()
 

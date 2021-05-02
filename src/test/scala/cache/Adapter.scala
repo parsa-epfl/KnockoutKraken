@@ -71,7 +71,7 @@ class RequestAdaptorTester extends FreeSpec with ChiselScalatestTester {
       dut.i.ready.expect(false.B)
 
       dut.o.valid.expect(true.B)
-      dut.o.bits.w_v.expect(false.B)
+      dut.o.bits.permission.expect(0.U)
       dut.o.bits.addr.expect(1.U)
 
       dut.clock.step()
@@ -112,7 +112,7 @@ class RequestAdaptorTester extends FreeSpec with ChiselScalatestTester {
       dut.i.ready.expect(true.B)
 
       dut.o.valid.expect(true.B)
-      dut.o.bits.w_v.expect(true.B)
+      dut.o.bits.permission.expect(1.U)
       dut.o.bits.wData.expect((128l << 24).U)
       dut.o.bits.wMask.expect((255l << 24).U)
     }

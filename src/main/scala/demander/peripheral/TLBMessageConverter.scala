@@ -20,21 +20,19 @@ import armflex.cache.{
  * The message will be sent to the core so that correct operations will be carried.
  * 
  * @param param the parameter of the TLB
- * @param readPermission the permission of the miss request which is also a read request. For I$, 2 and For D$, 1
  * 
  * @note Flush result will be ignored here because another module has already read the data.
  * @note To support multiple TLBs, please add an arbiter.
  * @note the fifos for the message is added in the message compositor.
  */
 class TLBMessageConverter(
-  param: TLBParameter,
-  readPermission: UInt
+  param: TLBParameter
 ) extends MultiIOModule {
   val tlb_backend_request_i = IO(Flipped(Decoupled(new TLBBackendRequestPacket(param))))
 
   val miss_request = Wire(Decoupled(new software_bundle.TLBMissRequestMessage(param)))
   miss_request.bits.tag:= tlb_backend_request_i.bits.tag
-  miss_request.bits.permission := Mux(tlb_backend_request_i.bits.need_write_permission_v, 1.U, readPermission)
+  miss_request.bits.permission := tlb_backend_request_i.bits.permission
   miss_request.valid := tlb_backend_request_i.valid && !tlb_backend_request_i.bits.w_v
 
   val ev_request = Wire(Decoupled(new software_bundle.TLBEvictionMessage(param)))
@@ -66,5 +64,5 @@ class TLBMessageConverter(
 
 object TLBWrapperVerilogEmitter extends App {
   import chisel3.stage.ChiselStage
-  println((new ChiselStage).emitVerilog(new TLBMessageConverter(new TLBParameter, 0.U)))
+  println((new ChiselStage).emitVerilog(new TLBMessageConverter(new TLBParameter)))
 }

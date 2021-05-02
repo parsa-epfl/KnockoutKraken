@@ -39,7 +39,7 @@ object PROCESSOR_TYPES
   val PADDR = 32
 
   // Miss type
-  def MISS_T = UInt(2.W)
+  def PERMISSION_T = UInt(2.W)
   val DATA_LOAD  = 0 // FA_QflexCmds.DATA_LOAD
   val DATA_STORE = 1 // FA_QflexCmds.DATA_STORE
   val INST_FETCH = 2 // FA_QflexCmds.INST_FETCH

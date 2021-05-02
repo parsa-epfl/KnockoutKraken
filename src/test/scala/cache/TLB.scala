@@ -71,7 +71,7 @@ implicit class BaseTLBDriver(target: DUTTLB){
   def setReadRequest(vpage: UInt, threadID: UInt) = {
     target.frontendRequest_i.bits.tag.vpage.poke(vpage)
     target.frontendRequest_i.bits.tag.thread_id.poke(threadID)
-    target.frontendRequest_i.bits.w_v.poke(false.B)
+    target.frontendRequest_i.bits.permission.poke(0.U)
     target.frontendRequest_i.valid.poke(true.B)
     target.frontendRequest_i.ready.expect(true.B)
   }
@@ -79,7 +79,7 @@ implicit class BaseTLBDriver(target: DUTTLB){
   def setWriteRequest(vpage: UInt, threadID: UInt) = {
     target.frontendRequest_i.bits.tag.vpage.poke(vpage)
     target.frontendRequest_i.bits.tag.thread_id.poke(threadID)
-    target.frontendRequest_i.bits.w_v.poke(true.B)
+    target.frontendRequest_i.bits.permission.poke(1.U)
     target.frontendRequest_i.valid.poke(true.B)
     target.frontendRequest_i.ready.expect(true.B)
   }

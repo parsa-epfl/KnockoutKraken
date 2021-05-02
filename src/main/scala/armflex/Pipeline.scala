@@ -94,9 +94,9 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
 
   mem.inst.req.bits.thread_id := fetch.mem.tag
   mem.inst.req.bits.addr := fetch.mem.bits
-  mem.inst.req.bits.w_v := false.B
   mem.inst.req.bits.wData := DontCare
-  mem.inst.req.bits.wMask := DontCare
+  mem.inst.req.bits.permission := 2.U // instruction permission
+  mem.inst.req.bits.wMask := 0.U
   mem.inst.req.handshake(fetch.mem)
 
   when(mem.inst.req.fire) {

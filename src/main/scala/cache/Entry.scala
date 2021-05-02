@@ -17,8 +17,8 @@ class CacheEntry(param: CacheParameter) extends Bundle {
    * Build the entry from given parameters **in place**. (Expected to be called when refilling)
    * This method is called when a entry in the bank is selected to be replaced with a new one.
   */ 
-  def refill(address: UInt, threadID: UInt, data: UInt): Unit  = {
-    this.v := true.B
+  def refill(address: UInt, threadID: UInt, data: UInt, valid: Bool = true.B): Unit  = {
+    this.v := valid
     this.tag := getTagFromAddress(address, param.tagWidth())
     this.d := false.B 
     this.data := data
@@ -28,14 +28,16 @@ class CacheEntry(param: CacheParameter) extends Bundle {
    * @brief @return a new entry with its data updated by @param data and the @param mask . 
    * Expected to be called when writing.
    */ 
-  def write(data: UInt, mask: UInt, refill: Bool): CacheEntry = {
+  def write(data: UInt, mask: UInt, refill: Bool, valid: Bool = true.B): CacheEntry = {
     when(refill){
       assert(mask.andR(), "Refill is 1 means mask is full 1!");
     }
     val res = Wire(new CacheEntry(param))
-    res.d := !refill // refilling should not cause the dirty
+    res.d := 
+      !refill && // refilling should not cause the dirty
+      mask.orR() =/= 0.U // no mask 
     res.tag := this.tag
-    res.v := true.B
+    res.v := valid
     val newdata = VecInit(0.U(param.blockBit.W).asBools())
     for(i <- 0 until param.blockBit){
       newdata(i) := Mux(mask(i), data(i), this.data(i))

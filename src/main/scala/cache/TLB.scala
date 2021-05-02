@@ -42,9 +42,15 @@ class TLBEntryPacket(param: TLBParameter) extends Bundle {
   val permission = UInt(param.permissionWidth.W)
   val modified = Bool()
 
-  def isWritable(): Bool = {
-    return modified === 1.U;
-  }
+  def permissionValid(targetPermission: UInt): Bool = MuxLookup(
+    targetPermission,
+    false.B,
+    Seq(
+      (0.U) -> (permission === 0.U || permission === 1.U),
+      (1.U) -> (permission === 1.U),
+      (2.U) -> (permission === 2.U)
+    )
+  )
 
   override def cloneType: this.type = new TLBEntryPacket(param).asInstanceOf[this.type]
 }
@@ -55,7 +61,7 @@ class TLBEntryPacket(param: TLBParameter) extends Bundle {
  */ 
 class TLBAccessRequestPacket(param: TLBParameter) extends Bundle {
   val tag = new TLBTagPacket(param)
-  val w_v = Bool()
+  val permission = UInt(2.W)
 
   override def cloneType: this.type = new TLBAccessRequestPacket(param).asInstanceOf[this.type]
 }
@@ -86,14 +92,14 @@ class TLBBackendRequestPacket(param: TLBParameter) extends Bundle {
   val entry = new TLBEntryPacket(param)
   val w_v = Bool()
   val flush_v = Bool()
-  val need_write_permission_v = Bool()
+  val permission = UInt(2.W)
 
   override def cloneType: this.type = new TLBBackendRequestPacket(param).asInstanceOf[this.type]
 
   def toAccessRequestPacket(): TLBAccessRequestPacket = {
     val res = new TLBAccessRequestPacket(param)
     res.tag := this.tag
-    res.w_v := this.w_v
+    res.permission := permission
     res
   }
 }
@@ -131,14 +137,18 @@ class BaseTLB(
   // activate
   val packet_arrive_o = IO(Valid(UInt(param.threadIDWidth().W)))
 
+  def tlbUpdateFunction(req: DataBankFrontendRequestPacket, oldEntry: CacheEntry): CacheEntry = {
+      val oldTLBEntry = oldEntry.asTypeOf(new TLBEntryPacket(param))
+      return Mux(
+        oldTLBEntry.permissionValid(req.permission),
+        oldEntry.write(req.wData, req.wMask, false.B, true.B),
+        oldEntry
+      )
+    }
+
   // basically, a cache.
   val u_cache = Module(new BaseCache(
-    param, lruCore,
-    {
-      (oldOne, newOne) =>
-      val oD = oldOne.read().asTypeOf(new TLBEntryPacket(param))
-      oD.isWritable() && (oldOne.read() =/= newOne.read())
-    }
+    param, lruCore, tlbUpdateFunction
   ))
 
   // It's not necessary to stall the TLB from outside.
@@ -154,8 +164,8 @@ class BaseTLB(
   modified_pte.pp := 0.U
   // bind the frontend_request
   u_cache.frontend_request_i.bits.wData := modified_pte.asUInt()
-  u_cache.frontend_request_i.bits.wMask := modified_pte.asUInt()
-  u_cache.frontend_request_i.bits.w_v := frontend_request_i.bits.w_v
+  u_cache.frontend_request_i.bits.wMask := Mux(frontend_request_i.bits.permission === 1.U, modified_pte.asUInt(), 0.U)
+  u_cache.frontend_request_i.bits.permission := frontend_request_i.bits.permission
   u_cache.frontend_request_i.valid := frontend_request_i.valid
   frontend_request_i.ready := u_cache.frontend_request_i.ready
 
@@ -166,13 +176,12 @@ class BaseTLB(
   flush_request_i.ready := u_cache.flush_request_i.ready
 
   // store the write permission so that the data flow is aligned
-  val s1_wr_v_r = if(param.implementedWithRegister) frontend_request_i.bits.w_v else RegNext(frontend_request_i.bits.w_v)
+  val s1_wr_v_r = if(param.implementedWithRegister) frontend_request_i.bits.permission else RegNext(frontend_request_i.bits.permission)
   
   val frontend_response =  u_cache.frontend_reply_o.bits.data.asTypeOf(new TLBEntryPacket(param))
   // after get response, check the permission
   violation_o.bits := u_cache.frontend_reply_o.bits.thread_id
-  // TODO: Not very sure whether a flush will trigger a violation problem.
-  violation_o.valid := u_cache.frontend_reply_o.valid && s1_wr_v_r && !frontend_response.isWritable()
+  violation_o.valid := u_cache.frontend_reply_o.valid && !frontend_response.permissionValid(s1_wr_v_r)
   // assign frontend_reply_o
   frontend_reply_o.valid := u_cache.frontend_reply_o.valid
   frontend_reply_o.bits.hit := u_cache.frontend_reply_o.bits.hit
@@ -184,7 +193,7 @@ class BaseTLB(
   backend_request_o.bits.entry := u_cache.backend_request_o.bits.data.asTypeOf(new TLBEntryPacket(param))
   backend_request_o.bits.w_v := u_cache.backend_request_o.bits.w_v
   backend_request_o.bits.flush_v := u_cache.backend_request_o.bits.flush_v
-  backend_request_o.bits.need_write_permission_v := u_cache.backend_request_o.bits.need_write_permission_v
+  backend_request_o.bits.permission := u_cache.backend_request_o.bits.permission
   backend_request_o.valid := u_cache.backend_request_o.valid
   u_cache.backend_request_o.ready := backend_request_o.ready
 

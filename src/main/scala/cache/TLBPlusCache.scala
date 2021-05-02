@@ -78,7 +78,7 @@ class TLBPlusCache(
     param.vAddressWidth - param.blockBiasWidth() - 1,
     log2Ceil(param.pageSize) - param.blockBiasWidth()
   )
-  u_tlb.frontend_request_i.bits.w_v := frontend_request_i.bits.w_v
+  u_tlb.frontend_request_i.bits.permission := frontend_request_i.bits.permission
   u_tlb.frontend_request_i.valid := frontend_request_i.valid
 
   // val tlb_frontend_reply = u_tlb.frontend_reply_o
@@ -93,7 +93,6 @@ class TLBPlusCache(
   u_cache.frontend_request_i.bits.thread_id := frontend_request_i.bits.thread_id
   u_cache.frontend_request_i.bits.wData := frontend_request_i.bits.wData
   u_cache.frontend_request_i.bits.wMask := frontend_request_i.bits.wMask
-  u_cache.frontend_request_i.bits.w_v := frontend_request_i.bits.w_v
   u_cache.frontend_request_i.valid := u_tlb.frontend_reply_o.valid &&
     u_tlb.frontend_reply_o.bits.hit && // TLB hit
     !u_tlb.frontend_reply_o.bits.violation // No violation
@@ -294,9 +293,9 @@ object CacheInterfaceAdaptors {
       param.blockBiasWidth()
     )
     o.bits.thread_id := u_arb.io.out.bits.thread_id
-    o.bits.w_v := u_arb.io.out.bits.w_v
     o.bits.wData := shifted._1
     o.bits.wMask := shifted._2
+    o.bits.permission := Mux(u_arb.io.out.bits.w_v, 1.U, 0.U)
 
     o.valid := u_arb.io.out.valid
     u_arb.io.out.ready := o.ready

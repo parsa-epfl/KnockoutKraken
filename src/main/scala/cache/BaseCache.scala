@@ -65,7 +65,7 @@ class CacheFrontendRequestPacket(
 ) extends Bundle {
   val addr = UInt(addressWidth.W) // access address.
   val thread_id = UInt(threadIDWidth.W)
-  val w_v = Bool()// write valid?
+  val permission = UInt(2.W)
   val wData = UInt(blockSize.W)
   val wMask = UInt(blockSize.W)
 
@@ -86,7 +86,8 @@ class CacheFrontendRequestPacket(
     res.thread_id := this.thread_id
     res.wData := this.wData
     res.wMask := this.wMask
-    res.w_v := this.w_v
+
+    res.permission := this.permission
 
     res
   }
@@ -120,8 +121,9 @@ class CacheFrontendFlushRequest(
     res.refill_v := false.B
     res.thread_id := this.thread_id
     res.wData := DontCare
-    res.wMask := 0.U
-    res.w_v := true.B
+    res.wMask := DontCare
+
+    res.permission := DontCare // Flush request doesn't consider the permission.
 
     res
   }
@@ -130,9 +132,9 @@ class CacheFrontendFlushRequest(
 class MergedBackendRequestPacket(param: CacheParameter) extends Bundle{
   val addr = UInt(param.addressWidth.W)
   val thread_id = UInt(param.threadIDWidth().W)
+  val permission = UInt(2.W)
   val w_v = Bool()
   val flush_v = Bool() // this request is caused by flush
-  val need_write_permission_v = Bool()
   val data = UInt(param.blockBit.W)
 
   override def cloneType: this.type = new MergedBackendRequestPacket(param).asInstanceOf[this.type]
@@ -150,7 +152,7 @@ class BackendRequestMerger(param: CacheParameter) extends MultiIOModule{
   read_request_converted.bits.thread_id := read_request_i.bits.thread_id
   read_request_converted.bits.w_v := false.B
   read_request_converted.bits.flush_v := false.B
-  read_request_converted.bits.need_write_permission_v := read_request_i.bits.need_write_permission_v
+  read_request_converted.bits.permission := read_request_i.bits.permission
   read_request_converted.valid := read_request_i.valid
   read_request_i.ready := read_request_converted.ready
 
@@ -160,7 +162,7 @@ class BackendRequestMerger(param: CacheParameter) extends MultiIOModule{
   write_request_converted.bits.thread_id := DontCare
   write_request_converted.bits.w_v := true.B
   write_request_converted.bits.flush_v := write_request_i.bits.flush_v
-  write_request_converted.bits.need_write_permission_v := true.B
+  write_request_converted.bits.permission := 1.U // The permission for writing is always 1.
   write_request_converted.valid := write_request_i.valid
   write_request_i.ready := write_request_converted.ready
 
@@ -222,15 +224,16 @@ class LRU[T <: LRUCore](
  * 
  * @param param the parameters of the cache
  * @param lruCore an generator of the LRU updating logic. See LRUCore.scala for all options.
-* @param writableFunction a function that returns whether to perform writing. The two parameters are original value and new value.
+ * @param updateFunction specify how to override the hit entry with given request and hit entry. Return the updated hit entry that will be written to.
  * 
+ * @note updateFunction will only be considered when it's a neither flushing nor refilling request, and return the old entry will not trigger a writing.
  */ 
 class BaseCache(
   val param: CacheParameter,
   lruCore: () => LRUCore,
-  writableFunction: (CacheEntry, CacheEntry) => Bool // (CacheParameter: UInt, CacheParameter: UInt) => Bool
+  updateFunction: (DataBankFrontendRequestPacket, CacheEntry) => CacheEntry // (req: DataBankFrontendRequestPacket, entryToUpdate: CacheEntry) => result
 ) extends MultiIOModule{
-  val u_bank_frontend = Module(new DataBankManager(param, writableFunction))
+  val u_bank_frontend = Module(new DataBankManager(param, updateFunction))
   val u_bram_adapter = Module(new BRAMPortAdapter(param))
 
   implicit val cfg = u_bram_adapter.bramCfg
@@ -278,8 +281,8 @@ class BaseCache(
   refill_request_internal.bits.thread_id := refill_request_i.bits.thread_id
   refill_request_internal.bits.wData := refill_request_i.bits.data
   refill_request_internal.bits.wMask := Fill(param.blockBit, true.B)
-  refill_request_internal.bits.w_v := true.B
   refill_request_internal.bits.refill_v := true.B
+  refill_request_internal.bits.permission := DontCare
 
   refill_request_i.ready := refill_request_internal.ready
 
@@ -334,6 +337,9 @@ class BaseCache(
 
 object BaseCache {
   def generateCache(param: CacheParameter, lruCore: () => LRUCore): BaseCache = {
-    new BaseCache(param, lruCore, (a, b) => true.B)
+    def cacheUpdateFunction(req: DataBankFrontendRequestPacket, oldEntry: CacheEntry): CacheEntry = {
+      oldEntry.write(req.wData, req.wMask, false.B, true.B)
+    }
+    new BaseCache(param, lruCore, cacheUpdateFunction)
   }
 }

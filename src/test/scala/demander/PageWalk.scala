@@ -27,7 +27,7 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
       dut.registerThreadTable(0, 10)
       timescope {
         dut.itlb_backend_request_i.bits.flush_v.poke(false.B)
-        dut.itlb_backend_request_i.bits.need_write_permission_v.poke(false.B)
+        dut.itlb_backend_request_i.bits.permission.poke(2.U)
         dut.itlb_backend_request_i.bits.w_v.poke(false.B)
         dut.itlb_backend_request_i.bits.tag.thread_id.poke(0.U)
         dut.itlb_backend_request_i.bits.tag.vpage.poke(0xABC.U)
@@ -64,7 +64,7 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
       dut.registerThreadTable(0, 10)
       timescope {
         dut.dtlb_backend_request_i.bits.flush_v.poke(false.B)
-        dut.dtlb_backend_request_i.bits.need_write_permission_v.poke(false.B)
+        dut.dtlb_backend_request_i.bits.permission.poke(0.U)
         dut.dtlb_backend_request_i.bits.w_v.poke(false.B)
         dut.dtlb_backend_request_i.bits.tag.thread_id.poke(0.U)
         dut.dtlb_backend_request_i.bits.tag.vpage.poke(0xABC.U)

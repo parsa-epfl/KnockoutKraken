@@ -66,11 +66,11 @@ class PageDemander(
   )))
 
   // TLB Message receiver
-  val u_itlb_mconv = Module(new TLBMessageConverter(param.mem.toTLBParameter(), 2.U))
+  val u_itlb_mconv = Module(new TLBMessageConverter(param.mem.toTLBParameter()))
   val itlb_backend_request_i = IO(Flipped(u_itlb_mconv.tlb_backend_request_i.cloneType))
   u_itlb_mconv.tlb_backend_request_i <> itlb_backend_request_i
 
-  val u_dtlb_mconv = Module(new TLBMessageConverter(param.mem.toTLBParameter(), 0.U))
+  val u_dtlb_mconv = Module(new TLBMessageConverter(param.mem.toTLBParameter()))
   val dtlb_backend_request_i = IO(Flipped(u_dtlb_mconv.tlb_backend_request_i.cloneType))
   u_dtlb_mconv.tlb_backend_request_i <> dtlb_backend_request_i
 

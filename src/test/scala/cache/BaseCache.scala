@@ -82,7 +82,7 @@ class DTUCache(
   u_refill_queue.miss_request_i.bits.addr := u_cache.backend_request_o.bits.addr
   u_refill_queue.miss_request_i.bits.thread_id := u_cache.backend_request_o.bits.thread_id
   u_refill_queue.miss_request_i.bits.not_sync_with_data_v := false.B
-  u_refill_queue.miss_request_i.bits.need_write_permission_v := u_cache.backend_request_o.bits.need_write_permission_v
+  u_refill_queue.miss_request_i.bits.permission := u_cache.backend_request_o.bits.permission
   u_refill_queue.miss_request_i.valid := u_cache.backend_request_o.fire() && !u_cache.backend_request_o.bits.w_v
 
   u_refill_queue.backend_reply_i <> u_delayChain.cacheReply_o
@@ -109,7 +109,7 @@ implicit class CacheDriver(target: DTUCache){
   def setReadRequest(addr: UInt, threadID: UInt, groupedFlag: Bool = false.B):Unit = {
     target.frontendRequest_i.bits.addr.poke(addr)
     target.frontendRequest_i.bits.thread_id.poke(threadID)
-    target.frontendRequest_i.bits.w_v.poke(false.B)
+    target.frontendRequest_i.bits.permission.poke(0.U) // Assume dCache here.
     target.frontendRequest_i.valid.poke(true.B)
     target.frontendRequest_i.ready.expect(true.B) // make sure this is selected.
   }
@@ -118,7 +118,7 @@ implicit class CacheDriver(target: DTUCache){
     //assert(target.u_cache.param.writable, "Can not set a write request to a read-only cache")
     target.frontendRequest_i.bits.addr.poke(addr)
     target.frontendRequest_i.bits.thread_id.poke(threadID)
-    target.frontendRequest_i.bits.w_v.poke(true.B)
+    target.frontendRequest_i.bits.permission.poke(1.U)
     target.frontendRequest_i.bits.wData.poke(data)
     target.frontendRequest_i.bits.wMask.poke(mask)
     target.frontendRequest_i.valid.poke(true.B)
