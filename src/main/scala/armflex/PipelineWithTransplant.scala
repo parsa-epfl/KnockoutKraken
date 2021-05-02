@@ -65,7 +65,7 @@ class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
 
   val mem = IO(pipeline.mem.cloneType)
   val transplantIO = IO(new Bundle {
-    val ctl = Flipped(new AXI4Lite(4, axiDataWidth))
+    val ctl = Flipped(new AXI4Lite(log2Ceil(bramRegCount + regCount) + log2Ceil(axiDataWidth / 8), axiDataWidth))
   })
   transplantIO.ctl <> axiLiteCSR.io.ctl
   pipeline.mem <> mem
