@@ -60,7 +60,7 @@ class AXI4LiteCSR(dataWidth: Int, regCount: Int) extends Module {
   io.ctl.r.rvalid := rvalid
   io.ctl.r.rresp := rresp
 
-  io.bus.read := io.ctl.r.rready && rvalid
+  io.bus.read := (io.ctl.r.rready && rvalid) || (io.ctl.ar.arvalid && arready)  // '||' for setting up the read address in BRAM before the read access
   io.bus.write := io.ctl.w.wvalid && wready
   io.bus.addr := addr
 
