@@ -41,7 +41,8 @@ class AXIRAMController(
     val size = UInt((1 << AXI4.sizeWidth).W)
   }
 
-  val read_state_r = RegInit(sIdle)
+  val read_req_state_r = RegInit(sIdle)
+  val read_reply_state_r = RegInit(sIdle)
   val read_context_r = Reg(new context_t)
 
   //  Read logic
@@ -63,6 +64,7 @@ class AXIRAMController(
     read_context_r.size := (1.U << S_AXI.ar.arsize)
     read_context_r.target_length := S_AXI.ar.arlen
     read_context_r.current_send_cnt := 0.U
+    read_context_r.current_receive_cnt := 0.U
     read_context_r.send_done := false.B
   }.elsewhen(read_request_o.fire()){
     read_context_r.current_addr := read_context_r.current_addr + read_context_r.size
@@ -70,31 +72,51 @@ class AXIRAMController(
     read_context_r.send_done := ar_final
   }
 
+  switch(read_req_state_r){
+    is(sIdle){
+      read_req_state_r := Mux(ar_fire, sTrans, sIdle)
+    }
+    is(sTrans){
+      read_req_state_r := Mux(
+        ar_final && read_request_o.fire(),
+        sReply,
+        sTrans
+      )
+    }
+    is(sReply){
+      read_req_state_r := Mux(r_fire && r_final, sIdle, sReply)
+    }
+  }
+
+  S_AXI.ar.arready := read_req_state_r === sIdle
+
+  read_request_o.valid := read_req_state_r === sTrans
+  read_request_o.bits := read_context_r.current_addr
+
+  switch(read_reply_state_r){
+    is(sIdle){
+      read_reply_state_r := Mux(
+        read_request_o.fire(), 
+        sTrans,
+        sIdle
+      )
+    }
+    is(sTrans){
+      read_reply_state_r := Mux(r_fire && r_final, sIdle, sTrans)
+    }
+  }
+
   when(r_fire){
     read_context_r.current_receive_cnt := read_context_r.current_receive_cnt + 1.U
   }
 
-  switch(read_state_r){
-    is(sIdle){
-      read_state_r := Mux(ar_fire, sTrans, sIdle)
-    }
-    is(sTrans){
-      read_state_r := Mux(r_final && r_fire, sIdle, sTrans)
-    }
-  }
-
-  S_AXI.ar.arready := read_state_r === sIdle
-
-  S_AXI.r.rvalid := read_state_r === sTrans && read_reply_i.valid
+  S_AXI.r.rvalid := read_reply_state_r === sTrans && read_reply_i.valid
   S_AXI.r.rid := read_context_r.id
   S_AXI.r.rdata := read_reply_i.bits
   S_AXI.r.rlast := r_final
   S_AXI.r.rresp := 0.U //! No exclusive case
 
-  read_request_o.valid := read_state_r === sTrans && !read_context_r.send_done
-  read_request_o.bits := read_context_r.current_addr
-
-  read_reply_i.ready := read_state_r === sTrans && S_AXI.r.rready
+  read_reply_i.ready := read_reply_state_r === sTrans && S_AXI.r.rready
 
   val write_state_r = RegInit(sIdle)
   val write_context_r = Reg(new context_t)

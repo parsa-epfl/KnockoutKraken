@@ -107,9 +107,9 @@ class TLBPlusCache(
     val thread_id = UInt(cacheParam.threadIDWidth().W)
   }
 
-  // val frontend_reply_o = IO(Valid(new tlb_cache_frontend_reply_t))
+  // FIXME: The reply logic is not compatible with BRAM-based TLB. Need refactoring here.
   val frontend_reply_o = IO(Valid(new FrontendReplyPacket(param.toCacheParameter())))
-  frontend_reply_o.valid := u_cache.frontend_reply_o.valid
+  frontend_reply_o.valid := u_cache.frontend_reply_o.valid || RegNext(frontend_request_i.fire()) // tempo solution.
   frontend_reply_o.bits.hit := u_cache.frontend_reply_o.bits.hit && RegNext(
     u_tlb.frontend_reply_o.bits.hit && !u_tlb.frontend_reply_o.bits.violation
   )
@@ -330,7 +330,9 @@ object CacheInterfaceAdaptors {
     val data_o = IO(Valid(new FrontendReplyPacket(param.toCacheParameter())))
     val sync_message_i = IO(Flipped(Decoupled(new CacheInterfaceHandshakePacket(param.toCacheParameter()))))
     // sync_message_i should align with cache_reply_i
-    assert(cache_reply_i.valid === sync_message_i.valid, "sync_message_i should align with cache_reply_i.")
+    when(cache_reply_i.valid){
+      assert(sync_message_i.valid, "sync_message_i should align with cache_reply_i.")
+    }
     sync_message_i.ready := true.B //?
 
     when(cache_reply_i.valid) {
@@ -405,7 +407,7 @@ object CacheBackendToAXIInterface {
     M_DMA_R.req.bits.length := 1.U
     M_DMA_R.req.bits.address := Cat(
       q_cache_backend_request.bits.addr,
-      Fill(log2Ceil(param.cacheBlockSize), 0.U)
+      Fill(param.blockBiasWidth(), 0.U)
     )
     M_DMA_R.req.valid := !q_cache_backend_request.bits.w_v && q_cache_backend_request.valid
 
@@ -424,7 +426,7 @@ object CacheBackendToAXIInterface {
 
     M_DMA_W.req.bits.address := Cat(
       q_cache_backend_request.bits.addr,
-      Fill(log2Ceil(param.cacheBlockSize), 0.U)
+      Fill(param.blockBiasWidth(), 0.U)
     )
     M_DMA_W.req.bits.length := 1.U
     M_DMA_W.req.valid := q_cache_backend_request.bits.w_v && q_cache_backend_request.valid

@@ -70,7 +70,6 @@ class QEMUMissReplyHandler(
   ppn_pop_i.ready := !request_r.synonym_v && state_r === sCheckAndLoadSynonym
 
   // sGetSynonym
-
   u_buffer.lookup_request_i := request_r.synonym_tag
   when(ppn_pop_i.fire()){
     ppn_r := ppn_pop_i.bits

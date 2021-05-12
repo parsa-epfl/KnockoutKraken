@@ -50,10 +50,12 @@ class AXIControlledMessageQueue extends MultiIOModule {
   val u_axi_trans_converter = Module(new AXIRAMController(7, 512))
   u_axi_trans_converter.S_AXI <> S_AXI
 
+  val read_req_q = Queue(u_axi_trans_converter.read_request_o)
+
   u_axi_trans_converter.read_reply_i.bits := fifo_i.bits
-  u_axi_trans_converter.read_reply_i.valid := u_axi_trans_converter.read_request_o.valid && fifo_i.valid
-  u_axi_trans_converter.read_request_o.ready := fifo_i.valid && u_axi_trans_converter.read_reply_i.ready
-  fifo_i.ready := u_axi_trans_converter.read_reply_i.fire()
+  u_axi_trans_converter.read_reply_i.valid := read_req_q.valid && fifo_i.valid
+  read_req_q.ready := fifo_i.valid && u_axi_trans_converter.read_reply_i.ready
+  fifo_i.ready := read_req_q.valid && u_axi_trans_converter.read_reply_i.ready
 
   fifo_o.bits := u_axi_trans_converter.write_request_o.bits.data
   fifo_o.valid := u_axi_trans_converter.write_request_o.valid

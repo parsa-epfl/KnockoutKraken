@@ -17,6 +17,7 @@ class ARMFlexTop extends MultiIOModule {
   implicit val pipelineCfg = new ProcConfig(NB_THREADS = 8)
   val memoryParameter = new MemorySystemParameter(
     threadNumber = 8,
+    // FIXME: Remember to make it into 36 before actually exporting to the hardware for FPGA
     pAddressWidth = 24 // For scaling down
   )
   val pdParam = new PageDemanderParameter(memoryParameter)

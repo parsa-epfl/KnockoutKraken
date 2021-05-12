@@ -29,10 +29,11 @@ class PageDemanderParameter(
   def dramAddrWidth = mem.pAddressWidth
   def dramDataWidth = mem.cacheBlockSize
 
+
   def getPageTableAddressByVPN(vpn: UInt) = {
+    def entryNumberInLog2 = mem.pAddressWidth - 12
     // val res = Wire()
-    // TODO: Move this function to Page Table Buffer.
-    val pageset_number = vpn(23, 4)
+    val pageset_number = vpn(entryNumberInLog2-1, 4)
     Cat(pageset_number * 3.U(2.W), 0.U(6.W))
   }
 }
