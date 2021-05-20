@@ -6,7 +6,6 @@ import armflex.cache._
 import armflex.demander.software_bundle.QEMUMissReply
 import armflex.demander.peripheral.PageTableSetBuffer
 import armflex.demander.peripheral.PageTableSetPacket
-import armflex.demander.peripheral.ThreadLookupResultPacket
 import antmicro.Bus._
 import antmicro.Frontend._
 import chisel3.experimental.Param
@@ -49,18 +48,12 @@ class QEMUMissReplyHandler(
   M_DMA_W.data <> move_out_enq
 
   // sIdle
-  val tt_pid_o = IO(Output(UInt(param.mem.processIDWidth.W)))
-  tt_pid_o := qemu_miss_reply_i.bits.tag.process_id
-  val tt_tid_i = IO(Input(new ThreadLookupResultPacket(param.mem.threadNumber)))
 
   qemu_miss_reply_i.ready := state_r === sIdle
   val request_r = Reg(new QEMUMissReply(param.mem.toTLBParameter))
   val ppn_r = RegInit(0.U(param.mem.pPageNumberWidth.W))
-  val tid_r = Reg(Valid(UInt(param.mem.toTLBParameter.threadIDWidth().W)))
   when(qemu_miss_reply_i.fire()){
     request_r := qemu_miss_reply_i.bits
-    tid_r.valid := tt_tid_i.hit_v
-    tid_r.bits := tt_tid_i.thread_id
   }
 
 
@@ -128,11 +121,10 @@ class QEMUMissReplyHandler(
 
   // sReplyTLB
   val tlb_backend_reply_o = IO(Decoupled(new TLBBackendReplyPacket(param.mem.toTLBParameter)))
-  tlb_backend_reply_o.bits.tag.thread_id := tid_r.bits
-  tlb_backend_reply_o.bits.tag.vpage := request_r.tag.vpn
+  tlb_backend_reply_o.bits.tag := request_r.tag
   tlb_backend_reply_o.bits.data.modified := false.B
   tlb_backend_reply_o.bits.data.permission := request_r.permission
-  tlb_backend_reply_o.bits.data.pp := ppn_r
+  tlb_backend_reply_o.bits.data.ppn := ppn_r
   tlb_backend_reply_o.valid := state_r === sReplyToTLB
 
   // state machine
@@ -175,7 +167,7 @@ class QEMUMissReplyHandler(
     is(sMoveback){
       state_r := Mux(
         M_DMA_W.done,
-        Mux(tid_r.valid, sReplyToTLB, sIdle),
+        sReplyToTLB,
         sMoveback
       )
     }

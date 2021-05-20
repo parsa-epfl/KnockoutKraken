@@ -33,37 +33,32 @@ abstract class SoftwareControlledBundle extends Bundle {
 //   }
 // }
 
-class TLBTag(param: TLBParameter) extends TLBTagPacket(param) {
-  
-}
-
-class PTTag(param: TLBParameter) extends SoftwareControlledBundle {
+class PTTagPacket(param: TLBParameter) extends SoftwareControlledBundle {
   val vpn = UInt(param.vPageWidth.W) // 52
-  val process_id = UInt(param.pidWidth.W) // 16
+  val asid = UInt(param.asidWidth.W) // 16
 
   def asVec(width: Int): Vec[UInt] = {
     assert(width == 32)
     return VecInit(Seq(
       vpn(31, 0),
       vpn(param.vPageWidth-1, 32),
-      process_id
+      asid
     ))
   }
 
   def parseFromVec(f: Vec[UInt]): this.type = {
     val res = Wire(this.cloneType)
     res.vpn := Cat(f(1), f(0))
-    res.process_id := f(2)
+    res.asid := f(2)
     return res.asInstanceOf[this.type]
   }
 
   override def cloneType: this.type = {
-    return new PTTag(param).asInstanceOf[this.type]
+    return new PTTagPacket(param).asInstanceOf[this.type]
   }
 }
 
-// FIXME: Make it compatible with TLBEntryPacket
-class PTEntry(param: TLBParameter) extends SoftwareControlledBundle {
+class PTEntryPacket(param: TLBParameter) extends SoftwareControlledBundle {
   val ppn = UInt(param.pPageWidth.W) // 24
   val permission = UInt(param.permissionWidth.W) // 2
   val modified = Bool() // 1
@@ -86,15 +81,23 @@ class PTEntry(param: TLBParameter) extends SoftwareControlledBundle {
   }
 
   override def cloneType: this.type = {
-    return new PTEntry(param).asInstanceOf[this.type]
+    return new PTEntryPacket(param).asInstanceOf[this.type]
   }
+
+  def permissionValid(targetPermission: UInt): Bool = MuxLookup(
+    targetPermission,
+    false.B,
+    Seq(
+      (0.U) -> (permission === 0.U || permission === 1.U),
+      (1.U) -> (permission === 1.U),
+      (2.U) -> (permission === 2.U)
+    )
+  )
 }
 
-
-// TODO: Merge pidWidth into TLBParameter, and get rid of the thread id from the whole memory system.
 class PageTableItem(param: TLBParameter) extends SoftwareControlledBundle {
-  val tag = new PTTag(param)     // 3
-  val entry = new PTEntry(param) // 3
+  val tag = new PTTagPacket(param)     // 3
+  val entry = new PTEntryPacket(param) // 3
 
   def asVec(width: Int): Vec[UInt] = {
     assert(width == 32)
@@ -115,7 +118,7 @@ class PageTableItem(param: TLBParameter) extends SoftwareControlledBundle {
 
 
 class TLBMissRequestMessage(param: TLBParameter) extends Bundle {
-  val tag = new TLBTag(param)
+  val tag = new PTTagPacket(param)
   val permission = UInt(param.permissionWidth.W)
 
   override def cloneType: this.type = {
@@ -124,8 +127,8 @@ class TLBMissRequestMessage(param: TLBParameter) extends Bundle {
 }
 
 class TLBEvictionMessage(param: TLBParameter) extends Bundle {
-  val tag = new TLBTag(param)
-  val entry = new PTEntry(param)
+  val tag = new PTTagPacket(param)
+  val entry = new PTEntryPacket(param)
 
   override def cloneType: this.type = {
     return new TLBEvictionMessage(param).asInstanceOf[this.type]
@@ -198,7 +201,7 @@ abstract class MessageUnionSubtype[T <: RawMessage](mess: T) extends SoftwareCon
 }
 
 class QEMUPageEvictRequest(param: TLBParameter) extends MessageUnionSubtype(new QEMURxMessage){
-  val tag = new PTTag(param)
+  val tag = new PTTagPacket(param)
   def asVec(width: Int): Vec[UInt] = {
     return tag.asVec(width)
   }
@@ -217,11 +220,11 @@ class QEMUPageEvictRequest(param: TLBParameter) extends MessageUnionSubtype(new 
 
 
 class QEMUMissReply(param: TLBParameter) extends MessageUnionSubtype(new QEMURxMessage) {
-  val tag = new PTTag(param)
+  val tag = new PTTagPacket(param)
   val permission = UInt(param.permissionWidth.W)
 
   val synonym_v = Bool()
-  val synonym_tag = new PTTag(param)
+  val synonym_tag = new PTTagPacket(param)
 
   def asVec(width: Int): Vec[UInt] = {
     assert(width == 32)
@@ -253,7 +256,7 @@ class QEMUMissReply(param: TLBParameter) extends MessageUnionSubtype(new QEMURxM
 }
 
 class QEMUEvictReply(param: TLBParameter) extends MessageUnionSubtype(new QEMURxMessage) {
-  val tag = new PTTag(param)
+  val tag = new PTTagPacket(param)
   val old_ppn = UInt(24.W)
   val synonym_v = Bool()
   def asVec(width: Int): Vec[UInt] = {
@@ -285,7 +288,7 @@ class QEMUEvictReply(param: TLBParameter) extends MessageUnionSubtype(new QEMURx
 
 
 class PageFaultNotification(param: TLBParameter) extends MessageUnionSubtype(new QEMUTxMessage) {
-  val tag = new PTTag(param)
+  val tag = new PTTagPacket(param)
   val permission = UInt(param.permissionWidth.W)
 
   def asVec(width: Int): Vec[UInt] = {

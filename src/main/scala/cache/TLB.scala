@@ -3,12 +3,13 @@ package armflex.cache
 import chisel3._
 import chisel3.util._
 
+import armflex.demander.software_bundle._
+
 class TLBParameter(
   val vPageWidth: Int = 52,
   val pPageWidth: Int = 24,
   val permissionWidth: Int = 2,
-  val pidWidth: Int = 15, // FIXME: This should appear here. But we have plan to merge TLBParam and Page Table param together.
-  threadNumber: Int = 4,
+  asidWidth: Int = 15, // FIXME: This should appear here. But we have plan to merge TLBParam and Page Table param together.
   setNumber: Int = 1,
   associativity: Int = 32,
   implementedWithRegister: Boolean = true
@@ -16,43 +17,10 @@ class TLBParameter(
   setNumber,
   associativity,
   pPageWidth + permissionWidth + 1, // permission bits + pPageWidth + modifiedBit
-  vPageWidth + log2Ceil(threadNumber) , // VA + TID
-  threadNumber,
+  vPageWidth + asidWidth , // VA + TID
+  asidWidth,
   implementedWithRegister
 ){
-}
-/**
- * The tag used to access a TLB entry
- * In order to be compatible with cache, we use this tag as address.
- * @param param the TLB Parameter
- */ 
-class TLBTagPacket(param: TLBParameter) extends Bundle {
-  val vpage = UInt(param.vPageWidth.W)
-  val thread_id = UInt(param.threadIDWidth().W)
-
-  override def cloneType: this.type = new TLBTagPacket(param).asInstanceOf[this.type]
-}
-
-/**
- * The data part of a PTE. Still make it compatible with Cache
- * @param param the TLB Parameter
- */ 
-class TLBEntryPacket(param: TLBParameter) extends Bundle {
-  val pp = UInt(param.pPageWidth.W)
-  val permission = UInt(param.permissionWidth.W)
-  val modified = Bool()
-
-  def permissionValid(targetPermission: UInt): Bool = MuxLookup(
-    targetPermission,
-    false.B,
-    Seq(
-      (0.U) -> (permission === 0.U || permission === 1.U),
-      (1.U) -> (permission === 1.U),
-      (2.U) -> (permission === 2.U)
-    )
-  )
-
-  override def cloneType: this.type = new TLBEntryPacket(param).asInstanceOf[this.type]
 }
 
 /**
@@ -60,7 +28,7 @@ class TLBEntryPacket(param: TLBParameter) extends Bundle {
  * @param param the TLB Parameter
  */ 
 class TLBAccessRequestPacket(param: TLBParameter) extends Bundle {
-  val tag = new TLBTagPacket(param)
+  val tag = new PTTagPacket(param)
   val permission = UInt(2.W)
 
   override def cloneType: this.type = new TLBAccessRequestPacket(param).asInstanceOf[this.type]
@@ -74,7 +42,7 @@ class TLBAccessRequestPacket(param: TLBParameter) extends Bundle {
 class TLBFrontendReplyPacket(param: TLBParameter) extends Bundle {
   // val pp = UInt(param.pPageWidth.W)
   // val modified = 
-  val entry = new TLBEntryPacket(param)
+  val entry = new PTEntryPacket(param)
   val hit = Bool()
   val violation = Bool()
   val dirty = Bool()
@@ -88,8 +56,8 @@ class TLBFrontendReplyPacket(param: TLBParameter) extends Bundle {
  * 
  */ 
 class TLBBackendRequestPacket(param: TLBParameter) extends Bundle {
-  val tag = new TLBTagPacket(param)
-  val entry = new TLBEntryPacket(param)
+  val tag = new PTTagPacket(param)
+  val entry = new PTEntryPacket(param)
   val w_v = Bool()
   val flush_v = Bool()
   val permission = UInt(2.W)
@@ -109,8 +77,8 @@ class TLBBackendRequestPacket(param: TLBParameter) extends Bundle {
  * @param param the TLB Parameter
  */ 
 class TLBBackendReplyPacket(param: TLBParameter) extends Bundle {
-  val tag = new TLBTagPacket(param)
-  val data = new TLBEntryPacket(param)
+  val tag = new PTTagPacket(param)
+  val data = new PTEntryPacket(param)
 
   override def cloneType: this.type = new TLBBackendReplyPacket(param).asInstanceOf[this.type]
 }
@@ -127,18 +95,18 @@ class BaseTLB(
 ) extends MultiIOModule {
   // frontend
   val frontend_request_i = IO(Flipped(Decoupled(new TLBAccessRequestPacket(param))))
-  val flush_request_i = IO(Flipped(Decoupled(new TLBTagPacket(param))))
+  val flush_request_i = IO(Flipped(Decoupled(new PTTagPacket(param))))
   val frontend_reply_o = IO(Valid(new TLBFrontendReplyPacket(param)))
   // permission violation
-  val violation_o = IO(Valid(UInt(param.threadIDWidth().W)))
+  val violation_o = IO(Valid(UInt(param.asidWidth.W)))
   // backend
   val backend_request_o = IO(Decoupled(new TLBBackendRequestPacket(param)))
   val backend_reply_i = IO(Flipped(Decoupled(new TLBBackendReplyPacket(param))))
   // activate
-  val packet_arrive_o = IO(Valid(UInt(param.threadIDWidth().W)))
+  val packet_arrive_o = IO(Valid(UInt(param.asidWidth.W)))
 
   def tlbUpdateFunction(req: DataBankFrontendRequestPacket, oldEntry: CacheEntry): CacheEntry = {
-      val oldTLBEntry = oldEntry.asTypeOf(new TLBEntryPacket(param))
+      val oldTLBEntry = oldEntry.asTypeOf(new PTEntryPacket(param))
       return Mux(
         oldTLBEntry.permissionValid(req.permission),
         oldEntry.write(req.wData, req.wMask, false.B, true.B),
@@ -156,12 +124,12 @@ class BaseTLB(
 
   // bind the frontend_request
   u_cache.frontend_request_i.bits.addr := frontend_request_i.bits.tag.asUInt()
-  u_cache.frontend_request_i.bits.thread_id := frontend_request_i.bits.tag.thread_id
+  u_cache.frontend_request_i.bits.asid := frontend_request_i.bits.tag.asid
   // mark it modified
-  val modified_pte = Wire(new TLBEntryPacket(param))
+  val modified_pte = Wire(new PTEntryPacket(param))
   modified_pte.modified := true.B
   modified_pte.permission := 0.U
-  modified_pte.pp := 0.U
+  modified_pte.ppn := 0.U
   // bind the frontend_request
   u_cache.frontend_request_i.bits.wData := modified_pte.asUInt()
   u_cache.frontend_request_i.bits.wMask := Mux(frontend_request_i.bits.permission === 1.U, modified_pte.asUInt(), 0.U)
@@ -171,16 +139,16 @@ class BaseTLB(
 
   // bind the flush request
   u_cache.flush_request_i.bits.addr := flush_request_i.bits.asUInt()
-  u_cache.flush_request_i.bits.thread_id := frontend_request_i.bits.tag.thread_id
+  u_cache.flush_request_i.bits.asid := frontend_request_i.bits.tag.asid
   u_cache.flush_request_i.valid := flush_request_i.valid
   flush_request_i.ready := u_cache.flush_request_i.ready
 
   // store the write permission so that the data flow is aligned
   val s1_wr_v_r = if(param.implementedWithRegister) frontend_request_i.bits.permission else RegNext(frontend_request_i.bits.permission)
   
-  val frontend_response =  u_cache.frontend_reply_o.bits.data.asTypeOf(new TLBEntryPacket(param))
+  val frontend_response =  u_cache.frontend_reply_o.bits.data.asTypeOf(new PTEntryPacket(param))
   // after get response, check the permission
-  violation_o.bits := u_cache.frontend_reply_o.bits.thread_id
+  violation_o.bits := u_cache.frontend_reply_o.bits.asid
   violation_o.valid := u_cache.frontend_reply_o.valid && !frontend_response.permissionValid(s1_wr_v_r)
   // assign frontend_reply_o
   frontend_reply_o.valid := u_cache.frontend_reply_o.valid
@@ -189,8 +157,8 @@ class BaseTLB(
   frontend_reply_o.bits.violation := violation_o.valid
   frontend_reply_o.bits.dirty := u_cache.frontend_reply_o.bits.dirty
 
-  backend_request_o.bits.tag := u_cache.backend_request_o.bits.addr.asTypeOf(new TLBTagPacket(param))
-  backend_request_o.bits.entry := u_cache.backend_request_o.bits.data.asTypeOf(new TLBEntryPacket(param))
+  backend_request_o.bits.tag := u_cache.backend_request_o.bits.addr.asTypeOf(new PTTagPacket(param))
+  backend_request_o.bits.entry := u_cache.backend_request_o.bits.data.asTypeOf(new PTEntryPacket(param))
   backend_request_o.bits.w_v := u_cache.backend_request_o.bits.w_v
   backend_request_o.bits.flush_v := u_cache.backend_request_o.bits.flush_v
   backend_request_o.bits.permission := u_cache.backend_request_o.bits.permission
@@ -201,11 +169,11 @@ class BaseTLB(
   u_cache.refill_request_i.bits.addr := backend_reply_i.bits.tag.asUInt()
   u_cache.refill_request_i.bits.data := backend_reply_i.bits.data.asUInt()
   u_cache.refill_request_i.bits.not_sync_with_data_v := false.B
-  u_cache.refill_request_i.bits.thread_id := backend_reply_i.bits.tag.thread_id
+  u_cache.refill_request_i.bits.asid := backend_reply_i.bits.tag.asid
   u_cache.refill_request_i.valid := backend_reply_i.valid
   backend_reply_i.ready := u_cache.refill_request_i.ready
 
-  packet_arrive_o.bits := u_cache.packet_arrive_o.bits.thread_id
+  packet_arrive_o.bits := u_cache.packet_arrive_o.bits.asid
   packet_arrive_o.valid := u_cache.packet_arrive_o.valid
 }
 

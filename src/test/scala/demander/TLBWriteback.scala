@@ -23,16 +23,16 @@ class TLBWritebackTester extends FreeSpec with ChiselScalatestTester {
     test(new PageDemanderDUT(new PageDemanderParameter())).withAnnotations(anno){ dut =>
       // apply a miss request
       // Set the thread table.
-      dut.registerThreadTable(0, 10)
+      // dut.registerThreadTable(0, 10)
       // set TLB eviction up.
       timescope {
         dut.dtlb_backend_request_i.bits.flush_v.poke(false.B)
         dut.dtlb_backend_request_i.bits.permission.poke(1.U)
         dut.dtlb_backend_request_i.bits.w_v.poke(true.B)
-        dut.dtlb_backend_request_i.bits.tag.thread_id.poke(0.U)
-        dut.dtlb_backend_request_i.bits.tag.vpage.poke(0xABC.U)
+        dut.dtlb_backend_request_i.bits.tag.asid.poke(10.U)
+        dut.dtlb_backend_request_i.bits.tag.vpn.poke(0xABC.U)
         dut.dtlb_backend_request_i.bits.entry.modified.poke(true.B)
-        dut.dtlb_backend_request_i.bits.entry.pp.poke(0xCBA.U)
+        dut.dtlb_backend_request_i.bits.entry.ppn.poke(0xCBA.U)
         dut.dtlb_backend_request_i.bits.entry.permission.poke(1.U)
         dut.dtlb_backend_request_i.valid.poke(true.B)
         dut.dtlb_backend_request_i.ready.expect(true.B)
@@ -42,7 +42,7 @@ class TLBWritebackTester extends FreeSpec with ChiselScalatestTester {
       dut.pageset_packet_i.lru_bits.poke(1.U)
       dut.pageset_packet_i.valids.poke(1.U)
       dut.pageset_packet_i.tags(0).vpn.poke(0xABC.U)
-      dut.pageset_packet_i.tags(0).process_id.poke(10.U)
+      dut.pageset_packet_i.tags(0).asid.poke(10.U)
       dut.pageset_packet_i.ptes(0).ppn.poke(0xCBA.U)
       dut.pageset_packet_i.ptes(0).modified.poke(false.B)
       dut.pageset_packet_i.ptes(0).permission.poke(1.U)
@@ -51,7 +51,7 @@ class TLBWritebackTester extends FreeSpec with ChiselScalatestTester {
       dut.receivePageTableSet(dut.M_AXI, (0xAB * 3 * 64).U)
       // verify the update
       dut.pageset_packet_o.tags(0).vpn.expect(0xABC.U)
-      dut.pageset_packet_o.tags(0).process_id.expect(10.U)
+      dut.pageset_packet_o.tags(0).asid.expect(10.U)
       dut.pageset_packet_o.ptes(0).ppn.expect(0xCBA.U)
       dut.pageset_packet_o.ptes(0).modified.expect(true.B)
     }

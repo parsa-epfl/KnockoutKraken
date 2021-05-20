@@ -6,7 +6,6 @@ import armflex.cache._
 import armflex.demander.software_bundle.QEMUMissReply
 import armflex.demander.peripheral.PageTableSetBuffer
 import armflex.demander.peripheral.PageTableSetPacket
-import armflex.demander.peripheral.ThreadLookupResultPacket
 import antmicro.Bus._
 import antmicro.Frontend._
 import chisel3.experimental.Param

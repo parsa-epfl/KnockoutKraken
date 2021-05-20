@@ -143,7 +143,7 @@ class PageDemanderDUT(
   val S_AXIL = IO(Flipped(u_axil_inter.S_AXIL.cloneType))
   S_AXIL <> u_axil_inter.S_AXIL
 
-  u_axil_inter.M_AXIL(0) <> u_page_demander.S_AXIL_TT
+  // u_axil_inter.M_AXIL(0) <> u_page_demander.S_AXIL_TT
   u_axil_inter.M_AXIL(1) <> u_page_demander.S_AXIL_QEMU_MQ
 
   // Helper 1: the page set converter
@@ -184,26 +184,6 @@ implicit class PageDemanderDriver(target: PageDemanderDUT){
     }
     return interval
   }
-  
-  def registerThreadTable(thread_id: Int, process_id: Int) = timescope {
-    // Send write request
-    target.S_AXIL.aw.awaddr.poke((thread_id * 4 + 0x4000).U)
-    target.S_AXIL.aw.awvalid.poke(true.B)
-    target.S_AXIL.aw.awready.expect(true.B)
-    target.tk()
-    target.S_AXIL.aw.awvalid.poke(false.B)
-    // Send write data
-    target.S_AXIL.w.wdata.poke(process_id.U)
-    target.S_AXIL.w.wvalid.poke(true.B)
-    // Wait for it ready.
-    target.S_AXIL.w.wready.expect(true.B)
-    target.tk()
-    // Wait for write reply
-    target.S_AXIL.w.wvalid.poke(false.B)
-    target.S_AXIL.b.bvalid.expect(true.B)
-    target.S_AXIL.b.bready.poke(true.B)
-    target.tk()
-  }
 
   def sendQEMUMessage(message_type: BigInt, rawMessage: Seq[BigInt]) = timescope {
     target.S_AXI.aw.awaddr.poke(0x8000.U)
@@ -230,17 +210,17 @@ implicit class PageDemanderDriver(target: PageDemanderDUT){
     tk()
   }
 
-  def sendPageFaultResponse(vpn: BigInt, pid: Int, permission: Int, synonym: Boolean, s_vpn: BigInt, s_pid: Int) = {
+  def sendPageFaultResponse(vpn: BigInt, asid: Int, permission: Int, synonym: Boolean, s_vpn: BigInt, s_asid: Int) = {
     sendQEMUMessage(
       2, Seq(
         vpn & 0xFFFFFFFF,
         vpn >> 32,
-        pid,
+        asid,
         permission, 
         if(synonym) 1 else 0,
         s_vpn & 0xFFFFFFFF,
         s_vpn >> 32,
-        s_pid
+        s_asid
       )
     )
   }

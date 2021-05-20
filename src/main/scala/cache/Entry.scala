@@ -17,7 +17,7 @@ class CacheEntry(param: CacheParameter) extends Bundle {
    * Build the entry from given parameters **in place**. (Expected to be called when refilling)
    * This method is called when a entry in the bank is selected to be replaced with a new one.
   */ 
-  def refill(address: UInt, threadID: UInt, data: UInt, valid: Bool = true.B): Unit  = {
+  def refill(address: UInt, asid: UInt, data: UInt, valid: Bool = true.B): Unit  = {
     this.v := valid
     this.tag := getTagFromAddress(address, param.tagWidth())
     this.d := false.B 
@@ -47,10 +47,10 @@ class CacheEntry(param: CacheParameter) extends Bundle {
   }
 
   /**
-   * Check whether this entry matches the given address and threadID
+   * Check whether this entry matches the given address and asid
    * @return true if match.
    */ 
-  def checkHit(address: UInt, threadID: UInt): Bool = this.tag === getTagFromAddress(address, param.tagWidth()) 
+  def checkHit(address: UInt, asid: UInt): Bool = this.tag === getTagFromAddress(address, param.tagWidth()) 
 
   /**
    * @return the data out from the entry.
@@ -72,8 +72,8 @@ class CacheEntry(param: CacheParameter) extends Bundle {
   /**
    * @return the thread id for this entry.
    */
-  def threadID(): UInt = {
-    0.U(param.threadIDWidth().W)
+  def asid(): UInt = {
+    0.U(param.asidWidth.W)
   }
 
   def getTagFromAddress(address: UInt, tagWidth: Int): UInt = {

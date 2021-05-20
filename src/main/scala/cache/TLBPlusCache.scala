@@ -6,8 +6,6 @@ import chisel3.experimental._
 import armflex.ProcConfig
 import armflex.MInst
 import armflex.util._
-import arm.PROCESSOR_TYPES
-import arm.DECODE_CONTROL_SIGNALS._
 
 /** Parameter structure for the whole memory system
   */
@@ -15,9 +13,8 @@ case class MemorySystemParameter(
   vAddressWidth:  Int = 64, // byte address
   pAddressWidth:  Int = 36, // 64GB
   pageSize:       Int = 4096, // page size
-  threadNumber:   Int = 8,
   tlbSetNumber:   Int = 16,
-  processIDWidth: Int = 15,
+  asidWidth: Int = 15,
   tlbWayNumber:   Int = 4,
   cacheSetNumber: Int = 1024,
   cacheWayNumber: Int = 4,
@@ -33,8 +30,7 @@ case class MemorySystemParameter(
       vPageNumberWidth(),
       pPageNumberWidth(),
       2,
-      processIDWidth,
-      threadNumber,
+      asidWidth,
       tlbSetNumber,
       tlbWayNumber,
       true
@@ -47,7 +43,7 @@ case class MemorySystemParameter(
       cacheWayNumber,
       cacheBlockSize,
       pAddressWidth - blockBiasWidth(),
-      threadNumber,
+      asidWidth,
       false
     )
   }
@@ -68,13 +64,13 @@ class TLBPlusCache(
   val u_tlb = Module(new BaseTLB(tlbParam, tlbLRUCore))
 
   val frontend_request_i = IO(Flipped(Decoupled(new CacheFrontendRequestPacket(
-          param.vAddressWidth - param.blockBiasWidth(), // virtual address with index rid
-          log2Ceil(param.threadNumber),
-          param.cacheBlockSize
-        ))))
+    param.vAddressWidth - param.blockBiasWidth(), // virtual address with index rid
+    param.asidWidth,
+    param.cacheBlockSize
+  ))))
 
-  u_tlb.frontend_request_i.bits.tag.thread_id := frontend_request_i.bits.thread_id
-  u_tlb.frontend_request_i.bits.tag.vpage := frontend_request_i.bits.addr(
+  u_tlb.frontend_request_i.bits.tag.asid := frontend_request_i.bits.asid
+  u_tlb.frontend_request_i.bits.tag.vpn := frontend_request_i.bits.addr(
     param.vAddressWidth - param.blockBiasWidth() - 1,
     log2Ceil(param.pageSize) - param.blockBiasWidth()
   )
@@ -83,14 +79,14 @@ class TLBPlusCache(
 
   // val tlb_frontend_reply = u_tlb.frontend_reply_o
   u_cache.frontend_request_i.bits.addr := Cat(
-    u_tlb.frontend_reply_o.bits.entry.pp,
+    u_tlb.frontend_reply_o.bits.entry.ppn,
     frontend_request_i.bits.addr(
       log2Ceil(param.pageSize) - param.blockBiasWidth() - 1,
       0
     )
   )
 
-  u_cache.frontend_request_i.bits.thread_id := frontend_request_i.bits.thread_id
+  u_cache.frontend_request_i.bits.asid := frontend_request_i.bits.asid
   u_cache.frontend_request_i.bits.wData := frontend_request_i.bits.wData
   u_cache.frontend_request_i.bits.wMask := frontend_request_i.bits.wMask
   u_cache.frontend_request_i.bits.permission := frontend_request_i.bits.permission
@@ -104,7 +100,7 @@ class TLBPlusCache(
     val tlb_hit_v = Bool()
     val cache_hit_v = Bool()
     val data = UInt(cacheParam.blockBit.W)
-    val thread_id = UInt(cacheParam.threadIDWidth().W)
+    val asid = UInt(cacheParam.asidWidth.W)
   }
 
   // FIXME: The reply logic is not compatible with BRAM-based TLB. Need refactoring here.
@@ -114,7 +110,7 @@ class TLBPlusCache(
     u_tlb.frontend_reply_o.bits.hit && !u_tlb.frontend_reply_o.bits.violation
   )
   frontend_reply_o.bits.data := u_cache.frontend_reply_o.bits.data
-  frontend_reply_o.bits.thread_id := u_cache.frontend_reply_o.bits.thread_id
+  frontend_reply_o.bits.asid := u_cache.frontend_reply_o.bits.asid
   frontend_reply_o.bits.dirty := u_cache.frontend_reply_o.bits.dirty
   //frontend_reply_o.bits.tlb_hit_v := && RegNext(u_tlb.frontend_reply_o.bits.hit && !u_tlb.frontend_reply_o.bits.violation)
 
@@ -161,215 +157,23 @@ class TLBPlusCache(
   cache_packet_arrive_o <> u_cache.packet_arrive_o
 }
 
-object CacheInterfaceAdaptors {
 
-  /** Generate Cache block and writing mask according to the data size and address bias
-    * @param blockSize the size of a cache block. For instance, 512 mean 512 bit
-    * @param data the data from the register file. 64bit with effective data starting from 0. For instance 0x000000000000000F for a byte
-    * @param size the size of the operand in the @param data. Mask will be generated according to this parameter. For instance SIZEB means a byte
-    * @param addrBias the address to shift the @param data to the correct position. Usually the lower 6 bits (512-bit cache block) of the address
-    * @return the Pair (shifted data, mask)
-    */
-  private def shiftData(blockSize: Int, data: UInt, size: UInt, addrBias: UInt): (UInt, UInt) = { // (data, mask)
-    val accessMaskingInByte = MuxLookup(
-      size,
-      0.U,
-      Array(
-        SIZEB -> 1.U((PROCESSOR_TYPES.DATA_SZ / 8).W),
-        SIZEH -> 3.U((PROCESSOR_TYPES.DATA_SZ / 8).W),
-        SIZE32 -> 15.U((PROCESSOR_TYPES.DATA_SZ / 8).W),
-        SIZE64 -> Fill((PROCESSOR_TYPES.DATA_SZ / 8), true.B)
-      )
-    )
-    val accessMaskingInBit = VecInit(accessMaskingInByte.asBools().map(Fill(8, _))).asUInt()
-    assert(data.getWidth == PROCESSOR_TYPES.DATA_SZ)
-    val res = WireInit(UInt(blockSize.W), data) // apply mask before logic extending to 512bit.
-    return (res << (addrBias << 3), accessMaskingInBit << (addrBias << 3))
-  }
-
-  /** Recover the data from a cache block (512bit) and shift it in the lowest position.
-    * @param blockSize the size of a cache block (512bit)
-    * @param data a cache line
-    * @param size the mask of required operand
-    * @param addrBias the lower 6 bits of the address. It defines data's position in the cache block as well as determines how many bits to shift in order to recover the data.
-    * @return the recovered data
-    */
-  private def recoverData(blockSize: Int, data: UInt, size: UInt, addrBias: UInt): UInt = {
-    val accessMaskingInByte = MuxLookup(
-      size,
-      0.U,
-      Array(
-        SIZEB -> 1.U((PROCESSOR_TYPES.DATA_SZ / 8).W),
-        SIZEH -> 3.U((PROCESSOR_TYPES.DATA_SZ / 8).W),
-        SIZE32 -> 15.U((PROCESSOR_TYPES.DATA_SZ / 8).W),
-        SIZE64 -> Fill((PROCESSOR_TYPES.DATA_SZ / 8), true.B)
-      )
-    )
-    val accessMaskingInBit = VecInit(accessMaskingInByte.asBools().map(Fill(8, _))).asUInt()
-    assert(data.getWidth == blockSize)
-    return (data >> (addrBias << 3)) & accessMaskingInBit
-  }
-
-  /** The handshake packet between request adaptor and reply adaptor.
-    * @param param Cache Parameter
-    */
-  class CacheInterfaceHandshakePacket(param: CacheParameter) extends Bundle {
-    val bias_addr = UInt(log2Ceil(param.blockBit / 8).W)
-    val size = UInt(2.W)
-    val thread_id = UInt(param.threadIDWidth.W)
-    val pair_v = Bool()
-    val order = UInt(1.W) // 0: 1:
-
-    override def cloneType: this.type = new CacheInterfaceHandshakePacket(param).asInstanceOf[this.type]
-  }
-
-  /** Adaptor converting the Pipeline request to the TLB/Cache request.
-    * Add 1 cycle latency to the data path
-    * @param param the parameter of the Memory system
-    * implicit @param cfg the configuration of ARMFlex pipeline
-    */
-  class CacheRequestAdaptor(param: MemorySystemParameter)
-      extends MultiIOModule {
-    def this(nbThreads: Int, vAddrW: Int, blockSize: Int) =
-      this(new MemorySystemParameter(vAddressWidth = vAddrW, threadNumber = nbThreads, cacheBlockSize = blockSize))
-
-    import armflex.MInstTag
-    // val i = IO(Flipped(Decoupled(new MInst)))
-
-    val i = IO(Flipped(Decoupled(new MInstTag(UInt(log2Ceil(param.threadNumber).W)))))
-    val o = IO(Decoupled(new CacheFrontendRequestPacket(
-      param.vAddressWidth - param.blockBiasWidth(), 
-      log2Ceil(param.threadNumber), 
-      param.cacheBlockSize)))
-
-    class internal_memory_request_t extends Bundle {
-      val size = UInt(2.W)
-      val vaddr = UInt(param.vAddressWidth.W)
-      val thread_id = UInt(log2Ceil(param.threadNumber).W)
-      val w_v = Bool()
-      val w_data = PROCESSOR_TYPES.DATA_T
-      val pair_order = UInt(1.W)
-      val pair_v = Bool()
-    }
-
-    val from_pipeline = Wire(Decoupled(new internal_memory_request_t))
-    from_pipeline.bits.size := i.bits.size
-    from_pipeline.bits.vaddr := i.bits.memReq(0).addr
-    from_pipeline.bits.thread_id := i.bits.tag
-    from_pipeline.bits.w_v := !i.bits.isLoad
-    from_pipeline.bits.w_data := i.bits.memReq(0).data
-    from_pipeline.bits.pair_order := 0.U // the first request
-    from_pipeline.bits.pair_v := i.bits.isPair
-    from_pipeline.valid := i.valid
-    i.ready := from_pipeline.ready
-
-    val s1_pair_context_n = Wire(Decoupled(new internal_memory_request_t))
-    s1_pair_context_n.bits.size := i.bits.size
-    s1_pair_context_n.bits.thread_id := i.bits.tag
-    s1_pair_context_n.bits.vaddr := i.bits.memReq(1).addr
-    s1_pair_context_n.bits.w_v := !i.bits.isLoad
-    s1_pair_context_n.bits.w_data := i.bits.memReq(1).addr
-    s1_pair_context_n.bits.pair_order := 1.U // the second request
-    s1_pair_context_n.bits.pair_v := true.B
-    s1_pair_context_n.valid := from_pipeline.fire() && i.bits.isPair
-    val s1_pair_context_r = FlushQueue(s1_pair_context_n, 1, false)
-
-    val u_arb = Module(new Arbiter(new internal_memory_request_t, 2))
-    u_arb.io.in(0) <> s1_pair_context_r
-    u_arb.io.in(1) <> from_pipeline
-    // shift shift shift!
-
-    val shifted = shiftData(
-      param.cacheBlockSize,
-      u_arb.io.out.bits.w_data,
-      u_arb.io.out.bits.size,
-      u_arb.io.out.bits.vaddr(
-        param.blockBiasWidth() - 1,
-        0
-      )
-    )
-
-    o.bits.addr := u_arb.io.out.bits.vaddr(
-      param.vAddressWidth - 1,
-      param.blockBiasWidth()
-    )
-    o.bits.thread_id := u_arb.io.out.bits.thread_id
-    o.bits.wData := shifted._1
-    o.bits.wMask := shifted._2
-    o.bits.permission := Mux(u_arb.io.out.bits.w_v, 1.U, 0.U)
-
-    o.valid := u_arb.io.out.valid
-    u_arb.io.out.ready := o.ready
-
-    // a message to the reply arbiter for synchronization
-    val sync_message = Wire(Decoupled(new CacheInterfaceHandshakePacket(param.toCacheParameter())))
-    sync_message.bits.size := u_arb.io.out.bits.size
-    sync_message.bits.bias_addr := u_arb.io.out.bits.vaddr(
-      param.blockBiasWidth() - 1,
-      0
-    )
-    sync_message.bits.order := u_arb.io.out.bits.pair_order
-    sync_message.bits.pair_v := u_arb.io.out.bits.pair_v
-    sync_message.bits.thread_id := u_arb.io.out.bits.thread_id
-    sync_message.valid := o.fire()
-    assert(sync_message.ready, "It's impossible that the FIFO of sync_message is full")
-
-    val sync_message_o = IO(Decoupled(new CacheInterfaceHandshakePacket(param.toCacheParameter())))
-    sync_message_o <> Queue(sync_message, 2 * param.threadNumber)
-  }
-
-// The purpose of this module is to apply masking and shifting to the data so that it's in the correct position.
-  class CacheReplyAdaptor(
-    val param: MemorySystemParameter)
-      extends MultiIOModule {
-    def this(nbThreads: Int, vAddrW: Int, blockSize: Int) =
-      this(new MemorySystemParameter(vAddressWidth = vAddrW, threadNumber = nbThreads, cacheBlockSize = blockSize))
-
-    val cache_reply_i = IO(Flipped(Valid(new FrontendReplyPacket(param.toCacheParameter()))))
-    // val data_o = IO(Valid(Vec(2, PROCESSOR_TYPES.DATA_T)))
-    val data_o = IO(Valid(new FrontendReplyPacket(param.toCacheParameter())))
-    val sync_message_i = IO(Flipped(Decoupled(new CacheInterfaceHandshakePacket(param.toCacheParameter()))))
-    // sync_message_i should align with cache_reply_i
-    when(cache_reply_i.valid){
-      assert(sync_message_i.valid, "sync_message_i should align with cache_reply_i.")
-    }
-    sync_message_i.ready := true.B //?
-
-    when(cache_reply_i.valid) {
-      assert(cache_reply_i.bits.thread_id === sync_message_i.bits.thread_id)
-    }
-
-    val recovered_data = recoverData(
-      param.cacheBlockSize,
-      cache_reply_i.bits.data,
-      sync_message_i.bits.size,
-      sync_message_i.bits.bias_addr
-    )
-
-    data_o.bits.data := recovered_data
-    data_o.bits.dirty := cache_reply_i.bits.dirty
-    data_o.bits.hit := cache_reply_i.bits.hit
-    data_o.bits.thread_id := cache_reply_i.bits.thread_id
-    data_o.valid := cache_reply_i.valid
-  }
-
-}
 
 object CacheBackendToAXIInterface {
 
   /** Queue that stores the miss requests orderly. These requests are necessary when generating refilling packet.
     * @param param the Cache Parameter.
     */
-  class RefillQueue(param: CacheParameter) extends MultiIOModule {
+  class RefillQueue(param: CacheParameter, queueDepth: Int) extends MultiIOModule {
     val miss_request_i = IO(Flipped(Decoupled(new MissRequestPacket(param))))
     val backend_reply_i = IO(Flipped(Decoupled(UInt(param.blockBit.W))))
     val refill_o = IO(Decoupled(new MissResolveReplyPacket(param)))
     // there is a queue for the miss request
 
-    val miss_request_q = Queue(miss_request_i, param.threadNumber * 2)
+    val miss_request_q = Queue(miss_request_i, queueDepth)
     assert(miss_request_i.ready)
 
-    refill_o.bits.thread_id := miss_request_q.bits.thread_id
+    refill_o.bits.asid := miss_request_q.bits.asid
     refill_o.bits.not_sync_with_data_v := miss_request_q.bits.not_sync_with_data_v
     refill_o.bits.addr := miss_request_q.bits.addr
     refill_o.bits.data := backend_reply_i.bits
@@ -387,13 +191,13 @@ object CacheBackendToAXIInterface {
     backend_reply_i.ready := refill_o.ready && !(miss_request_q.bits.not_sync_with_data_v && backend_reply_i.valid)
   }
 
-  class CacheBackendAXIAdaptors(param: MemorySystemParameter) extends MultiIOModule {
+  class CacheBackendAXIAdaptors(param: MemorySystemParameter, queueSize: Int) extends MultiIOModule {
     assert(param.cacheBlockSize == 512, "Only 512bit AXI transactions is supported.")
     //assert(param.pAddressWidth == 36, "Only 36bit memory addres is supported.")
 
     val cache_backend_request_i = IO(Flipped(Decoupled(new MergedBackendRequestPacket(param.toCacheParameter()))))
 
-    val q_cache_backend_request = Queue(cache_backend_request_i, param.threadNumber * 2)
+    val q_cache_backend_request = Queue(cache_backend_request_i, queueSize)
     val pending_queue_empty_o = IO(Output(Bool()))
     pending_queue_empty_o := !q_cache_backend_request.valid
 
@@ -414,7 +218,7 @@ object CacheBackendToAXIInterface {
     cache_backend_reply_o.bits.addr := q_cache_backend_request.bits.addr
     cache_backend_reply_o.bits.data := M_DMA_R.data.bits
     cache_backend_reply_o.bits.not_sync_with_data_v := false.B
-    cache_backend_reply_o.bits.thread_id := q_cache_backend_request.bits.thread_id
+    cache_backend_reply_o.bits.asid := q_cache_backend_request.bits.asid
     cache_backend_reply_o.valid := M_DMA_R.data.valid
     M_DMA_R.data.ready := cache_backend_reply_o.ready
 
@@ -432,7 +236,8 @@ object CacheBackendToAXIInterface {
     M_DMA_W.req.valid := q_cache_backend_request.bits.w_v && q_cache_backend_request.valid
 
     M_DMA_W.data.bits := q_cache_backend_request.bits.data
-    M_DMA_W.data.valid := M_DMA_W.req.fire()
+    // WARN: data valid should keep high until the done signal is received.
+    M_DMA_W.data.valid := M_DMA_W.req.valid
 
     q_cache_backend_request.ready := Mux(
       q_cache_backend_request.bits.w_v,

@@ -6,7 +6,7 @@ import chisel3.util._
 
 import arm.PROCESSOR_TYPES._
 import arm.DECODE_CONTROL_SIGNALS._
-import armflex.cache.CacheInterfaceAdaptors.CacheRequestAdaptor
+import armflex.CacheInterfaceAdaptors.CacheRequestAdaptor
 import java.net.CacheResponse
 
 class MemReq extends Bundle {
@@ -428,7 +428,7 @@ class DataAlignByte extends Module {
 }
 
 import armflex.cache._
-import armflex.cache.CacheInterfaceAdaptors._
+import armflex.CacheInterfaceAdaptors._
 import armflex.util._
 import armflex.util.ExtraUtils._
 
@@ -439,15 +439,15 @@ class MemoryAdaptor(implicit cfg: ProcConfig) extends MultiIOModule {
   })
 
   val mem = IO(new Bundle {
-    val req = Decoupled(new CacheFrontendRequestPacket(DATA_SZ, cfg.NB_THREADS_W, cfg.BLOCK_SIZE))
-    val resp = Input(Valid(new FrontendReplyPacket(cfg.BLOCK_SIZE, cfg.NB_THREADS_W)))
+    val req = Decoupled(new PipelineMemoryRequestPacket(DATA_SZ, cfg.NB_THREADS_W, cfg.BLOCK_SIZE))
+    val resp = Input(Valid(new PipelineMemoryReplyPacket(cfg.BLOCK_SIZE, cfg.NB_THREADS_W)))
   })
 
   val memReq = Module(new Queue(new MInstTag(cfg.TAG_T), 1, true, false))
   val memResp = Module(new Queue(new MInstTag(cfg.TAG_T), cfg.cacheLatency + 1, true, false))
   val cacheAdaptorReq = Module(new CacheRequestAdaptor(cfg.NB_THREADS, DATA_SZ, cfg.BLOCK_SIZE))
   val cacheAdaptorResp = Module(new CacheReplyAdaptor(cfg.NB_THREADS, DATA_SZ, cfg.BLOCK_SIZE))
-  cacheAdaptorResp.sync_message_i <> cacheAdaptorReq.sync_message_o
+  cacheAdaptorResp.sync_message_i <> Queue(cacheAdaptorReq.sync_message_o, 2*cfg.NB_THREADS)
 
 
   val cacheResp = cacheAdaptorResp.data_o

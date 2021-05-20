@@ -7,21 +7,43 @@ import chisel3.util._
 import arm.PROCESSOR_TYPES._
 import arm.DECODE_CONTROL_SIGNALS._
 
-import armflex.cache._
+
 import armflex.util._
 import armflex.util.ExtraUtils._
 import Chisel.debug
 
+class PipelineMemoryRequestPacket(
+  addressWidth: Int,
+  threadIDWidth: Int,
+  blockSize: Int
+) extends Bundle {
+  val addr = UInt(addressWidth.W) // access address.
+  val thread_id = UInt(threadIDWidth.W)
+  val permission = UInt(2.W)
+  val wData = UInt(blockSize.W)
+  val wMask = UInt(blockSize.W)
+}
+
+class PipelineMemoryReplyPacket(
+  dataWidth: Int,
+  threadIDWidth: Int
+) extends Bundle {
+  val data = UInt(dataWidth.W)
+  val thread_id = UInt(threadIDWidth.W)
+  val hit = Bool()
+  val dirty = Bool()
+}
+
 class PipelineMemoryIO(implicit val cfg: ProcConfig) extends Bundle {
   val inst = new Bundle {
     val req =
-      Decoupled(new CacheFrontendRequestPacket(DATA_SZ, cfg.NB_THREADS_W, cfg.BLOCK_SIZE))
+      Decoupled(new PipelineMemoryRequestPacket(DATA_SZ, cfg.NB_THREADS_W, cfg.BLOCK_SIZE))
     val resp =
-      Input(Valid(new FrontendReplyPacket(cfg.BLOCK_SIZE, cfg.NB_THREADS_W)))
+      Input(Valid(new PipelineMemoryReplyPacket(cfg.BLOCK_SIZE, cfg.NB_THREADS_W)))
   }
   val data = new Bundle {
-    val req = Decoupled(new CacheFrontendRequestPacket(DATA_SZ, cfg.NB_THREADS_W, cfg.BLOCK_SIZE))
-    val resp = Input(Valid(new FrontendReplyPacket(cfg.BLOCK_SIZE, cfg.NB_THREADS_W)))
+    val req = Decoupled(new PipelineMemoryRequestPacket(DATA_SZ, cfg.NB_THREADS_W, cfg.BLOCK_SIZE))
+    val resp = Input(Valid(new PipelineMemoryReplyPacket(cfg.BLOCK_SIZE, cfg.NB_THREADS_W)))
   }
   val wake = Input(Vec(4, ValidTag(cfg.TAG_T)))
   val dataFault = Input(ValidTag(cfg.NB_THREADS))
@@ -93,7 +115,7 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   fetch.ctrl.commit.bits.get := commitU.commit.archstate.regs.next.PC
 
   mem.inst.req.bits.thread_id := fetch.mem.tag
-  mem.inst.req.bits.addr := fetch.mem.bits >> log2Ceil(cfg.BLOCK_SIZE / 8)
+  mem.inst.req.bits.addr := fetch.mem.bits
   mem.inst.req.bits.wData := DontCare
   mem.inst.req.bits.permission := 2.U // instruction permission
   mem.inst.req.bits.wMask := 0.U

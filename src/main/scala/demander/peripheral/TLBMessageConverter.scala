@@ -10,10 +10,8 @@ import armflex.cache.{
   TLBBackendReplyPacket,
   TLBAccessRequestPacket,
   TLBBackendRequestPacket,
-  TLBTagPacket,
   TLBParameter,
   TLBFrontendReplyPacket,
-  TLBEntryPacket
 }
 /**
  * This module converts a TLB backend request (evict or just flush) to a message.
@@ -36,10 +34,7 @@ class TLBMessageConverter(
   miss_request.valid := tlb_backend_request_i.valid && !tlb_backend_request_i.bits.w_v
 
   val ev_request = Wire(Decoupled(new software_bundle.TLBEvictionMessage(param)))
-  ev_request.bits.tag := tlb_backend_request_i.bits.tag
-  ev_request.bits.entry.ppn := tlb_backend_request_i.bits.entry.pp
-  ev_request.bits.entry.permission := tlb_backend_request_i.bits.entry.permission // Eviction should always evict a modified page.
-  ev_request.bits.entry.modified := tlb_backend_request_i.bits.entry.modified
+  ev_request.bits := tlb_backend_request_i.bits
   // Why not flush: Flushed element is handled by the module TLBWrapper.
   ev_request.valid := tlb_backend_request_i.valid && tlb_backend_request_i.bits.w_v && !tlb_backend_request_i.bits.flush_v
 

@@ -78,9 +78,9 @@ class DTUCache(
   val u_delayChain = Module(new DelayChain(u_cache.param, 4))
   val u_backend = Module(new BackendMemorySimulator(u_cache.param, initialFile))
   
-  val u_refill_queue = Module(new CacheBackendToAXIInterface.RefillQueue(u_cache.param))
+  val u_refill_queue = Module(new CacheBackendToAXIInterface.RefillQueue(u_cache.param, 32))
   u_refill_queue.miss_request_i.bits.addr := u_cache.backend_request_o.bits.addr
-  u_refill_queue.miss_request_i.bits.thread_id := u_cache.backend_request_o.bits.thread_id
+  u_refill_queue.miss_request_i.bits.asid := u_cache.backend_request_o.bits.asid
   u_refill_queue.miss_request_i.bits.not_sync_with_data_v := false.B
   u_refill_queue.miss_request_i.bits.permission := u_cache.backend_request_o.bits.permission
   u_refill_queue.miss_request_i.valid := u_cache.backend_request_o.fire() && !u_cache.backend_request_o.bits.w_v
@@ -106,18 +106,18 @@ class DTUCache(
 }
 
 implicit class CacheDriver(target: DTUCache){
-  def setReadRequest(addr: UInt, threadID: UInt, groupedFlag: Bool = false.B):Unit = {
+  def setReadRequest(addr: UInt, asid: UInt, groupedFlag: Bool = false.B):Unit = {
     target.frontendRequest_i.bits.addr.poke(addr)
-    target.frontendRequest_i.bits.thread_id.poke(threadID)
+    target.frontendRequest_i.bits.asid.poke(asid)
     target.frontendRequest_i.bits.permission.poke(0.U) // Assume dCache here.
     target.frontendRequest_i.valid.poke(true.B)
     target.frontendRequest_i.ready.expect(true.B) // make sure this is selected.
   }
 
-  def setWriteRequest(addr: UInt, threadID: UInt, data: UInt, mask: UInt, groupedFlag: Bool = false.B): Unit = {
+  def setWriteRequest(addr: UInt, asid: UInt, data: UInt, mask: UInt, groupedFlag: Bool = false.B): Unit = {
     //assert(target.u_cache.param.writable, "Can not set a write request to a read-only cache")
     target.frontendRequest_i.bits.addr.poke(addr)
-    target.frontendRequest_i.bits.thread_id.poke(threadID)
+    target.frontendRequest_i.bits.asid.poke(asid)
     target.frontendRequest_i.bits.permission.poke(1.U)
     target.frontendRequest_i.bits.wData.poke(data)
     target.frontendRequest_i.bits.wMask.poke(mask)
@@ -125,9 +125,9 @@ implicit class CacheDriver(target: DTUCache){
     target.frontendRequest_i.ready.expect(true.B) // make sure this is selected.
   }
 
-  def setFlushRequest(addr: UInt, threadID: UInt): Unit = {
+  def setFlushRequest(addr: UInt, asid: UInt): Unit = {
     target.flushRequest_i.bits.addr.poke(addr)
-    target.flushRequest_i.bits.thread_id.poke(threadID)
+    target.flushRequest_i.bits.asid.poke(asid)
     target.flushRequest_i.valid.poke(true.B)
     target.flushRequest_i.ready.expect(true.B)
   }
@@ -137,18 +137,18 @@ implicit class CacheDriver(target: DTUCache){
     target.flushRequest_i.valid.poke(false.B)
   }
 
-  def waitForArrive(expectThreadID: UInt) = {
+  def waitForArrive(expectAsid: UInt) = {
     do{
       target.tick()
     } while(!target.packetArrive_o.valid.peek.litToBoolean)
-    target.packetArrive_o.bits.thread_id.expect(expectThreadID)
+    target.packetArrive_o.bits.asid.expect(expectAsid)
     target.tick()
   }
 
-  def expectReply(hit: Boolean, threadID: UInt, data: UInt, dataDontCare: Boolean = false) = {
+  def expectReply(hit: Boolean, asid: UInt, data: UInt, dataDontCare: Boolean = false) = {
     target.frontendReply_o.valid.expect(true.B)
     target.frontendReply_o.bits.hit.expect(hit.B)
-    target.frontendReply_o.bits.thread_id.expect(threadID)
+    target.frontendReply_o.bits.asid.expect(asid)
     if(hit && !dataDontCare){
       target.frontendReply_o.bits.data.expect(data)
     }

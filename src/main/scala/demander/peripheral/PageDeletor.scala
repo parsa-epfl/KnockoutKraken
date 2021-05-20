@@ -9,7 +9,6 @@ import armflex.demander.software_bundle._
 import armflex.cache.{
   CacheFrontendFlushRequest,
   CacheParameter,
-  TLBTagPacket,
   TLBFrontendReplyPacket
 }
 import armflex.cache.MemorySystemParameter
@@ -35,33 +34,25 @@ import armflex.util._
 class PageDeletor(
   param: PageDemanderParameter
 ) extends MultiIOModule {
-  val sIdle :: sGetTID :: sFlushTLB :: sNotify :: sFlushPage :: sPipe :: sWait :: sMove :: sSend :: Nil = Enum(9)
+  val sIdle :: sFlushTLB :: sNotify :: sFlushPage :: sPipe :: sWait :: sMove :: sSend :: Nil = Enum(8)
   val state_r = RegInit(sIdle)
 
   val page_delete_req_i = IO(Flipped(Decoupled(new PageTableItem(param.mem.toTLBParameter))))
 
   val item_r = Reg(new PageTableItem(param.mem.toTLBParameter))
-  
-  // sGetTID
-  val tt_pid_o = IO(Output(UInt(param.mem.processIDWidth.W)))
-  tt_pid_o := item_r.tag.process_id
-  val tt_tid_i = IO(Input(new peripheral.ThreadLookupResultPacket(param.mem.threadNumber))) // If miss, directly jump to the delete page.
 
-  val item_tid_r = Reg(UInt(param.mem.threadNumber.W))
-  when(state_r === sGetTID){
-    item_tid_r := tt_tid_i.thread_id
-  }
 
   class tlb_flush_request_t extends Bundle {
-    val req = new TLBTagPacket(param.mem.toTLBParameter())
+    val req = new PTTagPacket(param.mem.toTLBParameter())
     val which = UInt(1.W)
   }
 
   // sFlushTLB
   val tlb_flush_request_o = IO(Decoupled(new tlb_flush_request_t))
-  tlb_flush_request_o.bits.req.thread_id := item_tid_r
-  tlb_flush_request_o.bits.req.vpage := item_r.tag.vpn
-  tlb_flush_request_o.bits.which := Mux(item_r.entry.permission === 2.U, 0.U, 1.U)
+  // TODO: Let tlb_flush_request_o.bits.req and item_r.tag has the same type.
+  tlb_flush_request_o.bits.req.asid := item_r.tag.asid
+  tlb_flush_request_o.bits.req.vpn := item_r.tag.vpn
+  tlb_flush_request_o.bits.which := Mux(item_r.entry.permission === 2.U, 0.U, 1.U) // TODO: Support more than one TLB.
   tlb_flush_request_o.valid := state_r === sFlushTLB
   val tlb_frontend_reply_i = IO(Flipped(Valid(new TLBFrontendReplyPacket(param.mem.toTLBParameter()))))
 
@@ -107,7 +98,7 @@ class PageDeletor(
   }
 
   icache_flush_request_o.bits.addr := Cat(item_r.entry.ppn, flush_cnt_r)
-  icache_flush_request_o.bits.thread_id := 0.U
+  icache_flush_request_o.bits.asid := 0.U
   dcache_flush_request_o.bits := icache_flush_request_o.bits
   
   icache_flush_request_o.valid := state_r === sFlushPage && !flush_which
@@ -181,10 +172,7 @@ class PageDeletor(
   // Update logic of the state machine
   switch(state_r){
     is(sIdle){
-      state_r := Mux(page_delete_req_i.fire(), sGetTID, sIdle)
-    }
-    is(sGetTID){
-      state_r := Mux(tt_tid_i.hit_v, sFlushTLB, sNotify)
+      state_r := Mux(page_delete_req_i.fire(), sFlushTLB, sIdle)
     }
     is(sFlushTLB){
       state_r := Mux(tlb_flush_request_o.fire(), sNotify, sFlushTLB)

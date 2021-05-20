@@ -23,8 +23,9 @@ case class CacheParameter(
   blockBit: Int = 512,  
   // Address
   addressWidth: Int = 55, // address to access the whole block instead of one byte
-  // Thread id
-  threadNumber: Int = 4,
+  // Address space ID
+  asidWidth: Int = 15,
+  
   // the data bank is implemented in register?
   implementedWithRegister: Boolean = false
 ){
@@ -33,13 +34,6 @@ case class CacheParameter(
 
   def tagWidth(): Int = {
     addressWidth - log2Ceil(setNumber)
-  }
-
-  def threadIDWidth(): Int = {
-    if(threadNumber > 0)
-      log2Ceil(threadNumber)
-    else
-      0
   }
 
   def wayWidth(): Int = {
@@ -55,35 +49,35 @@ case class CacheParameter(
 /**
  * Request packet from the pipeline to the Cache.
  * @param addressWidth the width of the address to index the cache
- * @param threadIDWidth the width of the thread
+ * @param asidWidth the width of the address space ID.
  * @param blockSize the size of the data part
  */ 
 class CacheFrontendRequestPacket(
   addressWidth: Int,
-  threadIDWidth: Int,
+  asidWidth: Int,
   blockSize: Int
 ) extends Bundle {
   val addr = UInt(addressWidth.W) // access address.
-  val thread_id = UInt(threadIDWidth.W)
+  val asid = UInt(asidWidth.W)
   val permission = UInt(2.W)
   val wData = UInt(blockSize.W)
   val wMask = UInt(blockSize.W)
 
   def this(param: CacheParameter) = this(
     param.addressWidth,
-    param.threadIDWidth(),
+    param.asidWidth,
     param.blockBit,
   )
 
-  override def cloneType(): this.type = new CacheFrontendRequestPacket(addressWidth, threadIDWidth, blockSize).asInstanceOf[this.type]
+  override def cloneType(): this.type = new CacheFrontendRequestPacket(addressWidth, asidWidth, blockSize).asInstanceOf[this.type]
 
   def toInternalRequestPacket(): DataBankFrontendRequestPacket = {
-    val res = Wire(new DataBankFrontendRequestPacket(addressWidth, threadIDWidth, blockSize))
+    val res = Wire(new DataBankFrontendRequestPacket(addressWidth, asidWidth, blockSize))
     res.addr := this.addr
     res.flush_v := false.B
     res.refill_v := false.B
 
-    res.thread_id := this.thread_id
+    res.asid := this.asid
     res.wData := this.wData
     res.wMask := this.wMask
 
@@ -96,30 +90,30 @@ class CacheFrontendRequestPacket(
 /**
  * Request packet from the Page Manager to Cache to flush one item
  * @param addressWidth the width of the address to index the cache
- * @param threadIDWidth the width of the thread
+ * @param asidWidth the width of the address space id.
  */ 
 
 class CacheFrontendFlushRequest(
   addressWidth: Int,
-  threadIDWidth: Int
+  asidWidth: Int
 ) extends Bundle {
   val addr = UInt(addressWidth.W) // access address.
-  val thread_id = UInt(threadIDWidth.W)
+  val asid = UInt(asidWidth.W)
 
   def this(param: CacheParameter) = this(
     param.addressWidth,
-    param.threadIDWidth()
+    param.asidWidth
   )
 
-  override def cloneType(): this.type = new CacheFrontendFlushRequest(addressWidth, threadIDWidth).asInstanceOf[this.type]
+  override def cloneType(): this.type = new CacheFrontendFlushRequest(addressWidth, asidWidth).asInstanceOf[this.type]
 
   def toInternalRequestPacket(blockSize: Int): DataBankFrontendRequestPacket = {
-    val res = Wire(new DataBankFrontendRequestPacket(addressWidth, threadIDWidth, blockSize))
+    val res = Wire(new DataBankFrontendRequestPacket(addressWidth, asidWidth, blockSize))
 
     res.addr := this.addr
     res.flush_v := true.B
     res.refill_v := false.B
-    res.thread_id := this.thread_id
+    res.asid := this.asid
     res.wData := DontCare
     res.wMask := DontCare
 
@@ -131,7 +125,7 @@ class CacheFrontendFlushRequest(
 
 class MergedBackendRequestPacket(param: CacheParameter) extends Bundle{
   val addr = UInt(param.addressWidth.W)
-  val thread_id = UInt(param.threadIDWidth().W)
+  val asid = UInt(param.asidWidth.W)
   val permission = UInt(2.W)
   val w_v = Bool()
   val flush_v = Bool() // this request is caused by flush
@@ -149,7 +143,7 @@ class BackendRequestMerger(param: CacheParameter) extends MultiIOModule{
   val read_request_converted = Wire(Decoupled(new MergedBackendRequestPacket(param)))
   read_request_converted.bits.addr := read_request_i.bits.addr
   read_request_converted.bits.data := DontCare
-  read_request_converted.bits.thread_id := read_request_i.bits.thread_id
+  read_request_converted.bits.asid := read_request_i.bits.asid
   read_request_converted.bits.w_v := false.B
   read_request_converted.bits.flush_v := false.B
   read_request_converted.bits.permission := read_request_i.bits.permission
@@ -159,7 +153,7 @@ class BackendRequestMerger(param: CacheParameter) extends MultiIOModule{
   val write_request_converted = Wire(Decoupled(new MergedBackendRequestPacket(param)))
   write_request_converted.bits.addr := write_request_i.bits.addr
   write_request_converted.bits.data := write_request_i.bits.data
-  write_request_converted.bits.thread_id := DontCare
+  write_request_converted.bits.asid := DontCare
   write_request_converted.bits.w_v := true.B
   write_request_converted.bits.flush_v := write_request_i.bits.flush_v
   write_request_converted.bits.permission := 1.U // The permission for writing is always 1.
@@ -278,7 +272,7 @@ class BaseCache(
   refill_request_internal.valid := refill_request_i.valid
   refill_request_internal.bits.addr := refill_request_i.bits.addr
   refill_request_internal.bits.flush_v := false.B
-  refill_request_internal.bits.thread_id := refill_request_i.bits.thread_id
+  refill_request_internal.bits.asid := refill_request_i.bits.asid
   refill_request_internal.bits.wData := refill_request_i.bits.data
   refill_request_internal.bits.wMask := Fill(param.blockBit, true.B)
   refill_request_internal.bits.refill_v := true.B
@@ -288,11 +282,11 @@ class BaseCache(
 
 
   val packet_arrive_o = IO(Valid(new Bundle{
-    val thread_id = UInt(param.threadIDWidth().W)
+    val asid = UInt(param.asidWidth.W)
   }))
 
   packet_arrive_o.valid := refill_request_i.fire()
-  packet_arrive_o.bits.thread_id := refill_request_i.bits.thread_id
+  packet_arrive_o.bits.asid := refill_request_i.bits.asid
 
   //val flush_ack_o = IO(Output(Bool()))
 

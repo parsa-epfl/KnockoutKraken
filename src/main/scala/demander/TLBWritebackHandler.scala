@@ -21,11 +21,6 @@ class TLBWritebackHandler(
   val u_arb = Module(new RRArbiter(new TLBEvictionMessage(param.mem.toTLBParameter), tlbNumber))
   u_arb.io.in <> tlb_evict_req_i
 
-  // lookup pid by tid
-  val tt_tid_o = IO(Output(UInt(param.mem.toTLBParameter.threadIDWidth().W)))
-  tt_tid_o := u_arb.io.out.bits.tag.thread_id
-  val tt_pid_i = IO(Input(Valid(UInt(param.mem.pPageNumberWidth.W))))
-
   // Add page table set buffer and axi dma
   val u_buffer = Module(new peripheral.PageTableSetBuffer(
     param.mem.toTLBParameter,
@@ -54,19 +49,16 @@ class TLBWritebackHandler(
   // sIdle
   u_arb.io.out.ready := state_r === sIdle
   class request_t extends Bundle {
-    val tag = new PTTag(param.mem.toTLBParameter)
-    val evicted_pte = new PTEntry(param.mem.toTLBParameter)
-    val thread_id = UInt(param.mem.toTLBParameter.threadIDWidth().W)
+    val tag = new PTTagPacket(param.mem.toTLBParameter)
+    val evicted_pte = new PTEntryPacket(param.mem.toTLBParameter)
     val source = UInt(log2Ceil(tlbNumber).W)
   }
 
   val request_r = Reg(new request_t)
   when(u_arb.io.out.fire()){
-    request_r.tag.vpn := u_arb.io.out.bits.tag.vpage
-    request_r.tag.process_id := tt_pid_i.bits
+    request_r.tag := u_arb.io.out.bits.tag
     request_r.evicted_pte := u_arb.io.out.bits.entry
     request_r.source := u_arb.io.chosen
-    request_r.thread_id := u_arb.io.out.bits.tag.thread_id
     assert(u_arb.io.out.bits.entry.modified, "Only modified entry can be written back")
   }
 
@@ -98,7 +90,7 @@ class TLBWritebackHandler(
 
   switch(state_r){
     is(sIdle){
-      state_r := Mux(u_arb.io.out.fire() && tt_pid_i.valid, sMoveIn, sIdle)
+      state_r := Mux(u_arb.io.out.fire(), sMoveIn, sIdle)
     }
     is(sMoveIn){
       state_r := Mux(M_DMA_R.done, sPick, sMoveIn)

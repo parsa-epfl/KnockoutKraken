@@ -1,8 +1,8 @@
 package armflex.cache
 
+import armflex.demander.software_bundle.PTEntryPacket
 import chisel3._
 import chisel3.util._
-
 import chiseltest._
 import chiseltest.experimental._
 import org.scalatest.FreeSpec
@@ -54,7 +54,7 @@ class DUTTLB(
 
   delay_chain_req.o.ready := delay_chain_rep.i.ready
 
-  val u_mem = Mem((1l << u_tlb.param.addressWidth), new TLBEntryPacket(u_tlb.param))
+  val u_mem = Mem((1l << u_tlb.param.addressWidth), new PTEntryPacket(u_tlb.param))
 
   if(initialMem.nonEmpty) loadMemoryFromFile(u_mem, initialMem)
 
@@ -68,25 +68,25 @@ class DUTTLB(
 }
 
 implicit class BaseTLBDriver(target: DUTTLB){
-  def setReadRequest(vpage: UInt, threadID: UInt) = {
-    target.frontendRequest_i.bits.tag.vpage.poke(vpage)
-    target.frontendRequest_i.bits.tag.thread_id.poke(threadID)
+  def setReadRequest(vpage: UInt, asid: UInt) = {
+    target.frontendRequest_i.bits.tag.vpn.poke(vpage)
+    target.frontendRequest_i.bits.tag.asid.poke(asid)
     target.frontendRequest_i.bits.permission.poke(0.U)
     target.frontendRequest_i.valid.poke(true.B)
     target.frontendRequest_i.ready.expect(true.B)
   }
 
-  def setWriteRequest(vpage: UInt, threadID: UInt) = {
-    target.frontendRequest_i.bits.tag.vpage.poke(vpage)
-    target.frontendRequest_i.bits.tag.thread_id.poke(threadID)
+  def setWriteRequest(vpage: UInt, asid: UInt) = {
+    target.frontendRequest_i.bits.tag.vpn.poke(vpage)
+    target.frontendRequest_i.bits.tag.asid.poke(asid)
     target.frontendRequest_i.bits.permission.poke(1.U)
     target.frontendRequest_i.valid.poke(true.B)
     target.frontendRequest_i.ready.expect(true.B)
   }
 
-  def setFlushRequest(vpage: UInt, threadID: UInt) = {
-    target.flushRequest_i.bits.vpage.poke(vpage)
-    target.flushRequest_i.bits.thread_id.poke(threadID)
+  def setFlushRequest(vpage: UInt, asid: UInt) = {
+    target.flushRequest_i.bits.vpn.poke(vpage)
+    target.flushRequest_i.bits.asid.poke(asid)
     target.flushRequest_i.valid.poke(true.B)
     target.flushRequest_i.ready.expect(true.B)
   }
@@ -96,11 +96,11 @@ implicit class BaseTLBDriver(target: DUTTLB){
     target.flushRequest_i.valid.poke(false.B)
   }
 
-  def waitForArrive(expectThreadID: UInt) = {
+  def waitForArrive(expectAsid: UInt) = {
     do{
       target.tick()
     } while(!target.packetArrive_o.valid.peek.litToBoolean)
-    target.packetArrive_o.bits.expect(expectThreadID)
+    target.packetArrive_o.bits.expect(expectAsid)
     target.tick()
   }
 
@@ -109,7 +109,7 @@ implicit class BaseTLBDriver(target: DUTTLB){
     target.frontendReply_o.bits.violation.expect(violation.B)
     target.frontendReply_o.bits.hit.expect(hit.B)
     if(!violation && hit)
-      target.frontendReply_o.bits.entry.pp.expect(ppn)
+      target.frontendReply_o.bits.entry.ppn.expect(ppn)
   }
 
   def tick(step: Int = 1){
@@ -139,7 +139,7 @@ import firrtl.options.TargetDirAnnotation
 
 class TLBTester extends FreeSpec with ChiselScalatestTester {
   val param = new TLBParameter(
-    8, 4, 2, 15, 2, 1, 32, true
+    8, 4, 2, 15, 1, 32, true
   )
 
   import TLBTestUtility._

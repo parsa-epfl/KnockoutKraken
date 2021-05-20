@@ -1,4 +1,4 @@
-package armflex.cache
+package armflex
 
 import chisel3._
 import chisel3.util._
@@ -13,13 +13,13 @@ import TestOptionBuilder._
 //import armflex.util.SimTools._
 
 class RequestAdaptorTester extends FreeSpec with ChiselScalatestTester {
-  val param = new MemorySystemParameter()
+  // val param = new MemorySystemParameter()
   import CacheInterfaceAdaptors._
   import arm.DECODE_CONTROL_SIGNALS._
 
   "Normal read" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/memory_request_adaptor/normal"), WriteVcdAnnotation)
-    test(new CacheRequestAdaptor(param)).withAnnotations(anno){ dut =>
+    test(new CacheRequestAdaptor(2, 64, 512)).withAnnotations(anno){ dut =>
 
       dut.o.ready.poke(true.B)
 
@@ -51,7 +51,7 @@ class RequestAdaptorTester extends FreeSpec with ChiselScalatestTester {
 
   "Pair Load" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/memory_request_adaptor/pair"), WriteVcdAnnotation)
-    test(new CacheRequestAdaptor(param)).withAnnotations(anno){ dut =>
+    test(new CacheRequestAdaptor(2, 64, 512)).withAnnotations(anno){ dut =>
       dut.o.ready.poke(true.B)
 
       dut.i.bits.isLoad.poke(true.B)
@@ -96,7 +96,7 @@ class RequestAdaptorTester extends FreeSpec with ChiselScalatestTester {
 
   "Data placement" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/memory_request_adaptor/data_placement"), WriteVcdAnnotation)
-    test(new CacheRequestAdaptor(param)).withAnnotations(anno){ dut =>
+    test(new CacheRequestAdaptor(2, 64, 512)).withAnnotations(anno){ dut =>
       dut.o.ready.poke(true.B)
 
       // a normal read request
@@ -126,13 +126,12 @@ class RequestAdaptorTester extends FreeSpec with ChiselScalatestTester {
 // M | H
 // M | M
 class ReplyAdaptorTester extends FreeSpec with ChiselScalatestTester {
-  val param = new MemorySystemParameter()
   import CacheInterfaceAdaptors._
   import arm.DECODE_CONTROL_SIGNALS._
 
   "Pair" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/memory_reply_adaptor/pair"), WriteVcdAnnotation)
-    test(new CacheReplyAdaptor(param)).withAnnotations(anno){ dut =>
+    test(new CacheReplyAdaptor(2, 64, 512)).withAnnotations(anno){ dut =>
       // setup the sync_message_i
       //dut.sync_message_i.setSinkClock(dut.clock)
       dut.sync_message_i.bits.bias_addr.poke(2.U)

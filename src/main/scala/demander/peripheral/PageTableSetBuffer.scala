@@ -25,8 +25,8 @@ class PageTableSetPacket(
   param: TLBParameter,
   val entryNumber: Int = 16
 ) extends Bundle {
-  val tags = Vec(entryNumber, new software_bundle.PTTag(param))
-  val ptes = Vec(entryNumber, new software_bundle.PTEntry(param))
+  val tags = Vec(entryNumber, new software_bundle.PTTagPacket(param))
+  val ptes = Vec(entryNumber, new software_bundle.PTEntryPacket(param))
   
   val valids = UInt(entryNumber.W)
   val lru_bits = UInt(entryNumber.W)
@@ -129,10 +129,10 @@ class PageTableSetBuffer(
   updated_pt_set.lru_bits := u_lru_core.io.encoding_o
   updated_pt_set.valids := Cat(0.U(1.W), UIntToOH(write_request_i.bits.index))
 
-  val lookup_request_i = IO(Input(new software_bundle.PTTag(param)))
+  val lookup_request_i = IO(Input(new software_bundle.PTTagPacket(param)))
   val hit_vector = pt_set_r.tags.zip(pt_set_r.valids.asBools()).map({
     case (tag, valid) => 
-    tag.process_id === lookup_request_i.process_id && 
+    tag.asid === lookup_request_i.asid && 
     tag.vpn === lookup_request_i.vpn &&
     valid
   })

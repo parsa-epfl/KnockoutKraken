@@ -23,7 +23,7 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
     val anno = Seq(TargetDirAnnotation("test/demander/ppn_deallocation/normal"), VerilatorBackendAnnotation, WriteVcdAnnotation)
     test(new PageDemanderDUT(new PageDemanderParameter())).withAnnotations(anno){ dut=>
       // 1. push page.
-      dut.registerThreadTable(0, 0x10)
+      // dut.registerThreadTable(0, 0x10)
       dut.movePageIn(0x01234567)
       dut.sendPageFaultResponse(
         0xABC,
@@ -64,14 +64,14 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
       dut.pageset_packet_o.ptes(0).ppn.expect(0x10000.U)
       dut.pageset_packet_o.ptes(0).modified.expect(false.B)
       dut.pageset_packet_o.ptes(0).permission.expect(1.U)
-      dut.pageset_packet_o.tags(0).process_id.expect(0x10.U)
+      dut.pageset_packet_o.tags(0).asid.expect(0x10.U)
       dut.pageset_packet_o.tags(0).vpn.expect(0xABC.U)
       // 1.5. It should response to the TLB for page arrive.
       dut.waitForSignalToBe(dut.dtlb_backend_reply_o.valid)
-      dut.dtlb_backend_reply_o.bits.tag.thread_id.expect(0.U)
-      dut.dtlb_backend_reply_o.bits.tag.vpage.expect(0xABC.U)
+      dut.dtlb_backend_reply_o.bits.tag.asid.expect(0.U)
+      dut.dtlb_backend_reply_o.bits.tag.vpn.expect(0xABC.U)
       dut.dtlb_backend_reply_o.bits.data.modified.expect(false.B)
-      dut.dtlb_backend_reply_o.bits.data.pp.expect(0x10000.U)
+      dut.dtlb_backend_reply_o.bits.data.ppn.expect(0x10000.U)
       dut.dtlb_backend_reply_o.bits.data.permission.expect(1.U)
 
       dut.pa_pool_full_o.expect(false.B)
@@ -90,7 +90,7 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
       dut.pageset_packet_i.ptes(0).ppn.poke(0x10000.U)
       dut.pageset_packet_i.ptes(0).modified.poke(false.B)
       dut.pageset_packet_i.ptes(0).permission.poke(1.U)
-      dut.pageset_packet_i.tags(0).process_id.poke(0x10.U)
+      dut.pageset_packet_i.tags(0).asid.poke(0x10.U)
       dut.pageset_packet_i.tags(0).vpn.poke(0xABC.U)
       dut.pageset_packet_i.valids.poke(1.U)
       dut.sendPageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
@@ -113,7 +113,7 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
       for(i <- 0 until 64){
         dut.waitForSignalToBe(dut.dcache_flush_request_o.valid)
         dut.dcache_flush_request_o.bits.addr.expect((0x10000 * 64 + i).U)
-        dut.dcache_flush_request_o.bits.thread_id.expect(0.U)
+        dut.dcache_flush_request_o.bits.asid.expect(0.U)
         timescope {
           dut.dcache_flush_request_o.ready.poke(true.B)
           dut.tk()

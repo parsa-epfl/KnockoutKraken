@@ -16,7 +16,6 @@ import armflex.demander.PageDemanderParameter
 class ARMFlexTop extends MultiIOModule {
   implicit val pipelineCfg = new ProcConfig(NB_THREADS = 8)
   val memoryParameter = new MemorySystemParameter(
-    threadNumber = 8,
     // FIXME: Remember to make it into 36 before actually exporting to the hardware for FPGA
     pAddressWidth = 24 // For scaling down
   )
@@ -36,16 +35,16 @@ class ARMFlexTop extends MultiIOModule {
   u_pipeline.mem.inst.req <> u_inst_path.frontend_request_i
   u_pipeline.mem.inst.resp <> u_inst_path.frontend_reply_o
 
-  u_pipeline.mem.wake(0).tag := u_inst_path.tlb_packet_arrive_o.bits
+  u_pipeline.mem.wake(0).bits := u_inst_path.tlb_packet_arrive_o.bits
   u_pipeline.mem.wake(0).valid := u_inst_path.tlb_packet_arrive_o.valid
 
-  u_pipeline.mem.wake(1).tag := u_inst_path.cache_packet_arrive_o.bits.thread_id
+  u_pipeline.mem.wake(1).bits := u_inst_path.cache_packet_arrive_o.bits.asid
   u_pipeline.mem.wake(1).valid := u_inst_path.cache_packet_arrive_o.valid
 
-  u_pipeline.mem.instFault.tag := u_inst_path.tlb_violation_o.bits
+  u_pipeline.mem.instFault.bits := u_inst_path.tlb_violation_o.bits
   u_pipeline.mem.instFault.valid := u_inst_path.tlb_violation_o.valid
 
-  val u_inst_axi = Module(new CacheBackendToAXIInterface.CacheBackendAXIAdaptors(memoryParameter))
+  val u_inst_axi = Module(new CacheBackendToAXIInterface.CacheBackendAXIAdaptors(memoryParameter, pipelineCfg.NB_THREADS))
   
   u_inst_axi.cache_backend_reply_o <> u_inst_path.cache_backend_reply_i
   u_inst_axi.cache_backend_request_i <> u_inst_path.cache_backend_request_o // TODO: Add FIFO here to buffer the backend request if timing is not good then.
@@ -59,16 +58,16 @@ class ARMFlexTop extends MultiIOModule {
   u_pipeline.mem.data.req <> u_data_path.frontend_request_i
   u_pipeline.mem.data.resp <> u_data_path.frontend_reply_o
 
-  u_pipeline.mem.wake(2).tag := u_data_path.tlb_packet_arrive_o.bits
+  u_pipeline.mem.wake(2).bits := u_data_path.tlb_packet_arrive_o.bits
   u_pipeline.mem.wake(2).valid := u_data_path.tlb_packet_arrive_o.valid
 
-  u_pipeline.mem.wake(3).tag := u_data_path.cache_packet_arrive_o.bits.thread_id
+  u_pipeline.mem.wake(3).bits := u_data_path.cache_packet_arrive_o.bits.asid
   u_pipeline.mem.wake(3).valid := u_data_path.cache_packet_arrive_o.valid
 
-  u_pipeline.mem.dataFault.tag := u_data_path.tlb_violation_o.bits
+  u_pipeline.mem.dataFault := u_data_path.tlb_violation_o
   u_pipeline.mem.dataFault.valid := u_data_path.tlb_violation_o.valid
 
-  val u_data_axi = Module(new CacheBackendToAXIInterface.CacheBackendAXIAdaptors(memoryParameter))
+  val u_data_axi = Module(new CacheBackendToAXIInterface.CacheBackendAXIAdaptors(memoryParameter, pipelineCfg.NB_THREADS * 2))
   
   u_data_axi.cache_backend_reply_o <> u_data_path.cache_backend_reply_i
   u_data_axi.cache_backend_request_i <> u_data_path.cache_backend_request_o
@@ -154,15 +153,14 @@ class ARMFlexTop extends MultiIOModule {
   u_axi_write.M_AXI.r <> AXI4R.stub(pdParam.dramDataWidth)
 
   val u_axil_inter = Module(new AXILInterconnector(
-    Seq(0x0000, 0x4000, 0x8000), Seq(0xC000, 0xC000, 0xC000), 32, 32
+    Seq(0x0000, 0x8000), Seq(0x8000, 0x8000), 32, 32
   ))
 
   val S_AXIL = IO(Flipped(u_axil_inter.S_AXIL.cloneType))
   S_AXIL <> u_axil_inter.S_AXIL
 
-  u_axil_inter.M_AXIL(0) <> u_pipeline.transplantIO.ctl
-  u_axil_inter.M_AXIL(1) <> u_pd.S_AXIL_TT
-  u_axil_inter.M_AXIL(2) <> u_pd.S_AXIL_QEMU_MQ
+  u_axil_inter.M_AXIL(0) <> u_pipeline.S_AXI
+  u_axil_inter.M_AXIL(1) <> u_pd.S_AXIL_QEMU_MQ
 }
 
 object ARMFlexTopVerilogEmitter extends App {
@@ -210,6 +208,7 @@ class PipelineAxiHacked(implicit val cfg: ProcConfig) extends MultiIOModule {
       bits.valid := handshakeReg(3+idx)
       bits.tag := SimpleCSR(csr.io.csr(4+idx), axiDataWidth)
   }
+
   val currIdx = 4 + pipeline.mem.wake.length
   val regsPerBlock = cfg.BLOCK_SIZE/axiDataWidth
   pipeline.mem.inst.resp.bits := Cat(for (idx <- 0 until regsPerBlock) yield SimpleCSR(csr.io.csr(currIdx+idx), axiDataWidth)).asTypeOf(pipeline.mem.inst.resp.bits)

@@ -13,11 +13,11 @@ import armflex.util.FlushQueue
 
 class DataBankFrontendRequestPacket(
   addressWidth: Int,
-  threadIDWidth: Int,
+  asidWidth: Int,
   blockSize: Int
 ) extends Bundle{
   val addr = UInt(addressWidth.W) // access address.
-  val thread_id = UInt(threadIDWidth.W)
+  val asid = UInt(asidWidth.W)
   val permission = UInt(2.W)
   val wData = UInt(blockSize.W)
   val wMask = UInt(blockSize.W)
@@ -28,30 +28,30 @@ class DataBankFrontendRequestPacket(
   // overload constructor to quickly build a frontend port from the cache parameter.
   def this(param: CacheParameter) = this(
     param.addressWidth,
-    param.threadIDWidth(),
+    param.asidWidth,
     param.blockBit,
   )
 
-  override def cloneType(): this.type = new DataBankFrontendRequestPacket(addressWidth, threadIDWidth, blockSize).asInstanceOf[this.type]
+  override def cloneType(): this.type = new DataBankFrontendRequestPacket(addressWidth, asidWidth, blockSize).asInstanceOf[this.type]
 }
 
 
 
 class FrontendReplyPacket(
   dataWidth: Int,
-  threadWidth: Int 
+  asidWidth: Int 
 ) extends Bundle{
 
   val data = UInt(dataWidth.W)
-  val thread_id = UInt(threadWidth.W)
+  val asid = UInt(asidWidth.W)
   val hit = Bool()
   val dirty = Bool()
 
   def this(param: CacheParameter) {
-    this(param.blockBit, param.threadIDWidth())
+    this(param.blockBit, param.asidWidth)
   }
 
-  override def cloneType(): this.type = new FrontendReplyPacket(dataWidth, threadWidth).asInstanceOf[this.type]
+  override def cloneType(): this.type = new FrontendReplyPacket(dataWidth, asidWidth).asInstanceOf[this.type]
 }
 
 /**
@@ -60,7 +60,7 @@ class FrontendReplyPacket(
  */ 
 class MissRequestPacket(param: CacheParameter) extends Bundle{
   val addr = UInt(param.addressWidth.W)
-  val thread_id = UInt(param.threadIDWidth().W)
+  val asid = UInt(param.asidWidth.W)
   val permission = UInt(2.W)
 
 
@@ -75,7 +75,7 @@ class MissRequestPacket(param: CacheParameter) extends Bundle{
  */ 
 class MissResolveReplyPacket(param: CacheParameter) extends Bundle{
   val addr = UInt(param.addressWidth.W)
-  val thread_id = UInt(param.threadIDWidth().W)
+  val asid = UInt(param.asidWidth.W)
   
   val not_sync_with_data_v = Bool()
 
@@ -166,7 +166,7 @@ class DataBankManager(
   bank_ram_reply_data_i.ready := s1_frontend_request_r.valid // If transaction is valid, then we accept the result.
   
   val match_bits = bank_ram_reply_data_i.bits.map({ x=>
-    x.checkHit(s1_frontend_request_r.bits.addr, s1_frontend_request_r.bits.thread_id) && x.v
+    x.checkHit(s1_frontend_request_r.bits.addr, s1_frontend_request_r.bits.asid) && x.v
   }) // get all the comparison results
   assert(PopCount(match_bits) === 1.U || PopCount(match_bits) === 0.U, "It's impossible to hit multiple entries.")
 
@@ -183,13 +183,13 @@ class DataBankManager(
    */ 
   class writing_context_t extends Bundle{
     val addr = UInt(param.addressWidth.W)
-    val thread_id = UInt(param.threadIDWidth().W)
+    val asid = UInt(param.asidWidth.W)
     val dataBlock = UInt(param.blockBit.W)
     val flush_v = Bool()
     def toEntry(): CacheEntry = {
       val res = Wire(new CacheEntry(param))
       res.v := Mux(flush_v, false.B, true.B)
-      res.refill(this.addr, this.thread_id, this.dataBlock)
+      res.refill(this.addr, this.asid, this.dataBlock)
       res.d := true.B
       res
     }
@@ -212,7 +212,7 @@ class DataBankManager(
   )
 
   s2_bank_writing_n.bits.addr := s1_frontend_request_r.bits.addr
-  s2_bank_writing_n.bits.thread_id := s1_frontend_request_r.bits.thread_id
+  s2_bank_writing_n.bits.asid := s1_frontend_request_r.bits.asid
   s2_bank_writing_n.bits.flush_v := s1_frontend_request_r.bits.flush_v
   s2_bank_writing_n.valid := 
     s1_frontend_request_r.valid && // Request is valid
@@ -220,7 +220,7 @@ class DataBankManager(
     (hit_v || full_writing_v) //! No fire() required here because this register is in a branch instead of the main stream.
 
   frontend_reply_o.valid := s1_frontend_request_r.fire() // Also return if miss
-  frontend_reply_o.bits.thread_id := s1_frontend_request_r.bits.thread_id
+  frontend_reply_o.bits.asid := s1_frontend_request_r.bits.asid
   frontend_reply_o.bits.hit := hit_v || full_writing_v // this term is related to the wake up. A full-writing should be viewed as a hit to the frontend and a miss to the LRU and eviction.
   frontend_reply_o.bits.data := hit_entry.read()
 
@@ -264,7 +264,7 @@ class DataBankManager(
     full_writing_request.bits.addr := s1_frontend_request_r.bits.addr(param.setWidth()-1, 0)
   else
     full_writing_request.bits.addr := 0.U
-  full_writing_request.bits.data.refill(s1_frontend_request_r.bits.addr, s1_frontend_request_r.bits.thread_id, s1_frontend_request_r.bits.wData)
+  full_writing_request.bits.data.refill(s1_frontend_request_r.bits.addr, s1_frontend_request_r.bits.asid, s1_frontend_request_r.bits.wData)
   full_writing_request.bits.which := lru_which_i
   full_writing_request.valid := s1_frontend_request_r.valid && (!hit_v && full_writing_v)
 
@@ -280,7 +280,7 @@ class DataBankManager(
 
   val s2_miss_request_n = Wire(Decoupled(new MissRequestPacket(param)))
   s2_miss_request_n.bits.addr := s1_frontend_request_r.bits.addr
-  s2_miss_request_n.bits.thread_id := s1_frontend_request_r.bits.thread_id
+  s2_miss_request_n.bits.asid := s1_frontend_request_r.bits.asid
   s2_miss_request_n.bits.not_sync_with_data_v := false.B
   s2_miss_request_n.bits.permission := s1_frontend_request_r.bits.permission
   s2_miss_request_n.valid := !hit_v && s1_frontend_request_r.fire() && 

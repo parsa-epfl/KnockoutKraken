@@ -5,7 +5,7 @@ import peripheral._
 import chisel3._
 import chisel3.util._
 import armflex.cache._
-import armflex.demander.software_bundle.PTEntry
+import armflex.demander.software_bundle.PTEntryPacket
 import armflex.util._
 
 /**
@@ -31,11 +31,6 @@ class PageWalker(
   u_miss_arb.io.in <> tlb_miss_req_i
 
   // val selected_miss_req = u_miss_arb.io.out
-
-  // lookup process id. Converting Thread ID to Process ID. TT means thread table.
-  val tt_tid_o = IO(Output(UInt(param.mem.toTLBParameter().threadIDWidth().W)))
-  tt_tid_o := u_miss_arb.io.out.bits.tag.thread_id
-  val tt_pid_i = IO(Flipped(Valid((UInt(param.mem.processIDWidth.W)))))
 
   // AXI DMA Read Channels
   val M_DMA_R = IO(new AXIReadMasterIF(
@@ -68,8 +63,7 @@ class PageWalker(
   // The request packet
   class request_packet_t extends Bundle {
     val vpn = UInt(param.mem.vPageNumberWidth.W)
-    val process_id = UInt(param.pidWidth.W)
-    val thread_id = UInt(param.mem.toTLBParameter().threadIDWidth().W)
+    val asid = UInt(param.mem.toTLBParameter().asidWidth.W)
     val permission = UInt(param.mem.toTLBParameter().permissionWidth.W)
     val source = UInt(log2Ceil(tlbNumber).W)
   }
@@ -77,20 +71,19 @@ class PageWalker(
   val request_r = Reg(new request_packet_t)
   when(u_miss_arb.io.out.fire()){
     request_r.permission := u_miss_arb.io.out.bits.permission
-    request_r.process_id := tt_pid_i.bits
-    request_r.thread_id := u_miss_arb.io.out.bits.tag.thread_id
-    request_r.vpn := u_miss_arb.io.out.bits.tag.vpage
+    request_r.asid := u_miss_arb.io.out.bits.tag.asid
+    request_r.vpn := u_miss_arb.io.out.bits.tag.vpn
     request_r.source := u_miss_arb.io.chosen
   }
 
-  val pte_r = Reg(Valid(new PTEntry(param.mem.toTLBParameter())))
+  val pte_r = Reg(Valid(new PTEntryPacket(param.mem.toTLBParameter())))
   when(state_r === sLookup){
     pte_r.bits := u_buffer.lookup_reply_o.item.entry
     pte_r.valid := u_buffer.lookup_reply_o.hit_v
   }
 
   // IO assignment of u_buffer.
-  u_buffer.lookup_request_i.process_id := request_r.process_id
+  u_buffer.lookup_request_i.asid := request_r.asid
   u_buffer.lookup_request_i.vpn := request_r.vpn
 
   u_buffer.write_request_i.valid := false.B
@@ -106,15 +99,15 @@ class PageWalker(
   for(i <- 0 until tlbNumber){
     tlb_backend_reply_o(i).bits.data.modified := pte_r.bits.modified
     tlb_backend_reply_o(i).bits.data.permission := pte_r.bits.permission
-    tlb_backend_reply_o(i).bits.data.pp := pte_r.bits.ppn
-    tlb_backend_reply_o(i).bits.tag.thread_id := request_r.thread_id
-    tlb_backend_reply_o(i).bits.tag.vpage := request_r.vpn
+    tlb_backend_reply_o(i).bits.data.ppn := pte_r.bits.ppn
+    tlb_backend_reply_o(i).bits.tag.asid := request_r.asid
+    tlb_backend_reply_o(i).bits.tag.vpn := request_r.vpn
     tlb_backend_reply_o(i).valid := state_r === sReply && pte_r.valid && request_r.source === i.U
   }
 
   // assignment of page_fault_req_o
   page_fault_req_o.bits.permission := request_r.permission
-  page_fault_req_o.bits.tag.process_id := request_r.process_id
+  page_fault_req_o.bits.tag.asid := request_r.asid
   page_fault_req_o.bits.tag.vpn := request_r.vpn
   page_fault_req_o.valid := state_r === sReply && !pte_r.valid
 
