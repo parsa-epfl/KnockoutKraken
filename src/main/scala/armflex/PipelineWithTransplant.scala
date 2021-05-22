@@ -7,10 +7,9 @@ import chisel3.util._
 import arm.PROCESSOR_TYPES._
 import arm.DECODE_CONTROL_SIGNALS._
 
-import armflex.cache._
+import armflex_cache._
 import armflex.util._
 import armflex.util.ExtraUtils._
-import Chisel.debug
 
 import antmicro.CSR._
 import firrtl.PrimOps.Mul

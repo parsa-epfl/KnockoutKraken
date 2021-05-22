@@ -2,16 +2,11 @@ package armflex
 
 import chisel3._
 import chisel3.util._
-import armflex.cache.TLBPlusCache
-import armflex.cache.MemorySystemParameter
-import armflex.cache.MatrixLRUCore
-import armflex.cache.PseudoTreeLRUCore
-import armflex.cache.CacheBackendToAXIInterface
-import armflex.demander.PageDemander
+import armflex_cache._
+import armflex_mmu.{PageDemander, PageDemanderParameter}
 import armflex.util._
 
 import antmicro.Bus._
-import armflex.demander.PageDemanderParameter
 
 class ARMFlexTop extends MultiIOModule {
   implicit val pipelineCfg = new ProcConfig(NB_THREADS = 8)

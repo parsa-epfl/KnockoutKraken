@@ -1,6 +1,6 @@
 package armflex
 
-import armflex.cache._
+import armflex_cache._
 import chisel3._
 import chisel3.util._
 
