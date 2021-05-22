@@ -3,14 +3,12 @@ package armflex.demander
 import chisel3._
 import chisel3.util._
 import armflex.cache._
-import armflex.demander.software_bundle.QEMUMissReply
 import armflex.demander.peripheral.PageTableSetBuffer
 import armflex.demander.peripheral.PageTableSetPacket
 import antmicro.Bus._
 import antmicro.Frontend._
+import armflex.{PageTableItem, QEMUMissReply, QEMUPageEvictRequest}
 import chisel3.experimental.Param
-import armflex.demander.software_bundle.PageTableItem
-import armflex.demander.software_bundle.QEMUPageEvictRequest
 import armflex.util._
 
 class QEMUPageEvictHandler(

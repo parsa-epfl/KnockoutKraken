@@ -1,6 +1,6 @@
 package armflex.cache
 
-import armflex.demander.software_bundle.PTEntryPacket
+import armflex.PTEntryPacket
 import chisel3._
 import chisel3.util._
 import chiseltest._

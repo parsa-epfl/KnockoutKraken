@@ -1,10 +1,8 @@
-package armflex.demander.software_bundle
+package armflex
 
+import armflex.cache._
 import chisel3._
 import chisel3.util._
-import armflex.cache._
-import armflex.demander._
-import armflex.demander.peripheral.TLBMessageConverter
 
 abstract class SoftwareControlledBundle extends Bundle {
   def asVec(width: Int): Vec[UInt]

@@ -1,12 +1,9 @@
 package armflex.demander.peripheral
 
+import armflex.{PTEntryPacket, PTTagPacket, PageTableItem}
 import chisel3._
 import chisel3.util._
-
-import armflex.demander.software_bundle
-
 import armflex.cache.PseudoTreeLRUCore
-import armflex.demander.software_bundle.PageTableItem
 import armflex.cache.TLBParameter
 
 
@@ -25,8 +22,8 @@ class PageTableSetPacket(
   param: TLBParameter,
   val entryNumber: Int = 16
 ) extends Bundle {
-  val tags = Vec(entryNumber, new software_bundle.PTTagPacket(param))
-  val ptes = Vec(entryNumber, new software_bundle.PTEntryPacket(param))
+  val tags = Vec(entryNumber, new PTTagPacket(param))
+  val ptes = Vec(entryNumber, new PTEntryPacket(param))
   
   val valids = UInt(entryNumber.W)
   val lru_bits = UInt(entryNumber.W)
@@ -99,12 +96,12 @@ class PageTableSetBuffer(
   val u_lru_core = Module(new PseudoTreeLRUCore(t.entryNumber))
   u_lru_core.io.encoding_i := pt_set_r.lru_bits(t.entryNumber-2, 0)
   val lru_index = u_lru_core.io.lru_o
-  val lru_item = Wire(new software_bundle.PageTableItem(param))
+  val lru_item = Wire(new PageTableItem(param))
   lru_item.entry := pt_set_r.ptes(lru_index)
   lru_item.tag := pt_set_r.tags(lru_index)
 
   class get_lru_element_response_t extends Bundle {
-    val item = new software_bundle.PageTableItem(param)
+    val item = new PageTableItem(param)
     val lru_v = Bool()
     val index = UInt(log2Ceil(t.entryNumber).W)
     // That lru_v is true means the item is valid. 
@@ -129,7 +126,7 @@ class PageTableSetBuffer(
   updated_pt_set.lru_bits := u_lru_core.io.encoding_o
   updated_pt_set.valids := Cat(0.U(1.W), UIntToOH(write_request_i.bits.index))
 
-  val lookup_request_i = IO(Input(new software_bundle.PTTagPacket(param)))
+  val lookup_request_i = IO(Input(new PTTagPacket(param)))
   val hit_vector = pt_set_r.tags.zip(pt_set_r.valids.asBools()).map({
     case (tag, valid) => 
     tag.asid === lookup_request_i.asid && 

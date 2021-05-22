@@ -1,9 +1,8 @@
 package armflex.cache
 
+import armflex.{PTEntryPacket, PTTagPacket}
 import chisel3._
 import chisel3.util._
-
-import armflex.demander.software_bundle._
 
 class TLBParameter(
   val vPageWidth: Int = 52,

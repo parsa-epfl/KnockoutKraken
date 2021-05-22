@@ -1,18 +1,9 @@
 package armflex.demander.peripheral
 
+import armflex.{TLBEvictionMessage, TLBMissRequestMessage}
 import chisel3._
 import chisel3.util._
-
-import armflex.demander.software_bundle
-
-import armflex.cache.{
-  MemorySystemParameter,
-  TLBBackendReplyPacket,
-  TLBAccessRequestPacket,
-  TLBBackendRequestPacket,
-  TLBParameter,
-  TLBFrontendReplyPacket,
-}
+import armflex.cache.{MemorySystemParameter, TLBAccessRequestPacket, TLBBackendReplyPacket, TLBBackendRequestPacket, TLBFrontendReplyPacket, TLBParameter}
 /**
  * This module converts a TLB backend request (evict or just flush) to a message.
  * The message will be sent to the core so that correct operations will be carried.
@@ -28,12 +19,12 @@ class TLBMessageConverter(
 ) extends MultiIOModule {
   val tlb_backend_request_i = IO(Flipped(Decoupled(new TLBBackendRequestPacket(param))))
 
-  val miss_request = Wire(Decoupled(new software_bundle.TLBMissRequestMessage(param)))
+  val miss_request = Wire(Decoupled(new TLBMissRequestMessage(param)))
   miss_request.bits.tag:= tlb_backend_request_i.bits.tag
   miss_request.bits.permission := tlb_backend_request_i.bits.permission
   miss_request.valid := tlb_backend_request_i.valid && !tlb_backend_request_i.bits.w_v
 
-  val ev_request = Wire(Decoupled(new software_bundle.TLBEvictionMessage(param)))
+  val ev_request = Wire(Decoupled(new TLBEvictionMessage(param)))
   ev_request.bits := tlb_backend_request_i.bits
   // Why not flush: Flushed element is handled by the module TLBWrapper.
   ev_request.valid := tlb_backend_request_i.valid && tlb_backend_request_i.bits.w_v && !tlb_backend_request_i.bits.flush_v
@@ -43,11 +34,11 @@ class TLBMessageConverter(
   }
 
   // val miss_request_qo = Queue(miss_request, 4)
-  val miss_request_o = IO(Decoupled(new software_bundle.TLBMissRequestMessage(param)))
+  val miss_request_o = IO(Decoupled(new TLBMissRequestMessage(param)))
   miss_request_o <> miss_request
 
   // val ev_request_qo = Queue(ev_request, 4)
-  val eviction_request_o = IO(Decoupled(new software_bundle.TLBEvictionMessage(param)))
+  val eviction_request_o = IO(Decoupled(new TLBEvictionMessage(param)))
   eviction_request_o <> ev_request
 
   tlb_backend_request_i.ready := Mux(

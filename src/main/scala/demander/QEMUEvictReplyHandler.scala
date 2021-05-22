@@ -1,9 +1,8 @@
 package armflex.demander
 
+import armflex.QEMUEvictReply
 import chisel3._
 import chisel3.util._
-
-import software_bundle._
 import armflex.cache.TLBParameter
 
 class QEMUEvictReplyHandler(param: TLBParameter) extends MultiIOModule {

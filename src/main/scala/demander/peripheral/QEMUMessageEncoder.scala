@@ -1,9 +1,8 @@
 package armflex.demander.peripheral
 
+import armflex.{PageEvictNotification, PageFaultNotification, QEMUMessagesType, QEMUTxMessage}
 import chisel3._
 import chisel3.util._
-
-import armflex.demander.software_bundle._
 import armflex.cache.TLBParameter
 
 class QEMUMessageEncoder(

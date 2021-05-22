@@ -3,13 +3,12 @@ package armflex.demander
 import chisel3._
 import chisel3.util._
 import armflex.cache._
-import armflex.demander.software_bundle.QEMUMissReply
 import armflex.demander.peripheral.PageTableSetBuffer
 import armflex.demander.peripheral.PageTableSetPacket
 import antmicro.Bus._
 import antmicro.Frontend._
+import armflex.{PageTableItem, QEMUMissReply}
 import chisel3.experimental.Param
-import armflex.demander.software_bundle.PageTableItem
 import armflex.util.AXIDMARequestPacket
 import armflex.util.AXIReadMasterIF
 import armflex.util.AXIWriteMasterIF
@@ -17,14 +16,14 @@ import armflex.util.AXIWriteMasterIF
 class QEMUMissReplyHandler(
   param: PageDemanderParameter
 ) extends MultiIOModule {
-  val qemu_miss_reply_i = IO(Flipped(Decoupled(new QEMUMissReply(param.mem.toTLBParameter))))
+  val qemu_miss_reply_i = IO(Flipped(Decoupled(new QEMUMissReply(param.mem.toTLBParameter()))))
   
   val sIdle :: sCheckAndLoadSynonym :: sGetSynonym :: sLoadSet :: sGetEvict :: sDeletePageReq :: sDeletePage :: sReplace :: sInsertPage :: sMoveback :: sReplyToTLB :: Nil = Enum(11)
   val state_r = RegInit(sIdle)
 
   val u_buffer = Module(new PageTableSetBuffer(
-    param.mem.toTLBParameter,
-    new PageTableSetPacket(param.mem.toTLBParameter)
+    param.mem.toTLBParameter(),
+    new PageTableSetPacket(param.mem.toTLBParameter())
   ))
 
   // AXI DMA Read Channels
@@ -50,8 +49,8 @@ class QEMUMissReplyHandler(
   // sIdle
 
   qemu_miss_reply_i.ready := state_r === sIdle
-  val request_r = Reg(new QEMUMissReply(param.mem.toTLBParameter))
-  val ppn_r = RegInit(0.U(param.mem.pPageNumberWidth.W))
+  val request_r = Reg(new QEMUMissReply(param.mem.toTLBParameter()))
+  val ppn_r = RegInit(0.U(param.mem.pPageNumberWidth().W))
   when(qemu_miss_reply_i.fire()){
     request_r := qemu_miss_reply_i.bits
   }
@@ -59,7 +58,7 @@ class QEMUMissReplyHandler(
 
   // sCheckAndLoadSynonym
   // Port for access Freelist
-  val ppn_pop_i = IO(Flipped(Decoupled(UInt(param.mem.pPageNumberWidth.W))))
+  val ppn_pop_i = IO(Flipped(Decoupled(UInt(param.mem.pPageNumberWidth().W))))
   ppn_pop_i.ready := !request_r.synonym_v && state_r === sCheckAndLoadSynonym
 
   // sGetSynonym
@@ -85,7 +84,7 @@ class QEMUMissReplyHandler(
   )
 
   // sGetEvict
-  val victim_r = Reg(new PageTableItem(param.mem.toTLBParameter))
+  val victim_r = Reg(new PageTableItem(param.mem.toTLBParameter()))
   val target_index_r = Reg(UInt(log2Ceil(u_buffer.entryNumber).W))
   when(state_r === sGetEvict){
     victim_r := u_buffer.lru_element_o.item
@@ -94,7 +93,7 @@ class QEMUMissReplyHandler(
 
   // sDeletePageReq
   // Judge by done_o
-  val page_delete_req_o = IO(Decoupled(new PageTableItem(param.mem.toTLBParameter)))
+  val page_delete_req_o = IO(Decoupled(new PageTableItem(param.mem.toTLBParameter())))
   val page_delete_done_i = IO(Input(Bool()))
   page_delete_req_o.bits := victim_r
   page_delete_req_o.valid := state_r === sDeletePageReq
@@ -109,7 +108,7 @@ class QEMUMissReplyHandler(
 
   // sInsertPage
   // TODO: RAW Hazard detected. You have to wait for the Page deletor to complete before inserting pages.
-  val page_insert_req_o = IO(Decoupled(UInt(param.mem.pPageNumberWidth.W)))
+  val page_insert_req_o = IO(Decoupled(UInt(param.mem.pPageNumberWidth().W)))
   page_insert_req_o.bits := ppn_r
   page_insert_req_o.valid := state_r === sInsertPage
   val page_insert_done_i = IO(Input(Bool()))
@@ -120,7 +119,7 @@ class QEMUMissReplyHandler(
   M_DMA_W.req.valid := state_r === sMoveback
 
   // sReplyTLB
-  val tlb_backend_reply_o = IO(Decoupled(new TLBBackendReplyPacket(param.mem.toTLBParameter)))
+  val tlb_backend_reply_o = IO(Decoupled(new TLBBackendReplyPacket(param.mem.toTLBParameter())))
   tlb_backend_reply_o.bits.tag := request_r.tag
   tlb_backend_reply_o.bits.data.modified := false.B
   tlb_backend_reply_o.bits.data.permission := request_r.permission

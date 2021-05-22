@@ -2,15 +2,9 @@ package armflex.demander.peripheral
 
 import chisel3._
 import chisel3.util._
-
 import antmicro.Bus._
+import armflex.{QEMUEvictReply, QEMUMessagesType, QEMUMissReply, QEMUPageEvictRequest, QEMUTxMessage}
 import armflex.util.AXIRAMController
-import armflex.demander.software_bundle.QEMUTxMessage
-import armflex.demander.software_bundle.QEMUEvictReply
-import armflex.demander.software_bundle.QEMUMissReply
-import armflex.demander.software_bundle.QEMUMessagesType
-import armflex.demander.software_bundle.QEMUPageEvictRequest
-
 import armflex.demander.PageDemanderParameter
 import armflex.cache.MemorySystemParameter
 

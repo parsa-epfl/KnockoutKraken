@@ -1,11 +1,10 @@
 package armflex.demander
 
+import armflex.{PTEntryPacket, PageFaultNotification}
 import peripheral._
-
 import chisel3._
 import chisel3.util._
 import armflex.cache._
-import armflex.demander.software_bundle.PTEntryPacket
 import armflex.util._
 
 /**
@@ -17,10 +16,9 @@ class PageWalker(
   param: PageDemanderParameter,
   tlbNumber: Int = 2
 ) extends MultiIOModule {
-  import software_bundle.TLBMissRequestMessage
-  import software_bundle.PageFaultNotification
   import antmicro.Bus._
   import antmicro.Frontend._
+  import armflex.TLBMissRequestMessage
 
   // IO of TLB miss.
   val tlb_miss_req_i = IO(Vec(

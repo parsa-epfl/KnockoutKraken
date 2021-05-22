@@ -1,17 +1,10 @@
 package armflex.demander.peripheral
 
+import armflex.{PTTagPacket, PageEvictNotification, PageTableItem, QEMUMessagesType}
 import chisel3._
 import chisel3.util._
-
 import armflex.demander._
-import armflex.demander.software_bundle._
-
-import armflex.cache.{
-  CacheFrontendFlushRequest,
-  CacheParameter,
-  TLBFrontendReplyPacket
-}
-import armflex.cache.MemorySystemParameter
+import armflex.cache.{CacheFrontendFlushRequest, CacheParameter, TLBFrontendReplyPacket}
 import armflex.util._
 
 
