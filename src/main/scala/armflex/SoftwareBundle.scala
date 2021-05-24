@@ -11,25 +11,7 @@ abstract class SoftwareControlledBundle extends Bundle {
 
 /**
  * This file records all the hardware structures defined in the demander.cc 
- */ 
-
-// TODO: Make it not global, and combined with MemorySystemParameter.
-// object ParameterConstants {
-//   val dramAddrWidth = 24
-//   val dramDataWidth = 512
-
-//   val vpn_width = 52
-//   val ppn_width = dramAddrWidth - 12
-//   val process_id_width = 15
-//   val permission_bit_width = 2
-
-//   def getPageTableAddressByVPN(vpn: UInt) = {
-//     // val res = Wire()
-//     // TODO: Move this function to Page Table Buffer.
-//     val pageset_number = vpn(23, 4)
-//     Cat(pageset_number * 3.U(2.W), 0.U(6.W))
-//   }
-// }
+ */
 
 class PTTagPacket(param: TLBParameter) extends SoftwareControlledBundle {
   val vpn = UInt(param.vPageWidth.W) // 52

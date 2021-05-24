@@ -1,7 +1,6 @@
-package armflex
-
 import chisel3._
 import chisel3.util._
+import armflex._
 import armflex_cache._
 import armflex_mmu.{PageDemander, PageDemanderParameter}
 import armflex.util._

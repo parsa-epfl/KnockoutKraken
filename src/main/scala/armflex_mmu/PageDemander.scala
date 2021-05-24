@@ -1,23 +1,11 @@
-package armflex.demander
+package armflex_mmu
 
 import chisel3._
 import chisel3.util._
-
-import armflex.demander.software_bundle._
-import armflex.demander.peripheral._
-
-import armflex.cache.MemorySystemParameter
-import antmicro.Bus._
-import armflex.demander.peripheral.TLBMessageConverter
-import armflex.demander.peripheral.FreeList
-import armflex.cache.TLBBackendReplyPacket
-import armflex.demander.peripheral.PageDeletor
-import armflex.demander.peripheral.PageInserter
-import armflex.demander.peripheral.PageBuffer
-import armflex.demander.peripheral.QEMUMessageDecoder
-import armflex.demander.peripheral.QEMUMessageEncoder
-import armflex.demander.peripheral.DRAMResster
-import armflex.demander.software_bundle.PageTableItem
+import armflex_cache.MemorySystemParameter
+import armflex.{PTTagPacket, PageTableItem}
+import armflex_mmu.peripheral._
+import armflex_cache.TLBBackendReplyPacket
 import armflex.util.AXIControlledMessageQueue
 import armflex.util.AXIReadMasterIF
 import armflex.util.AXIWriteMasterIF
@@ -66,6 +54,8 @@ class PageDemander(
     param.dramDataWidth
   )))
 
+  // FIXME: Add a module to interact with multiple TLBs.
+
   // TLB Message receiver
   val u_itlb_mconv = Module(new TLBMessageConverter(param.mem.toTLBParameter()))
   val itlb_backend_request_i = IO(Flipped(u_itlb_mconv.tlb_backend_request_i.cloneType))
@@ -108,7 +98,7 @@ class PageDemander(
   // export TLB backend reply
   // two source: one from the page walk and one from the QEMU miss resolution
   val itlb_backend_reply_o = IO(Decoupled(new TLBBackendReplyPacket(param.mem.toTLBParameter())))
-  // FUCK: RRArbiter doesn't work in this scenario.
+  // FIXME: Here I cannot use RRArbiter and I don't know why.
   val u_itlb_backend_reply_arb = Module(new Arbiter(new TLBBackendReplyPacket(param.mem.toTLBParameter()), 2))
   itlb_backend_reply_o <> u_itlb_backend_reply_arb.io.out
   // 0: reply from the page walker
@@ -118,8 +108,9 @@ class PageDemander(
   u_itlb_backend_reply_arb.io.in(1).valid := u_qemu_miss.tlb_backend_reply_o.valid && u_qemu_miss.tlb_backend_reply_o.bits.data.permission === 2.U
 
   val dtlb_backend_reply_o = IO(u_page_walker.tlb_backend_reply_o(1).cloneType)
+  // FIXME: Here I cannot use RRArbiter and I don't know why.
   val u_dtlb_backend_reply_arb = Module(new Arbiter(new TLBBackendReplyPacket(param.mem.toTLBParameter()), 2))
-  dtlb_backend_reply_o <> u_dtlb_backend_reply_arb.io.out // u_page_walker.tlb_backend_reply_o(1)
+  dtlb_backend_reply_o <> u_dtlb_backend_reply_arb.io.out
   // 0: reply from the page walker
   u_dtlb_backend_reply_arb.io.in(0) <> u_page_walker.tlb_backend_reply_o(1)
   // 1: reply from the page fault resolver
@@ -127,10 +118,11 @@ class PageDemander(
   u_dtlb_backend_reply_arb.io.in(1).valid := u_qemu_miss.tlb_backend_reply_o.valid && u_qemu_miss.tlb_backend_reply_o.bits.data.permission =/= 2.U
   // ready signal of page fault resolver
   u_qemu_miss.tlb_backend_reply_o.ready := Mux(
-    u_qemu_miss.tlb_backend_reply_o.bits.data.permission === 2.U, 
+    u_qemu_miss.tlb_backend_reply_o.bits.data.permission === 2.U,
     u_itlb_backend_reply_arb.io.in(1).ready,
     u_dtlb_backend_reply_arb.io.in(1).ready
   )
+  // u_qemu_miss.tlb_backend_reply_o.ready := false.B
   
   u_qemu_miss.qemu_miss_reply_i <> u_qmd.qemu_miss_reply_o
 
@@ -155,10 +147,19 @@ class PageDemander(
   val icache_stall_request_vo = IO(Output(Bool()))
   icache_stall_request_vo := u_page_deleter.stall_icache_vo
 
-  val u_arb_page_delete_req = Module(new Arbiter(new PageTableItem(param.mem.toTLBParameter()), 2))
-  u_arb_page_delete_req.io.in(0) <> u_qemu_miss.page_delete_req_o
-  u_arb_page_delete_req.io.in(1) <> u_qemu_page_evict.page_delete_req_o
-  u_page_deleter.page_delete_req_i <> u_arb_page_delete_req.io.out
+  // FIXME: Here I cannot even use Arbiter and I don't know why. Temporary I use a manual Arbiter to solve the problem...
+//  val u_arb_page_delete_req = Module(new Arbiter(new PageTableItem(param.mem.toTLBParameter()), 2))
+//  u_arb_page_delete_req.io.in(0) <> u_qemu_miss.page_delete_req_o
+//  u_arb_page_delete_req.io.in(1) <> u_qemu_page_evict.page_delete_req_o
+  u_page_deleter.page_delete_req_i.bits := Mux(
+    u_qemu_miss.page_delete_req_o.valid,
+    u_qemu_miss.page_delete_req_o.bits,
+    u_qemu_page_evict.page_delete_req_o.bits
+  )
+
+  u_page_deleter.page_delete_req_i.valid := u_qemu_miss.page_delete_req_o.valid || u_qemu_page_evict.page_delete_req_o.valid
+  u_qemu_miss.page_delete_req_o.ready := u_page_deleter.page_delete_req_i.ready
+  u_qemu_page_evict.page_delete_req_o.ready := u_page_deleter.page_delete_req_i.ready && !u_qemu_miss.page_delete_req_o.valid
 
    val itlb_flush_request_o = IO(Decoupled(new PTTagPacket(param.mem.toTLBParameter())))
    itlb_flush_request_o.bits := u_page_deleter.tlb_flush_request_o.bits.req

@@ -85,8 +85,7 @@ class TLBBackendReplyPacket(param: TLBParameter) extends Bundle {
 /**
  * The base model of TLB.
  * @param param the TLB Parameter
- * @param refillEnabled whether keep ports for refilling.
- */ 
+ */
 // TODO: Build the TLB with data manager + register file rather than the BaseCache.
 class BaseTLB(
   val param: TLBParameter,

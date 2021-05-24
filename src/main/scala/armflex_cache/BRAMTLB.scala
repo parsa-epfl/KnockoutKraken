@@ -134,8 +134,14 @@ class BRAMTLB(
 
   // miss request
   // val miss_request_o = IO(u_bank_frontend.miss_request_o.cloneType)
-  // FIXME: the interconnection of miss request to bank miss request.
-  miss_request_o <> u_bank_frontend.miss_request_o
+  miss_request_o.valid := u_bank_frontend.miss_request_o.valid
+  miss_request_o.bits.tag.asid := u_bank_frontend.miss_request_o.bits.asid
+  miss_request_o.bits.tag.vpn := u_bank_frontend.miss_request_o.bits.addr // only reserve the lower bits.
+  miss_request_o.bits.permission := u_bank_frontend.miss_request_o.bits.permission
+  miss_request_o.bits.flush_v := DontCare
+  miss_request_o.bits.entry := DontCare
+  u_bank_frontend.miss_request_o.ready := miss_request_o.ready
+
   // write back request
   // So make the request pop all the time since we will not use it.
   u_bank_frontend.writeback_request_o.ready := true.B
