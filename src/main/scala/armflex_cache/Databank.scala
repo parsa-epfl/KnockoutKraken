@@ -185,7 +185,7 @@ class DataBankManager(
     val addr = UInt(param.addressWidth.W)
     val asid = UInt(param.asidWidth.W)
     val dataBlock = UInt(param.blockBit.W)
-    val flush_v = Bool()
+    val flush_v = Bool() // The operation in the second stage (write) is a flush.
     def toEntry(): CacheEntry = {
       val res = Wire(new CacheEntry(param))
       res.v := Mux(flush_v, false.B, true.B)
