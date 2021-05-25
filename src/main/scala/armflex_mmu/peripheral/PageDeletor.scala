@@ -91,7 +91,7 @@ class PageDeletor(
   }
 
   icache_flush_request_o.bits.addr := Cat(item_r.entry.ppn, flush_cnt_r)
-  icache_flush_request_o.bits.asid := 0.U
+  icache_flush_request_o.bits.asid := item_r.tag.asid
   dcache_flush_request_o.bits := icache_flush_request_o.bits
   
   icache_flush_request_o.valid := state_r === sFlushPage && !flush_which

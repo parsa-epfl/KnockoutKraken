@@ -137,14 +137,14 @@ class PageDemanderDUT(
   u_axi_write.M_AXI.r <> AXI4R.stub(param.dramDataWidth)
 
   val u_axil_inter = Module(new AXILInterconnector(
-    Seq(0x4000, 0x8000), Seq(0xC000, 0xC000), 32, 32
+    Seq(0x8000), Seq(0xC000), 32, 32
   ))
 
   val S_AXIL = IO(Flipped(u_axil_inter.S_AXIL.cloneType))
   S_AXIL <> u_axil_inter.S_AXIL
 
   // u_axil_inter.M_AXIL(0) <> u_page_demander.S_AXIL_TT
-  u_axil_inter.M_AXIL(1) <> u_page_demander.S_AXIL_QEMU_MQ
+  u_axil_inter.M_AXIL(0) <> u_page_demander.S_AXIL_QEMU_MQ
 
   // Helper 1: the page set converter
   val u_helper_page_set_converter = Module(new PageDemanderTestHelper.PageSetConverter(param.mem.toTLBParameter()))

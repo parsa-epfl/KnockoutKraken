@@ -17,7 +17,6 @@ import scala.collection.mutable.Queue
 import armflex._
 import armflex.util.VerificationDriver
 import armflex.util.ArmflexProtoBuf._
-import armflex.cache.MemorySystemParameter
 import armflex.util.SoftwareStructs.CommitTrace
 import armflex.TestDriversExtra._
 import armflex.PipelineDrivers._

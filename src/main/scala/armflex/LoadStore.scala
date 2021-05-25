@@ -427,7 +427,6 @@ class DataAlignByte extends Module {
   io.unalignedExcp := !isAlignedMem_0 || (minst.isPair && !isAlignedMem_1)
 }
 
-import armflex.cache._
 import armflex.CacheInterfaceAdaptors._
 import armflex.util._
 import armflex.util.ExtraUtils._

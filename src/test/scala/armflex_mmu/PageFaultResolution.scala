@@ -68,7 +68,7 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
       dut.pageset_packet_o.tags(0).vpn.expect(0xABC.U)
       // 5. It should response to the TLB for page arrive.
       dut.waitForSignalToBe(dut.dtlb_backend_reply_o.valid)
-      dut.dtlb_backend_reply_o.bits.tag.asid.expect(0.U)
+      dut.dtlb_backend_reply_o.bits.tag.asid.expect(0x10.U)
       dut.dtlb_backend_reply_o.bits.tag.vpn.expect(0xABC.U)
       dut.dtlb_backend_reply_o.bits.data.modified.expect(false.B)
       dut.dtlb_backend_reply_o.bits.data.ppn.expect(0x10000.U)
@@ -107,7 +107,7 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
       // 3. The page deletor should be activated.
       // 3.1 TLB eviction
       dut.waitForSignalToBe(dut.dtlb_flush_request_o.valid)
-      dut.dtlb_flush_request_o.bits.asid.expect(0.U)
+      dut.dtlb_flush_request_o.bits.asid.expect(0x10.U)
       dut.dtlb_flush_request_o.bits.vpn.expect(0x20.U)
       dut.dtlb_flush_reply_i.bits.dirty.poke(true.B)
       dut.dtlb_flush_reply_i.bits.hit.poke(true.B)
@@ -129,7 +129,7 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
       for(i <- 0 until 64){
         dut.waitForSignalToBe(dut.dcache_flush_request_o.valid)
         dut.dcache_flush_request_o.bits.addr.expect((0x10 * 64 + i).U)
-        dut.dcache_flush_request_o.bits.asid.expect(0.U)
+        dut.dcache_flush_request_o.bits.asid.expect(0x10.U)
         timescope {
           dut.dcache_flush_request_o.ready.poke(true.B)
           dut.tk()
@@ -162,6 +162,7 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
       dut.expectQEMUMessage(
         6,
         Seq(0x20, 0x0, 0x10, 0x10, 1, 1)
+
       )
 
       // 4. It should inserting pages.
@@ -195,7 +196,7 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
       dut.pageset_packet_o.tags(0).vpn.expect(0xABC.U)
       // 6. It should response to the TLB for page arrive.
       dut.waitForSignalToBe(dut.dtlb_backend_reply_o.valid)
-      dut.dtlb_backend_reply_o.bits.tag.asid.expect(0.U)
+      dut.dtlb_backend_reply_o.bits.tag.asid.expect(0x10.U)
       dut.dtlb_backend_reply_o.bits.tag.vpn.expect(0xABC.U)
       dut.dtlb_backend_reply_o.bits.data.modified.expect(false.B)
       dut.dtlb_backend_reply_o.bits.data.ppn.expect(0x10000.U)
@@ -244,7 +245,7 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
 
       // response to the TLB
       dut.waitForSignalToBe(dut.dtlb_backend_reply_o.valid)
-      dut.dtlb_backend_reply_o.bits.tag.asid.expect(0.U)
+      dut.dtlb_backend_reply_o.bits.tag.asid.expect(0x10.U)
       dut.dtlb_backend_reply_o.bits.tag.vpn.expect(0xABC.U)
       dut.dtlb_backend_reply_o.bits.data.modified.expect(false.B)
       dut.dtlb_backend_reply_o.bits.data.ppn.expect(0x0FF.U)

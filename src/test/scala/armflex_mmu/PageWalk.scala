@@ -29,7 +29,7 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
         dut.itlb_backend_request_i.bits.flush_v.poke(false.B)
         dut.itlb_backend_request_i.bits.permission.poke(2.U)
         dut.itlb_backend_request_i.bits.w_v.poke(false.B)
-        dut.itlb_backend_request_i.bits.tag.asid.poke(0.U)
+        dut.itlb_backend_request_i.bits.tag.asid.poke(0x10.U)
         dut.itlb_backend_request_i.bits.tag.vpn.poke(0xABC.U)
         dut.itlb_backend_request_i.valid.poke(true.B)
         dut.itlb_backend_request_i.ready.expect(true.B)
@@ -40,7 +40,7 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
       dut.pageset_packet_i.lru_bits.poke(1.U)
       dut.pageset_packet_i.valids.poke(1.U)
       dut.pageset_packet_i.tags(0).vpn.poke(0xABC.U)
-      dut.pageset_packet_i.tags(0).asid.poke(10.U)
+      dut.pageset_packet_i.tags(0).asid.poke(0x10.U)
       dut.pageset_packet_i.ptes(0).ppn.poke(0xCBA.U)
       dut.pageset_packet_i.ptes(0).modified.poke(false.B)
       dut.pageset_packet_i.ptes(0).permission.poke(2.U)
@@ -48,7 +48,7 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
       dut.sendPageTableSet(dut.M_AXI, (0xAB * 3 * 64).U)
       // wait for the reply to the TLB
       dut.waitForSignalToBe(dut.itlb_backend_reply_o.valid)
-      dut.itlb_backend_reply_o.bits.tag.asid.expect(0.U)
+      dut.itlb_backend_reply_o.bits.tag.asid.expect(0x10.U)
       dut.itlb_backend_reply_o.bits.tag.vpn.expect(0xABC.U)
       dut.itlb_backend_reply_o.bits.data.modified.expect(false.B)
       dut.itlb_backend_reply_o.bits.data.ppn.expect(0xCBA.U)
@@ -66,7 +66,7 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
         dut.dtlb_backend_request_i.bits.flush_v.poke(false.B)
         dut.dtlb_backend_request_i.bits.permission.poke(0.U)
         dut.dtlb_backend_request_i.bits.w_v.poke(false.B)
-        dut.dtlb_backend_request_i.bits.tag.asid.poke(0.U)
+        dut.dtlb_backend_request_i.bits.tag.asid.poke(0x10.U)
         dut.dtlb_backend_request_i.bits.tag.vpn.poke(0xABC.U)
         dut.dtlb_backend_request_i.valid.poke(true.B)
         dut.dtlb_backend_request_i.ready.expect(true.B)
@@ -77,7 +77,7 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
       println("Page fault should have been triggered. Check it now.")
       
       dut.expectQEMUMessage(
-        4, Seq(0xABC, 0, 10, 0)
+        4, Seq(0xABC, 0, 0x10, 0)
       )
 
       // dut.waitForSignalToBe(dut.M_AXI_QEMU_MQ.aw.awvalid)

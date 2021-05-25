@@ -9,8 +9,22 @@ import chiseltest.internal.VerilatorBackendAnnotation
 import chiseltest.internal.WriteVcdAnnotation
 import firrtl.options.TargetDirAnnotation
 import TestOptionBuilder._
+import armflex.CacheInterfaceAdaptors.CacheRequestAdaptor
 
 //import armflex.util.SimTools._
+
+class CacheRequestAdaptoerDUT extends MultiIOModule {
+  val uDUT = Module(new CacheRequestAdaptor(2, 64, 512))
+
+  val i = IO(Flipped(uDUT.i.cloneType))
+  i <> uDUT.i
+
+  val o = IO(uDUT.o.cloneType)
+  o <> uDUT.o
+
+  val sync_message_o = IO(uDUT.sync_message_o.cloneType)
+  sync_message_o <> Queue(uDUT.sync_message_o, 8)
+}
 
 class RequestAdaptorTester extends FreeSpec with ChiselScalatestTester {
   // val param = new MemorySystemParameter()
@@ -19,7 +33,7 @@ class RequestAdaptorTester extends FreeSpec with ChiselScalatestTester {
 
   "Normal read" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/memory_request_adaptor/normal"), WriteVcdAnnotation)
-    test(new CacheRequestAdaptor(2, 64, 512)).withAnnotations(anno){ dut =>
+    test(new CacheRequestAdaptoerDUT).withAnnotations(anno){ dut =>
 
       dut.o.ready.poke(true.B)
 
@@ -41,17 +55,17 @@ class RequestAdaptorTester extends FreeSpec with ChiselScalatestTester {
 
       // check o
       dut.o.valid.expect(false.B)
-      
+
       // check sync_message_o
       dut.sync_message_o.valid.expect(true.B)
-      
+
       dut.clock.step()
     }
   }
 
   "Pair Load" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/memory_request_adaptor/pair"), WriteVcdAnnotation)
-    test(new CacheRequestAdaptor(2, 64, 512)).withAnnotations(anno){ dut =>
+    test(new CacheRequestAdaptoerDUT).withAnnotations(anno){ dut =>
       dut.o.ready.poke(true.B)
 
       dut.i.bits.isLoad.poke(true.B)
@@ -64,7 +78,7 @@ class RequestAdaptorTester extends FreeSpec with ChiselScalatestTester {
       dut.i.ready.expect(true.B)
 
       dut.o.valid.expect(true.B)
-      dut.o.bits.addr.expect(0.U)
+      dut.o.bits.addr.expect(56.U) // The output of adapter is 64bit address.
 
       dut.clock.step()
       dut.i.valid.poke(false.B)
@@ -72,7 +86,7 @@ class RequestAdaptorTester extends FreeSpec with ChiselScalatestTester {
 
       dut.o.valid.expect(true.B)
       dut.o.bits.permission.expect(0.U)
-      dut.o.bits.addr.expect(1.U)
+      dut.o.bits.addr.expect(64.U)
 
       dut.clock.step()
 
@@ -96,7 +110,7 @@ class RequestAdaptorTester extends FreeSpec with ChiselScalatestTester {
 
   "Data placement" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/memory_request_adaptor/data_placement"), WriteVcdAnnotation)
-    test(new CacheRequestAdaptor(2, 64, 512)).withAnnotations(anno){ dut =>
+    test(new CacheRequestAdaptoerDUT).withAnnotations(anno){ dut =>
       dut.o.ready.poke(true.B)
 
       // a normal read request

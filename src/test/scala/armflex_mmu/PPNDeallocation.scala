@@ -68,7 +68,7 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
       dut.pageset_packet_o.tags(0).vpn.expect(0xABC.U)
       // 1.5. It should response to the TLB for page arrive.
       dut.waitForSignalToBe(dut.dtlb_backend_reply_o.valid)
-      dut.dtlb_backend_reply_o.bits.tag.asid.expect(0.U)
+      dut.dtlb_backend_reply_o.bits.tag.asid.expect(0x10.U)
       dut.dtlb_backend_reply_o.bits.tag.vpn.expect(0xABC.U)
       dut.dtlb_backend_reply_o.bits.data.modified.expect(false.B)
       dut.dtlb_backend_reply_o.bits.data.ppn.expect(0x10000.U)
@@ -113,7 +113,7 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
       for(i <- 0 until 64){
         dut.waitForSignalToBe(dut.dcache_flush_request_o.valid)
         dut.dcache_flush_request_o.bits.addr.expect((0x10000 * 64 + i).U)
-        dut.dcache_flush_request_o.bits.asid.expect(0.U)
+        dut.dcache_flush_request_o.bits.asid.expect(0x10.U)
         timescope {
           dut.dcache_flush_request_o.ready.poke(true.B)
           dut.tk()

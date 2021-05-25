@@ -5,7 +5,6 @@ import chisel3.util._
 import arm.PROCESSOR_TYPES._
 
 import armflex.util._
-import armflex.cache._
 import armflex.util.ExtraUtils._
 
 class FetchUnit(implicit val cfg: ProcConfig) extends MultiIOModule {
