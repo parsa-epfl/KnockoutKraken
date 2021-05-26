@@ -124,10 +124,10 @@ class PageDemanderDUT(
   val u_axi_write = Module(new AXIWriteMultiplexer(
     param.dramAddrWidth,
     param.dramDataWidth,
-    4
+    5
   ))
 
-  for(i <- 0 until 4) u_axi_write.S_IF(i) <> u_page_demander.M_DMA_W(i)
+  for(i <- 0 until 5) u_axi_write.S_IF(i) <> u_page_demander.M_DMA_W(i)
 
   M_AXI.aw <> u_axi_write.M_AXI.aw
   M_AXI.w <> u_axi_write.M_AXI.w

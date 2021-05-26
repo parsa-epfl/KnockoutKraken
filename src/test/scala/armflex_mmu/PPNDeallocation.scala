@@ -2,8 +2,6 @@ package armflex_mmu
 
 
 import chisel3._
-import chisel3.util._
-import chisel3.experimental.BundleLiterals._
 
 import chiseltest._
 import chiseltest.experimental._
@@ -15,7 +13,6 @@ import firrtl.options.TargetDirAnnotation
 
 
 import org.scalatest.FreeSpec
-import armflex_cache.MemorySystemParameter
 
 class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
   "Normal case" in {
@@ -66,6 +63,7 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
       dut.pageset_packet_o.ptes(0).permission.expect(1.U)
       dut.pageset_packet_o.tags(0).asid.expect(0x10.U)
       dut.pageset_packet_o.tags(0).vpn.expect(0xABC.U)
+      dut.pageset_packet_o.valids.expect(1.U)
       // 1.5. It should response to the TLB for page arrive.
       dut.waitForSignalToBe(dut.dtlb_backend_reply_o.valid)
       dut.dtlb_backend_reply_o.bits.tag.asid.expect(0x10.U)
@@ -122,6 +120,10 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
 
       // 6. Wait Cache to be empty
       dut.dcache_wb_queue_empty_i.poke(true.B)
+
+      // 7. The PTE should be invalid.
+      dut.receivePageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
+      dut.pageset_packet_o.valids.expect(0.U)
 
       // If so, the eviction is done.
       // Let's free the PPN

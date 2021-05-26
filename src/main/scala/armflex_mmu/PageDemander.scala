@@ -49,7 +49,7 @@ class PageDemander(
     param.dramDataWidth
   )))
 
-  val M_DMA_W = IO(Vec(4, new AXIWriteMasterIF(
+  val M_DMA_W = IO(Vec(5, new AXIWriteMasterIF(
     param.dramAddrWidth,
     param.dramDataWidth
   )))
@@ -92,6 +92,7 @@ class PageDemander(
   // Page Evict Handler
   val u_qemu_page_evict = Module(new QEMUPageEvictHandler(param))
   u_qemu_page_evict.M_DMA_R <> M_DMA_R(3)
+  u_qemu_page_evict.M_DMA_W <> M_DMA_W(2)
 
   u_qemu_page_evict.evict_request_i <> u_qmd.qemu_evict_page_req_o
 
@@ -186,7 +187,7 @@ class PageDemander(
 
   // Page Inserter
   val u_page_inserter = Module(new PageInserter(param))
-  u_page_inserter.M_DMA_W <> M_DMA_W(2)
+  u_page_inserter.M_DMA_W <> M_DMA_W(3)
   u_page_inserter.done_o <> u_qemu_miss.page_insert_done_i
   u_page_inserter.req_i <> u_qemu_miss.page_insert_req_o
 
@@ -201,7 +202,7 @@ class PageDemander(
   // the PA Pool
   val u_pool = Module(new FreeList(param))
   u_pool.M_DMA_R <> M_DMA_R(5)
-  u_pool.M_DMA_W <> M_DMA_W(3)
+  u_pool.M_DMA_W <> M_DMA_W(4)
 
   val pa_pool_empty_o = IO(Output(Bool()))
   pa_pool_empty_o := u_pool.empty_o

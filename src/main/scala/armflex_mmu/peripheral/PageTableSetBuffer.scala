@@ -36,6 +36,7 @@ class PageSetBufferWriteRequestPacket(
   entryNumber: Int = 16
 ) extends Bundle {
   val item = new PageTableItem(param)
+  val flush_v = Bool()
   val index = UInt(log2Ceil(entryNumber).W)
 
   override def cloneType: this.type = new PageSetBufferWriteRequestPacket(param, entryNumber).asInstanceOf[this.type]
@@ -122,9 +123,17 @@ class PageTableSetBuffer(
   updated_pt_set.ptes(write_request_i.bits.index) := write_request_i.bits.item.entry
   updated_pt_set.tags(write_request_i.bits.index) := write_request_i.bits.item.tag
 
+  val oh = Cat(0.U(1.W), UIntToOH(write_request_i.bits.index))
+  val updated_valids = oh | pt_set_r.valids
+  val flushed_valids = (~oh).asUInt() & pt_set_r.valids
+
   u_lru_core.io.lru_i := write_request_i.bits.index
   updated_pt_set.lru_bits := u_lru_core.io.encoding_o
-  updated_pt_set.valids := Cat(0.U(1.W), UIntToOH(write_request_i.bits.index))
+  updated_pt_set.valids := Mux(
+    write_request_i.bits.flush_v,
+    flushed_valids,
+    updated_valids
+  )
 
   val lookup_request_i = IO(Input(new PTTagPacket(param)))
   val hit_vector = pt_set_r.tags.zip(pt_set_r.valids.asBools()).map({

@@ -16,8 +16,6 @@ class PageWalker(
   param: PageDemanderParameter,
   tlbNumber: Int = 2
 ) extends MultiIOModule {
-  import antmicro.Bus._
-  import antmicro.Frontend._
   import armflex.TLBMissRequestMessage
 
   // IO of TLB miss.
@@ -38,8 +36,8 @@ class PageWalker(
 
   // The Page table set buffer.
   val u_buffer = Module(new PageTableSetBuffer(
-    param.mem.toTLBParameter, 
-    new PageTableSetPacket(param.mem.toTLBParameter)
+    param.mem.toTLBParameter(),
+    new PageTableSetPacket(param.mem.toTLBParameter())
   ))
   u_buffer.dma_data_i <> M_DMA_R.data
   u_buffer.dma_data_o.ready := false.B
@@ -60,7 +58,7 @@ class PageWalker(
 
   // The request packet
   class request_packet_t extends Bundle {
-    val vpn = UInt(param.mem.vPageNumberWidth.W)
+    val vpn = UInt(param.mem.vPageNumberWidth().W)
     val asid = UInt(param.mem.toTLBParameter().asidWidth.W)
     val permission = UInt(param.mem.toTLBParameter().permissionWidth.W)
     val source = UInt(log2Ceil(tlbNumber).W)
@@ -122,7 +120,7 @@ class PageWalker(
     }
     is(sReply){
       state_r := Mux(
-        VecInit(tlb_backend_reply_o.map(_.fire()).toSeq :+ page_fault_req_o.fire()).asUInt.orR(),
+        VecInit(tlb_backend_reply_o.map(_.fire()) :+ page_fault_req_o.fire()).asUInt.orR(),
         sIdle, 
         sReply
       )

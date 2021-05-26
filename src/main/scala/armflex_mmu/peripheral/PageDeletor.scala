@@ -30,9 +30,9 @@ class PageDeletor(
   val sIdle :: sFlushTLB :: sNotify :: sFlushPage :: sPipe :: sWait :: sMove :: sSend :: Nil = Enum(8)
   val state_r = RegInit(sIdle)
 
-  val page_delete_req_i = IO(Flipped(Decoupled(new PageTableItem(param.mem.toTLBParameter))))
+  val page_delete_req_i = IO(Flipped(Decoupled(new PageTableItem(param.mem.toTLBParameter()))))
 
-  val item_r = Reg(new PageTableItem(param.mem.toTLBParameter))
+  val item_r = Reg(new PageTableItem(param.mem.toTLBParameter()))
 
 
   class tlb_flush_request_t extends Bundle {
@@ -66,7 +66,7 @@ class PageDeletor(
   // Port to send a starting message.
   val start_message_o = IO(Decoupled(new PageEvictNotification(
     QEMUMessagesType.sEvictNotify,
-    param.mem.toTLBParameter
+    param.mem.toTLBParameter()
   )))
   start_message_o.bits.item := item_r
   start_message_o.valid := state_r === sNotify
@@ -157,7 +157,7 @@ class PageDeletor(
   // Port to send message to QEMU
   val done_message_o = IO(Decoupled(new PageEvictNotification(
     QEMUMessagesType.sEvictDone,
-    param.mem.toTLBParameter
+    param.mem.toTLBParameter()
   )))
   done_message_o.bits.item := item_r
   done_message_o.valid := state_r === sSend

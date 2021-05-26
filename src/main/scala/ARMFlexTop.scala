@@ -132,12 +132,12 @@ class ARMFlexTop extends MultiIOModule {
   val u_axi_write = Module(new AXIWriteMultiplexer(
     pdParam.dramAddrWidth,
     pdParam.dramDataWidth,
-    6
+    7
   ))
 
-  for(i <- 0 until 4) u_axi_write.S_IF(i) <> u_pd.M_DMA_W(i)
-  u_axi_write.S_IF(4) <> u_inst_axi.M_DMA_W
-  u_axi_write.S_IF(5) <> u_data_axi.M_DMA_W
+  for(i <- 0 until 5) u_axi_write.S_IF(i) <> u_pd.M_DMA_W(i)
+  u_axi_write.S_IF(5) <> u_inst_axi.M_DMA_W
+  u_axi_write.S_IF(6) <> u_data_axi.M_DMA_W
 
   M_AXI.aw <> u_axi_write.M_AXI.aw
   M_AXI.w <> u_axi_write.M_AXI.w

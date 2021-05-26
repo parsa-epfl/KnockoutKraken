@@ -77,6 +77,7 @@ class TLBWritebackHandler(
   }
 
   // sUpdatePT
+  u_buffer.write_request_i.bits.flush_v := false.B
   u_buffer.write_request_i.bits.index := victim_index_r
   u_buffer.write_request_i.bits.item.entry := request_r.evicted_pte
   u_buffer.write_request_i.bits.item.tag := request_r.tag

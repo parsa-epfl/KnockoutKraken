@@ -99,6 +99,7 @@ class QEMUMissReplyHandler(
   page_delete_req_o.valid := state_r === sDeletePageReq
 
   // sReplace
+  u_buffer.write_request_i.bits.flush_v := false.B
   u_buffer.write_request_i.bits.index := target_index_r
   u_buffer.write_request_i.bits.item.tag := request_r.tag
   u_buffer.write_request_i.bits.item.entry.modified := false.B
