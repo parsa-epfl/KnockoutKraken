@@ -206,6 +206,7 @@ class QEMUMissReply(param: TLBParameter) extends MessageUnionSubtype(new QEMURxM
   val permission = UInt(param.permissionWidth.W)
 
   val tid = UInt(log2Ceil(param.threadNumber).W)
+  val tid_v = Bool()
 
   val synonym_v = Bool()
   val synonym_tag = new PTTagPacket(param)
@@ -213,13 +214,13 @@ class QEMUMissReply(param: TLBParameter) extends MessageUnionSubtype(new QEMURxM
   def asVec(width: Int): Vec[UInt] = {
     assert(width == 32)
     return VecInit(
-      tag.asVec(width).toSeq ++ 
+      tag.asVec(width) ++
       Seq(
         permission,
-        tid,
+        Mux(tid_v, tid, -1.S(32.W).asUInt()),
         synonym_v
       ) ++ 
-      synonym_tag.asVec(width).toSeq
+      synonym_tag.asVec(width)
     )
   }
 
@@ -228,6 +229,7 @@ class QEMUMissReply(param: TLBParameter) extends MessageUnionSubtype(new QEMURxM
     res.tag := res.tag.parseFromVec(VecInit(f.slice(0, 3)))
     res.permission := f(3)
     res.tid := f(4)
+    res.tid_v := f(4) =/= -1.S(32.W).asUInt()
     res.synonym_v := f(5)
     res.synonym_tag := res.synonym_tag.parseFromVec(VecInit(f.slice(6, 9)))
     return res.asInstanceOf[this.type]

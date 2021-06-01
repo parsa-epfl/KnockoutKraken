@@ -85,7 +85,7 @@ class TLBBackendRequestPacket(param: TLBParameter) extends Bundle {
 class TLBBackendReplyPacket(param: TLBParameter) extends Bundle {
   val tag = new PTTagPacket(param)
   val data = new PTEntryPacket(param)
-  val tid = UInt(log2Ceil(param.threadNumber).W)
+  val wakeup_tid = Valid(UInt(log2Ceil(param.threadNumber).W))
 
   override def cloneType: this.type = new TLBBackendReplyPacket(param).asInstanceOf[this.type]
 }
@@ -179,11 +179,11 @@ class BaseTLB(
   u_cache.refill_request_i.bits.data := backend_reply_i.bits.data.asUInt()
   u_cache.refill_request_i.bits.not_sync_with_data_v := false.B
   u_cache.refill_request_i.bits.asid := backend_reply_i.bits.tag.asid
-  u_cache.refill_request_i.bits.tid := backend_reply_i.bits.tid
+  u_cache.refill_request_i.bits.tid := DontCare
   u_cache.refill_request_i.valid := backend_reply_i.valid
   backend_reply_i.ready := u_cache.refill_request_i.ready
 
-  packet_arrive_o.bits := u_cache.packet_arrive_o.bits
-  packet_arrive_o.valid := u_cache.packet_arrive_o.valid
+  packet_arrive_o.bits := backend_reply_i.bits.wakeup_tid.bits
+  packet_arrive_o.valid := backend_reply_i.fire() && backend_reply_i.bits.wakeup_tid.valid
 }
 

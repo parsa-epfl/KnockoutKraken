@@ -74,7 +74,8 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
       dut.dtlb_backend_reply_o.bits.data.modified.expect(false.B)
       dut.dtlb_backend_reply_o.bits.data.ppn.expect(0x10000.U)
       dut.dtlb_backend_reply_o.bits.data.permission.expect(1.U)
-      dut.dtlb_backend_reply_o.bits.tid.expect(1.U)
+      dut.dtlb_backend_reply_o.bits.wakeup_tid.bits.expect(1.U)
+      dut.dtlb_backend_reply_o.bits.wakeup_tid.valid.expect(true.B)
     }
   }
   "Trigger Page Eviction" in {
@@ -204,7 +205,8 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
       dut.dtlb_backend_reply_o.bits.data.modified.expect(false.B)
       dut.dtlb_backend_reply_o.bits.data.ppn.expect(0x10000.U)
       dut.dtlb_backend_reply_o.bits.data.permission.expect(1.U)
-      dut.dtlb_backend_reply_o.bits.tid.expect(1.U)
+      dut.dtlb_backend_reply_o.bits.wakeup_tid.bits.expect(1.U)
+      dut.dtlb_backend_reply_o.bits.wakeup_tid.valid.expect(true.B)
     }
   }
 
@@ -216,7 +218,7 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
       // dut.registerThreadTable(1, 0xEF)
       dut.sendPageFaultResponse(
         0xABC,
-        1,
+        -1,
         0x10,
         1,
         true,
@@ -250,7 +252,7 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
 
       // response to the TLB
       dut.waitForSignalToBe(dut.dtlb_backend_reply_o.valid)
-      dut.dtlb_backend_reply_o.bits.tid.expect(1.U)
+      dut.dtlb_backend_reply_o.bits.wakeup_tid.valid.expect(false.B)
       dut.dtlb_backend_reply_o.bits.tag.asid.expect(0x10.U)
       dut.dtlb_backend_reply_o.bits.tag.vpn.expect(0xABC.U)
       dut.dtlb_backend_reply_o.bits.data.modified.expect(false.B)

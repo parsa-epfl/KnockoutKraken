@@ -50,7 +50,8 @@ class DUTTLB(
   violation_o <> u_tlb.violation_o
 
   delay_chain_rep.i.valid := delay_chain_req.o.valid && !delay_chain_req.o.bits.w_v
-  delay_chain_rep.i.bits.tid := delay_chain_rep.o.bits.tid
+  delay_chain_rep.i.bits.wakeup_tid.bits := delay_chain_req.o.bits.tid
+  delay_chain_rep.i.bits.wakeup_tid.valid := true.B
   delay_chain_rep.i.bits.tag := delay_chain_req.o.bits.tag
 
   delay_chain_req.o.ready := delay_chain_rep.i.ready

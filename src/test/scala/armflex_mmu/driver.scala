@@ -195,9 +195,9 @@ implicit class PageDemanderDriver(target: PageDemanderDUT){
     tk()
     target.S_AXI.aw.awvalid.poke(false.B)
     val raw_res = (message_type +: rawMessage).reverse.reduce { (last: BigInt, current: BigInt) =>
-        (last << 32) | current
+        (last << 32) | (current & BigInt("4294967295"))
     }
-    target.S_AXI.w.wdata.poke(raw_res.U)
+    target.S_AXI.w.wdata.poke(raw_res.asUInt())
     target.S_AXI.w.wlast.poke(true.B)
     target.S_AXI.w.wstrb.poke(((BigInt(1) << 64) - 1).U)
     timescope {

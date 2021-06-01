@@ -185,8 +185,8 @@ class PipelineAxiHacked(implicit val cfg: ProcConfig) extends MultiIOModule {
   val trans2host = WireInit(Mux(pipeline.hostIO.trans2host.done.valid, 1.U << pipeline.hostIO.trans2host.done.tag, 0.U))
   val host2transClear = WireInit(Mux(pipeline.hostIO.trans2host.clear.valid, 1.U << pipeline.hostIO.trans2host.clear.tag, 0.U))
 
-  SetCSR(trans2host, csr.io.csr(0), axiDataWidth)
-  val pendingHostTrans = ClearCSR(host2transClear, csr.io.csr(1), axiDataWidth)
+  SetCSR(trans2host.asUInt(), csr.io.csr(0), axiDataWidth)
+  val pendingHostTrans = ClearCSR(host2transClear.asUInt(), csr.io.csr(1), axiDataWidth)
   pipeline.hostIO.host2trans.pending := pendingHostTrans
 
   // Hacked port

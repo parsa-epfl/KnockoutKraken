@@ -100,7 +100,8 @@ class PageWalker(
     tlb_backend_reply_o(i).bits.data.ppn := pte_r.bits.ppn
     tlb_backend_reply_o(i).bits.tag.asid := request_r.asid
     tlb_backend_reply_o(i).bits.tag.vpn := request_r.vpn
-    tlb_backend_reply_o(i).bits.tid := request_r.tid
+    tlb_backend_reply_o(i).bits.wakeup_tid.bits := request_r.tid
+    tlb_backend_reply_o(i).bits.wakeup_tid.valid := true.B // Page walk should always trigger the wakeup of thread.
     tlb_backend_reply_o(i).valid := state_r === sReply && pte_r.valid && request_r.source === i.U
   }
 
