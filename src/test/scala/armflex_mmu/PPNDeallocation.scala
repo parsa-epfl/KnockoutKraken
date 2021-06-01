@@ -24,6 +24,7 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
       dut.movePageIn(0x01234567)
       dut.sendPageFaultResponse(
         0xABC,
+        0x1,
         0x10,
         1,
         false,
@@ -71,6 +72,7 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
       dut.dtlb_backend_reply_o.bits.data.modified.expect(false.B)
       dut.dtlb_backend_reply_o.bits.data.ppn.expect(0x10000.U)
       dut.dtlb_backend_reply_o.bits.data.permission.expect(1.U)
+      dut.dtlb_backend_reply_o.bits.tid.expect(1.U)
 
       dut.pa_pool_full_o.expect(false.B)
 

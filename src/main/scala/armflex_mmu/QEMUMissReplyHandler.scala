@@ -125,6 +125,7 @@ class QEMUMissReplyHandler(
   tlb_backend_reply_o.bits.data.modified := false.B
   tlb_backend_reply_o.bits.data.permission := request_r.permission
   tlb_backend_reply_o.bits.data.ppn := ppn_r
+  tlb_backend_reply_o.bits.tid := request_r.tid
   tlb_backend_reply_o.valid := state_r === sReplyToTLB
 
   // state machine

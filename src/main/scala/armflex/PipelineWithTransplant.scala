@@ -55,7 +55,7 @@ class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
 
   val pipeline = Module(new PipelineWithTransplant)
   val uThreadTable = Module(new ThreadTable(
-    cfg.NB_THREADS, cfg.ASID_WIDTH, 2, 8
+    cfg.NB_THREADS, cfg.ASID_WIDTH, 2, 0
   ))
 
   val uAxilToCSR = Module(new AXI4LiteCSR(axiDataWidth, 2*bramRegCount))
@@ -67,13 +67,11 @@ class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
   uThreadTable.S_BUS <> 0.U.asTypeOf(uThreadTable.S_BUS)
 
   // TODO: Replace this with a AXI arbiter. 
-  when((uAxilToCSR.io.bus.addr >> log2Ceil(bramRegCount)) === 0.U) { // 0-2K
+  when((uAxilToCSR.io.bus.addr >> log2Ceil(bramRegCount)).asUInt() === 0.U) { // 0-2K
     uCSRToArchState.io.bus <> uAxilToCSR.io.bus
-  }.elsewhen(
-    (uAxilToCSR.io.bus.addr >> (log2Ceil(bramRegCount) - 1)) === 2.U
-  ){ // 2k - 3k
+  }.elsewhen((uAxilToCSR.io.bus.addr >> (log2Ceil(bramRegCount) - 1)).asUInt() === 2.U) { // 2k - 3k
     uThreadTable.S_BUS <> uAxilToCSR.io.bus
-  }.otherwise{ // 3k - 4k
+  }.otherwise { // 3k - 4k
     uCSR2ToTransplant.io.bus <> uAxilToCSR.io.bus
   }
 
@@ -83,8 +81,8 @@ class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
   val trans2host = WireInit(Mux(pipeline.hostIO.trans2host.done.valid, 1.U << pipeline.hostIO.trans2host.done.tag, 0.U))
   val host2transClear = WireInit(Mux(pipeline.hostIO.trans2host.clear.valid, 1.U << pipeline.hostIO.trans2host.clear.tag, 0.U))
 
-  SetCSR(trans2host, uCSR2ToTransplant.io.csr(0), axiDataWidth)
-  val pendingHostTrans = ClearCSR(host2transClear, uCSR2ToTransplant.io.csr(1), axiDataWidth)
+  SetCSR(trans2host.asUInt(), uCSR2ToTransplant.io.csr(0), axiDataWidth)
+  val pendingHostTrans = ClearCSR(host2transClear.asUInt(), uCSR2ToTransplant.io.csr(1), axiDataWidth)
   pipeline.hostIO.host2trans.pending := pendingHostTrans
   
   // BRAM (Architecture State)
@@ -98,30 +96,34 @@ class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
   class replaced_memory_interface_t extends Bundle {
     val inst = new Bundle {
       val req = Decoupled(new CacheFrontendRequestPacket(
-        DATA_SZ - log2Ceil( cfg.BLOCK_SIZE / 8), 
-        cfg.NB_THREADS_W, 
-        cfg.BLOCK_SIZE
+        DATA_SZ - log2Ceil( cfg.BLOCK_SIZE / 8),
+        cfg.ASID_WIDTH,
+        cfg.BLOCK_SIZE,
+        cfg.NB_THREADS_W,
       ))
       val resp = Input(Valid(new FrontendReplyPacket(
         cfg.BLOCK_SIZE,
+        cfg.ASID_WIDTH,
         cfg.NB_THREADS_W
       )))
     }
     val data = new Bundle {
       val req = Decoupled(new CacheFrontendRequestPacket(
-        DATA_SZ, 
-        cfg.NB_THREADS_W, 
-        cfg.BLOCK_SIZE
+        DATA_SZ - log2Ceil( cfg.BLOCK_SIZE / 8),
+        cfg.ASID_WIDTH,
+        cfg.BLOCK_SIZE,
+        cfg.NB_THREADS_W,
       ))
       val resp = Input(Valid(new FrontendReplyPacket(
         cfg.BLOCK_SIZE,
+        cfg.ASID_WIDTH,
         cfg.NB_THREADS_W
       )))
     }
     // Yeah I will definitely refactor these code.
-    val wake = Input(Vec(4, Valid(UInt(cfg.ASID_WIDTH.W)))) // 4 (TID + Valid)
-    val dataFault = Input(Valid(UInt(cfg.ASID_WIDTH.W))) // TID + Valid
-    val instFault = Input(Valid(UInt(cfg.ASID_WIDTH.W))) // TID + Valid
+    val wake = Input(Vec(4, Valid(UInt(cfg.NB_THREADS_W.W)))) // 4 (TID + Valid)
+    val dataFault = Input(Valid(UInt(cfg.NB_THREADS_W.W))) // TID + Valid
+    val instFault = Input(Valid(UInt(cfg.NB_THREADS_W.W))) // TID + Valid
   }
 
   val mem = IO(new replaced_memory_interface_t)
@@ -134,6 +136,7 @@ class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
     assert(uThreadTable.pid_o(0).valid, "No instruction request is allowed if the hardware thread is not registed.")
   }
   mem.inst.req.bits.permission := pipeline.mem.inst.req.bits.permission
+  mem.inst.req.bits.tid := pipeline.mem.inst.req.bits.thread_id
   mem.inst.req.bits.wData := pipeline.mem.inst.req.bits.wData
   mem.inst.req.bits.wMask := pipeline.mem.inst.req.bits.wMask
   mem.inst.req.valid := pipeline.mem.inst.req.valid
@@ -144,11 +147,7 @@ class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
   pipeline.mem.inst.resp.bits.data := mem.inst.resp.bits.data
   pipeline.mem.inst.resp.bits.dirty := mem.inst.resp.bits.dirty
   pipeline.mem.inst.resp.bits.hit := mem.inst.resp.bits.hit
-  uThreadTable.pid_i(0) := mem.inst.resp.bits.asid
-  pipeline.mem.inst.resp.bits.thread_id := uThreadTable.tid_o(0).thread_id
-  when(mem.inst.resp.valid){
-    assert(uThreadTable.tid_o(0).hit_v, "No instruction response is allowed if the hardware thread is not registed.")
-  }
+  pipeline.mem.inst.resp.bits.thread_id := mem.inst.resp.bits.tid
 
   // mem.data.req
   mem.data.req.bits.addr := pipeline.mem.data.req.bits.addr >> log2Ceil(cfg.BLOCK_SIZE / 8)
@@ -158,6 +157,7 @@ class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
     assert(uThreadTable.pid_o(1).valid, "No instruction request is allowed if the hardware thread is not registed.")
   }
   mem.data.req.bits.permission := pipeline.mem.data.req.bits.permission
+  mem.data.req.bits.tid := pipeline.mem.data.req.bits.thread_id
   mem.data.req.bits.wData := pipeline.mem.data.req.bits.wData
   mem.data.req.bits.wMask := pipeline.mem.data.req.bits.wMask
   mem.data.req.valid := pipeline.mem.data.req.valid
@@ -168,28 +168,21 @@ class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
   pipeline.mem.data.resp.bits.data := mem.data.resp.bits.data
   pipeline.mem.data.resp.bits.dirty := mem.data.resp.bits.dirty
   pipeline.mem.data.resp.bits.hit := mem.data.resp.bits.hit
-  pipeline.mem.data.resp.bits.thread_id := uThreadTable.tid_o(1).thread_id
-  uThreadTable.pid_i(1) := mem.data.resp.bits.asid
-  when(mem.data.resp.valid){
-    assert(uThreadTable.tid_o(1).hit_v, "No data response is allowed if the hardware thread is not registed.")
-  }
+  pipeline.mem.data.resp.bits.thread_id := mem.data.resp.bits.asid
 
   // mem.wake
   for (i <- 0 until 4){
-    pipeline.mem.wake(i).tag := uThreadTable.tid_o(i + 2).thread_id
-    pipeline.mem.wake(i).valid := uThreadTable.tid_o(i + 2).hit_v && mem.wake(i).valid
-    uThreadTable.pid_i(i + 2) := mem.wake(i).bits
+    pipeline.mem.wake(i).valid := mem.wake(i).valid
+    pipeline.mem.wake(i).tag := mem.wake(i).bits
   }
 
   // mem.dataFault
-  pipeline.mem.dataFault.tag := uThreadTable.tid_o(6).thread_id
-  pipeline.mem.dataFault.valid := uThreadTable.tid_o(6).hit_v && mem.dataFault.valid
-  uThreadTable.pid_i(6) := mem.dataFault.bits
+  pipeline.mem.dataFault.tag := mem.dataFault.bits
+  pipeline.mem.dataFault.valid := mem.dataFault.valid
 
   // mem.instFault
-  pipeline.mem.instFault.tag := uThreadTable.tid_o(7).thread_id
-  pipeline.mem.instFault.valid := uThreadTable.tid_o(7).hit_v && mem.instFault.valid
-  uThreadTable.pid_i(7) := mem.instFault.bits
+  pipeline.mem.instFault.tag := mem.instFault.bits
+  pipeline.mem.instFault.valid := mem.instFault.valid
 }
 
 class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule {

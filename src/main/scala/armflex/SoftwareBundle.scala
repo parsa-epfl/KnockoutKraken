@@ -100,6 +100,7 @@ class PageTableItem(param: TLBParameter) extends SoftwareControlledBundle {
 class TLBMissRequestMessage(param: TLBParameter) extends Bundle {
   val tag = new PTTagPacket(param)
   val permission = UInt(param.permissionWidth.W)
+  val tid = UInt(log2Ceil(param.threadNumber).W)
 
   override def cloneType: this.type = {
     return new TLBMissRequestMessage(param).asInstanceOf[this.type]
@@ -149,7 +150,7 @@ class QEMURxMessage extends RawMessage {
 //TODO: Mark the parseFromVec to a static member 
 class QEMUTxMessage extends RawMessage {
   val message_type = UInt(3.W)
-  val data = Vec(8, UInt(32.W))
+  val data = Vec(15, UInt(32.W)) // Maximum is 512bit
 
   def asVec(width: Int): Vec[UInt] = {
     assert(width == 32)
@@ -157,9 +158,10 @@ class QEMUTxMessage extends RawMessage {
   }
   
   def parseFromVec(f: Vec[UInt]): this.type = {
+    assert(f.size <= 16 && f.size > 1)
     val res = Wire(this.cloneType)
     res.message_type := f(0)
-    res.data := VecInit(f.slice(1, 9))
+    res.data := VecInit(f.slice(1, f.size))
     return res.asInstanceOf[this.type]
   }
 }
@@ -203,6 +205,8 @@ class QEMUMissReply(param: TLBParameter) extends MessageUnionSubtype(new QEMURxM
   val tag = new PTTagPacket(param)
   val permission = UInt(param.permissionWidth.W)
 
+  val tid = UInt(log2Ceil(param.threadNumber).W)
+
   val synonym_v = Bool()
   val synonym_tag = new PTTagPacket(param)
 
@@ -212,6 +216,7 @@ class QEMUMissReply(param: TLBParameter) extends MessageUnionSubtype(new QEMURxM
       tag.asVec(width).toSeq ++ 
       Seq(
         permission,
+        tid,
         synonym_v
       ) ++ 
       synonym_tag.asVec(width).toSeq
@@ -222,8 +227,9 @@ class QEMUMissReply(param: TLBParameter) extends MessageUnionSubtype(new QEMURxM
     val res = Wire(this.cloneType)
     res.tag := res.tag.parseFromVec(VecInit(f.slice(0, 3)))
     res.permission := f(3)
-    res.synonym_v := f(4)
-    res.synonym_tag := res.synonym_tag.parseFromVec(VecInit(f.slice(5, 8)))
+    res.tid := f(4)
+    res.synonym_v := f(5)
+    res.synonym_tag := res.synonym_tag.parseFromVec(VecInit(f.slice(6, 9)))
     return res.asInstanceOf[this.type]
   }
 
@@ -270,16 +276,18 @@ class QEMUEvictReply(param: TLBParameter) extends MessageUnionSubtype(new QEMURx
 class PageFaultNotification(param: TLBParameter) extends MessageUnionSubtype(new QEMUTxMessage) {
   val tag = new PTTagPacket(param)
   val permission = UInt(param.permissionWidth.W)
+  val tid = UInt(log2Ceil(param.threadNumber).W)
 
   def asVec(width: Int): Vec[UInt] = {
     assert(width == 32)
-    return VecInit(tag.asVec(width).toSeq ++ Seq(permission))
+    return VecInit(tag.asVec(width).toSeq ++ Seq(permission, tid))
   }
 
   def parseFromVec(f: Vec[UInt]): this.type = {
     val res = Wire(this.cloneType)
     res.tag := tag.parseFromVec(VecInit(f.slice(0, 3)))
     res.permission := f(3)
+    res.tid := f(4)
     return res.asInstanceOf[this.type]
   }
 

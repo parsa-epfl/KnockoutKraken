@@ -50,6 +50,7 @@ class DUTTLB(
   violation_o <> u_tlb.violation_o
 
   delay_chain_rep.i.valid := delay_chain_req.o.valid && !delay_chain_req.o.bits.w_v
+  delay_chain_rep.i.bits.tid := delay_chain_rep.o.bits.tid
   delay_chain_rep.i.bits.tag := delay_chain_req.o.bits.tag
 
   delay_chain_req.o.ready := delay_chain_rep.i.ready
@@ -70,6 +71,7 @@ class DUTTLB(
 implicit class BaseTLBDriver(target: DUTTLB){
   def setReadRequest(vpage: UInt, asid: UInt) = {
     target.frontendRequest_i.bits.tag.vpn.poke(vpage)
+    target.frontendRequest_i.bits.tid.poke(asid)
     target.frontendRequest_i.bits.tag.asid.poke(asid)
     target.frontendRequest_i.bits.permission.poke(0.U)
     target.frontendRequest_i.valid.poke(true.B)
@@ -78,6 +80,7 @@ implicit class BaseTLBDriver(target: DUTTLB){
 
   def setWriteRequest(vpage: UInt, asid: UInt) = {
     target.frontendRequest_i.bits.tag.vpn.poke(vpage)
+    target.frontendRequest_i.bits.tid.poke(vpage)
     target.frontendRequest_i.bits.tag.asid.poke(asid)
     target.frontendRequest_i.bits.permission.poke(1.U)
     target.frontendRequest_i.valid.poke(true.B)
@@ -139,7 +142,7 @@ import firrtl.options.TargetDirAnnotation
 
 class TLBTester extends FreeSpec with ChiselScalatestTester {
   val param = new TLBParameter(
-    8, 4, 2, 15, 1, 32, true
+    8, 4, 2, 15, 1, 32, 32, true
   )
 
   import TLBTestUtility._

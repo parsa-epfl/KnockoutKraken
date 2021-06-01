@@ -13,6 +13,7 @@ case class MemorySystemParameter(
   vAddressWidth:  Int = 64, // byte address
   pAddressWidth:  Int = 36, // 64GB
   pageSize:       Int = 4096, // page size
+  threadNumber: Int = 32,
   tlbSetNumber:   Int = 16,
   asidWidth: Int = 15,
   tlbWayNumber:   Int = 4,
@@ -33,6 +34,7 @@ case class MemorySystemParameter(
       asidWidth,
       tlbSetNumber,
       tlbWayNumber,
+      threadNumber,
       true
     )
   }
@@ -44,6 +46,7 @@ case class MemorySystemParameter(
       cacheBlockSize,
       pAddressWidth - blockBiasWidth(),
       asidWidth,
+      threadNumber,
       false
     )
   }
@@ -66,7 +69,8 @@ class TLBPlusCache(
   val frontend_request_i = IO(Flipped(Decoupled(new CacheFrontendRequestPacket(
     param.vAddressWidth - param.blockBiasWidth(), // virtual address with index rid
     param.asidWidth,
-    param.cacheBlockSize
+    param.cacheBlockSize,
+    log2Ceil(param.threadNumber)
   ))))
 
   u_tlb.frontend_request_i.bits.tag.asid := frontend_request_i.bits.asid
@@ -74,6 +78,7 @@ class TLBPlusCache(
     param.vAddressWidth - param.blockBiasWidth() - 1,
     log2Ceil(param.pageSize) - param.blockBiasWidth()
   )
+  u_tlb.frontend_request_i.bits.tid := frontend_request_i.bits.tid
   u_tlb.frontend_request_i.bits.permission := frontend_request_i.bits.permission
   u_tlb.frontend_request_i.valid := frontend_request_i.valid
 
@@ -90,6 +95,7 @@ class TLBPlusCache(
   u_cache.frontend_request_i.bits.wData := frontend_request_i.bits.wData
   u_cache.frontend_request_i.bits.wMask := frontend_request_i.bits.wMask
   u_cache.frontend_request_i.bits.permission := frontend_request_i.bits.permission
+  u_cache.frontend_request_i.bits.tid := frontend_request_i.bits.tid
   u_cache.frontend_request_i.valid := u_tlb.frontend_reply_o.valid &&
     u_tlb.frontend_reply_o.bits.hit && // TLB hit
     !u_tlb.frontend_reply_o.bits.violation // No violation
@@ -112,6 +118,7 @@ class TLBPlusCache(
   frontend_reply_o.bits.data := u_cache.frontend_reply_o.bits.data
   frontend_reply_o.bits.asid := u_cache.frontend_reply_o.bits.asid
   frontend_reply_o.bits.dirty := u_cache.frontend_reply_o.bits.dirty
+  frontend_reply_o.bits.tid := u_cache.frontend_reply_o.bits.tid
   //frontend_reply_o.bits.tlb_hit_v := && RegNext(u_tlb.frontend_reply_o.bits.hit && !u_tlb.frontend_reply_o.bits.violation)
 
   // Flush
@@ -176,6 +183,7 @@ object CacheBackendToAXIInterface {
     refill_o.bits.asid := miss_request_q.bits.asid
     refill_o.bits.not_sync_with_data_v := miss_request_q.bits.not_sync_with_data_v
     refill_o.bits.addr := miss_request_q.bits.addr
+    refill_o.bits.tid := miss_request_q.bits.tid
     refill_o.bits.data := backend_reply_i.bits
 
     refill_o.valid := miss_request_q.valid && Mux(
@@ -219,6 +227,7 @@ object CacheBackendToAXIInterface {
     cache_backend_reply_o.bits.data := M_DMA_R.data.bits
     cache_backend_reply_o.bits.not_sync_with_data_v := false.B
     cache_backend_reply_o.bits.asid := q_cache_backend_request.bits.asid
+    cache_backend_reply_o.bits.tid := q_cache_backend_request.bits.tid
     cache_backend_reply_o.valid := M_DMA_R.data.valid
     M_DMA_R.data.ready := cache_backend_reply_o.ready
 

@@ -210,13 +210,14 @@ implicit class PageDemanderDriver(target: PageDemanderDUT){
     tk()
   }
 
-  def sendPageFaultResponse(vpn: BigInt, asid: Int, permission: Int, synonym: Boolean, s_vpn: BigInt, s_asid: Int) = {
+  def sendPageFaultResponse(vpn: BigInt, tid: Int, asid: Int, permission: Int, synonym: Boolean, s_vpn: BigInt, s_asid: Int) = {
     sendQEMUMessage(
       2, Seq(
         vpn & 0xFFFFFFFF,
         vpn >> 32,
         asid,
-        permission, 
+        permission,
+        tid,
         if(synonym) 1 else 0,
         s_vpn & 0xFFFFFFFF,
         s_vpn >> 32,

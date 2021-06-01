@@ -22,6 +22,7 @@ class TLBMessageConverter(
   val miss_request = Wire(Decoupled(new TLBMissRequestMessage(param)))
   miss_request.bits.tag:= tlb_backend_request_i.bits.tag
   miss_request.bits.permission := tlb_backend_request_i.bits.permission
+  miss_request.bits.tid := tlb_backend_request_i.bits.tid
   miss_request.valid := tlb_backend_request_i.valid && !tlb_backend_request_i.bits.w_v
 
   val ev_request = Wire(Decoupled(new TLBEvictionMessage(param)))

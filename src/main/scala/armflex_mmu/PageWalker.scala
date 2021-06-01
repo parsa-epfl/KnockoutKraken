@@ -62,6 +62,7 @@ class PageWalker(
     val asid = UInt(param.mem.toTLBParameter().asidWidth.W)
     val permission = UInt(param.mem.toTLBParameter().permissionWidth.W)
     val source = UInt(log2Ceil(tlbNumber).W)
+    val tid = UInt(log2Ceil(param.mem.threadNumber).W)
   }
 
   val request_r = Reg(new request_packet_t)
@@ -70,6 +71,7 @@ class PageWalker(
     request_r.asid := u_miss_arb.io.out.bits.tag.asid
     request_r.vpn := u_miss_arb.io.out.bits.tag.vpn
     request_r.source := u_miss_arb.io.chosen
+    request_r.tid := u_miss_arb.io.out.bits.tid
   }
 
   val pte_r = Reg(Valid(new PTEntryPacket(param.mem.toTLBParameter())))
@@ -98,6 +100,7 @@ class PageWalker(
     tlb_backend_reply_o(i).bits.data.ppn := pte_r.bits.ppn
     tlb_backend_reply_o(i).bits.tag.asid := request_r.asid
     tlb_backend_reply_o(i).bits.tag.vpn := request_r.vpn
+    tlb_backend_reply_o(i).bits.tid := request_r.tid
     tlb_backend_reply_o(i).valid := state_r === sReply && pte_r.valid && request_r.source === i.U
   }
 
@@ -105,6 +108,7 @@ class PageWalker(
   page_fault_req_o.bits.permission := request_r.permission
   page_fault_req_o.bits.tag.asid := request_r.asid
   page_fault_req_o.bits.tag.vpn := request_r.vpn
+  page_fault_req_o.bits.tid := request_r.tid
   page_fault_req_o.valid := state_r === sReply && !pte_r.valid
 
   // state machine

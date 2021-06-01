@@ -25,12 +25,15 @@ case class CacheParameter(
   addressWidth: Int = 55, // address to access the whole block instead of one byte
   // Address space ID
   asidWidth: Int = 15,
+  // thread Number
+  threadNumber: Int = 32,
   
   // the data bank is implemented in register?
   implementedWithRegister: Boolean = false
 ){
   assert (isPow2(setNumber))
   assert (isPow2(associativity))
+  assert (isPow2(threadNumber))
 
   def tagWidth(): Int = {
     addressWidth - log2Ceil(setNumber)
@@ -51,13 +54,16 @@ case class CacheParameter(
  * @param addressWidth the width of the address to index the cache
  * @param asidWidth the width of the address space ID.
  * @param blockSize the size of the data part
+ * @param threadIDWidth the width of the thread ID. The thread ID is for the
  */ 
 class CacheFrontendRequestPacket(
   addressWidth: Int,
   asidWidth: Int,
-  blockSize: Int
+  blockSize: Int,
+  threadIDWidth: Int
 ) extends Bundle {
   val addr = UInt(addressWidth.W) // access address.
+  val tid = UInt(threadIDWidth.W) // for wake up.
   val asid = UInt(asidWidth.W)
   val permission = UInt(2.W)
   val wData = UInt(blockSize.W)
@@ -67,12 +73,13 @@ class CacheFrontendRequestPacket(
     param.addressWidth,
     param.asidWidth,
     param.blockBit,
+    log2Ceil(param.threadNumber)
   )
 
-  override def cloneType(): this.type = new CacheFrontendRequestPacket(addressWidth, asidWidth, blockSize).asInstanceOf[this.type]
+  override def cloneType(): this.type = new CacheFrontendRequestPacket(addressWidth, asidWidth, blockSize, threadIDWidth).asInstanceOf[this.type]
 
   def toInternalRequestPacket(): DataBankFrontendRequestPacket = {
-    val res = Wire(new DataBankFrontendRequestPacket(addressWidth, asidWidth, blockSize))
+    val res = Wire(new DataBankFrontendRequestPacket(addressWidth, asidWidth, blockSize, threadIDWidth))
     res.addr := this.addr
     res.flush_v := false.B
     res.refill_v := false.B
@@ -80,6 +87,7 @@ class CacheFrontendRequestPacket(
     res.asid := this.asid
     res.wData := this.wData
     res.wMask := this.wMask
+    res.tid := this.tid
 
     res.permission := this.permission
 
@@ -107,8 +115,8 @@ class CacheFrontendFlushRequest(
 
   override def cloneType(): this.type = new CacheFrontendFlushRequest(addressWidth, asidWidth).asInstanceOf[this.type]
 
-  def toInternalRequestPacket(blockSize: Int): DataBankFrontendRequestPacket = {
-    val res = Wire(new DataBankFrontendRequestPacket(addressWidth, asidWidth, blockSize))
+  def toInternalRequestPacket(blockSize: Int, threadIDWidth: Int): DataBankFrontendRequestPacket = {
+    val res = Wire(new DataBankFrontendRequestPacket(addressWidth, asidWidth, blockSize, threadIDWidth))
 
     res.addr := this.addr
     res.flush_v := true.B
@@ -116,6 +124,7 @@ class CacheFrontendFlushRequest(
     res.asid := this.asid
     res.wData := DontCare
     res.wMask := DontCare
+    res.tid := DontCare
 
     res.permission := DontCare // Flush request doesn't consider the permission.
 
@@ -126,6 +135,7 @@ class CacheFrontendFlushRequest(
 class MergedBackendRequestPacket(param: CacheParameter) extends Bundle{
   val addr = UInt(param.addressWidth.W)
   val asid = UInt(param.asidWidth.W)
+  val tid = UInt(log2Ceil(param.threadNumber).W)
   val permission = UInt(2.W)
   val w_v = Bool()
   val flush_v = Bool() // this request is caused by flush
@@ -147,6 +157,7 @@ class BackendRequestMerger(param: CacheParameter) extends MultiIOModule{
   read_request_converted.bits.w_v := false.B
   read_request_converted.bits.flush_v := false.B
   read_request_converted.bits.permission := read_request_i.bits.permission
+  read_request_converted.bits.tid := read_request_i.bits.tid
   read_request_converted.valid := read_request_i.valid
   read_request_i.ready := read_request_converted.ready
 
@@ -157,6 +168,7 @@ class BackendRequestMerger(param: CacheParameter) extends MultiIOModule{
   write_request_converted.bits.w_v := true.B
   write_request_converted.bits.flush_v := write_request_i.bits.flush_v
   write_request_converted.bits.permission := 1.U // The permission for writing is always 1.
+  write_request_converted.bits.tid := DontCare
   write_request_converted.valid := write_request_i.valid
   write_request_i.ready := write_request_converted.ready
 
@@ -245,7 +257,7 @@ class BaseCache(
   u_bank_frontend.lru_which_i := u_lruCore.lru_o
 
   // Connect to the Refill Queue
-  //val u_refill_queue = Module(new RefillingQueue(param))
+  //val u_refill_queue = Module(new RefillingQueue(param))s2_miss_request_n
   //u_refill_queue.miss_request_i <> u_bank_frontend.miss_request_o
   // u_refill_queue.refill_o <> u_bank_frontend.refill_request_i
   //val backendReadReply_i = IO(Flipped(u_refill_queue.backend_reply_i.cloneType)) //! When clone a Flipped Decoupled type, remember to use Flipped to make it correct direction
@@ -277,16 +289,15 @@ class BaseCache(
   refill_request_internal.bits.wMask := Fill(param.blockBit, true.B)
   refill_request_internal.bits.refill_v := true.B
   refill_request_internal.bits.permission := DontCare
+  refill_request_internal.bits.tid := DontCare
 
   refill_request_i.ready := refill_request_internal.ready
 
 
-  val packet_arrive_o = IO(Valid(new Bundle{
-    val asid = UInt(param.asidWidth.W)
-  }))
+  val packet_arrive_o = IO(Valid(UInt(log2Ceil(param.threadNumber).W)))
 
   packet_arrive_o.valid := refill_request_i.fire()
-  packet_arrive_o.bits.asid := refill_request_i.bits.asid
+  packet_arrive_o.bits := refill_request_i.bits.tid
 
   //val flush_ack_o = IO(Output(Bool()))
 
@@ -302,7 +313,7 @@ class BaseCache(
   frontend_request_i.ready := !flush_request_i.valid && !refill_request_i.valid
   // The flush request from other place
   u_frontend_arb.io.in(0).valid := flush_request_i.valid
-  u_frontend_arb.io.in(0).bits := flush_request_i.bits.toInternalRequestPacket(param.blockBit)
+  u_frontend_arb.io.in(0).bits := flush_request_i.bits.toInternalRequestPacket(param.blockBit, log2Ceil(param.threadNumber))
   flush_request_i.ready := u_frontend_arb.io.in(0).ready
   // The refilling request from the backend of the cache
   u_frontend_arb.io.in(1) <> refill_request_internal

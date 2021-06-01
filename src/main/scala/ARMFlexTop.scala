@@ -32,7 +32,7 @@ class ARMFlexTop extends MultiIOModule {
   u_pipeline.mem.wake(0).bits := u_inst_path.tlb_packet_arrive_o.bits
   u_pipeline.mem.wake(0).valid := u_inst_path.tlb_packet_arrive_o.valid
 
-  u_pipeline.mem.wake(1).bits := u_inst_path.cache_packet_arrive_o.bits.asid
+  u_pipeline.mem.wake(1).bits := u_inst_path.cache_packet_arrive_o.bits
   u_pipeline.mem.wake(1).valid := u_inst_path.cache_packet_arrive_o.valid
 
   u_pipeline.mem.instFault.bits := u_inst_path.tlb_violation_o.bits
@@ -55,7 +55,7 @@ class ARMFlexTop extends MultiIOModule {
   u_pipeline.mem.wake(2).bits := u_data_path.tlb_packet_arrive_o.bits
   u_pipeline.mem.wake(2).valid := u_data_path.tlb_packet_arrive_o.valid
 
-  u_pipeline.mem.wake(3).bits := u_data_path.cache_packet_arrive_o.bits.asid
+  u_pipeline.mem.wake(3).bits := u_data_path.cache_packet_arrive_o.bits
   u_pipeline.mem.wake(3).valid := u_data_path.cache_packet_arrive_o.valid
 
   u_pipeline.mem.dataFault := u_data_path.tlb_violation_o

@@ -83,6 +83,9 @@ class DTUCache(
   u_refill_queue.miss_request_i.bits.asid := u_cache.backend_request_o.bits.asid
   u_refill_queue.miss_request_i.bits.not_sync_with_data_v := false.B
   u_refill_queue.miss_request_i.bits.permission := u_cache.backend_request_o.bits.permission
+  u_refill_queue.miss_request_i.bits.tid := u_cache.backend_request_o.bits.tid
+  u_refill_queue.miss_request_i.bits.wMask := DontCare
+  u_refill_queue.miss_request_i.bits.wData := DontCare
   u_refill_queue.miss_request_i.valid := u_cache.backend_request_o.fire() && !u_cache.backend_request_o.bits.w_v
 
   u_refill_queue.backend_reply_i <> u_delayChain.cacheReply_o
@@ -108,6 +111,7 @@ class DTUCache(
 implicit class CacheDriver(target: DTUCache){
   def setReadRequest(addr: UInt, asid: UInt, groupedFlag: Bool = false.B):Unit = {
     target.frontendRequest_i.bits.addr.poke(addr)
+    target.frontendRequest_i.bits.tid.poke(asid)
     target.frontendRequest_i.bits.asid.poke(asid)
     target.frontendRequest_i.bits.permission.poke(0.U) // Assume dCache here.
     target.frontendRequest_i.valid.poke(true.B)
@@ -117,6 +121,7 @@ implicit class CacheDriver(target: DTUCache){
   def setWriteRequest(addr: UInt, asid: UInt, data: UInt, mask: UInt, groupedFlag: Bool = false.B): Unit = {
     //assert(target.u_cache.param.writable, "Can not set a write request to a read-only cache")
     target.frontendRequest_i.bits.addr.poke(addr)
+    target.frontendRequest_i.bits.tid.poke(asid)
     target.frontendRequest_i.bits.asid.poke(asid)
     target.frontendRequest_i.bits.permission.poke(1.U)
     target.frontendRequest_i.bits.wData.poke(data)
@@ -141,7 +146,7 @@ implicit class CacheDriver(target: DTUCache){
     do{
       target.tick()
     } while(!target.packetArrive_o.valid.peek.litToBoolean)
-    target.packetArrive_o.bits.asid.expect(expectAsid)
+    target.packetArrive_o.bits.expect(expectAsid)
     target.tick()
   }
 
@@ -149,6 +154,7 @@ implicit class CacheDriver(target: DTUCache){
     target.frontendReply_o.valid.expect(true.B)
     target.frontendReply_o.bits.hit.expect(hit.B)
     target.frontendReply_o.bits.asid.expect(asid)
+    target.frontendReply_o.bits.tid.expect(asid)
     if(hit && !dataDontCare){
       target.frontendReply_o.bits.data.expect(data)
     }
