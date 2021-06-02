@@ -55,11 +55,10 @@ class PageDeletor(
   }.elsewhen(
     state_r === sFlushTLB && 
     tlb_flush_request_o.fire() && 
-    tlb_frontend_reply_i.bits.dirty && 
     tlb_frontend_reply_i.bits.hit
   ){
     assert(tlb_frontend_reply_i.valid)
-    item_r.entry.modified := true.B
+    item_r.entry.modified := tlb_frontend_reply_i.bits.entry.modified
   }
 
   // sNotify

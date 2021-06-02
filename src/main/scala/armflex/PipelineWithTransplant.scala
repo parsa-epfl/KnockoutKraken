@@ -145,7 +145,7 @@ class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
   // mem.inst.resp
   pipeline.mem.inst.resp.valid := mem.inst.resp.valid
   pipeline.mem.inst.resp.bits.data := mem.inst.resp.bits.data
-  pipeline.mem.inst.resp.bits.dirty := mem.inst.resp.bits.dirty
+  // pipeline.mem.inst.resp.bits.dirty := mem.inst.resp.bits.dirty
   pipeline.mem.inst.resp.bits.hit := mem.inst.resp.bits.hit
   pipeline.mem.inst.resp.bits.thread_id := mem.inst.resp.bits.tid
 
@@ -166,7 +166,7 @@ class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
   // mem.data.resp
   pipeline.mem.data.resp.valid := mem.data.resp.valid
   pipeline.mem.data.resp.bits.data := mem.data.resp.bits.data
-  pipeline.mem.data.resp.bits.dirty := mem.data.resp.bits.dirty
+  // pipeline.mem.data.resp.bits.dirty := mem.data.resp.bits.dirty
   pipeline.mem.data.resp.bits.hit := mem.data.resp.bits.hit
   pipeline.mem.data.resp.bits.thread_id := mem.data.resp.bits.asid
 

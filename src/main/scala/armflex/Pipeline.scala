@@ -31,7 +31,7 @@ class PipelineMemoryReplyPacket(
   val data = UInt(dataWidth.W)
   val thread_id = UInt(threadIDWidth.W)
   val hit = Bool()
-  val dirty = Bool()
+  // val dirty = Bool()
 }
 
 class PipelineMemoryIO(implicit val cfg: ProcConfig) extends Bundle {

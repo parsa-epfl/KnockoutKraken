@@ -116,7 +116,7 @@ class BRAMTLB(
 
   // frontend_reply_o: Response to the R/W request from the pipeline
   frontend_reply_o.bits.hit := u_bank_frontend.frontend_reply_o.bits.hit
-  frontend_reply_o.bits.dirty := u_bank_frontend.frontend_reply_o.bits.dirty
+  // frontend_reply_o.bits.dirty := u_bank_frontend.frontend_reply_o.bits.dirty
   frontend_reply_o.bits.violation := !replied_pte.permissionValid(RegNext(frontend_request_i.bits.permission))
   frontend_reply_o.bits.entry := replied_pte
 
@@ -127,7 +127,7 @@ class BRAMTLB(
   // flush_reply_o
   flush_reply_o.bits.hit := u_bank_frontend.frontend_reply_o.bits.hit
   flush_reply_o.bits.entry := replied_pte.asUInt()
-  flush_reply_o.bits.dirty := u_bank_frontend.frontend_reply_o.bits.dirty
+  // flush_reply_o.bits.dirty := u_bank_frontend.frontend_reply_o.bits.dirty
   flush_reply_o.bits.violation := false.B // Flush will never cause permission violation.
   flush_reply_o.valid := u_bank_frontend.frontend_reply_o.valid &&
     (if(param.implementedWithRegister) flush_request_i.fire() else RegNext(flush_request_i.fire()))

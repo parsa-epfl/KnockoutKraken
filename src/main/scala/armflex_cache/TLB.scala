@@ -47,7 +47,7 @@ class TLBFrontendReplyPacket(param: TLBParameter) extends Bundle {
   val entry = new PTEntryPacket(param)
   val hit = Bool()
   val violation = Bool()
-  val dirty = Bool()
+  // val dirty = Bool()
   val tid = UInt(log2Ceil(param.threadNumber).W)
 
 
@@ -85,7 +85,7 @@ class TLBBackendRequestPacket(param: TLBParameter) extends Bundle {
 class TLBBackendReplyPacket(param: TLBParameter) extends Bundle {
   val tag = new PTTagPacket(param)
   val data = new PTEntryPacket(param)
-  val wakeup_tid = Valid(UInt(log2Ceil(param.threadNumber).W))
+  val tid = UInt(log2Ceil(param.threadNumber).W)
 
   override def cloneType: this.type = new TLBBackendReplyPacket(param).asInstanceOf[this.type]
 }
@@ -103,6 +103,7 @@ class BaseTLB(
   val frontend_request_i = IO(Flipped(Decoupled(new TLBAccessRequestPacket(param))))
   val flush_request_i = IO(Flipped(Decoupled(new PTTagPacket(param))))
   val frontend_reply_o = IO(Valid(new TLBFrontendReplyPacket(param)))
+  val flush_reply_o = IO(Valid(new TLBFrontendReplyPacket(param)))
   // permission violation
   val violation_o = IO(Valid(UInt(log2Ceil(param.threadNumber).W)))
   // backend
@@ -162,8 +163,16 @@ class BaseTLB(
   frontend_reply_o.bits.hit := u_cache.frontend_reply_o.bits.hit
   frontend_reply_o.bits.entry := frontend_response
   frontend_reply_o.bits.violation := violation_o.valid
-  frontend_reply_o.bits.dirty := u_cache.frontend_reply_o.bits.dirty
+  // frontend_reply_o.bits.dirty := u_cache.frontend_reply_o.bits.dirty
   frontend_reply_o.bits.tid := u_cache.frontend_reply_o.bits.tid
+
+  // assign flush_reply_o
+  flush_reply_o.valid := (if(param.implementedWithRegister) flush_request_i.fire() else RegNext(flush_request_i.fire()))
+  flush_reply_o.bits.hit := u_cache.frontend_reply_o.bits.hit
+  flush_reply_o.bits.entry := frontend_response
+  flush_reply_o.bits.violation := violation_o.valid
+  // flush_reply_o.bits.dirty := u_cache.frontend_reply_o.bits.dirty
+  flush_reply_o.bits.tid := u_cache.frontend_reply_o.bits.tid
 
   backend_request_o.bits.tag := u_cache.backend_request_o.bits.addr.asTypeOf(new PTTagPacket(param))
   backend_request_o.bits.entry := u_cache.backend_request_o.bits.data.asTypeOf(new PTEntryPacket(param))
@@ -183,7 +192,7 @@ class BaseTLB(
   u_cache.refill_request_i.valid := backend_reply_i.valid
   backend_reply_i.ready := u_cache.refill_request_i.ready
 
-  packet_arrive_o.bits := backend_reply_i.bits.wakeup_tid.bits
-  packet_arrive_o.valid := backend_reply_i.fire() && backend_reply_i.bits.wakeup_tid.valid
+  packet_arrive_o.bits := backend_reply_i.bits.tid
+  packet_arrive_o.valid := backend_reply_i.fire()
 }
 

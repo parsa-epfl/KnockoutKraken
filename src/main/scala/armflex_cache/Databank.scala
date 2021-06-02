@@ -49,7 +49,7 @@ class FrontendReplyPacket(
   val asid = UInt(asidWidth.W)
   val tid = UInt(threadIDWidth.W) // only for wake up
   val hit = Bool()
-  val dirty = Bool()
+  // val dirty = Bool()
 
   def this(param: CacheParameter) = {
     this(param.blockBit, param.asidWidth, log2Ceil(param.threadNumber))
@@ -264,8 +264,9 @@ class DataBankManager(
     hit_v && 
     !s1_frontend_request_r.bits.refill_v && 
     updated_entry.asUInt =/= hit_entry.asUInt
-  
-  frontend_reply_o.bits.dirty := frontend_write_to_bank.valid && !s1_frontend_request_r.bits.flush_v // This will trigger a writing.
+
+  // What's the meaning of this fucking signal?
+  // frontend_reply_o.bits.dirty := frontend_write_to_bank.valid && !s1_frontend_request_r.bits.flush_v // This will trigger a writing.
 
   s2_bank_writing_n.bits.dataBlock := updated_entry.read()
 

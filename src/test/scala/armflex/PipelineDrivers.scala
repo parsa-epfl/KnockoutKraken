@@ -214,7 +214,7 @@ class PipelineHardDriverModule(implicit val cfg: ProcConfig) extends MultiIOModu
   val memRespBits = ShiftRegister(memResp.io.deq.bits, cfg.cacheLatency)
 
   pipeline.mem.data.resp.valid := singleResponse || pairResponse
-  pipeline.mem.data.resp.bits.dirty := false.B
+  // pipeline.mem.data.resp.bits.dirty := false.B
   pipeline.mem.data.resp.bits.hit := true.B
   pipeline.mem.data.resp.bits.thread_id := 0.U
   pipeline.mem.data.resp.bits.data := memRespBits.memReq(0).block

@@ -200,7 +200,7 @@ object CacheInterfaceAdaptors {
     )
 
     data_o.bits.data := recovered_data
-    data_o.bits.dirty := cache_reply_i.bits.dirty
+    // data_o.bits.dirty := cache_reply_i.bits.dirty
     data_o.bits.hit := cache_reply_i.bits.hit
     data_o.bits.thread_id := cache_reply_i.bits.thread_id
     data_o.valid := cache_reply_i.valid

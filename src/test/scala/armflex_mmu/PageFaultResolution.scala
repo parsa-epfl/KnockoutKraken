@@ -74,8 +74,7 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
       dut.dtlb_backend_reply_o.bits.data.modified.expect(false.B)
       dut.dtlb_backend_reply_o.bits.data.ppn.expect(0x10000.U)
       dut.dtlb_backend_reply_o.bits.data.permission.expect(1.U)
-      dut.dtlb_backend_reply_o.bits.wakeup_tid.bits.expect(1.U)
-      dut.dtlb_backend_reply_o.bits.wakeup_tid.valid.expect(true.B)
+      dut.dtlb_backend_reply_o.bits.tid.expect(1.U)
     }
   }
   "Trigger Page Eviction" in {
@@ -113,12 +112,13 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
       dut.waitForSignalToBe(dut.dtlb_flush_request_o.valid)
       dut.dtlb_flush_request_o.bits.asid.expect(0x10.U)
       dut.dtlb_flush_request_o.bits.vpn.expect(0x20.U)
-      dut.dtlb_flush_reply_i.bits.dirty.poke(true.B)
+      // dut.dtlb_flush_reply_i.bits.dirty.poke(true.B)
       dut.dtlb_flush_reply_i.bits.hit.poke(true.B)
       dut.dtlb_flush_reply_i.bits.violation.poke(false.B)
       dut.dtlb_flush_reply_i.bits.entry.modified.poke(true.B)
       dut.dtlb_flush_reply_i.bits.entry.permission.poke(1.U)
       dut.dtlb_flush_reply_i.bits.entry.ppn.poke(0x10.U)
+      dut.dtlb_flush_reply_i.valid.poke(true.B)
       timescope {
         dut.dtlb_flush_reply_i.valid.poke(true.B)
         dut.dtlb_flush_request_o.ready.poke(true.B)
@@ -205,8 +205,7 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
       dut.dtlb_backend_reply_o.bits.data.modified.expect(false.B)
       dut.dtlb_backend_reply_o.bits.data.ppn.expect(0x10000.U)
       dut.dtlb_backend_reply_o.bits.data.permission.expect(1.U)
-      dut.dtlb_backend_reply_o.bits.wakeup_tid.bits.expect(1.U)
-      dut.dtlb_backend_reply_o.bits.wakeup_tid.valid.expect(true.B)
+      dut.dtlb_backend_reply_o.bits.tid.expect(1.U)
     }
   }
 
@@ -251,13 +250,14 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
       dut.pageset_packet_o.tags(0).vpn.expect(0xABC.U)
 
       // response to the TLB
-      dut.waitForSignalToBe(dut.dtlb_backend_reply_o.valid)
-      dut.dtlb_backend_reply_o.bits.wakeup_tid.valid.expect(false.B)
-      dut.dtlb_backend_reply_o.bits.tag.asid.expect(0x10.U)
-      dut.dtlb_backend_reply_o.bits.tag.vpn.expect(0xABC.U)
-      dut.dtlb_backend_reply_o.bits.data.modified.expect(false.B)
-      dut.dtlb_backend_reply_o.bits.data.ppn.expect(0x0FF.U)
-      dut.dtlb_backend_reply_o.bits.data.permission.expect(1.U)
+      // No wakeup for TLB
+//      dut.waitForSignalToBe(dut.dtlb_backend_reply_o.valid)
+//      dut.dtlb_backend_reply_o.bits.wakeup_tid.valid.expect(false.B)
+//      dut.dtlb_backend_reply_o.bits.tag.asid.expect(0x10.U)
+//      dut.dtlb_backend_reply_o.bits.tag.vpn.expect(0xABC.U)
+//      dut.dtlb_backend_reply_o.bits.data.modified.expect(false.B)
+//      dut.dtlb_backend_reply_o.bits.data.ppn.expect(0x0FF.U)
+//      dut.dtlb_backend_reply_o.bits.data.permission.expect(1.U)
     }
   }
 }

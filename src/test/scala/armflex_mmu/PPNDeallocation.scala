@@ -72,8 +72,7 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
       dut.dtlb_backend_reply_o.bits.data.modified.expect(false.B)
       dut.dtlb_backend_reply_o.bits.data.ppn.expect(0x10000.U)
       dut.dtlb_backend_reply_o.bits.data.permission.expect(1.U)
-      dut.dtlb_backend_reply_o.bits.wakeup_tid.bits.expect(1.U)
-      dut.dtlb_backend_reply_o.bits.wakeup_tid.valid.expect(true.B)
+      dut.dtlb_backend_reply_o.bits.tid.expect(1.U)
 
       dut.pa_pool_full_o.expect(false.B)
 

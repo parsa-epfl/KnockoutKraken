@@ -55,7 +55,7 @@ class PageBuffer extends MultiIOModule {
   normal_read_request_i.ready := u_port_a_arb.io.in(0).ready && page_from_qemu_vr
 
   u_port_a_arb.io.in(1).bits := u_converter.read_request_o.bits(15, 6)
-  u_port_a_arb.io.in(1).valid := u_converter.read_request_o.valid && page_to_qemu_vr && u_converter.read_request_o.bits(15, 12) === 1.U
+  u_port_a_arb.io.in(1).valid := u_converter.read_request_o.valid && page_to_qemu_vr && u_converter.read_request_o.bits(15, 12) === 0.U
   u_converter.read_request_o.ready := u_port_a_arb.io.in(1).ready && page_to_qemu_vr
 
   val chosen_port = Wire(Decoupled(u_port_a_arb.io.chosen.cloneType))
@@ -63,14 +63,18 @@ class PageBuffer extends MultiIOModule {
   u_port_a_arb.io.out.ready := chosen_port.ready
   chosen_port.bits := u_port_a_arb.io.chosen
 
-  val chosen_port_q = Queue(chosen_port, 1, true)
+  val chosen_port_q = Queue(chosen_port, 1, pipe = true)
 
   u_bram.portA.ADDR := u_port_a_arb.io.out.bits
   u_bram.portA.DI := DontCare
   u_bram.portA.EN := chosen_port.fire()
   u_bram.portA.WE := 0.U
 
-  chosen_port_q.ready := Mux(chosen_port_q.bits === 0.U, normal_read_reply_o.ready, u_converter.read_reply_i.ready)
+  chosen_port_q.ready := Mux(
+    chosen_port_q.bits === 0.U,
+    normal_read_reply_o.ready,
+    u_converter.read_reply_i.ready
+  )
 
   normal_read_reply_o.bits := u_bram.portA.DO
   normal_read_reply_o.valid := chosen_port_q.valid && chosen_port_q.bits === 0.U

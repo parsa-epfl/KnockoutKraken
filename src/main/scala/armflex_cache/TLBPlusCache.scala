@@ -117,7 +117,7 @@ class TLBPlusCache(
   )
   frontend_reply_o.bits.data := u_cache.frontend_reply_o.bits.data
   frontend_reply_o.bits.asid := u_cache.frontend_reply_o.bits.asid
-  frontend_reply_o.bits.dirty := u_cache.frontend_reply_o.bits.dirty
+  // frontend_reply_o.bits.dirty := u_cache.frontend_reply_o.bits.dirty
   frontend_reply_o.bits.tid := u_cache.frontend_reply_o.bits.tid
   //frontend_reply_o.bits.tlb_hit_v := && RegNext(u_tlb.frontend_reply_o.bits.hit && !u_tlb.frontend_reply_o.bits.violation)
 
@@ -133,10 +133,8 @@ class TLBPlusCache(
   val stall_request_i = IO(Input(Bool()))
   u_cache.stall_request_vi := stall_request_i
 
-  val tlb_flush_reply_o = IO(Output(u_tlb.frontend_reply_o.cloneType))
-  tlb_flush_reply_o.bits := u_tlb.frontend_reply_o.bits
-  // TODO: When the TLB is not a register file, this logic won't hold. Find a solution to it.
-  tlb_flush_reply_o.valid := u_tlb.frontend_reply_o.valid && tlb_flush_request_i.fire()
+  val tlb_flush_reply_o = IO(Output(u_tlb.flush_reply_o.cloneType))
+  tlb_flush_reply_o := u_tlb.flush_reply_o
 
   // Backend
   // tlb_backend_request_o
