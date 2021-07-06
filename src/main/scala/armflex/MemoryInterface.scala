@@ -249,7 +249,7 @@ object PipeCache {
   ) extends Bundle {
     val addr = UInt(paddrWidth.W)
     val data = UInt(blockWidth.W)
-    val w_en = Bool()
+    val w_en = Bool((blockWidth/8).W)
   }
 
   class CacheResponse(
