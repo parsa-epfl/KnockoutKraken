@@ -9,7 +9,6 @@ import arm.DECODE_CONTROL_SIGNALS._
 import armflex.util._
 
 
-import ProcConfig._
 
 object CacheInterfaceAdaptors {
 
@@ -34,7 +33,10 @@ object CacheInterfaceAdaptors {
     val accessMaskingInBit = VecInit(accessMaskingInByte.asBools().map(Fill(8, _))).asUInt()
     assert(data.getWidth == PROCESSOR_TYPES.DATA_SZ)
     val res = WireInit(UInt(blockSize.W), data) // apply mask before logic extending to 512bit.
-    return (res << (addrBias << 3), accessMaskingInBit << (addrBias << 3))
+    return (
+      (res << (addrBias << 3).asUInt()).asUInt(),
+      (accessMaskingInBit << (addrBias << 3).asUInt()).asUInt()
+    )
   }
 
   /** Recover the data from a cache block (512bit) and shift it in the lowest position.
@@ -57,11 +59,12 @@ object CacheInterfaceAdaptors {
     )
     val accessMaskingInBit = VecInit(accessMaskingInByte.asBools().map(Fill(8, _))).asUInt()
     assert(data.getWidth == blockSize)
-    return (data >> (addrBias << 3)) & accessMaskingInBit
+    return (data >> (addrBias << 3).asUInt).asUInt() & accessMaskingInBit
   }
 
   /** The handshake packet between request adaptor and reply adaptor.
-    * @param param Cache Parameter
+    * @param blockSizeInBit number of bits for a cache block
+    * @param threadIDWidth width of thread ID
     */
   class CacheInterfaceHandshakePacket(
     blockSizeInBit: Int,
@@ -206,9 +209,6 @@ object CacheInterfaceAdaptors {
     data_o.valid := cache_reply_i.valid
   }
 }
-
-
-import armflex.util.{DoubleLatencyQueue}
 
 object PipeTLB {
   class PipeTLBRequest(
