@@ -1,6 +1,6 @@
 package armflex_cache
 
-import armflex.{PTEntryPacket, PTTagPacket}
+import armflex.{PTEntryPacket, PTTagPacket, PipeTLB}
 import chisel3._
 import chisel3.util._
 
@@ -33,7 +33,15 @@ class TLBAccessRequestPacket(param: TLBParameter) extends Bundle {
   val tid = UInt(log2Ceil(param.threadNumber).W)
 
   override def cloneType: this.type = new TLBAccessRequestPacket(param).asInstanceOf[this.type]
+
+  def := (o: armflex.PipeTLB.PipeTLBRequest): Unit = {
+    this.tag.asid := o.asid
+    this.tag.vpn := o.addr >> 12 // page size
+    this.permission := o.perm
+    this.tid := o.thid
+  }
 }
+
 
 /**
  * The translation result we get from the TLB.
@@ -49,6 +57,14 @@ class TLBFrontendReplyPacket(param: TLBParameter) extends Bundle {
   // val dirty = Bool()
   val tid = UInt(log2Ceil(param.threadNumber).W)
 
+  def toPipeTLBResponse: armflex.PipeTLB.PipeTLBResponse = {
+    val res = Wire(new PipeTLB.PipeTLBResponse(param.pPageWidth))
+    res.addr := entry.ppn << 12
+    res.hit := hit
+    res.miss := !res.hit
+    res.permFault := violation
+    res
+  }
 
   override def cloneType: this.type = new TLBFrontendReplyPacket(param).asInstanceOf[this.type]
 }
