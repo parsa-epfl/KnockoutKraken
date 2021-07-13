@@ -15,10 +15,10 @@ class TestPseudoTreeLRU extends FreeSpec with ChiselScalatestTester{
   "Trace Correction" in {
     val wayNumber = 16
     val cacheParam = new CacheParameter(
-      1, wayNumber, 512, 10, 4, 32, true
+      36, 1, wayNumber
     )
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/Pseudo"), WriteVcdAnnotation)
-    test(new LRU(cacheParam, () => new PseudoTreeLRUCore(wayNumber))).withAnnotations(anno){ dut =>
+    test(new LRU(cacheParam.databankParameter, () => new PseudoTreeLRUCore(wayNumber))).withAnnotations(anno){ dut =>
       // fix one term
       // dut.addr_i.poke(0.U)
       dut.index_i.valid.poke(true.B)

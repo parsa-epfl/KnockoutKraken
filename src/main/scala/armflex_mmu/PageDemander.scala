@@ -57,11 +57,11 @@ class PageDemander(
   // FIXME: Add a module to interact with multiple TLBs.
 
   // TLB Message receiver
-  val u_itlb_mconv = Module(new TLBMessageConverter(param.mem.toTLBParameter()))
+  val u_itlb_mconv = Module(new TLBMessageConverter(param.mem.toTLBParameter))
   val itlb_backend_request_i = IO(Flipped(u_itlb_mconv.tlb_backend_request_i.cloneType))
   u_itlb_mconv.tlb_backend_request_i <> itlb_backend_request_i
 
-  val u_dtlb_mconv = Module(new TLBMessageConverter(param.mem.toTLBParameter()))
+  val u_dtlb_mconv = Module(new TLBMessageConverter(param.mem.toTLBParameter))
   val dtlb_backend_request_i = IO(Flipped(u_dtlb_mconv.tlb_backend_request_i.cloneType))
   u_dtlb_mconv.tlb_backend_request_i <> dtlb_backend_request_i
 
@@ -98,9 +98,9 @@ class PageDemander(
 
   // export TLB backend reply
   // two source: one from the page walk and one from the QEMU miss resolution
-  val itlb_backend_reply_o = IO(Decoupled(new TLBBackendReplyPacket(param.mem.toTLBParameter())))
+  val itlb_backend_reply_o = IO(Decoupled(new TLBBackendReplyPacket(param.mem.toTLBParameter)))
   // FIXME: Here I cannot use RRArbiter and I don't know why.
-  val u_itlb_backend_reply_arb = Module(new Arbiter(new TLBBackendReplyPacket(param.mem.toTLBParameter()), 2))
+  val u_itlb_backend_reply_arb = Module(new Arbiter(new TLBBackendReplyPacket(param.mem.toTLBParameter), 2))
   itlb_backend_reply_o <> u_itlb_backend_reply_arb.io.out
   // 0: reply from the page walker
   u_itlb_backend_reply_arb.io.in(0) <> u_page_walker.tlb_backend_reply_o(0)
@@ -110,7 +110,7 @@ class PageDemander(
 
   val dtlb_backend_reply_o = IO(u_page_walker.tlb_backend_reply_o(1).cloneType)
   // FIXME: Here I cannot use RRArbiter and I don't know why.
-  val u_dtlb_backend_reply_arb = Module(new Arbiter(new TLBBackendReplyPacket(param.mem.toTLBParameter()), 2))
+  val u_dtlb_backend_reply_arb = Module(new Arbiter(new TLBBackendReplyPacket(param.mem.toTLBParameter), 2))
   dtlb_backend_reply_o <> u_dtlb_backend_reply_arb.io.out
   // 0: reply from the page walker
   u_dtlb_backend_reply_arb.io.in(0) <> u_page_walker.tlb_backend_reply_o(1)
@@ -162,11 +162,11 @@ class PageDemander(
   u_qemu_miss.page_delete_req_o.ready := u_page_deleter.page_delete_req_i.ready
   u_qemu_page_evict.page_delete_req_o.ready := u_page_deleter.page_delete_req_i.ready && !u_qemu_miss.page_delete_req_o.valid
 
-   val itlb_flush_request_o = IO(Decoupled(new PTTagPacket(param.mem.toTLBParameter())))
+   val itlb_flush_request_o = IO(Decoupled(new PTTagPacket(param.mem.toTLBParameter)))
    itlb_flush_request_o.bits := u_page_deleter.tlb_flush_request_o.bits.req
    itlb_flush_request_o.valid := u_page_deleter.tlb_flush_request_o.valid && u_page_deleter.tlb_flush_request_o.bits.which === 0.U
 
-  val dtlb_flush_request_o = IO(Decoupled(new PTTagPacket(param.mem.toTLBParameter())))
+  val dtlb_flush_request_o = IO(Decoupled(new PTTagPacket(param.mem.toTLBParameter)))
   dtlb_flush_request_o.bits := u_page_deleter.tlb_flush_request_o.bits.req
   dtlb_flush_request_o.valid := u_page_deleter.tlb_flush_request_o.valid && u_page_deleter.tlb_flush_request_o.bits.which === 1.U
 
@@ -211,12 +211,12 @@ class PageDemander(
   u_pool.pop_o <> u_qemu_miss.ppn_pop_i
 
   // QEMU eviction notifier
-  val u_qemu_evict_reply = Module(new QEMUEvictReplyHandler(param.mem.toTLBParameter()))
+  val u_qemu_evict_reply = Module(new QEMUEvictReplyHandler(param.mem.toTLBParameter))
   u_qemu_evict_reply.req_i <> u_qmd.qemu_evict_reply_o
   u_qemu_evict_reply.free_o <> u_pool.push_i
   
   // QEMU message encoder
-  val u_qme = Module(new QEMUMessageEncoder(param.mem.toTLBParameter(), messageFIFODepth))
+  val u_qme = Module(new QEMUMessageEncoder(param.mem.toTLBParameter, messageFIFODepth))
   u_qme.evict_done_req_i <> u_page_deleter.done_message_o
   u_qme.evict_notify_req_i <> u_page_deleter.start_message_o
   u_qme.page_fault_req_i <> u_page_walker.page_fault_req_o

@@ -113,7 +113,6 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
       for(i <- 0 until 64){
         dut.waitForSignalToBe(dut.dcache_flush_request_o.valid)
         dut.dcache_flush_request_o.bits.addr.expect((0x10000 * 64 + i).U)
-        dut.dcache_flush_request_o.bits.asid.expect(0x10.U)
         timescope {
           dut.dcache_flush_request_o.ready.poke(true.B)
           dut.tk()

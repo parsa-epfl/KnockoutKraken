@@ -20,10 +20,10 @@ class PageWalker(
 
   // IO of TLB miss.
   val tlb_miss_req_i = IO(Vec(
-    tlbNumber, Flipped(Decoupled(new TLBMissRequestMessage(param.mem.toTLBParameter())))
+    tlbNumber, Flipped(Decoupled(new TLBMissRequestMessage(param.mem.toTLBParameter)))
   ))
 
-  val u_miss_arb = Module(new RRArbiter(new TLBMissRequestMessage(param.mem.toTLBParameter()), tlbNumber))
+  val u_miss_arb = Module(new RRArbiter(new TLBMissRequestMessage(param.mem.toTLBParameter), tlbNumber))
   u_miss_arb.io.in <> tlb_miss_req_i
 
   // val selected_miss_req = u_miss_arb.io.out
@@ -36,8 +36,8 @@ class PageWalker(
 
   // The Page table set buffer.
   val u_buffer = Module(new PageTableSetBuffer(
-    param.mem.toTLBParameter(),
-    new PageTableSetPacket(param.mem.toTLBParameter())
+    param.mem.toTLBParameter,
+    new PageTableSetPacket(param.mem.toTLBParameter)
   ))
   u_buffer.dma_data_i <> M_DMA_R.data
   u_buffer.dma_data_o.ready := false.B
@@ -45,10 +45,10 @@ class PageWalker(
   // u_buffer.lru_element_i.bits := DontCare
 
   // Reply to TLB
-  val tlb_backend_reply_o = IO(Vec(tlbNumber, Decoupled(new TLBBackendReplyPacket(param.mem.toTLBParameter()))))
+  val tlb_backend_reply_o = IO(Vec(tlbNumber, Decoupled(new TLBBackendReplyPacket(param.mem.toTLBParameter))))
 
   // Message sent to QEMU
-  val page_fault_req_o = IO(Decoupled(new PageFaultNotification(param.mem.toTLBParameter())))
+  val page_fault_req_o = IO(Decoupled(new PageFaultNotification(param.mem.toTLBParameter)))
 
   // The state machine.
   val sIdle :: sMove :: sLookup :: sReply :: Nil = Enum(4)
@@ -59,8 +59,8 @@ class PageWalker(
   // The request packet
   class request_packet_t extends Bundle {
     val vpn = UInt(param.mem.vPageNumberWidth().W)
-    val asid = UInt(param.mem.toTLBParameter().asidWidth.W)
-    val permission = UInt(param.mem.toTLBParameter().permissionWidth.W)
+    val asid = UInt(param.mem.toTLBParameter.asidWidth.W)
+    val permission = UInt(param.mem.toTLBParameter.permissionWidth.W)
     val source = UInt(log2Ceil(tlbNumber).W)
     val tid = UInt(log2Ceil(param.mem.threadNumber).W)
   }
@@ -74,7 +74,7 @@ class PageWalker(
     request_r.tid := u_miss_arb.io.out.bits.tid
   }
 
-  val pte_r = Reg(Valid(new PTEntryPacket(param.mem.toTLBParameter())))
+  val pte_r = Reg(Valid(new PTEntryPacket(param.mem.toTLBParameter)))
   when(state_r === sLookup){
     pte_r.bits := u_buffer.lookup_reply_o.item.entry
     pte_r.valid := u_buffer.lookup_reply_o.hit_v

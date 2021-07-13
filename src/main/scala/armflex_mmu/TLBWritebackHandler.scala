@@ -15,16 +15,16 @@ class TLBWritebackHandler(
 
   // the eviction request of the TLB
   val tlb_evict_req_i = IO(Vec(
-    tlbNumber, Flipped(Decoupled(new TLBEvictionMessage(param.mem.toTLBParameter())))
+    tlbNumber, Flipped(Decoupled(new TLBEvictionMessage(param.mem.toTLBParameter)))
   ))
   // arbiter to select the evict request
-  val u_arb = Module(new RRArbiter(new TLBEvictionMessage(param.mem.toTLBParameter()), tlbNumber))
+  val u_arb = Module(new RRArbiter(new TLBEvictionMessage(param.mem.toTLBParameter), tlbNumber))
   u_arb.io.in <> tlb_evict_req_i
 
   // Add page table set buffer and axi dma
   val u_buffer = Module(new peripheral.PageTableSetBuffer(
-    param.mem.toTLBParameter(),
-    new peripheral.PageTableSetPacket(param.mem.toTLBParameter())
+    param.mem.toTLBParameter,
+    new peripheral.PageTableSetPacket(param.mem.toTLBParameter)
   ))
 
   // AXI DMA Read channels
@@ -49,8 +49,8 @@ class TLBWritebackHandler(
   // sIdle
   u_arb.io.out.ready := state_r === sIdle
   class request_t extends Bundle {
-    val tag = new PTTagPacket(param.mem.toTLBParameter())
-    val evicted_pte = new PTEntryPacket(param.mem.toTLBParameter())
+    val tag = new PTTagPacket(param.mem.toTLBParameter)
+    val evicted_pte = new PTEntryPacket(param.mem.toTLBParameter)
     val source = UInt(log2Ceil(tlbNumber).W)
   }
 

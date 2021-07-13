@@ -2,12 +2,11 @@ package armflex_cache
 
 import chisel3._
 import chisel3.util._
-import chisel3.stage.{ChiselStage}
 
 /**
  * Data bank entry for a simple cache.
  */ 
-class CacheEntry(param: CacheParameter) extends Bundle {
+class CacheEntry(param: DatabankParameter) extends Bundle {
   val tag = UInt(param.tagWidth().W)
   val data = UInt(param.blockBit.W)
   val v = Bool() // valid bit

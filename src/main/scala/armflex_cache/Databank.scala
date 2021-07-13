@@ -11,6 +11,43 @@ import armflex.util.BRAMPort
 import armflex.util.BRAM
 import armflex.util.FlushQueue
 
+case class DatabankParameter(
+  // Cache properties
+  setNumber: Int = 1024,
+  associativity: Int = 4,
+  blockBit: Int = 512,
+  // Address
+  addressWidth: Int = 55, // address to access the whole block instead of one byte
+  // Address space ID
+  asidWidth: Int = 15,
+  // thread Number
+  threadNumber: Int = 32,
+
+  // the data bank is implemented in register?
+  implementedWithRegister: Boolean = false
+){
+  assert (isPow2(setNumber))
+  assert (isPow2(associativity))
+  assert (isPow2(threadNumber))
+
+  def tagWidth(): Int = {
+    addressWidth - log2Ceil(setNumber)
+  }
+
+  def wayWidth(): Int = {
+    log2Ceil(associativity)
+  }
+
+  def setWidth(): Int = {
+    log2Ceil(setNumber)
+  }
+
+  def threadIDWidth(): Int = {
+    log2Ceil(threadNumber)
+  }
+
+}
+
 class DataBankFrontendRequestPacket(
   addressWidth: Int,
   asidWidth: Int,
@@ -25,44 +62,53 @@ class DataBankFrontendRequestPacket(
   val wMask = UInt(blockSize.W)
 
   val flush_v = Bool() // Flushing signal
+
   val refill_v = Bool() // Is the request a refilling?
+  val refillData = UInt(blockSize.W) // the data of refilling.
+  // A refilling must contains a potential pending operation.
+  // - If a refill cause a miss, the writing result would be refill result + pending operation.
+  // - If a refill cause a hit, the writing result would be hit + pending operation
 
   // overload constructor to quickly build a frontend port from the cache parameter.
-  def this(param: CacheParameter) = this(
+  def this(param: DatabankParameter) = this(
     param.addressWidth,
     param.asidWidth,
     param.blockBit,
-    param.threadNumber
+    log2Ceil(param.threadNumber)
   )
 
   override def cloneType(): this.type = new DataBankFrontendRequestPacket(addressWidth, asidWidth, blockSize, threadIDWidth).asInstanceOf[this.type]
 }
 
-
-
-class FrontendReplyPacket(
-  dataWidth: Int,
+class DataBankFrontendReplyPacket(
   asidWidth: Int,
-  threadIDWidth: Int,
-) extends Bundle{
-  val data = UInt(dataWidth.W)
+  blockSize: Int,
+  threadIDWidth: Int
+) extends Bundle {
+  // data
+  val rData = UInt(blockSize.W) // data read from the cache if hit. (Before apply writing)
+  val wData = UInt(blockSize.W) // data applied writing request if any. (The data that will be written into cache)
+  // thread id / asid
+  val tid = UInt(threadIDWidth.W)
   val asid = UInt(asidWidth.W)
-  val tid = UInt(threadIDWidth.W) // only for wake up
-  val hit = Bool()
-  // val dirty = Bool()
+  // properties
+  val hit = Bool() // does this reply hit the cache?
+  val refill = Bool() // is this reply a refill request?
+  val flush = Bool() // is this reply a flush request?
 
-  def this(param: CacheParameter) = {
-    this(param.blockBit, param.asidWidth, log2Ceil(param.threadNumber))
-  }
 
-  override def cloneType(): this.type = new FrontendReplyPacket(dataWidth, asidWidth, threadIDWidth).asInstanceOf[this.type]
+  def this(param: DatabankParameter) = this(
+    param.asidWidth,
+    param.blockBit,
+    log2Ceil(param.threadNumber)
+  )
 }
 
 /**
  * Packet sent to backend for notifying a miss.
  * @param param the Cache parameter
  */ 
-class MissRequestPacket(param: CacheParameter) extends Bundle{
+class MissRequestPacket(param: DatabankParameter) extends Bundle{
   val addr = UInt(param.addressWidth.W)
   val asid = UInt(param.asidWidth.W)
   val tid = UInt(log2Ceil(param.threadNumber).W) // only for wake up
@@ -78,25 +124,9 @@ class MissRequestPacket(param: CacheParameter) extends Bundle{
 }
 
 /**
- * Packet of the reply from the backend to resolve a miss
- * @param param the Cache parameter.
- */ 
-class MissResolveReplyPacket(param: CacheParameter) extends Bundle{
-  val addr = UInt(param.addressWidth.W)
-  val asid = UInt(param.asidWidth.W)
-  val tid = UInt(log2Ceil(param.threadNumber).W)
-
-  val not_sync_with_data_v = Bool()
-
-  val data = UInt(param.blockBit.W)
-
-  override def cloneType: this.type = new MissResolveReplyPacket(param).asInstanceOf[this.type]
-}
-
-/**
  * Packet of the request to the backend for cache writing back when there is a miss.
  */ 
-class WriteBackRequestPacket(param: CacheParameter) extends Bundle{
+class WriteBackRequestPacket(param: DatabankParameter) extends Bundle{
   val addr = UInt(param.addressWidth.W)
   val data = UInt(param.blockBit.W)
 
@@ -113,12 +143,12 @@ class WriteBackRequestPacket(param: CacheParameter) extends Bundle{
  * @note updateFunction will only be considered when it's a neither flushing nor refilling request, and return the old entry will not trigger a writing.
  */ 
 class DataBankManager(
-  param: CacheParameter,
+  param: DatabankParameter,
   updateFunction: (DataBankFrontendRequestPacket, CacheEntry) => CacheEntry // (req: DataBankFrontendRequestPacket, entryToUpdate: CacheEntry) => result
 ) extends MultiIOModule {
   // Ports to frontend
   val frontend_request_i = IO(Flipped(Decoupled(new DataBankFrontendRequestPacket(param))))
-  val frontend_reply_o = IO(Valid(new FrontendReplyPacket(param)))
+  val frontend_reply_o = IO(Valid(new DataBankFrontendReplyPacket(param)))
 
   // Ports to Bank RAM (Read port)
   val setType = Vec(param.associativity, new CacheEntry(param))
@@ -179,7 +209,7 @@ class DataBankManager(
   }) // get all the comparison results
   assert(PopCount(match_bits) === 1.U || PopCount(match_bits) === 0.U, "It's impossible to hit multiple entries.")
 
-  val full_writing_v = s1_frontend_request_r.bits.wMask.andR()
+  val full_writing_v = s1_frontend_request_r.bits.wMask.andR() || s1_frontend_request_r.bits.refill_v
   when(s1_frontend_request_r.bits.refill_v && s1_frontend_request_r.valid){
     assert(full_writing_v, "Refill must be a full writing. (Full mask!)")
   }
@@ -225,64 +255,88 @@ class DataBankManager(
   s2_bank_writing_n.bits.flush_v := s1_frontend_request_r.bits.flush_v
   s2_bank_writing_n.valid := 
     s1_frontend_request_r.valid && // Request is valid
-    (s1_frontend_request_r.bits.wMask.orR() || s1_frontend_request_r.bits.flush_v) && // write or flush.
+    (s1_frontend_request_r.bits.wMask.orR() || s1_frontend_request_r.bits.flush_v || s1_frontend_request_r.bits.refill_v) && // write, flush, or refill.
     (hit_v || full_writing_v) //! No fire() required here because this register is in a branch instead of the main stream.
-
-  frontend_reply_o.valid := s1_frontend_request_r.fire() // Also return if miss
-  frontend_reply_o.bits.asid := s1_frontend_request_r.bits.asid
-  frontend_reply_o.bits.hit := hit_v || full_writing_v // this term is related to the wake up. A full-writing should be viewed as a hit to the frontend and a miss to the LRU and eviction.
-  frontend_reply_o.bits.tid := s1_frontend_request_r.bits.tid
-  frontend_reply_o.bits.data := hit_entry.read()
 
   lru_index_o.bits := Mux(hit_v, match_which, lru_which_i)
   // Hit, refill, and full writing will update the LRU bits. But flush won't update it.
   lru_index_o.valid := s1_frontend_request_r.valid && (hit_v || full_writing_v) && !s1_frontend_request_r.bits.flush_v
 
   val frontend_write_to_bank = Wire(Decoupled(new BankWriteRequestPacket(param))) // normal writing (writing & flushing)
-
   if(param.setWidth() > 1)
     frontend_write_to_bank.bits.addr := s1_frontend_request_r.bits.addr(param.setWidth()-1, 0)
   else
     frontend_write_to_bank.bits.addr := 0.U
-
-  val flush_entry = Wire(new CacheEntry(param))
-  flush_entry.d := false.B
-  flush_entry.data := DontCare
-  flush_entry.tag := DontCare
-  flush_entry.v := false.B
-
-  val updated_entry = Mux(
-    s1_frontend_request_r.bits.flush_v,  // Flush?
-    flush_entry,  // Flushed entry
-    updateFunction(s1_frontend_request_r.bits, hit_entry)
-  )
-
-  frontend_write_to_bank.bits.data := updated_entry
-  frontend_write_to_bank.bits.which := match_which
-  frontend_write_to_bank.valid := 
-    s1_frontend_request_r.valid && 
-    hit_v && 
-    !s1_frontend_request_r.bits.refill_v && 
-    updated_entry.asUInt =/= hit_entry.asUInt
-
-  // What's the meaning of this fucking signal?
-  // frontend_reply_o.bits.dirty := frontend_write_to_bank.valid && !s1_frontend_request_r.bits.flush_v // This will trigger a writing.
-
-  s2_bank_writing_n.bits.dataBlock := updated_entry.read()
 
   val full_writing_request = Wire(Decoupled(new BankWriteRequestPacket(param))) // A full writing, which means a complete override to the block, so no original data needed. (refill should follow this path)
   if(param.setWidth() > 1)
     full_writing_request.bits.addr := s1_frontend_request_r.bits.addr(param.setWidth()-1, 0)
   else
     full_writing_request.bits.addr := 0.U
-  full_writing_request.bits.data.refill(s1_frontend_request_r.bits.addr, s1_frontend_request_r.bits.asid, s1_frontend_request_r.bits.wData)
-  full_writing_request.bits.which := lru_which_i
-  full_writing_request.valid := s1_frontend_request_r.valid && (!hit_v && full_writing_v)
 
-  val u_bank_writing_arb = Module(new Arbiter(new BankWriteRequestPacket(param), 2))
-  u_bank_writing_arb.io.in(0) <> full_writing_request
-  u_bank_writing_arb.io.in(1) <> frontend_write_to_bank
-  bank_ram_write_request_o <> u_bank_writing_arb.io.out
+  val flushEntry = Wire(new CacheEntry(param))
+  flushEntry.d := false.B
+  flushEntry.data := DontCare
+  flushEntry.tag := DontCare
+  flushEntry.v := false.B
+
+  val updatedEntry = Mux( // this one will be written into cache if the request type is a flushing or a normal write.
+    s1_frontend_request_r.bits.flush_v,  // Flush?
+    flushEntry,  // Flushed entry
+    updateFunction(s1_frontend_request_r.bits, hit_entry) // Apply write operation
+  )
+
+
+  val refillNewEntry = Wire(new CacheEntry(param))
+  refillNewEntry.refill(
+    s1_frontend_request_r.bits.addr,
+    s1_frontend_request_r.bits.asid,
+    s1_frontend_request_r.bits.refillData
+  )
+
+  val refillEntry = Mux( // This one will be written into cache if the request is a refill
+    hit_v,
+    updateFunction(s1_frontend_request_r.bits, hit_entry),
+    updateFunction(s1_frontend_request_r.bits, refillNewEntry)
+  )
+
+  frontend_reply_o.valid := s1_frontend_request_r.fire() // Also return if miss
+  frontend_reply_o.bits.rData := hit_entry.read()
+  frontend_reply_o.bits.wData := Mux(
+    full_writing_v,
+    refillEntry.read(),
+    updatedEntry.read()
+  )
+  frontend_reply_o.bits.tid := s1_frontend_request_r.bits.tid
+  frontend_reply_o.bits.asid := s1_frontend_request_r.bits.asid
+  frontend_reply_o.bits.hit := hit_v || full_writing_v // full writing should be recognized as hit.
+  frontend_reply_o.bits.flush := s1_frontend_request_r.bits.flush_v
+  frontend_reply_o.bits.refill := s1_frontend_request_r.bits.refill_v
+
+  frontend_write_to_bank.bits.data := updatedEntry
+  frontend_write_to_bank.bits.which := match_which
+  frontend_write_to_bank.valid :=
+    s1_frontend_request_r.valid &&
+    hit_v &&
+    !s1_frontend_request_r.bits.refill_v &&
+    updatedEntry.asUInt =/= hit_entry.asUInt
+
+  s2_bank_writing_n.bits.dataBlock := frontend_reply_o.bits.wData
+
+
+  full_writing_request.bits.data := refillEntry
+  full_writing_request.bits.which := lru_which_i
+  full_writing_request.valid := s1_frontend_request_r.valid && full_writing_v
+
+  bank_ram_write_request_o.bits := Mux(
+    full_writing_request.valid,
+    full_writing_request.bits,
+    frontend_write_to_bank.bits
+  )
+
+  bank_ram_write_request_o.valid := full_writing_request.valid || frontend_write_to_bank.valid
+  full_writing_request.ready := bank_ram_write_request_o.ready
+  frontend_write_to_bank.ready := bank_ram_write_request_o.ready
 
   assert(
     PopCount(full_writing_request.valid ## frontend_write_to_bank.valid) <= 1.U,
@@ -301,7 +355,7 @@ class DataBankManager(
     !full_writing_v &&  // full writing is not a miss
     !s1_frontend_request_r.bits.flush_v // flush is not a miss
 
-  val s2_miss_request_r = FlushQueue(s2_miss_request_n, 2, true)
+  val s2_miss_request_r = FlushQueue(s2_miss_request_n, 2, pipe = true)
   miss_request_o <> s2_miss_request_r
 
 
@@ -335,11 +389,16 @@ class DataBankManager(
     "It's impossible to write back due to eviction and miss at the same time!"
   )
 
-  val u_wb_req_arb = Module(new Arbiter(new WriteBackRequestPacket(param), 2))
-  u_wb_req_arb.io.in(0) <> eviction_wb_req
-  u_wb_req_arb.io.in(1) <> flush_wb_req
+  val s2_writeback_request_n = Wire(Decoupled(new WriteBackRequestPacket(param)))
+  s2_writeback_request_n.bits := Mux(
+    eviction_wb_req.valid,
+    eviction_wb_req.bits,
+    flush_wb_req.bits
+  )
+  s2_writeback_request_n.valid := eviction_wb_req.valid || flush_wb_req.valid
+  eviction_wb_req.ready := s2_writeback_request_n.ready
+  flush_wb_req.ready := s2_writeback_request_n.ready
 
-  val s2_writeback_request_n = u_wb_req_arb.io.out
   val s2_writeback_request_r = FlushQueue(s2_writeback_request_n, 2, true)
   writeback_request_o <> s2_writeback_request_r
   

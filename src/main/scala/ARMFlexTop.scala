@@ -7,12 +7,15 @@ import armflex.util._
 
 import antmicro.Bus._
 
-class ARMFlexTop extends MultiIOModule {
+class ARMFlexTop(
+  forRTLSimulator: Boolean = true
+) extends MultiIOModule {
   implicit val pipelineCfg = new ProcConfig(NB_THREADS = 8)
   val memoryParameter = new MemorySystemParameter(
     // FIXME: Remember to make it into 36 before actually exporting to the hardware for FPGA
-    pAddressWidth = 24, // For scaling down
-    threadNumber = pipelineCfg.NB_THREADS
+    pAddressWidth = if(forRTLSimulator) 24 else 34, // For scaling down
+    threadNumber = pipelineCfg.NB_THREADS,
+    tlbWayNumber = 2
   )
   val pdParam = new PageDemanderParameter(memoryParameter)
 
@@ -27,22 +30,22 @@ class ARMFlexTop extends MultiIOModule {
     () => new PseudoTreeLRUCore(memoryParameter.tlbWayNumber)
   ))
 
-  u_pipeline.mem.inst.req <> u_inst_path.frontend_request_i
-  u_pipeline.mem.inst.resp <> u_inst_path.frontend_reply_o
+//  u_pipeline.mem.inst.req <> u_inst_path.frontend_request_i
+//  u_pipeline.mem.inst.resp <> u_inst_path.frontend_reply_o
+//
+//  u_pipeline.mem.wake(0).bits := u_inst_path.tlb_packet_arrive_o.bits
+//  u_pipeline.mem.wake(0).valid := u_inst_path.tlb_packet_arrive_o.valid
+//
+//  u_pipeline.mem.wake(1).bits := u_inst_path.cache_packet_arrive_o.bits
+//  u_pipeline.mem.wake(1).valid := u_inst_path.cache_packet_arrive_o.valid
+//
+//  u_pipeline.mem.instFault.bits := u_inst_path.tlb_violation_o.bits
+//  u_pipeline.mem.instFault.valid := u_inst_path.tlb_violation_o.valid
 
-  u_pipeline.mem.wake(0).bits := u_inst_path.tlb_packet_arrive_o.bits
-  u_pipeline.mem.wake(0).valid := u_inst_path.tlb_packet_arrive_o.valid
-
-  u_pipeline.mem.wake(1).bits := u_inst_path.cache_packet_arrive_o.bits
-  u_pipeline.mem.wake(1).valid := u_inst_path.cache_packet_arrive_o.valid
-
-  u_pipeline.mem.instFault.bits := u_inst_path.tlb_violation_o.bits
-  u_pipeline.mem.instFault.valid := u_inst_path.tlb_violation_o.valid
-
-  val u_inst_axi = Module(new CacheBackendToAXIInterface.CacheBackendAXIAdaptors(memoryParameter, pipelineCfg.NB_THREADS))
+  // val u_inst_axi = Module(new CacheBackendToAXIInterface.CacheBackendAXIAdaptors(memoryParameter, pipelineCfg.NB_THREADS))
   
-  u_inst_axi.cache_backend_reply_o <> u_inst_path.cache_backend_reply_i
-  u_inst_axi.cache_backend_request_i <> u_inst_path.cache_backend_request_o // TODO: Add FIFO here to buffer the backend request if timing is not good then.
+  // u_inst_axi.cache_backend_reply_o <> u_inst_path.cache_backend_reply_i
+  // u_inst_axi.cache_backend_request_i <> u_inst_path.cache_backend_request_o // TODO: Add FIFO here to buffer the backend request if timing is not good then.
 
   val u_data_path = Module(new TLBPlusCache(
     memoryParameter,
@@ -50,22 +53,22 @@ class ARMFlexTop extends MultiIOModule {
     () => new PseudoTreeLRUCore(memoryParameter.tlbWayNumber)
   ))
 
-  u_pipeline.mem.data.req <> u_data_path.frontend_request_i
-  u_pipeline.mem.data.resp <> u_data_path.frontend_reply_o
+//  u_pipeline.mem.data.req <> u_data_path.frontend_request_i
+//  u_pipeline.mem.data.resp <> u_data_path.frontend_reply_o
+//
+//  u_pipeline.mem.wake(2).bits := u_data_path.tlb_packet_arrive_o.bits
+//  u_pipeline.mem.wake(2).valid := u_data_path.tlb_packet_arrive_o.valid
+//
+//  u_pipeline.mem.wake(3).bits := u_data_path.cache_packet_arrive_o.bits
+//  u_pipeline.mem.wake(3).valid := u_data_path.cache_packet_arrive_o.valid
+//
+//  u_pipeline.mem.dataFault := u_data_path.tlb_violation_o
+//  u_pipeline.mem.dataFault.valid := u_data_path.tlb_violation_o.valid
 
-  u_pipeline.mem.wake(2).bits := u_data_path.tlb_packet_arrive_o.bits
-  u_pipeline.mem.wake(2).valid := u_data_path.tlb_packet_arrive_o.valid
-
-  u_pipeline.mem.wake(3).bits := u_data_path.cache_packet_arrive_o.bits
-  u_pipeline.mem.wake(3).valid := u_data_path.cache_packet_arrive_o.valid
-
-  u_pipeline.mem.dataFault := u_data_path.tlb_violation_o
-  u_pipeline.mem.dataFault.valid := u_data_path.tlb_violation_o.valid
-
-  val u_data_axi = Module(new CacheBackendToAXIInterface.CacheBackendAXIAdaptors(memoryParameter, pipelineCfg.NB_THREADS * 2))
+  // val u_data_axi = Module(new CacheBackendToAXIInterface.CacheBackendAXIAdaptors(memoryParameter, pipelineCfg.NB_THREADS * 2))
   
-  u_data_axi.cache_backend_reply_o <> u_data_path.cache_backend_reply_i
-  u_data_axi.cache_backend_request_i <> u_data_path.cache_backend_request_o
+  // u_data_axi.cache_backend_reply_o <> u_data_path.cache_backend_reply_i
+  // u_data_axi.cache_backend_request_i <> u_data_path.cache_backend_request_o
 
   val u_pd = Module(new PageDemander(pdParam, 2))
   // ports of the page demander
@@ -77,37 +80,37 @@ class ARMFlexTop extends MultiIOModule {
   // val S_AXIL_QEMU_MQ = IO(u_pd.S_AXIL_QEMU_MQ.cloneType)
   // S_AXIL_QEMU_MQ <> u_pd.S_AXIL_QEMU_MQ
 
-  // u_pd.dcache_flush_request_o
-  u_pd.dcache_flush_request_o <> u_data_path.cache_flush_request_i
-  // u_pd.dcache_stall_request_vo
-  u_pd.dcache_stall_request_vo <> u_data_path.stall_request_i
-  // u_pd.dcache_wb_queue_empty_i
-  u_pd.dcache_wb_queue_empty_i <> u_data_axi.pending_queue_empty_o
-
-  // u_pd.dtlb_backend_reply_o
-  u_pd.dtlb_backend_reply_o <> u_data_path.tlb_backend_reply_i
-  // u_pd.dtlb_backend_request_i
-  u_pd.dtlb_backend_request_i <> u_data_path.tlb_backend_request_o
-  // u_pd.dtlb_flush_reply_i
-  u_pd.dtlb_flush_reply_i := u_data_path.tlb_flush_reply_o
-  // u_pd.dtlb_flush_request_o
-  u_pd.dtlb_flush_request_o <> u_data_path.tlb_flush_request_i
-
-  // u_pd.icache_flush_request_o
-  u_pd.icache_flush_request_o <> u_inst_path.cache_flush_request_i
-  // u_pd.icache_stall_request_vo
-  u_pd.icache_stall_request_vo <> u_inst_path.stall_request_i
-  // u_pd.icache_wb_queue_empty_i
-  u_pd.icache_wb_queue_empty_i <> u_inst_axi.pending_queue_empty_o
-
-  // u_pd.itlb_backend_reply_o
-  u_pd.itlb_backend_reply_o <> u_inst_path.tlb_backend_reply_i
-  // u_pd.itlb_backend_request_i
-  u_pd.itlb_backend_request_i <> u_inst_path.tlb_backend_request_o
-  // u_pd.itlb_flush_reply_i
-  u_pd.itlb_flush_reply_i <> u_inst_path.tlb_flush_reply_o
-  // u_pd.itlb_flush_request_o
-  u_pd.itlb_flush_request_o <> u_inst_path.tlb_flush_request_i
+//  // u_pd.dcache_flush_request_o
+//  u_pd.dcache_flush_request_o <> u_data_path.cache_flush_request_i
+//  // u_pd.dcache_stall_request_vo
+//  u_pd.dcache_stall_request_vo <> u_data_path.stall_request_i
+//  // u_pd.dcache_wb_queue_empty_i
+//  u_pd.dcache_wb_queue_empty_i <> u_data_axi.pending_queue_empty_o
+//
+//  // u_pd.dtlb_backend_reply_o
+//  u_pd.dtlb_backend_reply_o <> u_data_path.tlb_backend_reply_i
+//  // u_pd.dtlb_backend_request_i
+//  u_pd.dtlb_backend_request_i <> u_data_path.tlb_backend_request_o
+//  // u_pd.dtlb_flush_reply_i
+//  u_pd.dtlb_flush_reply_i := u_data_path.tlb_flush_reply_o
+//  // u_pd.dtlb_flush_request_o
+//  u_pd.dtlb_flush_request_o <> u_data_path.tlb_flush_request_i
+//
+//  // u_pd.icache_flush_request_o
+//  u_pd.icache_flush_request_o <> u_inst_path.cache_flush_request_i
+//  // u_pd.icache_stall_request_vo
+//  u_pd.icache_stall_request_vo <> u_inst_path.stall_request_i
+//  // u_pd.icache_wb_queue_empty_i
+//  u_pd.icache_wb_queue_empty_i <> u_inst_axi.pending_queue_empty_o
+//
+//  // u_pd.itlb_backend_reply_o
+//  u_pd.itlb_backend_reply_o <> u_inst_path.tlb_backend_reply_i
+//  // u_pd.itlb_backend_request_i
+//  u_pd.itlb_backend_request_i <> u_inst_path.tlb_backend_request_o
+//  // u_pd.itlb_flush_reply_i
+//  u_pd.itlb_flush_reply_i <> u_inst_path.tlb_flush_reply_o
+//  // u_pd.itlb_flush_request_o
+//  u_pd.itlb_flush_request_o <> u_inst_path.tlb_flush_request_i
 
   val M_AXI = IO(new AXI4(
     pdParam.dramAddrWidth, 
@@ -121,8 +124,8 @@ class ARMFlexTop extends MultiIOModule {
   ))
 
   for(i <- 0 until 6) u_axi_read.S_IF(i) <> u_pd.M_DMA_R(i)
-  u_axi_read.S_IF(6) <> u_inst_axi.M_DMA_R
-  u_axi_read.S_IF(7) <> u_data_axi.M_DMA_R
+//  u_axi_read.S_IF(6) <> u_inst_axi.M_DMA_R
+//  u_axi_read.S_IF(7) <> u_data_axi.M_DMA_R
 
   M_AXI.ar <> u_axi_read.M_AXI.ar
   M_AXI.r <> u_axi_read.M_AXI.r
@@ -137,8 +140,8 @@ class ARMFlexTop extends MultiIOModule {
   ))
 
   for(i <- 0 until 5) u_axi_write.S_IF(i) <> u_pd.M_DMA_W(i)
-  u_axi_write.S_IF(5) <> u_inst_axi.M_DMA_W
-  u_axi_write.S_IF(6) <> u_data_axi.M_DMA_W
+//  u_axi_write.S_IF(5) <> u_inst_axi.M_DMA_W
+//  u_axi_write.S_IF(6) <> u_data_axi.M_DMA_W
 
   M_AXI.aw <> u_axi_write.M_AXI.aw
   M_AXI.w <> u_axi_write.M_AXI.w
@@ -161,8 +164,8 @@ class ARMFlexTop extends MultiIOModule {
 object ARMFlexTopVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
   import java.io._
-  val fr = new FileWriter(new File("ARMFlexTop.v"))
-  fr.write(c.emitVerilog(new ARMFlexTop))
+  val fr = new FileWriter(new File("ARMFlexTop_AWS.v"))
+  fr.write(c.emitVerilog(new ARMFlexTop(false)))
   fr.close()
 }
 

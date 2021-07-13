@@ -6,7 +6,7 @@ import chisel3.util._
 import armflex._
 
 import armflex_cache.{
-  CacheFrontendFlushRequest,
+  CacheFlushRequest,
   CacheParameter,
 }
 

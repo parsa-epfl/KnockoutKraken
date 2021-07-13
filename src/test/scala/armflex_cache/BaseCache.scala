@@ -31,9 +31,9 @@ class BackendMemorySimulator(
   param: CacheParameter,
   srcFile: String = ""
 ) extends MultiIOModule{
-  val mem = SyncReadMem((1 << param.addressWidth), UInt(param.blockBit.W))
-  val request_i = IO(Flipped(Decoupled(new MergedBackendRequestPacket(param))))
-  val reply_o = IO(Decoupled(UInt(param.blockBit.W)))
+  val mem = SyncReadMem(1 << (param.blockAddressWidth), UInt(param.blockSizeInBit.W))
+  val request_i = IO(Flipped(Decoupled(new MergedBackendRequestPacket(param.databankParameter))))
+  val reply_o = IO(Decoupled(UInt(param.blockSizeInBit.W)))
   if(srcFile.nonEmpty) loadMemoryFromFile(mem, srcFile)
 
   request_i.ready := true.B
@@ -50,11 +50,11 @@ class BackendMemorySimulator(
 }
 
 class DelayChain(param: CacheParameter, n: Int) extends MultiIOModule{
-  val cacheRequest_i = IO(Flipped(Decoupled(new MergedBackendRequestPacket(param))))
-  val cacheReply_o = IO(Decoupled(UInt(param.blockBit.W)))
+  val cacheRequest_i = IO(Flipped(Decoupled(new MergedBackendRequestPacket(param.databankParameter))))
+  val cacheReply_o = IO(Decoupled(UInt(param.blockSizeInBit.W)))
 
-  val backendRequest_o = IO(Decoupled(new MergedBackendRequestPacket(param)))
-  val backendReply_i = IO(Flipped(Decoupled(UInt(param.blockBit.W))))
+  val backendRequest_o = IO(Decoupled(new MergedBackendRequestPacket(param.databankParameter)))
+  val backendReply_i = IO(Flipped(Decoupled(UInt(param.blockSizeInBit.W))))
 
   val requestChain = Wire(Vec(n+1, cacheRequest_i.cloneType))
   requestChain(0) <> cacheRequest_i
@@ -77,20 +77,8 @@ class DTUCache(
   //? why delay chain? To simulate the latency of DRAM access.
   val u_delayChain = Module(new DelayChain(u_cache.param, 4))
   val u_backend = Module(new BackendMemorySimulator(u_cache.param, initialFile))
-  
-  val u_refill_queue = Module(new CacheBackendToAXIInterface.RefillQueue(u_cache.param, 32))
-  u_refill_queue.miss_request_i.bits.addr := u_cache.backend_request_o.bits.addr
-  u_refill_queue.miss_request_i.bits.asid := u_cache.backend_request_o.bits.asid
-  u_refill_queue.miss_request_i.bits.not_sync_with_data_v := false.B
-  u_refill_queue.miss_request_i.bits.permission := u_cache.backend_request_o.bits.permission
-  u_refill_queue.miss_request_i.bits.tid := u_cache.backend_request_o.bits.tid
-  u_refill_queue.miss_request_i.bits.wMask := DontCare
-  u_refill_queue.miss_request_i.bits.wData := DontCare
-  u_refill_queue.miss_request_i.valid := u_cache.backend_request_o.fire() && !u_cache.backend_request_o.bits.w_v
 
-  u_refill_queue.backend_reply_i <> u_delayChain.cacheReply_o
-
-  u_cache.refill_request_i <> u_refill_queue.refill_o
+  u_cache.refill_data_i <> u_delayChain.cacheReply_o
   u_cache.backend_request_o <> u_delayChain.cacheRequest_i
   u_cache.stall_request_vi := false.B
   
@@ -98,41 +86,35 @@ class DTUCache(
   u_backend.reply_o <> u_delayChain.backendReply_i
 
   // export the frontend ports of cache
-  val frontendRequest_i = IO(Flipped(u_cache.frontend_request_i.cloneType))
-  frontendRequest_i <> u_cache.frontend_request_i
+  val frontendRequest_i = IO(Flipped(u_cache.pipeline_request_i.cloneType))
+  frontendRequest_i <> u_cache.pipeline_request_i
   val flushRequest_i = IO(Flipped(u_cache.flush_request_i.cloneType))
   flushRequest_i <> u_cache.flush_request_i
-  val frontendReply_o = IO(u_cache.frontend_reply_o.cloneType)
-  frontendReply_o <> u_cache.frontend_reply_o
-  val packetArrive_o = IO(u_cache.packet_arrive_o.cloneType)
-  packetArrive_o <> u_cache.packet_arrive_o
+  val frontendReply_o = IO(u_cache.pipeline_response_o.cloneType)
+  frontendReply_o <> u_cache.pipeline_response_o
 }
 
 implicit class CacheDriver(target: DTUCache){
-  def setReadRequest(addr: UInt, asid: UInt, groupedFlag: Bool = false.B):Unit = {
-    target.frontendRequest_i.bits.addr.poke(addr)
-    target.frontendRequest_i.bits.tid.poke(asid)
-    target.frontendRequest_i.bits.asid.poke(asid)
-    target.frontendRequest_i.bits.permission.poke(0.U) // Assume dCache here.
+
+  def blockOffsetWidth = log2Ceil(target.u_cache.param.blockSizeInBit / 8)
+
+  def setReadRequest(blockAddr: Int):Unit = {
+    target.frontendRequest_i.bits.addr.poke((blockAddr << blockOffsetWidth).U)
     target.frontendRequest_i.valid.poke(true.B)
     target.frontendRequest_i.ready.expect(true.B) // make sure this is selected.
   }
 
-  def setWriteRequest(addr: UInt, asid: UInt, data: UInt, mask: UInt, groupedFlag: Bool = false.B): Unit = {
+  def setWriteRequest(blockAddr: Int, data: BigInt, wEn: BigInt): Unit = {
     //assert(target.u_cache.param.writable, "Can not set a write request to a read-only cache")
-    target.frontendRequest_i.bits.addr.poke(addr)
-    target.frontendRequest_i.bits.tid.poke(asid)
-    target.frontendRequest_i.bits.asid.poke(asid)
-    target.frontendRequest_i.bits.permission.poke(1.U)
-    target.frontendRequest_i.bits.wData.poke(data)
-    target.frontendRequest_i.bits.wMask.poke(mask)
+    target.frontendRequest_i.bits.addr.poke((blockAddr << blockOffsetWidth).U)
+    target.frontendRequest_i.bits.data.poke(data.U)
+    target.frontendRequest_i.bits.w_en.poke(wEn.U)
     target.frontendRequest_i.valid.poke(true.B)
     target.frontendRequest_i.ready.expect(true.B) // make sure this is selected.
   }
 
-  def setFlushRequest(addr: UInt, asid: UInt): Unit = {
-    target.flushRequest_i.bits.addr.poke(addr)
-    target.flushRequest_i.bits.asid.poke(asid)
+  def setFlushRequest(blockAddr: Int): Unit = {
+    target.flushRequest_i.bits.addr.poke((blockAddr << blockOffsetWidth).U)
     target.flushRequest_i.valid.poke(true.B)
     target.flushRequest_i.ready.expect(true.B)
   }
@@ -142,21 +124,20 @@ implicit class CacheDriver(target: DTUCache){
     target.flushRequest_i.valid.poke(false.B)
   }
 
-  def waitForArrive(expectAsid: UInt) = {
+  def waitForArrive(data: BigInt) = {
     do{
       target.tick()
-    } while(!target.packetArrive_o.valid.peek.litToBoolean)
-    target.packetArrive_o.bits.expect(expectAsid)
-    target.tick()
+    } while(!target.frontendReply_o.valid.peek.litToBoolean)
+    target.frontendReply_o.bits.miss2hit.expect(true.B)
+    target.frontendReply_o.bits.data.expect(data.U)
   }
 
-  def expectReply(hit: Boolean, asid: UInt, data: UInt, dataDontCare: Boolean = false) = {
+  def expectReply(hit: Boolean, data: BigInt, dataDontCare: Boolean = false) = {
     target.frontendReply_o.valid.expect(true.B)
     target.frontendReply_o.bits.hit.expect(hit.B)
-    target.frontendReply_o.bits.asid.expect(asid)
-    target.frontendReply_o.bits.tid.expect(asid)
+    target.frontendReply_o.bits.miss2hit.expect(false.B)
     if(hit && !dataDontCare){
-      target.frontendReply_o.bits.data.expect(data)
+      target.frontendReply_o.bits.data.expect(data.U)
     }
   }
 
@@ -180,8 +161,8 @@ import TestOptionBuilder._
  */ 
 
 class CacheTester extends FreeSpec with ChiselScalatestTester {
-  val param = new CacheParameter(
-    64, 2, 32, 10, 2
+  val param = CacheParameter(
+    12, 64, 2, 32, 32
   )
 
   import CacheTestUtility._
@@ -194,49 +175,39 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
     )).withAnnotations(anno){ dut =>
       //dut.frontendRequest_i.bits.
       //dut.
-      dut.setReadRequest(108.U, 0.U, false.B)
+      dut.setReadRequest(108)
       dut.tick()
-      dut.expectReply(false, 0.U, 0.U)
+      dut.expectReply(hit = false, 0)
       dut.frontendRequest_i.valid.poke(false.B)
-      dut.waitForArrive(0.U)
+      dut.waitForArrive(108)
       dut.tick()
-      dut.setReadRequest(108.U, 0.U, false.B)
+      dut.setReadRequest(108)
       dut.tick()
-      dut.expectReply(true, 0.U, 108.U)
+      dut.expectReply(hit = true, data = 108)
       dut.frontendRequest_i.valid.poke(false.B)
     }
   }
-  "Synonyms" in {
+  "Refilling keeps latest result" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/cache/synonyms"), WriteVcdAnnotation)
     test(new DTUCache(
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
       "src/test/content/memory.txt"
     )).withAnnotations(anno){ dut =>
       // the first transaction
-      dut.setReadRequest(108.U, 0.U)
+      dut.setReadRequest(108)
       dut.tick()
-      dut.expectReply(false, 0.U, 0.U)
+      dut.expectReply(hit = false, 0)
       dut.clearRequest()
       dut.tick(4)
 
-      dut.setReadRequest(108.U, 1.U)
+      dut.setWriteRequest(108, 110, 0x1)
       dut.tick()
-      dut.expectReply(false, 1.U, 0.U);
+      dut.expectReply(hit = false, 0)
       dut.clearRequest()
 
-      dut.waitForArrive(0.U)
+      dut.waitForArrive(108) // first read
       dut.tick()
-      dut.setWriteRequest(108.U, 0.U, 110.U, ((1l << 8) - 1).U)
-      dut.tick()
-      dut.clearRequest()
-      dut.expectReply(true, 0.U, 110.U, true)
-
-      dut.waitForArrive(1.U)
-      dut.tick()
-      dut.setReadRequest(108.U, 0.U)
-      dut.tick()
-      dut.clearRequest()
-      dut.expectReply(true, 0.U, 110.U)
+      dut.waitForArrive(110) // second write
     }
   }
 
@@ -246,23 +217,27 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
       "src/test/content/memory.txt"
     )).withAnnotations(anno){ dut =>
+      // warm up the cache
       dut.setWriteRequest(
-        108.U, 0.U, 114.U, ((1l << 8) - 1).U // no full mask here in order not to trigger the full write.
+        108, 114, 0x1 // no full mask here in order not to trigger the full write.
       )
       dut.tick()
-      dut.expectReply(false, 0.U, 0.U, true)
+      dut.expectReply(hit = false, 0, dataDontCare = true)
       dut.frontendRequest_i.valid.poke(false.B)
 
-      dut.waitForArrive(0.U)
+      dut.waitForArrive(114)
+      dut.tick()
       dut.tick()
 
-      dut.setWriteRequest(108.U, 0.U, 112.U, ((1l << 32) - 1).U)
+      // bring the RAW hazard
+
+      dut.setWriteRequest(108,112, 1)
       dut.tick()
-      dut.expectReply(true, 0.U, 112.U, true) // reply its previous value?
-      dut.setReadRequest(108.U, 0.U)
+      dut.expectReply(hit = true, 114, dataDontCare = true) // hit always reply its value read from cache
+      dut.setReadRequest(108)
       dut.tick()
       dut.frontendRequest_i.valid.poke(false.B)
-      dut.expectReply(true, 0.U, 112.U)
+      dut.expectReply(hit = true, 112)
     }
   }
 
@@ -272,22 +247,22 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
       "src/test/content/memory.txt"
     )).withAnnotations(anno){ dut =>
-      dut.setWriteRequest(111.U, 0.U, 10.U, ((1l << 32) - 1).U)
+      dut.setWriteRequest(111, 10, 0xF)
       dut.tick()
-      dut.expectReply(true, 0.U, 10.U, true)
+      dut.expectReply(hit = true, 10, dataDontCare = true)
       dut.clearRequest()
       dut.tick()
-      dut.setReadRequest(111.U, 0.U)
+      dut.setReadRequest(111)
       dut.tick()
-      dut.expectReply(true, 0.U, 10.U)
+      dut.expectReply(hit = true, 10)
       dut.clearRequest()
 
-      dut.setWriteRequest(122.U, 0.U, 133.U, ((1l << 32) - 1).U)
+      dut.setWriteRequest(122, 133, 0xF)
       dut.tick()
-      dut.setReadRequest(122.U, 0.U)
+      dut.setReadRequest(122)
       dut.tick()
       dut.clearRequest()
-      dut.expectReply(true, 0.U, 133.U)
+      dut.expectReply(hit = true, 133)
     }
   }
 
@@ -297,35 +272,35 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
       "src/test/content/memory.txt"
     )).withAnnotations(anno){ dut =>
-      dut.setReadRequest(101.U, 0.U)
+      dut.setReadRequest(101)
       dut.tick()
-      dut.expectReply(false, 0.U, 0.U)
+      dut.expectReply(hit = false, 0)
       dut.clearRequest()
-      dut.waitForArrive(0.U)
+      dut.waitForArrive(101)
       dut.tick()
 
-      dut.setReadRequest(101.U, 0.U)
+      dut.setReadRequest(101)
       dut.tick()
-      dut.expectReply(true, 0.U, 101.U)
+      dut.expectReply(hit = true, 101)
       dut.clearRequest()
 
-      dut.setFlushRequest(101.U, 0.U)
+      dut.setFlushRequest(101)
       dut.tick()
       //dut.expectReply(true, 0.U, 0.U, true)
       dut.clearRequest()
 
-      dut.setReadRequest(101.U, 0.U)
+      dut.setReadRequest(101)
       dut.tick()
-      dut.expectReply(false, 0.U, 101.U)
+      dut.expectReply(hit = false, 101)
       dut.clearRequest()
-      dut.waitForArrive(0.U)
+      dut.waitForArrive(101)
       dut.tick()
 
       // What if we flush an entry which is not in the cache?
-      dut.setFlushRequest(99.U, 0.U)
+      dut.setFlushRequest(99)
       dut.tick()
       // There should be no backend request
-      for(i <- 0 until 30){
+      for(_ <- 0 until 30){
         //dut.expectReply(false, 0.U, 0.U, true)
         dut.tick() // keep flushing and never hit
       }
@@ -338,17 +313,14 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
       "src/test/content/memory.txt"
     )).withAnnotations(anno){ dut =>
-      dut.setWriteRequest(10.U, 0.U, 100.U, ((1l << 8) - 1).U)
+      dut.setWriteRequest(10, 100, 1)
       dut.tick()
-      dut.expectReply(false, 0.U, 0.U, true)
+      dut.expectReply(hit = false, 0, dataDontCare = true)
       dut.clearRequest()
-      dut.waitForArrive(0.U)
+      dut.waitForArrive(100)
       dut.tick()
-      dut.setWriteRequest(10.U, 0.U, 100.U, ((1l << 8) - 1).U)
-      dut.tick()
-      dut.clearRequest()
-      dut.expectReply(true, 0.U, 0.U, true)
-      dut.setFlushRequest(10.U, 0.U)
+
+      dut.setFlushRequest(10)
       dut.tick()
       //dut.expectReply(true, 0.U, 0.U, true)
       dut.clearRequest()
@@ -357,45 +329,41 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
       dut.tick()
       dut.tick()
 
-      dut.setReadRequest(10.U, 0.U)
+      dut.setReadRequest(10)
       dut.tick()
-      dut.expectReply(false, 0.U, 0.U, true)
+      dut.expectReply(hit = false, 0, dataDontCare = true)
       dut.clearRequest()
-      dut.waitForArrive(0.U)
+      dut.waitForArrive(100)
       dut.tick()
-
-      dut.setReadRequest(10.U, 0.U)
-      dut.tick()
-      dut.expectReply(true, 0.U, 100.U)
     }
   }
 
-  "Hit incomplete forwarding chunk" in {
+  "Hit incomplete forwarding block" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/cache/forwarding_chunk"), WriteVcdAnnotation)
     test(new DTUCache(
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
       "src/test/content/memory.txt"
     )).withAnnotations(anno){ dut =>
-      dut.setWriteRequest(10.U, 0.U, 0xA0.U, 0xFF.U)
+      dut.setWriteRequest(10, 0xA, 0x1)
       dut.tick()
-      dut.expectReply(false, 0.U, 0.U)
+      dut.expectReply(hit = false, 0)
       dut.clearRequest()
-      dut.waitForArrive(0.U)
+      dut.waitForArrive(0xA)
       dut.tick(10)
-      dut.setWriteRequest(10.U, 0.U, 0xA000.U, 0xFF00.U)
+      dut.setWriteRequest(10, 0xA000, 0x2)
       dut.tick()
-      dut.expectReply(true, 0.U, 0.U, true)
-      dut.setReadRequest(10.U, 0.U)
+      dut.expectReply(hit = true, 0, dataDontCare = true)
+      dut.setReadRequest(10)
       dut.tick()
       dut.clearRequest()
-      dut.expectReply(true, 0.U, 0xA00A.U)
+      dut.expectReply(hit = true, 0xA00A)
     }
   }
 }
 
 class CacheLRUTester extends FreeSpec with ChiselScalatestTester {
-  val param = new CacheParameter(
-    64, 2, 32, 10, 2
+  val param = CacheParameter(
+    12, 64, 2, 32, 32
   )
   import CacheTestUtility._
 
@@ -408,44 +376,44 @@ class CacheLRUTester extends FreeSpec with ChiselScalatestTester {
       "src/test/content/memory.txt"
     )).withAnnotations(anno){ dut =>
       // set number is 64, associativity is 2.
-      dut.setReadRequest(0.U, 0.U)
+      dut.setReadRequest(0)
       dut.tick()
       dut.clearRequest()
-      dut.waitForArrive(0.U)
+      dut.waitForArrive(0)
       dut.tick()
 
-      dut.setReadRequest(64.U, 0.U)
+      dut.setReadRequest(64)
       dut.tick()
       dut.clearRequest()
-      dut.waitForArrive(0.U)
+      dut.waitForArrive(64)
       dut.tick()
 
-      dut.setReadRequest(0.U, 0.U)
+      dut.setReadRequest(0)
       dut.tick()
       dut.clearRequest()
-      dut.expectReply(true, 0.U, 0.U)
+      dut.expectReply(hit = true, 0)
 
-      dut.setReadRequest(128.U, 0.U)
+      dut.setReadRequest(128)
       dut.tick()
       dut.clearRequest()
-      dut.waitForArrive(0.U)
-      dut.tick()
-
-      dut.setReadRequest(128.U, 0.U)
-      dut.tick()
-      dut.clearRequest()
-      dut.expectReply(true, 0.U, 128.U)
-
-      dut.setReadRequest(256.U, 0.U)
-      dut.tick()
-      dut.clearRequest()
-      dut.waitForArrive(0.U)
+      dut.waitForArrive(128)
       dut.tick()
 
-      dut.setReadRequest(128.U, 0.U)
+      dut.setReadRequest(128)
       dut.tick()
       dut.clearRequest()
-      dut.expectReply(true, 0.U, 128.U)
+      dut.expectReply(hit = true, 128)
+
+      dut.setReadRequest(256)
+      dut.tick()
+      dut.clearRequest()
+      dut.waitForArrive(256)
+      dut.tick()
+
+      dut.setReadRequest(128)
+      dut.tick()
+      dut.clearRequest()
+      dut.expectReply(hit = true, 128)
     }
   }
 }

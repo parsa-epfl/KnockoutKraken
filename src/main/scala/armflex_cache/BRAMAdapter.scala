@@ -46,7 +46,7 @@ class BRAMorRegister(implementedWithRegister: Boolean = true)(implicit cfg: BRAM
 }
 
 class BankWriteRequestPacket(
-  param: CacheParameter
+  param: DatabankParameter
 ) extends Bundle{
   val addr = UInt(param.setWidth().W)
   val which = UInt(param.wayWidth().W)
@@ -56,7 +56,7 @@ class BankWriteRequestPacket(
 }
 
 class BRAMPortAdapter(
-  param: CacheParameter,
+  param: DatabankParameter,
 ) extends MultiIOModule{
   val set_t = Vec(param.associativity, new CacheEntry(param))
 

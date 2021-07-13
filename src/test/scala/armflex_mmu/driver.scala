@@ -147,13 +147,13 @@ class PageDemanderDUT(
   u_axil_inter.M_AXIL(0) <> u_page_demander.S_AXIL_QEMU_MQ
 
   // Helper 1: the page set converter
-  val u_helper_page_set_converter = Module(new PageDemanderTestHelper.PageSetConverter(param.mem.toTLBParameter()))
+  val u_helper_page_set_converter = Module(new PageDemanderTestHelper.PageSetConverter(param.mem.toTLBParameter))
   val pageset_packet_i = IO(Input(u_helper_page_set_converter.pageset_packet_i.cloneType))
   pageset_packet_i <> u_helper_page_set_converter.pageset_packet_i
   val pageset_converter_raw_o = IO(Output(u_helper_page_set_converter.raw_o.cloneType))
   pageset_converter_raw_o <> u_helper_page_set_converter.raw_o
 
-  val pageset_packet_o = IO(Output(new PageTableSetPacket(param.mem.toTLBParameter())))
+  val pageset_packet_o = IO(Output(new PageTableSetPacket(param.mem.toTLBParameter)))
   pageset_packet_o <> u_helper_page_set_converter.pageset_packet_o
   val pageset_converter_raw_i = IO(Input(Vec(3, UInt(512.W))))
   pageset_converter_raw_i <> u_helper_page_set_converter.raw_i

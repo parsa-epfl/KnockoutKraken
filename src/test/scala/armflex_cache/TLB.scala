@@ -22,16 +22,16 @@ class DelayChain[T <: Data](in: T, level: Integer) extends MultiIOModule {
 }
 
 class DUTTLB(
-  parent: () => BaseTLB,
+  parent: () => BRAMTLB,
   initialMem: String = ""
 ) extends MultiIOModule {
   val u_tlb = Module(parent())
 
-  val delay_chain_req = Module(new DelayChain(u_tlb.backend_request_o.bits.cloneType, 4))
-  delay_chain_req.i <> u_tlb.backend_request_o
+  val delay_chain_req = Module(new DelayChain(u_tlb.miss_request_o.bits.cloneType, 4))
+  delay_chain_req.i <> u_tlb.miss_request_o
   
-  val delay_chain_rep = Module(new DelayChain(u_tlb.backend_reply_i.bits.cloneType, 4))
-  delay_chain_rep.o <> u_tlb.backend_reply_i
+  val delay_chain_rep = Module(new DelayChain(u_tlb.refill_request_i.bits.cloneType, 4))
+  delay_chain_rep.o <> u_tlb.refill_request_i
 
 
   val frontendRequest_i = IO(Flipped(u_tlb.frontend_request_i.cloneType))
@@ -46,16 +46,13 @@ class DUTTLB(
   val packetArrive_o = IO(u_tlb.packet_arrive_o.cloneType)
   packetArrive_o <> u_tlb.packet_arrive_o
 
-  val violation_o = IO(u_tlb.violation_o.cloneType)
-  violation_o <> u_tlb.violation_o
-
   delay_chain_rep.i.valid := delay_chain_req.o.valid && !delay_chain_req.o.bits.w_v
   delay_chain_rep.i.bits.tid := delay_chain_req.o.bits.tid
   delay_chain_rep.i.bits.tag := delay_chain_req.o.bits.tag
 
   delay_chain_req.o.ready := delay_chain_rep.i.ready
 
-  val u_mem = Mem((1l << u_tlb.param.addressWidth), new PTEntryPacket(u_tlb.param))
+  val u_mem = Mem(1L << u_tlb.param.vPageWidth, new PTEntryPacket(u_tlb.param))
 
   if(initialMem.nonEmpty) loadMemoryFromFile(u_mem, initialMem)
 
@@ -121,17 +118,6 @@ implicit class BaseTLBDriver(target: DUTTLB){
     target.clock.step(step)
   }
 }
-
-class TLBPlusCache(
-  parentTLB: () => BaseTLB,
-  parentCache: () => BaseCache,
-  initialMemFile: String = "",
-  initialMapping: String = ""
-) extends MultiIOModule {
-
-}
-
-
 }
 
 
@@ -142,7 +128,7 @@ import firrtl.options.TargetDirAnnotation
 
 class TLBTester extends FreeSpec with ChiselScalatestTester {
   val param = new TLBParameter(
-    8, 4, 2, 15, 1, 32, 32, true
+    8, 4, 2, 15, 1, 32, 32
   )
 
   import TLBTestUtility._
@@ -150,17 +136,19 @@ class TLBTester extends FreeSpec with ChiselScalatestTester {
   "Normal Access" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/tlb/normal_read"), WriteVcdAnnotation)
     test(new DUTTLB(
-      () => new BaseTLB(param, () => new PseudoTreeLRUCore(param.associativity)), ""
+      () => new BRAMTLB(param, () => new PseudoTreeLRUCore(param.associativity)), ""
     )).withAnnotations(anno){ dut =>
       dut.setReadRequest(0.U, 0.U)
-      dut.frontendRequest_i.valid.expect(true.B)
-      dut.expectReply(false, false, 0.U)
+      dut.tick()
+      dut.expectReply(violation = false, hit = false, 0.U)
       dut.tick()
       dut.clearRequest()
       dut.waitForArrive(0.U)
 
       dut.setReadRequest(0.U, 0.U)
-      dut.expectReply(false, true, 0.U)
+      dut.tick()
+      dut.clearRequest()
+      dut.expectReply(violation = false, hit = true, 0.U)
     }
   }
 }

@@ -4,7 +4,7 @@ import armflex.{PTTagPacket, PageEvictNotification, PageTableItem, QEMUMessagesT
 import chisel3._
 import chisel3.util._
 import armflex_mmu._
-import armflex_cache.{CacheFrontendFlushRequest, CacheParameter, TLBFrontendReplyPacket}
+import armflex_cache.{CacheFlushRequest, CacheParameter, TLBFrontendReplyPacket}
 import armflex.util._
 
 
@@ -30,13 +30,13 @@ class PageDeletor(
   val sIdle :: sFlushTLB :: sNotify :: sFlushPage :: sPipe :: sWait :: sMove :: sSend :: Nil = Enum(8)
   val state_r = RegInit(sIdle)
 
-  val page_delete_req_i = IO(Flipped(Decoupled(new PageTableItem(param.mem.toTLBParameter()))))
+  val page_delete_req_i = IO(Flipped(Decoupled(new PageTableItem(param.mem.toTLBParameter))))
 
-  val item_r = Reg(new PageTableItem(param.mem.toTLBParameter()))
+  val item_r = Reg(new PageTableItem(param.mem.toTLBParameter))
 
 
   class tlb_flush_request_t extends Bundle {
-    val req = new PTTagPacket(param.mem.toTLBParameter())
+    val req = new PTTagPacket(param.mem.toTLBParameter)
     val which = UInt(1.W)
   }
 
@@ -47,7 +47,7 @@ class PageDeletor(
   tlb_flush_request_o.bits.req.vpn := item_r.tag.vpn
   tlb_flush_request_o.bits.which := Mux(item_r.entry.permission === 2.U, 0.U, 1.U) // TODO: Support more than one TLB.
   tlb_flush_request_o.valid := state_r === sFlushTLB
-  val tlb_frontend_reply_i = IO(Flipped(Valid(new TLBFrontendReplyPacket(param.mem.toTLBParameter()))))
+  val tlb_frontend_reply_i = IO(Flipped(Valid(new TLBFrontendReplyPacket(param.mem.toTLBParameter))))
 
   // update the modified bit
   when(page_delete_req_i.fire()){
@@ -65,15 +65,15 @@ class PageDeletor(
   // Port to send a starting message.
   val start_message_o = IO(Decoupled(new PageEvictNotification(
     QEMUMessagesType.sEvictNotify,
-    param.mem.toTLBParameter()
+    param.mem.toTLBParameter
   )))
   start_message_o.bits.item := item_r
   start_message_o.valid := state_r === sNotify
 
   // sFlush
   // Ports for flushing cache
-  val icache_flush_request_o = IO(Decoupled(new CacheFrontendFlushRequest(param.mem.toCacheParameter())))
-  val dcache_flush_request_o = IO(Decoupled(new CacheFrontendFlushRequest(param.mem.toCacheParameter())))
+  val icache_flush_request_o = IO(Decoupled(new CacheFlushRequest(param.mem.toCacheParameter)))
+  val dcache_flush_request_o = IO(Decoupled(new CacheFlushRequest(param.mem.toCacheParameter)))
 
   // Counter to monitor the flush process
   val flush_cnt_r = RegInit(0.U(6.W))
@@ -90,7 +90,6 @@ class PageDeletor(
   }
 
   icache_flush_request_o.bits.addr := Cat(item_r.entry.ppn, flush_cnt_r)
-  icache_flush_request_o.bits.asid := item_r.tag.asid
   dcache_flush_request_o.bits := icache_flush_request_o.bits
   
   icache_flush_request_o.valid := state_r === sFlushPage && !flush_which
@@ -156,7 +155,7 @@ class PageDeletor(
   // Port to send message to QEMU
   val done_message_o = IO(Decoupled(new PageEvictNotification(
     QEMUMessagesType.sEvictDone,
-    param.mem.toTLBParameter()
+    param.mem.toTLBParameter
   )))
   done_message_o.bits.item := item_r
   done_message_o.valid := state_r === sSend
@@ -185,7 +184,7 @@ class PageDeletor(
     is(sWait){
       state_r := Mux(
         queue_empty, 
-        Mux(item_r.entry.modified, sMove, sIdle),
+        Mux(item_r.entry.modified, sMove, sSend),
         sWait
       )
     }
