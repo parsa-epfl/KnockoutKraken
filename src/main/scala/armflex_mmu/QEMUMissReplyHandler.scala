@@ -1,24 +1,18 @@
 package armflex_mmu
 
+import armflex.util.{AXIReadMasterIF, AXIWriteMasterIF}
+import armflex.{PageTableItem, QEMUMissReply}
+import armflex_cache._
+import armflex_mmu.peripheral.{PageTableSetBuffer, PageTableSetPacket}
 import chisel3._
 import chisel3.util._
-import armflex_cache._
-import armflex_mmu.peripheral.PageTableSetBuffer
-import armflex_mmu.peripheral.PageTableSetPacket
-import antmicro.Bus._
-import antmicro.Frontend._
-import armflex.{PageTableItem, QEMUMissReply}
-import chisel3.experimental.Param
-import armflex.util.AXIDMARequestPacket
-import armflex.util.AXIReadMasterIF
-import armflex.util.AXIWriteMasterIF
 
 class QEMUMissReplyHandler(
-  param: PageDemanderParameter
+  param: MMUParameter
 ) extends MultiIOModule {
   val qemu_miss_reply_i = IO(Flipped(Decoupled(new QEMUMissReply(param.mem.toTLBParameter))))
   
-  val sIdle :: sCheckAndLoadSynonym :: sGetSynonym :: sLoadSet :: sGetEvict :: sDeletePageReq :: sDeletePage :: sReplace :: sInsertPage :: sMoveback :: sReplyToTLB :: Nil = Enum(11)
+  val sIdle ::  sLoadSet :: sGetEvict :: sDeletePageReq :: sDeletePage :: sReplace ::  sMoveback :: sReplyToTLB :: Nil = Enum(8)
   val state_r = RegInit(sIdle)
 
   val u_buffer = Module(new PageTableSetBuffer(
@@ -47,41 +41,18 @@ class QEMUMissReplyHandler(
   M_DMA_W.data <> move_out_enq
 
   // sIdle
-
   qemu_miss_reply_i.ready := state_r === sIdle
   val request_r = Reg(new QEMUMissReply(param.mem.toTLBParameter))
-  val ppn_r = RegInit(0.U(param.mem.pPageNumberWidth().W))
   when(qemu_miss_reply_i.fire()){
     request_r := qemu_miss_reply_i.bits
   }
 
-
-  // sCheckAndLoadSynonym
-  // Port for access Freelist
-  val ppn_pop_i = IO(Flipped(Decoupled(UInt(param.mem.pPageNumberWidth().W))))
-  ppn_pop_i.ready := !request_r.synonym_v && state_r === sCheckAndLoadSynonym
-
-  // sGetSynonym
-  u_buffer.lookup_request_i := request_r.synonym_tag
-  when(ppn_pop_i.fire()){
-    ppn_r := ppn_pop_i.bits
-  }.elsewhen(state_r === sGetSynonym){
-    assert(u_buffer.lookup_reply_o.hit_v)
-    ppn_r := u_buffer.lookup_reply_o.item.entry.ppn
-  }
+  u_buffer.lookup_request_i := request_r.tag
 
   // sLoadSet
-  M_DMA_R.req.bits.address := Mux(
-    state_r === sCheckAndLoadSynonym,
-    param.getPageTableAddressByVPN(request_r.synonym_tag.vpn),
-    param.getPageTableAddressByVPN(request_r.tag.vpn)
-  )
+  M_DMA_R.req.bits.address := param.getPageTableAddressByVPN(request_r.tag.vpn)
   M_DMA_R.req.bits.length := u_buffer.requestPacketNumber.U
-  M_DMA_R.req.valid := Mux(
-    state_r === sCheckAndLoadSynonym,
-    request_r.synonym_v,
-    state_r === sLoadSet
-  )
+  M_DMA_R.req.valid := state_r === sLoadSet
 
   // sGetEvict
   val victim_r = Reg(new PageTableItem(param.mem.toTLBParameter))
@@ -104,15 +75,8 @@ class QEMUMissReplyHandler(
   u_buffer.write_request_i.bits.item.tag := request_r.tag
   u_buffer.write_request_i.bits.item.entry.modified := false.B
   u_buffer.write_request_i.bits.item.entry.permission := request_r.permission
-  u_buffer.write_request_i.bits.item.entry.ppn := ppn_r
+  u_buffer.write_request_i.bits.item.entry.ppn := request_r.ppn
   u_buffer.write_request_i.valid := state_r === sReplace
-
-  // sInsertPage
-  // TODO: RAW Hazard detected. You have to wait for the Page deletor to complete before inserting pages.
-  val page_insert_req_o = IO(Decoupled(UInt(param.mem.pPageNumberWidth().W)))
-  page_insert_req_o.bits := ppn_r
-  page_insert_req_o.valid := state_r === sInsertPage
-  val page_insert_done_i = IO(Input(Bool()))
 
   // sMoveback
   M_DMA_W.req.bits.address := param.getPageTableAddressByVPN(request_r.tag.vpn)
@@ -124,24 +88,14 @@ class QEMUMissReplyHandler(
   tlb_backend_reply_o.bits.tag := request_r.tag
   tlb_backend_reply_o.bits.data.modified := false.B
   tlb_backend_reply_o.bits.data.permission := request_r.permission
-  tlb_backend_reply_o.bits.data.ppn := ppn_r
+  tlb_backend_reply_o.bits.data.ppn := request_r.ppn
   tlb_backend_reply_o.bits.tid := request_r.tid
   tlb_backend_reply_o.valid := state_r === sReplyToTLB
 
   // state machine
   switch(state_r){
     is(sIdle){
-      state_r := Mux(qemu_miss_reply_i.fire(), sCheckAndLoadSynonym, sIdle)
-    }
-    is(sCheckAndLoadSynonym){
-      state_r := Mux(
-        !request_r.synonym_v, 
-        Mux(ppn_pop_i.fire(), sLoadSet, sCheckAndLoadSynonym),
-        Mux(M_DMA_R.done, sGetSynonym, sCheckAndLoadSynonym)
-      )
-    }
-    is(sGetSynonym){
-      state_r := sLoadSet
+      state_r := Mux(qemu_miss_reply_i.fire(), sLoadSet, sIdle)
     }
     is(sLoadSet){
       state_r := Mux(M_DMA_R.done, sGetEvict, sLoadSet)
@@ -158,12 +112,9 @@ class QEMUMissReplyHandler(
     is(sReplace){
       state_r := Mux(
         u_buffer.write_request_i.fire(),
-        Mux(request_r.synonym_v, sMoveback ,sInsertPage), // Synonym means no pages insertion is needed.
+        sMoveback,
         sReplace
       )
-    }
-    is(sInsertPage){
-      state_r := Mux(page_insert_done_i, sMoveback, sInsertPage)
     }
     is(sMoveback){
       state_r := Mux(
@@ -180,6 +131,6 @@ class QEMUMissReplyHandler(
 
 object QEMUMissReplyHandlerVerilogEmitter extends App {
   val c = new stage.ChiselStage
-  println(c.emitVerilog(new QEMUMissReplyHandler(new PageDemanderParameter())))
+  println(c.emitVerilog(new QEMUMissReplyHandler(new MMUParameter())))
 }
 

@@ -21,7 +21,7 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
   import PageDemanderDriver._
   "Normal" in {
     val anno = Seq(TargetDirAnnotation("test/demander/pagewalk/normal"), VerilatorBackendAnnotation, WriteVcdAnnotation)
-    test(new PageDemanderDUT(new PageDemanderParameter())).withAnnotations(anno){ dut =>
+    test(new MMUDUT(new MMUParameter())).withAnnotations(anno){ dut =>
       // apply a miss request
       // Set the thread table.
       // dut.registerThreadTable(0, 10)
@@ -58,7 +58,7 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
 
   "Page Fault" in {
     val anno = Seq(TargetDirAnnotation("test/demander/pagefault/pagefault"), VerilatorBackendAnnotation, WriteVcdAnnotation)
-    test(new PageDemanderDUT(new PageDemanderParameter())).withAnnotations(anno){ dut =>
+    test(new MMUDUT(new MMUParameter())).withAnnotations(anno){ dut =>
       // apply a miss request
       // Set the thread table.
       // dut.registerThreadTable(0, 10)

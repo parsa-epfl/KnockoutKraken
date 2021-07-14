@@ -1,11 +1,10 @@
 package armflex_mmu.peripheral
 
 import armflex.{PTTagPacket, PageEvictNotification, PageTableItem, QEMUMessagesType}
+import armflex_cache.{CacheFlushRequest, TLBFrontendReplyPacket}
+import armflex_mmu._
 import chisel3._
 import chisel3.util._
-import armflex_mmu._
-import armflex_cache.{CacheFlushRequest, CacheParameter, TLBFrontendReplyPacket}
-import armflex.util._
 
 
 /**
@@ -13,6 +12,7 @@ import armflex.util._
  * Replated function: movePageToQEMU
  * 
  * This module will:
+ * 0. Wait for the Ack signal from LSU so that all pending requests are finished.
  * 1. Lookup the Thread table for the thread. If not paried with a thread, go to 3.
  * 2. Flush TLB. If hit and dirty, update the entry.
  * 3. Notify QEMU that an eviction will start.
@@ -25,15 +25,18 @@ import armflex.util._
  * @param param the parameter of the MemorySystem
  */ 
 class PageDeletor(
-  param: PageDemanderParameter
+  param: MMUParameter
 ) extends MultiIOModule {
-  val sIdle :: sFlushTLB :: sNotify :: sFlushPage :: sPipe :: sWait :: sMove :: sSend :: Nil = Enum(8)
+  val sIdle :: sAck :: sFlushTLB :: sNotify :: sFlushPage :: sPipe :: sWait :: sSend :: Nil = Enum(8)
   val state_r = RegInit(sIdle)
 
   val page_delete_req_i = IO(Flipped(Decoupled(new PageTableItem(param.mem.toTLBParameter))))
 
   val item_r = Reg(new PageTableItem(param.mem.toTLBParameter))
 
+  // sAck
+  val lsu_page_delete_request_o = IO(Decoupled())
+  lsu_page_delete_request_o.valid := state_r === sAck
 
   class tlb_flush_request_t extends Bundle {
     val req = new PTTagPacket(param.mem.toTLBParameter)
@@ -108,48 +111,14 @@ class PageDeletor(
   // Eviction done? (You have to wait for like two / three cycles to get the correct result.)
   val icache_wb_queue_empty_i = IO(Input(Bool()))
   val stall_icache_vo = IO(Output(Bool()))
-  stall_icache_vo := state_r === sWait && item_r.entry.permission === 2.U
+  stall_icache_vo := state_r === sWait && item_r.entry.permission === 2.U || state_r === sPipe
   val dcache_wb_queue_empty_i = IO(Input(Bool()))
   val stall_dcache_vo = IO(Output(Bool()))
-  stall_dcache_vo := state_r === sWait && item_r.entry.permission =/= 2.U
+  stall_dcache_vo := state_r === sWait && item_r.entry.permission =/= 2.U || state_r === sPipe
 
   val queue_empty = Mux(item_r.entry.permission =/= 2.U, dcache_wb_queue_empty_i, icache_wb_queue_empty_i)
 
   // sMove
-  // A DMA that moves data from the DRAM to page buffer.
-  class page_buffer_write_request_t extends Bundle {
-    val addr = UInt(10.W) // TODO: Make external and let it becomes a parameter.
-    val data = UInt(512.W) // TODO: Make external.
-    val last_v = Bool()
-  }
-  val page_buffer_write_o = IO(Decoupled(new page_buffer_write_request_t))
-
-  // AXI DMA Read Channel
-  val M_DMA_R = IO(new AXIReadMasterIF(
-    param.dramAddrWidth,
-    param.dramDataWidth
-  ))
-
-  M_DMA_R.req.bits.address := Cat(item_r.entry.ppn, Fill(12, 0.U(1.W)))
-  M_DMA_R.req.bits.length := 64.U
-  M_DMA_R.req.valid := state_r === sMove
-
-  // A counter to control the address of the output
-  // ? What if I want to delete more than one page at the same time?
-  // TODO: We need a method to assign addresses to the page buffer. Maybe a stack or something else.
-  // ? Actually I prefer a pointer.
-  val page_buffer_addr_cnt_r = RegInit(0.U(6.W)) 
-  page_buffer_write_o.bits.data := M_DMA_R.data.bits
-  page_buffer_write_o.bits.addr := page_buffer_addr_cnt_r
-  page_buffer_write_o.bits.last_v := page_buffer_addr_cnt_r === 63.U
-  page_buffer_write_o.valid := M_DMA_R.data.valid
-  M_DMA_R.data.ready := page_buffer_write_o.ready
-
-  when(state_r === sIdle){
-    page_buffer_addr_cnt_r := 0.U
-  }.elsewhen(page_buffer_write_o.fire()){
-    page_buffer_addr_cnt_r := page_buffer_addr_cnt_r + 1.U
-  }
 
   // sSend
   // Port to send message to QEMU
@@ -163,7 +132,10 @@ class PageDeletor(
   // Update logic of the state machine
   switch(state_r){
     is(sIdle){
-      state_r := Mux(page_delete_req_i.fire(), sFlushTLB, sIdle)
+      state_r := Mux(page_delete_req_i.fire(), sAck, sIdle)
+    }
+    is(sAck){
+      state_r := Mux(lsu_page_delete_request_o.fire(), sFlushTLB, sAck)
     }
     is(sFlushTLB){
       state_r := Mux(tlb_flush_request_o.fire(), sNotify, sFlushTLB)
@@ -183,13 +155,10 @@ class PageDeletor(
     }
     is(sWait){
       state_r := Mux(
-        queue_empty, 
-        Mux(item_r.entry.modified, sMove, sSend),
+        queue_empty,
+        sSend,
         sWait
       )
-    }
-    is(sMove){
-      state_r := Mux(M_DMA_R.done, sSend, sMove)
     }
     is(sSend){
       state_r := Mux(done_message_o.fire(), sIdle, sSend)
@@ -205,5 +174,5 @@ class PageDeletor(
 
 object PageDeletorVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
-  println(c.emitVerilog(new PageDeletor(new PageDemanderParameter())))
+  println(c.emitVerilog(new PageDeletor(new MMUParameter())))
 }

@@ -272,7 +272,7 @@ class BaseCache(
   ))))
 
   val flush_request_i = IO(Flipped(Decoupled(new CacheFlushRequest(param))))
-  val stall_request_vi = IO(Input(Bool()))
+  val reject_request_vi = IO(Input(Bool())) // When this signal is raised, no new requests will be accepted.
 
   val refill_data_i = IO(Flipped(Decoupled(UInt(param.blockSizeInBit.W))))
   u_refill_queue.dramRefillData_i <> refill_data_i
@@ -294,7 +294,7 @@ class BaseCache(
   u_frontend_arb.io.in(2).bits.refill_v := false.B
   u_frontend_arb.io.in(2).bits.wData := pipeline_request_i.bits.data
   u_frontend_arb.io.in(2).bits.wMask := Cat(pipeline_request_i.bits.w_en.asBools().map(Fill(8, _)).reverse)
-  pipeline_request_i.ready := !flush_request_i.valid && !u_refill_queue.refillRequest_o.valid
+  pipeline_request_i.ready := !flush_request_i.valid && !u_refill_queue.refillRequest_o.valid && !reject_request_vi
   // The flush request from other place
   u_frontend_arb.io.in(0).valid := flush_request_i.valid
   u_frontend_arb.io.in(0).bits := flush_request_i.bits.toInternalRequestPacket
@@ -302,11 +302,11 @@ class BaseCache(
   // The refilling request from the backend of the cache
   u_frontend_arb.io.in(1).valid := u_refill_queue.refillRequest_o.valid
   u_frontend_arb.io.in(1).bits := u_refill_queue.refillRequest_o.bits.toInternalRequestPacket
-  u_refill_queue.refillRequest_o.ready := !flush_request_i.valid
+  u_refill_queue.refillRequest_o.ready := !flush_request_i.valid && !reject_request_vi
 
   u_bank_frontend.frontend_request_i.bits := u_frontend_arb.io.out.bits
-  u_bank_frontend.frontend_request_i.valid := !stall_request_vi && u_frontend_arb.io.out.valid
-  u_frontend_arb.io.out.ready := !stall_request_vi && u_bank_frontend.frontend_request_i.ready
+  u_bank_frontend.frontend_request_i.valid := !reject_request_vi && u_frontend_arb.io.out.valid
+  u_frontend_arb.io.out.ready := !reject_request_vi && u_bank_frontend.frontend_request_i.ready
 
   // reply
   val pipeline_response_o = IO(Valid(new PipeCache.CacheResponse(param.blockSizeInBit)))

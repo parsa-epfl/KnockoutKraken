@@ -6,7 +6,7 @@ import armflex_cache._
 import armflex.util._
 
 class TLBWritebackHandler(
-  param: PageDemanderParameter,
+  param: MMUParameter,
   tlbNumber: Int = 2
 ) extends MultiIOModule {
   import armflex.{PTEntryPacket, PTTagPacket, TLBEvictionMessage}
@@ -110,5 +110,5 @@ class TLBWritebackHandler(
 
 object TLBWritebackHandlerVerilogEmitter extends App{
   val c = chisel3.stage.ChiselStage
-  println(c.emitVerilog(new TLBWritebackHandler(new PageDemanderParameter())))
+  println(c.emitVerilog(new TLBWritebackHandler(new MMUParameter())))
 }

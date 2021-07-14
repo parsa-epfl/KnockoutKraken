@@ -80,7 +80,7 @@ class DTUCache(
 
   u_cache.refill_data_i <> u_delayChain.cacheReply_o
   u_cache.backend_request_o <> u_delayChain.cacheRequest_i
-  u_cache.stall_request_vi := false.B
+  u_cache.reject_request_vi := false.B
   
   u_backend.request_i <> u_delayChain.backendRequest_o
   u_backend.reply_o <> u_delayChain.backendReply_i

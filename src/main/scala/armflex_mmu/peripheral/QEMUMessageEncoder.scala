@@ -1,6 +1,6 @@
 package armflex_mmu.peripheral
 
-import armflex.{PageEvictNotification, PageFaultNotification, QEMUMessagesType, QEMUTxMessage}
+import armflex.{PageEvictNotification, PageFaultNotification, QEMUMessagesType, TxMessage}
 import chisel3._
 import chisel3.util._
 import armflex_cache.TLBParameter
@@ -35,7 +35,7 @@ class QEMUMessageEncoder(
     res
   })
 
-  val u_arb = Module(new Arbiter(new QEMUTxMessage, 3))
+  val u_arb = Module(new Arbiter(new TxMessage, 3))
   
   u_arb.io.in.zip(messages).foreach({
     case (s, d) => s <> d

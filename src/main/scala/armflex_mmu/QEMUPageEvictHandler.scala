@@ -8,7 +8,7 @@ import armflex.{PageTableItem, QEMUPageEvictRequest}
 import armflex.util._
 
 class QEMUPageEvictHandler(
-  param: PageDemanderParameter
+  param: MMUParameter
 ) extends MultiIOModule {
   val evict_request_i = IO(Flipped(Decoupled(new QEMUPageEvictRequest(param.mem.toTLBParameter))))
   
@@ -102,6 +102,6 @@ class QEMUPageEvictHandler(
 
 object QEMUPageEvictHandlerrVerilogEmitter extends App {
   val c = new stage.ChiselStage
-  println(c.emitVerilog(new QEMUPageEvictHandler(new PageDemanderParameter())))
+  println(c.emitVerilog(new QEMUPageEvictHandler(new MMUParameter())))
 }
 

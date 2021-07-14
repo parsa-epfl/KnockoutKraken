@@ -1,17 +1,13 @@
 package armflex_mmu
 
+import armflex.PTTagPacket
+import armflex.util.{AXIControlledMessageQueue, AXIReadMasterIF, AXIWriteMasterIF}
+import armflex_cache.{MemorySystemParameter, TLBBackendReplyPacket}
+import armflex_mmu.peripheral._
 import chisel3._
 import chisel3.util._
-import armflex_cache.MemorySystemParameter
-import armflex.{PTTagPacket, PageTableItem}
-import armflex_mmu.peripheral._
-import armflex_cache.TLBBackendReplyPacket
-import armflex.util.AXIControlledMessageQueue
-import armflex.util.AXIReadMasterIF
-import armflex.util.AXIWriteMasterIF
-import armflex.util.AXIInterconnector
 
-class PageDemanderParameter(
+class MMUParameter(
   val mem: MemorySystemParameter = new MemorySystemParameter,
 ){
   def dramAddrWidth = mem.pAddressWidth
@@ -28,28 +24,23 @@ class PageDemanderParameter(
 
 
 /**
- * Top module of the page demander. 
- * 
+ * Top module of MMU.
+ *
  * @param param the parameter of the memory system for communication with TLB and cache.
  * @param messageFIFODepth the depth of all FIFOs that contains messages.
- * 
- * @note In the paper this module contains two parts: the MMU and page demander. In reality they're combined.
- */ 
-class PageDemander(
-  param: PageDemanderParameter,
+ *
+ */
+class MMU(
+  param: MMUParameter,
   messageFIFODepth: Int = 2,
 ) extends MultiIOModule {
-  // TODO: split this module to two part: the MMU and the real Page demander.
-  // TODO: Combine all AXI slave and AXI lite slave internally.
-
-
   // AXI DMA Access ports
-  val M_DMA_R = IO(Vec(6, new AXIReadMasterIF(
+  val M_DMA_R = IO(Vec(4, new AXIReadMasterIF(
     param.dramAddrWidth,
     param.dramDataWidth
   )))
 
-  val M_DMA_W = IO(Vec(5, new AXIWriteMasterIF(
+  val M_DMA_W = IO(Vec(3, new AXIWriteMasterIF(
     param.dramAddrWidth,
     param.dramDataWidth
   )))
@@ -67,12 +58,14 @@ class PageDemander(
 
   // QEMU Message Decoder
   val u_qmd = Module(new QEMUMessageDecoder(param))
+  u_qmd.qemu_evict_reply_o.ready := true.B // always ignore this message
+  assert(!u_qmd.qemu_evict_reply_o.valid, "QEMU Eviction Reply should be deprecated!")
 
   // Hardware page walker
   // TODO: Page walker and TLB writer back handler should be merged into one module in order to keep the consistency.
   val u_page_walker = Module(new PageWalker(param))
   u_page_walker.M_DMA_R <> M_DMA_R(0)
-  
+
   u_page_walker.tlb_miss_req_i(0) <> u_itlb_mconv.miss_request_o
   u_page_walker.tlb_miss_req_i(1) <> u_dtlb_mconv.miss_request_o
 
@@ -124,12 +117,14 @@ class PageDemander(
     u_dtlb_backend_reply_arb.io.in(1).ready
   )
   // u_qemu_miss.tlb_backend_reply_o.ready := false.B
-  
+
   u_qemu_miss.qemu_miss_reply_i <> u_qmd.qemu_miss_reply_o
 
   // Page Deleter
   val u_page_deleter = Module(new PageDeletor(param))
-  u_page_deleter.M_DMA_R <> M_DMA_R(4)
+
+  val lsu_page_delete_request_o = IO(u_page_deleter.lsu_page_delete_request_o.cloneType)
+  lsu_page_delete_request_o <> u_page_deleter.lsu_page_delete_request_o
 
   val dcache_flush_request_o = IO(u_page_deleter.dcache_flush_request_o.cloneType)
   u_page_deleter.dcache_flush_request_o <> dcache_flush_request_o
@@ -185,36 +180,6 @@ class PageDemander(
     dtlb_flush_reply_i
   )
 
-  // Page Inserter
-  val u_page_inserter = Module(new PageInserter(param))
-  u_page_inserter.M_DMA_W <> M_DMA_W(3)
-  u_page_inserter.done_o <> u_qemu_miss.page_insert_done_i
-  u_page_inserter.req_i <> u_qemu_miss.page_insert_req_o
-
-  // Page Buffer
-  val u_page_buffer = Module(new PageBuffer())
-  // val S_AXI_PAGE = IO(Flipped(u_page_buffer.S_AXI.cloneType))
-  // u_page_buffer.S_AXI <> S_AXI_PAGE
-  u_page_buffer.normal_read_request_i <> u_page_inserter.read_request_o
-  u_page_buffer.normal_read_reply_o <> u_page_inserter.read_reply_i
-  u_page_buffer.normal_write_request_i <> u_page_deleter.page_buffer_write_o
-  
-  // the PA Pool
-  val u_pool = Module(new FreeList(param))
-  u_pool.M_DMA_R <> M_DMA_R(5)
-  u_pool.M_DMA_W <> M_DMA_W(4)
-
-  val pa_pool_empty_o = IO(Output(Bool()))
-  pa_pool_empty_o := u_pool.empty_o
-  val pa_pool_full_o = IO(Output(Bool()))
-  pa_pool_full_o := u_pool.full_o
-  u_pool.pop_o <> u_qemu_miss.ppn_pop_i
-
-  // QEMU eviction notifier
-  val u_qemu_evict_reply = Module(new QEMUEvictReplyHandler(param.mem.toTLBParameter))
-  u_qemu_evict_reply.req_i <> u_qmd.qemu_evict_reply_o
-  u_qemu_evict_reply.free_o <> u_pool.push_i
-  
   // QEMU message encoder
   val u_qme = Module(new QEMUMessageEncoder(param.mem.toTLBParameter, messageFIFODepth))
   u_qme.evict_done_req_i <> u_page_deleter.done_message_o
@@ -233,22 +198,13 @@ class PageDemander(
   val qemu_message_available_o = IO(Output(Bool()))
   qemu_message_available_o := u_qme.o.valid
 
-  // AXI Slave interconnector
-  val u_s_axi_int = Module(new AXIInterconnector(
-    Seq(0x0000, 0x8000), Seq(0x8000, 0x8000), 16, 512
-  ))
 
-  val S_AXI = IO(Flipped(u_s_axi_int.S_AXI.cloneType))
-  S_AXI <> u_s_axi_int.S_AXI
-
-  u_s_axi_int.M_AXI(0) <> u_page_buffer.S_AXI // 0x0000 - 0x8000: Page
-  u_s_axi_int.M_AXI(1) <> u_qemu_mq.S_AXI // 0x8000 - 0xF000: message
-  
-
+  val S_AXI = IO(Flipped(u_qemu_mq.S_AXI.cloneType))
+  S_AXI <> u_qemu_mq.S_AXI
 }
 
 object PageDemanderVerilogEmitter extends App{
   val c = chisel3.stage.ChiselStage
-  println(c.emitVerilog(new PageDemander(new PageDemanderParameter())));
+  println(c.emitVerilog(new MMU(new MMUParameter())));
 }
 

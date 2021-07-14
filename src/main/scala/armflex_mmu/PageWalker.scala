@@ -13,7 +13,7 @@ import armflex.util._
  * @param param the parameter of the MMU/Page demander. 
  */ 
 class PageWalker(
-  param: PageDemanderParameter,
+  param: MMUParameter,
   tlbNumber: Int = 2
 ) extends MultiIOModule {
   import armflex.TLBMissRequestMessage
@@ -135,6 +135,6 @@ class PageWalker(
 
 object PageWalkerVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
-  println(c.emitVerilog(new PageWalker(new PageDemanderParameter())))
+  println(c.emitVerilog(new PageWalker(new MMUParameter())))
 }
 

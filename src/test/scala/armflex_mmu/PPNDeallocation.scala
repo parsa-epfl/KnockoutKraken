@@ -18,46 +18,21 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
   "Normal case" in {
     import PageDemanderDriver._
     val anno = Seq(TargetDirAnnotation("test/demander/ppn_deallocation/normal"), VerilatorBackendAnnotation, WriteVcdAnnotation)
-    test(new PageDemanderDUT(new PageDemanderParameter())).withAnnotations(anno){ dut=>
+    test(new MMUDUT(new MMUParameter())).withAnnotations(anno){ dut=>
       // 1. push page.
       // dut.registerThreadTable(0, 0x10)
-      dut.movePageIn(0x01234567)
       dut.sendPageFaultResponse(
         0xABC,
         0x1,
         0x10,
         1,
-        false,
-        0xCCD,
-        0xEF
+        0x10000,
       )
       // 1.1. wait for the response of fetching PTEs and response with nothing.
       dut.sendPageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
       // 1.2. It should allocate Free PPN
 
-      // 1.3. It should inserting pages.
-      dut.waitForSignalToBe(dut.M_AXI.aw.awvalid)
-      dut.M_AXI.aw.awaddr.expect(0x10000000.U)
-      dut.M_AXI.aw.awlen.expect(63.U)
-      timescope {
-        dut.M_AXI.aw.awready.poke(true.B)
-        dut.tk()
-      }
-
-      for (i <- 0 until 64) timescope {
-        dut.M_AXI.w.wready.poke(true.B)
-        dut.waitForSignalToBe(dut.M_AXI.w.wvalid)
-        dut.M_AXI.w.wdata.expect(0x01234567.U)
-        dut.tk()
-      }
-
-      timescope {
-        dut.M_AXI.b.bvalid.poke(true.B)
-        dut.waitForSignalToBe(dut.M_AXI.b.bready)
-        dut.tk()
-      }
-      
-      // 1.4. It should insert the PTE to page table
+      // 1.3. It should insert the PTE to page table
       dut.receivePageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
       dut.pageset_packet_o.ptes(0).ppn.expect(0x10000.U)
       dut.pageset_packet_o.ptes(0).modified.expect(false.B)
@@ -73,8 +48,6 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
       dut.dtlb_backend_reply_o.bits.data.ppn.expect(0x10000.U)
       dut.dtlb_backend_reply_o.bits.data.permission.expect(1.U)
       dut.dtlb_backend_reply_o.bits.tid.expect(1.U)
-
-      dut.pa_pool_full_o.expect(false.B)
 
       // 2. evict the page.
       dut.sendQEMUMessage(
@@ -126,14 +99,6 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
       dut.receivePageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
       dut.pageset_packet_o.valids.expect(0.U)
 
-      // If so, the eviction is done.
-      // Let's free the PPN
-      dut.sendQEMUMessage(
-        3,
-        Seq(0xABC, 0x10, 0x10000, 0)
-      )
-
-      dut.waitForSignalToBe(dut.pa_pool_full_o)
     }
   }
 }

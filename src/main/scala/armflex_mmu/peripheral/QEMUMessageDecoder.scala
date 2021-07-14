@@ -3,13 +3,13 @@ package armflex_mmu.peripheral
 import chisel3._
 import chisel3.util._
 import antmicro.Bus._
-import armflex.{QEMUEvictReply, QEMUMessagesType, QEMUMissReply, QEMUPageEvictRequest, QEMUTxMessage}
+import armflex.{QEMUEvictReply, QEMUMessagesType, QEMUMissReply, QEMUPageEvictRequest, TxMessage}
 import armflex.util.AXIRAMController
-import armflex_mmu.PageDemanderParameter
+import armflex_mmu.MMUParameter
 import armflex_cache.MemorySystemParameter
 
 class QEMUMessageDecoder(
-  param: PageDemanderParameter,
+  param: MMUParameter,
   fifoDepth: Int = 1
 ) extends MultiIOModule {
   val message_i = IO(Flipped(Decoupled(UInt(param.dramDataWidth.W))))
@@ -17,7 +17,7 @@ class QEMUMessageDecoder(
   val qemu_evict_reply_o = IO(Decoupled(new QEMUEvictReply(param.mem.toTLBParameter)))
   val qemu_evict_page_req_o = IO(Decoupled(new QEMUPageEvictRequest(param.mem.toTLBParameter)))
 
-  val raw_message = (new QEMUTxMessage).parseFromVec(VecInit(message_i.bits.asBools().grouped(32).map{x=> Cat(x.reverse)}.toSeq))
+  val raw_message = (new TxMessage).parseFromVec(VecInit(message_i.bits.asBools().grouped(32).map{x=> Cat(x.reverse)}.toSeq))
   
   val qemu_miss_reply_q = Wire(Decoupled(new QEMUMissReply(param.mem.toTLBParameter)))
   qemu_miss_reply_q.bits := qemu_miss_reply_q.bits.parseFromVec(raw_message.data)
@@ -50,5 +50,5 @@ class QEMUMessageDecoder(
 
 object PCIEAdaptorVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
-  println(c.emitVerilog(new QEMUMessageDecoder(new PageDemanderParameter())))
+  println(c.emitVerilog(new QEMUMessageDecoder(new MMUParameter())))
 }

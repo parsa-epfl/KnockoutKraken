@@ -138,12 +138,12 @@ class PageTableSetBuffer(
   val lookup_request_i = IO(Input(new PTTagPacket(param)))
   val hit_vector = pt_set_r.tags.zip(pt_set_r.valids.asBools()).map({
     case (tag, valid) => 
-    tag.asid === lookup_request_i.asid && 
+    tag.asid === lookup_request_i.asid &&
     tag.vpn === lookup_request_i.vpn &&
     valid
   })
 
-  val hit_v = VecInit(hit_vector).asUInt() =/= 0.U  
+  val hit_v = VecInit(hit_vector).asUInt() =/= 0.U
   assert(PopCount(hit_vector) === 1.U || PopCount(hit_vector) === 0.U, "There should be only one hit at most!!!")
 
   val hit_index = OHToUInt(hit_vector)

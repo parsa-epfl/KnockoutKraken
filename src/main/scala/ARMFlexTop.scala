@@ -2,7 +2,7 @@ import chisel3._
 import chisel3.util._
 import armflex._
 import armflex_cache._
-import armflex_mmu.{PageDemander, PageDemanderParameter}
+import armflex_mmu.{MMU, MMUParameter}
 import armflex.util._
 
 import antmicro.Bus._
@@ -17,7 +17,7 @@ class ARMFlexTop(
     threadNumber = pipelineCfg.NB_THREADS,
     tlbWayNumber = 2
   )
-  val pdParam = new PageDemanderParameter(memoryParameter)
+  val pdParam = new MMUParameter(memoryParameter)
 
   val u_pipeline = Module(new PipelineAxi)
 
@@ -70,7 +70,7 @@ class ARMFlexTop(
   // u_data_axi.cache_backend_reply_o <> u_data_path.cache_backend_reply_i
   // u_data_axi.cache_backend_request_i <> u_data_path.cache_backend_request_o
 
-  val u_pd = Module(new PageDemander(pdParam, 2))
+  val u_pd = Module(new MMU(pdParam, 2))
   // ports of the page demander
   val S_AXI = IO(Flipped(u_pd.S_AXI.cloneType))
   u_pd.S_AXI <> S_AXI
