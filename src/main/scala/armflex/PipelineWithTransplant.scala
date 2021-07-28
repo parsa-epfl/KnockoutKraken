@@ -113,7 +113,9 @@ class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule
   // State
   // Memory
   val mem_io = IO(pipeline.mem_io.cloneType)
+  val mmu_io = IO(pipeline.mmu_io.cloneType)
   mem_io <> pipeline.mem_io
+  mmu_io <> pipeline.mmu_io
   val archstate = Module(new ArchState(cfg.NB_THREADS, cfg.DebugSignals))
 
   // -------- Pipeline ---------

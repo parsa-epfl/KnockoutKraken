@@ -105,6 +105,7 @@ object PipeCache {
   ) extends MultiIOModule {
     val pipe_io = IO(new PipeCacheInterfaceIO(genMeta, paddrWidth, blockSize))
     val cache_io = IO(new PipeCacheIO(paddrWidth, blockSize))
+    val pending = IO(Output(UInt(log2Ceil(maxInstsInFlight).W)))
 
     pipe_io.req.port <> cache_io.req
     pipe_io.resp.port <> cache_io.resp
@@ -132,6 +133,51 @@ object PipeCache {
       cache_io.req.valid := false.B
     }
 
+    // ---- Track Pending Requests ----
+    pending := metaQ.pending
+
+  }
+
+  /**
+   * This module ensures that all pending cache requests are completed before allowing for flushing
+   */
+  class CacheFlushingController extends MultiIOModule {
+    val mmu_io = IO(new PipeMMUPortIO)
+    val ctrl = IO(new Bundle {
+      val hasPendingWork = Input(Bool())
+      val stopTransactions = Output(Bool())
+      val waitingForMMU = Output(Bool())
+    })
+    private val sFlush_idle :: sFlush_completePending :: sFlush_waitComplete :: Nil = Enum(3)
+    private val flushState = RegInit(sFlush_idle)
+    mmu_io.flushPermReq.ready := false.B
+    mmu_io.flushCompled.ready := false.B
+    switch(flushState) {
+      is(sFlush_idle) {
+        when(mmu_io.flushPermReq.valid) {
+          flushState := sFlush_completePending
+        }
+      }
+      is(sFlush_completePending) {
+        // Stop translating new requests
+        when(!ctrl.hasPendingWork) {
+          mmu_io.flushPermReq.ready := true.B
+          when(mmu_io.flushPermReq.fire) {
+            flushState := sFlush_waitComplete
+          }
+        }
+      }
+      is(sFlush_waitComplete) {
+        // Stop translating new requests
+        mmu_io.flushCompled.ready := true.B
+        when(mmu_io.flushCompled.fire) {
+          flushState := sFlush_idle
+        }
+      }
+    }
+
+    ctrl.waitingForMMU := flushState === sFlush_waitComplete
+    ctrl.stopTransactions := flushState === sFlush_completePending || flushState === sFlush_waitComplete
   }
 }
 
@@ -146,3 +192,12 @@ class PipeMemPortIO(
   val cache = new PipeCache.PipeCacheIO(paddrWidth, blockSize)
 }
 
+class PipeMMUPortIO extends Bundle {
+  val flushPermReq = Flipped(Decoupled())
+  val flushCompled = Flipped(Decoupled())
+}
+
+class PipeMMUIO extends Bundle {
+  val data = new PipeMMUPortIO
+  val inst = new PipeMMUPortIO
+}

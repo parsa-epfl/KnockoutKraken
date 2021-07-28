@@ -20,6 +20,7 @@ class DoubleLatencyQueue[T <: Data](gen: T, maxElements: Int) extends MultiIOMod
     val base = Valid(gen.cloneType)
     val long = Valid(gen.cloneType)
   })
+  val pending = IO(Output(UInt(log2Ceil(maxElements).W)))
 
   // Control Signals
   private val drop = ctrl_i.drop
@@ -54,6 +55,9 @@ class DoubleLatencyQueue[T <: Data](gen: T, maxElements: Int) extends MultiIOMod
   longQ.io.enq.bits := baseQ.io.deq.bits
   resp_o.base.bits := baseQ.io.deq.bits
   resp_o.long.bits := longQ.io.deq.bits
+
+  // ---- Track Pending Requests ----
+  pending := baseQ.io.count + longQ.io.count
 
   if (true) { // TODO, conditional asserts
     // A request must be pending in order to pop it

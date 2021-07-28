@@ -210,6 +210,11 @@ class PipelineAxiHacked(implicit val cfg: ProcConfig) extends MultiIOModule {
       bits.tag := SimpleCSR(csr.io.csr(4+idx), axiDataWidth)
   }
 
+  pipeline.mmu_io.data.flushCompled.valid := handshakeReg(2)
+  pipeline.mmu_io.data.flushPermReq.valid := handshakeReg(3)
+  pipeline.mmu_io.inst.flushCompled.valid := handshakeReg(2)
+  pipeline.mmu_io.inst.flushPermReq.valid := handshakeReg(3)
+
   val currIdx = 4 + pipeline.mem_io.wake.length
   val regsPerBlock = cfg.BLOCK_SIZE/axiDataWidth
   pipeline.mem_io.inst.tlb.resp.bits := Cat(for (idx <- 0 until regsPerBlock) yield SimpleCSR(csr.io.csr(currIdx+idx), axiDataWidth)).asTypeOf(pipeline.mem_io.inst.tlb.resp.bits)

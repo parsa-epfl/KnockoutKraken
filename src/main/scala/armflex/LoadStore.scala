@@ -311,6 +311,7 @@ class MemoryUnit(
     val resp = Decoupled(new CommitInst(cfg.NB_THREADS))
   })
   val mem_io = IO(new PipeMemPortIO(DATA_SZ, cfg.pAddressWidth, cfg.NB_THREADS_W, 0, cfg.BLOCK_SIZE))
+  val mmu_io = IO(new PipeMMUPortIO)
 
   private class PendingCacheReq extends Bundle {
     val inst = new MInstTag(cfg.TAG_T)
@@ -593,6 +594,20 @@ class MemoryUnit(
 
   pipe.resp <> doneInst.io.deq
 
+  // -----------------------------------------
+  // -------------- Flush Request ------------
+  // -----------------------------------------
+  private val flushController = Module(new PipeCache.CacheFlushingController)
+  private val haveCacheReq = WireInit(cacheReqQ.io.deq.valid || cacheReqMisalignedQ.io.deq.valid)
+  private val havePendingCacheReq = WireInit(cacheAdaptor.pending =/= 0.U)
+  when(flushController.ctrl.stopTransactions){
+    tlbReqQ.io.deq.ready := false.B
+    mem_io.tlb.req.valid := false.B
+  }
+  flushController.ctrl.hasPendingWork := haveCacheReq || havePendingCacheReq
+
+  mmu_io <> flushController.mmu_io
+
   if(true) { // TODO Conditional asserts
     // --- TLB Stage ---
     when(mem_io.tlb.resp.fire && sTLB_state =/= sTLB_intermediateResp) {
@@ -606,5 +621,14 @@ class MemoryUnit(
 
     // --- Cache Stage ---
 
+    // --- Flush assertions ---
+    when(flushController.ctrl.stopTransactions) {
+      // A new translation should never be sent once starting to fill flushing permissions
+      assert(!mem_io.tlb.req.fire)
+    }
+    when(flushController.ctrl.waitingForMMU) {
+      // No new cache requests should ever appear given that we stopped translating
+      assert(!haveCacheReq && !havePendingCacheReq)
+    }
   }
 }

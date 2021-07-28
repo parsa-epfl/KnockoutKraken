@@ -36,6 +36,7 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   // --------- IO -----------
   // Memory Hierarchy
   val mem_io = IO(new PipelineMemoryIO(cfg.pAddressWidth, cfg.NB_THREADS_W, cfg.ASID_WIDTH, cfg.BLOCK_SIZE))
+  val mmu_io = IO(new PipeMMUIO)
   // Transplant case
   val transplantIO = IO(new Bundle {
     val start = Input(ValidTag(cfg.TAG_T, DATA_T))
@@ -81,6 +82,7 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
 
   // --- Fetch PC from Mem ---
   fetch.mem_io <> mem_io.inst
+  fetch.mmu_io <> mmu_io.inst
 
   // --- Fetch Inst -> Decode ---
   decoder.inst := fetch.instQ_o.bits.data
@@ -151,6 +153,7 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   memUnit.pipe.req.bits.:=(ldstU.io.minst.bits) // Enforce := method of MInstTag
   memUnit.pipe.req.bits.tag := issuer.io.deq.tag
   memUnit.mem_io <> mem_io.data
+  memUnit.mmu_io <> mmu_io.data
 
   // - Exceptions -
   val memException = WireInit(

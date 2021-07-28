@@ -60,6 +60,7 @@ class FetchUnit(
   val ctrl_i = IO(pcUnit.ctrl.cloneType)
   val instQ_o = IO(Decoupled(new Tagged(cfg.TAG_T, INST_T)))
   val mem_io = IO(new PipeMemPortIO(DATA_SZ, cfg.pAddressWidth, cfg.NB_THREADS_W, cfg.ASID_WIDTH, cfg.BLOCK_SIZE))
+  val mmu_io = IO(new PipeMMUPortIO)
 
   // ------- Modules
   // Get instruction blocks
@@ -154,6 +155,21 @@ class FetchUnit(
   // Next stage
   instQ_o <> instQueue.io.deq
 
+  // -----------------------------------------
+  // -------------- Flush Request ------------
+  // -----------------------------------------
+  private val flushController = Module(new PipeCache.CacheFlushingController)
+  private val haveCacheReq = WireInit(cacheQ.io.deq.valid)
+  private val havePendingCacheReq = WireInit(cacheAdaptor.pending =/= 0.U)
+  when(flushController.ctrl.stopTransactions){
+    pcUnit.req.ready := false.B
+    mem_io.tlb.req.valid := false.B
+  }
+
+  flushController.ctrl.hasPendingWork := haveCacheReq || havePendingCacheReq
+
+  mmu_io <> flushController.mmu_io
+
   if (true) { // TODO, conditional asserts
     when(mem_io.tlb.resp.valid) {
       // Credit system should ensure that qeues can always receive request
@@ -165,5 +181,14 @@ class FetchUnit(
       assert(instQueue.io.enq.ready)
     }
 
+    // --- Flush assertions ---
+    when(flushController.ctrl.stopTransactions) {
+      // A new translation should never be sent once starting to fill flushing permissions
+      assert(!mem_io.tlb.req.fire)
+    }
+    when(flushController.ctrl.waitingForMMU) {
+      // No new cache requests should ever appear given that we stopped translating
+      assert(!haveCacheReq && !havePendingCacheReq)
+    }
   }
 }
