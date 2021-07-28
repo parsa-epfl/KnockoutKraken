@@ -89,100 +89,21 @@ class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
   pipeline.hostIO.port <> uCSRToArchState.io.port
 
   // Memory port.
-  // val mem = IO(pipeline.mem.cloneType)
-  // pipeline.mem <> mem
+  val mem = IO(pipeline.mem_io.cloneType)
+  pipeline.mem_io <> mem
 
-  // the interface used for cache.
-//  class replaced_memory_interface_t extends Bundle {
-//    val inst = new Bundle {
-//      val req = Decoupled(new CacheFrontendRequestPacket(
-//        DATA_SZ - log2Ceil( cfg.BLOCK_SIZE / 8),
-//        cfg.ASID_WIDTH,
-//        cfg.BLOCK_SIZE,
-//        cfg.NB_THREADS_W,
-//      ))
-//      val resp = Input(Valid(new FrontendReplyPacket(
-//        cfg.BLOCK_SIZE,
-//        cfg.ASID_WIDTH,
-//        cfg.NB_THREADS_W
-//      )))
-//    }
-//    val data = new Bundle {
-//      val req = Decoupled(new CacheFrontendRequestPacket(
-//        DATA_SZ - log2Ceil( cfg.BLOCK_SIZE / 8),
-//        cfg.ASID_WIDTH,
-//        cfg.BLOCK_SIZE,
-//        cfg.NB_THREADS_W,
-//      ))
-//      val resp = Input(Valid(new FrontendReplyPacket(
-//        cfg.BLOCK_SIZE,
-//        cfg.ASID_WIDTH,
-//        cfg.NB_THREADS_W
-//      )))
-//    }
-//    // Yeah I will definitely refactor these code.
-//    val wake = Input(Vec(4, Valid(UInt(cfg.NB_THREADS_W.W)))) // 4 (TID + Valid)
-//    val dataFault = Input(Valid(UInt(cfg.NB_THREADS_W.W))) // TID + Valid
-//    val instFault = Input(Valid(UInt(cfg.NB_THREADS_W.W))) // TID + Valid
-//  }
-//
-//  val mem = IO(new replaced_memory_interface_t)
-//
-//  // mem.inst.req
-//  mem.inst.req.bits.addr := pipeline.mem.inst.req.bits.addr >> log2Ceil(cfg.BLOCK_SIZE / 8)
-//  uThreadTable.tid_i(0) := pipeline.mem.inst.req.bits.thread_id
-//  mem.inst.req.bits.asid := uThreadTable.pid_o(0).bits
-//  when(pipeline.mem.inst.req.valid){
-//    assert(uThreadTable.pid_o(0).valid, "No instruction request is allowed if the hardware thread is not registed.")
-//  }
-//  mem.inst.req.bits.permission := pipeline.mem.inst.req.bits.permission
-//  mem.inst.req.bits.tid := pipeline.mem.inst.req.bits.thread_id
-//  mem.inst.req.bits.wData := pipeline.mem.inst.req.bits.wData
-//  mem.inst.req.bits.wMask := pipeline.mem.inst.req.bits.wMask
-//  mem.inst.req.valid := pipeline.mem.inst.req.valid
-//  pipeline.mem.inst.req.ready := mem.inst.req.ready
-//
-//  // mem.inst.resp
-//  pipeline.mem.inst.resp.valid := mem.inst.resp.valid
-//  pipeline.mem.inst.resp.bits.data := mem.inst.resp.bits.data
-//  // pipeline.mem.inst.resp.bits.dirty := mem.inst.resp.bits.dirty
-//  pipeline.mem.inst.resp.bits.hit := mem.inst.resp.bits.hit
-//  pipeline.mem.inst.resp.bits.thread_id := mem.inst.resp.bits.tid
-//
-//  // mem.data.req
-//  mem.data.req.bits.addr := pipeline.mem.data.req.bits.addr >> log2Ceil(cfg.BLOCK_SIZE / 8)
-//  uThreadTable.tid_i(1) := pipeline.mem.data.req.bits.thread_id
-//  mem.data.req.bits.asid := uThreadTable.pid_o(1).bits
-//  when(pipeline.mem.data.req.valid){
-//    assert(uThreadTable.pid_o(1).valid, "No instruction request is allowed if the hardware thread is not registed.")
-//  }
-//  mem.data.req.bits.permission := pipeline.mem.data.req.bits.permission
-//  mem.data.req.bits.tid := pipeline.mem.data.req.bits.thread_id
-//  mem.data.req.bits.wData := pipeline.mem.data.req.bits.wData
-//  mem.data.req.bits.wMask := pipeline.mem.data.req.bits.wMask
-//  mem.data.req.valid := pipeline.mem.data.req.valid
-//  pipeline.mem.data.req.ready := mem.data.req.ready
-//
-//  // mem.data.resp
-//  pipeline.mem.data.resp.valid := mem.data.resp.valid
-//  pipeline.mem.data.resp.bits.data := mem.data.resp.bits.data
-//  // pipeline.mem.data.resp.bits.dirty := mem.data.resp.bits.dirty
-//  pipeline.mem.data.resp.bits.hit := mem.data.resp.bits.hit
-//  pipeline.mem.data.resp.bits.thread_id := mem.data.resp.bits.asid
-//
-//  // mem.wake
-//  for (i <- 0 until 4){
-//    pipeline.mem.wake(i).valid := mem.wake(i).valid
-//    pipeline.mem.wake(i).tag := mem.wake(i).bits
-//  }
-//
-//  // mem.dataFault
-//  pipeline.mem.dataFault.tag := mem.dataFault.bits
-//  pipeline.mem.dataFault.valid := mem.dataFault.valid
-//
-//  // mem.instFault
-//  pipeline.mem.instFault.tag := mem.instFault.bits
-//  pipeline.mem.instFault.valid := mem.instFault.valid
+  // mem.inst.req
+  uThreadTable.tid_i(0) := pipeline.mem_io.inst.tlb.req.bits.thid
+  mem.inst.tlb.req.bits.asid := uThreadTable.pid_o(0).bits
+  when(pipeline.mem_io.inst.tlb.req.valid) {
+    assert(uThreadTable.pid_o(0).valid, "No instruction request is allowed if the hardware thread is not registed.")
+  }
+
+  uThreadTable.tid_i(1) := pipeline.mem_io.data.tlb.req.bits.thid
+  mem.data.tlb.req.bits.asid := uThreadTable.pid_o(1).bits
+  when(pipeline.mem_io.data.tlb.req.valid){
+    assert(uThreadTable.pid_o(1).valid, "No instruction request is allowed if the hardware thread is not registed.")
+  }
 }
 
 class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule {
@@ -191,8 +112,8 @@ class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule
   val pipeline = Module(new Pipeline)
   // State
   // Memory
-  val mem = IO(pipeline.mem.cloneType)
-  mem <> pipeline.mem
+  val mem_io = IO(pipeline.mem_io.cloneType)
+  mem_io <> pipeline.mem_io
   val archstate = Module(new ArchState(cfg.NB_THREADS, cfg.DebugSignals))
 
   // -------- Pipeline ---------
@@ -214,14 +135,17 @@ class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule
 
   // -------- Transplant ---------
   val transplantU = Module(new TransplantUnit(cfg.NB_THREADS))
-  val hostIO = IO(new Bundle {
+  class HostIO extends Bundle {
     val port = transplantU.hostBramPort.cloneType
     val trans2host = transplantU.trans2host.cloneType
     val host2trans = transplantU.host2trans.cloneType
-  })
+  }
+  val hostIO = IO(new HostIO)
   // Mem Fault - Transplant
-  transplantU.mem2trans.instFault := mem.instFault
-  transplantU.mem2trans.dataFault := mem.dataFault
+  // TODO: Add page Fault support
+  transplantU.mem2trans.instFault := 0.U.asTypeOf(transplantU.mem2trans.instFault) // pipeline.mem_io.instFault
+  transplantU.mem2trans.dataFault := 0.U.asTypeOf(transplantU.mem2trans.dataFault) // pipeline.mem_io.dataFault
+
   // Update State - Highjack commit ports from pipeline
   archstate.pstate.transplant.thread := transplantU.trans2cpu.thread
   pipeline.archstate.commit.ready := !transplantU.trans2cpu.updatingPState
@@ -262,8 +186,8 @@ class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule
 
   if(cfg.DebugSignals) {
     dbg.bits.get.stateVec := archstate.dbg.vecState.get
-    dbg.bits.get.fetch.valid := pipeline.mem.inst.req.valid
-    dbg.bits.get.fetch.tag := pipeline.mem.inst.req.bits.thread_id
+    dbg.bits.get.fetch.valid := pipeline.mem_io.inst.tlb.req.valid
+    dbg.bits.get.fetch.tag := pipeline.mem_io.inst.tlb.req.bits.thid
     dbg.bits.get.fetch.bits.get := archstate.dbg.vecState.get(dbg.bits.get.fetch.tag)
 
     dbg.bits.get.issue.tag := pipeline.dbg.issue.thread

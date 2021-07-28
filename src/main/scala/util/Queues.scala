@@ -3,16 +3,19 @@ package armflex.util
 import chisel3._
 import chisel3.util._
 
-class DoubleLatencyQueue(gen: Bits, maxElements: Int) extends MultiIOModule {
+class DoubleLatencyQueueCtrlIO extends Bundle {
+  val drop = Bool()
+  val done = Bool()
+  val long = Bool()
+  val longDone = Bool()
+}
+
+// TODO: Short path should allocate less entries, close to the latency of a hit request
+class DoubleLatencyQueue[T <: Data](gen: T, maxElements: Int) extends MultiIOModule {
 
   // IO
-  val ctrl_i = IO(new Bundle {
-    val drop = Input(Bool())
-    val done = Input(Bool())
-    val long = Input(Bool())
-    val longDone = Input(Bool())
-  })
-  val req_i = IO(Decoupled(gen.cloneType))
+  val ctrl_i = IO(Input(new DoubleLatencyQueueCtrlIO))
+  val req_i = IO(Flipped(Decoupled(gen.cloneType)))
   val resp_o = IO(new Bundle {
     val base = Valid(gen.cloneType)
     val long = Valid(gen.cloneType)

@@ -183,7 +183,7 @@ class PipelineAxiHacked(implicit val cfg: ProcConfig) extends MultiIOModule {
   val S_AXIL_TRANSPLANT = IO(Flipped(axiLiteCSR.io.ctl.cloneType))
   S_AXIL_TRANSPLANT <> axiLiteCSR.io.ctl
 
-  val transplant_ram = IO(Flipped(pipeline.hostIO.port.cloneType))
+  val transplant_ram = IO(pipeline.hostIO.port.cloneType)
   transplant_ram <> pipeline.hostIO.port
 
   val trans2host = WireInit(Mux(pipeline.hostIO.trans2host.done.valid, 1.U << pipeline.hostIO.trans2host.done.tag, 0.U))
@@ -194,24 +194,33 @@ class PipelineAxiHacked(implicit val cfg: ProcConfig) extends MultiIOModule {
   pipeline.hostIO.host2trans.pending := pendingHostTrans
 
   // Hacked port
-  pipeline.mem.dataFault := SimpleCSR(csr.io.csr(2), axiDataWidth).asTypeOf(pipeline.mem.dataFault)
-  pipeline.mem.instFault := SimpleCSR(csr.io.csr(3), axiDataWidth).asTypeOf(pipeline.mem.instFault)
+  pipeline.mem_io.wake := SimpleCSR(csr.io.csr(2), axiDataWidth).asTypeOf(pipeline.mem_io.wake)
   val handshakeReg = WireInit(SimpleCSR(csr.io.csr(4), axiDataWidth))
-  pipeline.mem.inst.req.ready := handshakeReg(0)
-  pipeline.mem.inst.resp.valid := handshakeReg(1)
-  pipeline.mem.data.req.ready := handshakeReg(2)
-  pipeline.mem.data.resp.valid := handshakeReg(3)
-  pipeline.mem.wake.zipWithIndex.foreach {
+  pipeline.mem_io.inst.tlb.req.ready := handshakeReg(0)
+  pipeline.mem_io.inst.tlb.resp.valid := handshakeReg(1)
+  pipeline.mem_io.inst.cache.req.ready := handshakeReg(0)
+  pipeline.mem_io.inst.cache.resp.valid := handshakeReg(1)
+  pipeline.mem_io.data.tlb.req.ready := handshakeReg(0)
+  pipeline.mem_io.data.tlb.resp.valid := handshakeReg(1)
+  pipeline.mem_io.data.cache.req.ready := handshakeReg(0)
+  pipeline.mem_io.data.cache.resp.valid := handshakeReg(1)
+  pipeline.mem_io.wake.zipWithIndex.foreach {
     case (bits, idx) => 
       bits.valid := handshakeReg(3+idx)
       bits.tag := SimpleCSR(csr.io.csr(4+idx), axiDataWidth)
   }
 
-  val currIdx = 4 + pipeline.mem.wake.length
+  val currIdx = 4 + pipeline.mem_io.wake.length
   val regsPerBlock = cfg.BLOCK_SIZE/axiDataWidth
-  pipeline.mem.inst.resp.bits := Cat(for (idx <- 0 until regsPerBlock) yield SimpleCSR(csr.io.csr(currIdx+idx), axiDataWidth)).asTypeOf(pipeline.mem.inst.resp.bits)
-  pipeline.mem.data.resp.bits := Cat(for (idx <- 0 until regsPerBlock) yield SimpleCSR(csr.io.csr(currIdx+regsPerBlock+idx), axiDataWidth)).asTypeOf(pipeline.mem.data.resp.bits)
- 
+  pipeline.mem_io.inst.tlb.resp.bits := Cat(for (idx <- 0 until regsPerBlock) yield SimpleCSR(csr.io.csr(currIdx+idx), axiDataWidth)).asTypeOf(pipeline.mem_io.inst.tlb.resp.bits)
+  pipeline.mem_io.inst.cache.resp.bits := Cat(for (idx <- 0 until regsPerBlock) yield SimpleCSR(csr.io.csr(currIdx+idx), axiDataWidth)).asTypeOf(pipeline.mem_io.inst.cache.resp.bits)
+  pipeline.mem_io.data.tlb.resp.bits := Cat(for (idx <- 0 until regsPerBlock) yield SimpleCSR(csr.io.csr(currIdx+regsPerBlock+idx), axiDataWidth)).asTypeOf(pipeline.mem_io.data.tlb.resp.bits)
+  pipeline.mem_io.data.cache.resp.bits := Cat(for (idx <- 0 until regsPerBlock) yield SimpleCSR(csr.io.csr(currIdx+regsPerBlock+idx), axiDataWidth)).asTypeOf(pipeline.mem_io.data.cache.resp.bits)
+
+
+  csr.io.csr(38) <> 0.U.asTypeOf(csr.io.csr(0))
+  csr.io.csr(3) <> 0.U.asTypeOf(csr.io.csr(0))
+  csr.io.csr(39) <> 0.U.asTypeOf(csr.io.csr(0))
 }
 
 object PipelineFakeTopVerilogEmitter extends App {

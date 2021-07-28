@@ -162,6 +162,17 @@ class PipelineHardDriverModule(implicit val cfg: ProcConfig) extends MultiIOModu
     val done = Input(ValidTag(cfg.NB_THREADS))
     val transOut = Output(ValidTag(cfg.NB_THREADS))
   })
+  val traceIn = IO(Flipped(Decoupled(new CommitTraceBundle(cfg.BLOCK_SIZE))))
+  val traceExpect = IO(Flipped(Decoupled(new CommitTraceBundle(cfg.BLOCK_SIZE))))
+  val done = IO(Output(Bool()))
+  val transplantOut = IO(new Bundle {
+    val expected = Valid(new CommitTraceBundle(cfg.BLOCK_SIZE))
+    val actual = Output(new FullStateBundle)
+    val inst = Output(INST_T)
+  })
+ 
+
+  /* TODO: Redo Pipeline Test with new MemoryUnit
   pipeline.hostIO.port <> hostIO.port
   val set = Wire(Valid(cfg.TAG_T))
   set.bits := hostIO.done.tag
@@ -173,14 +184,6 @@ class PipelineHardDriverModule(implicit val cfg: ProcConfig) extends MultiIOModu
   pipeline.hostIO.host2trans.pending := pendingHost
 
   hostIO.transOut := pipeline.hostIO.trans2host.done
-  //val setCpu = Wire(Valid(cfg.TAG_T))
-  //setCpu.valid := pipeline.hostIO.trans2host.done.valid
-  //setCpu.bits := pipeline.hostIO.trans2host.done.tag
-  //val pendingCpu = ClearReg(setCpu, set, cfg.NB_THREADS)
-
-  val traceIn = IO(Flipped(Decoupled(new CommitTraceBundle(cfg.BLOCK_SIZE))))
-  val traceExpect = IO(Flipped(Decoupled(new CommitTraceBundle(cfg.BLOCK_SIZE))))
-  val done = IO(Output(Bool()))
 
   val fetch = Module(new Queue(new CommitTraceBundle(cfg.BLOCK_SIZE), 128, true, true))
   val issue = Module(new Queue(new CommitTraceBundle(cfg.BLOCK_SIZE), 128, true, true))
@@ -258,15 +261,11 @@ class PipelineHardDriverModule(implicit val cfg: ProcConfig) extends MultiIOModu
     }
   }
 
-  val transplantOut = IO(new Bundle {
-    val expected = Valid(new CommitTraceBundle(cfg.BLOCK_SIZE))
-    val actual = Output(new FullStateBundle)
-    val inst = Output(INST_T)
-  })
   transplantOut.expected.bits := commit.io.deq.bits
   transplantOut.expected.valid := commit.io.deq.fire && commitTransplant.valid
   transplantOut.actual := pipeline.dbg.bits.get.stateVec(0)
   transplantOut.inst := commitTransplant.bits
 
   done := commit.io.count === 0.U
+  */
 }
