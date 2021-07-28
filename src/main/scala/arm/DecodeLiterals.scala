@@ -120,6 +120,7 @@ object DEC_LITS {
   val SIZEH  = 1
   val SIZE32 = 2
   val SIZE64 = 3
+  val SIZE128 = 4 // Only used for cache access pair instructions
   // op(2) = L
   val isLoad = (1 << 2)
   // op(3) = isSigned

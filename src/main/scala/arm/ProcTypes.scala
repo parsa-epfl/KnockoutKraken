@@ -15,7 +15,8 @@ object PROCESSOR_TYPES
   def DATA_T = UInt(DATA_W)
   val DATA_X = 0.U(DATA_W)
 
-  val INST_W = 32.W
+  val INST_SZ = 32
+  val INST_W = INST_SZ.W
   def INST_T = UInt(INST_W)
   val INST_X = 0.U(INST_W)
 

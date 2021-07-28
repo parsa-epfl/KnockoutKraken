@@ -10,44 +10,11 @@ import arm.DECODE_CONTROL_SIGNALS._
 
 import armflex.util._
 import armflex.util.ExtraUtils._
-import Chisel.debug
 
-class PipelineMemoryRequestPacket(
-  addressWidth: Int,
-  threadIDWidth: Int,
-  blockSize: Int
-) extends Bundle {
-  val addr = UInt(addressWidth.W) // access address.
-  val thread_id = UInt(threadIDWidth.W)
-  val permission = UInt(2.W)
-  val wData = UInt(blockSize.W)
-  val wMask = UInt(blockSize.W)
-}
-
-class PipelineMemoryReplyPacket(
-  dataWidth: Int,
-  threadIDWidth: Int
-) extends Bundle {
-  val data = UInt(dataWidth.W)
-  val thread_id = UInt(threadIDWidth.W)
-  val hit = Bool()
-  // val dirty = Bool()
-}
-
-class PipelineMemoryIO(implicit val cfg: ProcConfig) extends Bundle {
-  val inst = new Bundle {
-    val req =
-      Decoupled(new PipelineMemoryRequestPacket(DATA_SZ, cfg.NB_THREADS_W, cfg.BLOCK_SIZE))
-    val resp =
-      Input(Valid(new PipelineMemoryReplyPacket(cfg.BLOCK_SIZE, cfg.NB_THREADS_W)))
-  }
-  val data = new Bundle {
-    val req = Decoupled(new PipelineMemoryRequestPacket(DATA_SZ, cfg.NB_THREADS_W, cfg.BLOCK_SIZE))
-    val resp = Input(Valid(new PipelineMemoryReplyPacket(cfg.BLOCK_SIZE, cfg.NB_THREADS_W)))
-  }
-  val wake = Input(Vec(4, ValidTag(cfg.TAG_T)))
-  val dataFault = Input(ValidTag(cfg.NB_THREADS))
-  val instFault = Input(ValidTag(cfg.NB_THREADS))
+class PipelineMemoryIO(paddrWidth: Int, thidWidth: Int, asidWidth: Int, blockSize: Int) extends Bundle {
+  val inst = new PipeMemPortIO(DATA_SZ, paddrWidth, thidWidth, asidWidth, blockSize)
+  val data = new PipeMemPortIO(DATA_SZ, paddrWidth, thidWidth, asidWidth, blockSize)
+  val wake = Input(Vec(2, ValidTag(UInt(thidWidth.W))))
 }
 
 class IssueArchStateIO(nbThreads: Int) extends Bundle {
@@ -68,7 +35,8 @@ class PipeArchStateIO(nbThreads: Int) extends Bundle {
 class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   // --------- IO -----------
   // Memory Hierarchy
-  val mem = IO(new PipelineMemoryIO)
+  val mem_io = IO(new PipelineMemoryIO(cfg.pAddressWidth, cfg.NB_THREADS_W, cfg.ASID_WIDTH, cfg.BLOCK_SIZE))
+  val mmu_io = IO(new PipeMMUIO)
   // Transplant case
   val transplantIO = IO(new Bundle {
     val start = Input(ValidTag(cfg.TAG_T, DATA_T))
@@ -80,9 +48,7 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   // ----- System modules ------
 
   // Pipeline -----------------------------------------------
-  //val fetch = IO(Flipped(Decoupled(INST_T)))
   val fetch = Module(new FetchUnit)
-  val fetchQueue = Module(new Queue(new Tagged(cfg.TAG_T, INST_T), cfg.NB_THREADS, true, false))
   // Decode
   val decoder = Module(new DecodeUnit)
   val decReg = Module(new FlushReg(cfg.TAG_T, new DInst))
@@ -98,48 +64,34 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   val ldstU = Module(new LDSTUnit())
   // (MemInst || Issuer) -> CommitReg
 
-  val memHandler = Module(new MemoryAdaptor)
+  val memUnit = Module(new MemoryUnit)
   // Commit
   val commitU = Module(new CommitUnit(cfg.NB_THREADS))
 
   // Interconnect -------------------------------------------
 
-  // Fetch next instruction ---
-  // Transplant
-  fetch.ctrl.start := transplantIO.start
-  // Wake on memory miss completed
-  fetch.ctrl.memWake := mem.wake
-  // Wake on state commit
-  fetch.ctrl.commit.valid := commitU.commit.commited.valid && !commitU.commit.transplant.valid
-  fetch.ctrl.commit.tag := commitU.commit.commited.tag
-  fetch.ctrl.commit.bits.get := commitU.commit.archstate.regs.next.PC
+  // --- Enable Fetch ---
+  // Start on transplant
+  fetch.ctrl_i.start := transplantIO.start
+  // Wake on TLB miss completed
+  fetch.ctrl_i.memWake := mem_io.wake
+  // Wake on instruction commit
+  fetch.ctrl_i.commit.valid := commitU.commit.commited.valid && !commitU.commit.transplant.valid
+  fetch.ctrl_i.commit.tag := commitU.commit.commited.tag
+  fetch.ctrl_i.commit.bits.get := commitU.commit.archstate.regs.next.PC
 
-  mem.inst.req.bits.thread_id := fetch.mem.tag
-  mem.inst.req.bits.addr := fetch.mem.bits
-  mem.inst.req.bits.wData := DontCare
-  mem.inst.req.bits.permission := 2.U // instruction permission
-  mem.inst.req.bits.wMask := 0.U
-  mem.inst.req.handshake(fetch.mem)
+  // --- Fetch PC from Mem ---
+  fetch.mem_io <> mem_io.inst
+  fetch.mmu_io <> mmu_io.inst
 
-  when(mem.inst.req.fire) {
-    assert(fetchQueue.io.enq.ready)
-  }
-
-  val fetchTag = ShiftRegister(fetch.mem.tag, cfg.cacheLatency)
-  val fetchPC = ShiftRegister(fetch.mem.bits, cfg.cacheLatency)
-  val blockInsts = VecInit.tabulate(cfg.BLOCK_SIZE/32) { idx => mem.inst.resp.bits.data((idx + 1) * 32 - 1, idx * 32) }
-  fetchQueue.io.enq.valid := mem.inst.resp.valid && mem.inst.resp.bits.hit
-  val selectBlock = WireInit(fetchPC(log2Ceil(cfg.BLOCK_SIZE / 8)-1, 0) >> 2.U)
-  fetchQueue.io.enq.bits := Tagged(fetchTag, blockInsts(selectBlock))
-
-  // Fetch -> Decode
-  decoder.inst := fetchQueue.io.deq.bits.data
+  // --- Fetch Inst -> Decode ---
+  decoder.inst := fetch.instQ_o.bits.data
   decReg.io.enq.bits := decoder.dinst
-  decReg.io.enq.tag := fetchQueue.io.deq.bits.tag
-  decReg.io.enq.handshake(fetchQueue.io.deq)
+  decReg.io.enq.tag := fetch.instQ_o.bits.tag
+  decReg.io.enq.handshake(fetch.instQ_o)
 
-  // Decode -> Issue
-  // Read from RFile, 1 cycle delay 
+  // --- Decode -> Issue ---
+  // Read from RFile, 1 cycle delay
   archstate.issue.sel.tag := decReg.io.deq.tag
   archstate.issue.sel.valid := decReg.io.deq.fire
   archstate.issue.rd.tag := decReg.io.deq.tag
@@ -198,10 +150,10 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   ldstU.io.pstate := curr_state
 
   // ------ Pack Execute/LDST result
-  memHandler.pipe.req.bits := ldstU.io.minst.bits
-  memHandler.pipe.req.bits.tag := issuer.io.deq.tag
-  mem.data.req <> memHandler.mem.req
-  memHandler.mem.resp <> mem.data.resp
+  memUnit.pipe.req.bits.:=(ldstU.io.minst.bits) // Enforce := method of MInstTag
+  memUnit.pipe.req.bits.tag := issuer.io.deq.tag
+  memUnit.mem_io <> mem_io.data
+  memUnit.mmu_io <> mmu_io.data
 
   // - Exceptions -
   val memException = WireInit(
@@ -258,32 +210,24 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   // Handle response from Memory Hierarchy before Issued Inst
   // Handshakes of IssuerDeq, memInst and CommitReg
   issuer.io.deq.ready := false.B
-  memHandler.pipe.req.valid := false.B
+  memUnit.pipe.req.valid := false.B
+  memUnit.pipe.resp.ready := false.B
   commitU.enq.valid := false.B
 
   val ldstInstruction = ldstU.io.minst.valid && !ldstU.io.minst.bits.exceptions.valid
   val commitAsIssue = commitU.commit.commited.valid && issuer.io.deq.tag === commitU.commit.commited.tag
-  commitU.enq.bits := Mux(mem.data.resp.valid, memHandler.pipe.resp.bits, commitNext)
-  when(memHandler.pipe.resp.valid) {
+  when(memUnit.pipe.resp.valid) {
     // When memory response arrives, don't take from issue but from response
-    commitU.enq.valid := true.B
+    commitU.enq <> memUnit.pipe.resp
   }.otherwise {
     commitU.enq.handshake(issuer.io.deq, !ldstInstruction)
-  }
-  when(ldstInstruction) {
-    issuer.io.deq.handshake(memHandler.pipe.req)
+    commitU.enq.bits := commitNext
   }
 
-  // Assertions:  Issuer Deq | memInst Req&Resp | CommitReg Enq
-  when(issuer.io.deq.fire) {
-    assert(commitU.enq.fire || memHandler.pipe.req.fire)
-    assert(!(commitU.enq.fire && memHandler.pipe.req.fire))
-    when(commitU.commit.commited.valid) { assert(issuer.io.deq.tag =/= commitU.commit.commited.tag) }
+  when(ldstInstruction) {
+    issuer.io.deq.handshake(memUnit.pipe.req)
   }
-  when(commitU.enq.fire) {
-    assert(memHandler.pipe.resp.valid || issuer.io.deq.fire)
-    assert(!(memHandler.pipe.resp.valid && issuer.io.deq.fire))
-  }
+
 
   // ------ Commit Stage ------
   // Commit State
@@ -311,9 +255,23 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   dbg.issue.thread := issuer.io.deq.tag
   dbg.issue.mem := ldstU.io.minst.valid
   dbg.issue.transplant := commitU.enq.bits.exceptions.valid || commitU.enq.bits.undef
+
+  if(true) { // TODO Conditional Assertions
+    // Assertions:  Issuer Deq | memInst Req&Resp | CommitReg Enq
+    when(issuer.io.deq.fire) {
+        assert(commitU.enq.fire || memUnit.pipe.req.fire)
+      assert(!(commitU.enq.fire && memUnit.pipe.req.fire))
+      when(commitU.commit.commited.valid) { 
+          assert(issuer.io.deq.tag =/= commitU.commit.commited.tag) 
+        }
+    }
+    when(commitU.enq.fire) {
+        assert(memUnit.pipe.resp.valid || issuer.io.deq.fire)
+      assert(!(memUnit.pipe.resp.valid && issuer.io.deq.fire))
+    }
+  }
 }
 
-import chisel3.util.{Cat, Queue, ShiftRegister}
 class FullStateBundle extends Bundle {
   val rfile = Vec(REG_N, DATA_T)
   val regs = new PStateRegs
