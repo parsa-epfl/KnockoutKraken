@@ -68,3 +68,32 @@ class DoubleLatencyQueue[T <: Data](gen: T, maxElements: Int) extends MultiIOMod
     when(resp_o.base.valid || resp_o.long.valid) { assert(!(resp_o.base.valid && resp_o.long.valid)) }
   }
 }
+
+/**
+ * This module keeps track whenever the next stage queue has enough entries left to
+ * receive the transaction.
+ * It also keeps tracks of pending transaction at given stage
+ *
+ * IO: trans
+ *     - in             Transaction was sent requiring an free entry at receiver
+ *     - out            Transaction left receiver queue freeing an entry
+ *     - dropped        Transaction completed but dropped for next stage
+ *     ready            Receiver has entries left
+ *
+ * @param size Max number of elements in receiver Queue
+ *
+ */
+class CreditQueueController(size: Int) extends MultiIOModule {
+  val trans = IO(new Bundle {
+    val in = Input(Bool())
+    val dropped = Input(Bool())
+    val out = Input(Bool())
+  })
+  val ready = IO(Output(Bool()))
+
+  private val cnt = RegInit(0.U(log2Ceil(size).W))
+  private val diff = WireInit(0.U(2.W))
+  diff := trans.in.asUInt - (trans.out.asUInt + trans.dropped.asUInt)
+  cnt := cnt + diff
+  ready := cnt < (size-1).U
+}

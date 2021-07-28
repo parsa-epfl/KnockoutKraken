@@ -49,7 +49,10 @@ class FetchUnitPC(implicit val cfg: ProcConfig) extends MultiIOModule {
 }
 
 // TODO: Expose event when instruciton is ditched (TLB miss/permError/etc)
-class FetchUnit(implicit val cfg: ProcConfig) extends MultiIOModule {
+class FetchUnit(
+  cacheQ_entries: Int = 3,
+  instQueue_entries: Int = 8
+)(implicit val cfg: ProcConfig) extends MultiIOModule {
 
   // Generate PC
   private val pcUnit = Module(new FetchUnitPC)
@@ -60,10 +63,14 @@ class FetchUnit(implicit val cfg: ProcConfig) extends MultiIOModule {
 
   // ------- Modules
   // Get instruction blocks
-  private val cacheQ = Module(new Queue(new PendingCacheReq, cfg.NB_THREADS, true, false))
-  private val cacheAdaptor = Module(new PipeCache.CacheInterface(new MetaData, cfg.NB_THREADS, cfg.pAddressWidth, cfg.BLOCK_SIZE))
+  private val maxInstsInFlight = instQueue_entries
+  private val cacheQ = Module(new Queue(new PendingCacheReq, cacheQ_entries, true, false))
+  private val cacheAdaptor = Module(new PipeCache.CacheInterface(new MetaData, maxInstsInFlight, cfg.pAddressWidth, cfg.BLOCK_SIZE))
   // Actual instructions
-  private val instQueue = Module(new Queue(new Tagged(cfg.TAG_T, INST_T), cfg.NB_THREADS, true, false))
+  private val instQueue = Module(new Queue(new Tagged(cfg.TAG_T, INST_T), instQueue_entries, true, false))
+  // Make sure receiver has enough entries left
+  private val pc2cache_credits = Module(new CreditQueueController(cacheQ_entries))
+  private val cache2insts_credits = Module(new CreditQueueController(instQueue_entries))
 
   pcUnit.ctrl <> ctrl_i
 
@@ -95,10 +102,15 @@ class FetchUnit(implicit val cfg: ProcConfig) extends MultiIOModule {
   pcUnit.req.ready := false.B
   mem_io.tlb.resp.ready := false.B
   cacheQ.io.enq.valid := false.B
-  mem_io.tlb.req.handshake(pcUnit.req)
+  mem_io.tlb.req.handshake(pcUnit.req, pc2cache_credits.ready)
   when(mem_io.tlb.resp.bits.hit) {
     cacheQ.io.enq.handshake(mem_io.tlb.resp)
   }
+
+  // Backpressure
+  pc2cache_credits.trans.in := pcUnit.req.fire
+  pc2cache_credits.trans.out := cacheQ.io.deq.fire
+  pc2cache_credits.trans.dropped := mem_io.tlb.resp.fire && !mem_io.tlb.resp.bits.hit
 
   // ------- Cache Request, paddr available ---------
 
@@ -131,20 +143,27 @@ class FetchUnit(implicit val cfg: ProcConfig) extends MultiIOModule {
   cacheQ.io.deq.ready := false.B
   cacheAdaptor.pipe_io.resp.port.ready := false.B
   instQueue.io.enq.valid := false.B
-  cacheAdaptor.pipe_io.req.port.handshake(cacheQ.io.deq)
+  cacheAdaptor.pipe_io.req.port.handshake(cacheQ.io.deq, cache2insts_credits.ready)
   instQueue.io.enq.handshake(cacheAdaptor.pipe_io.resp.port)
 
+  // Backpressure
+  cache2insts_credits.trans.in := cacheQ.io.deq.fire
+  cache2insts_credits.trans.out := instQueue.io.deq.fire
+  cache2insts_credits.trans.dropped := false.B
 
   // Next stage
   instQ_o <> instQueue.io.deq
 
   if (true) { // TODO, conditional asserts
     when(mem_io.tlb.resp.valid) {
+      // Credit system should ensure that qeues can always receive request
       assert(cacheQ.io.enq.ready)
     }
 
     when(mem_io.cache.resp.valid) {
+      // Credit system should ensure that qeues can always receive request
       assert(instQueue.io.enq.ready)
     }
+
   }
 }

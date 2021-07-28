@@ -5,6 +5,7 @@ import chisel3._
 import chisel3.util._
 import arm.PROCESSOR_TYPES._
 import arm.DECODE_CONTROL_SIGNALS._
+import armflex.util.CreditQueueController
 
 class MemReq extends Bundle {
   val addr = DATA_T
@@ -299,7 +300,12 @@ class LDSTUnit extends Module {
 
 import armflex.util.ExtraUtils._
 
-class MemoryUnit(implicit cfg: ProcConfig) extends MultiIOModule {
+class MemoryUnit(
+  tlbQ_entries: Int = 2,
+  cacheReqQ_entries: Int = 3,
+  cacheReqQMisalignement_entries: Int = 3,
+  doneInsts_entries: Int = 4
+)(implicit cfg: ProcConfig) extends MultiIOModule {
   val pipe = IO(new Bundle {
     val req = Flipped(Decoupled(new MInstTag(cfg.TAG_T)))
     val resp = Decoupled(new CommitInst(cfg.NB_THREADS))
@@ -314,14 +320,19 @@ class MemoryUnit(implicit cfg: ProcConfig) extends MultiIOModule {
     val paddr = Output(Vec(2, mem_io.cache.req.bits.addr.cloneType))
   }
 
-  private val tlbReqQ = Module(new Queue(new MInstTag(cfg.TAG_T), cfg.NB_THREADS, true, false))
+  private val cacheInstsFlight_entries = doneInsts_entries + cacheReqQMisalignement_entries
+  private val tlbReqQ = Module(new Queue(new MInstTag(cfg.TAG_T), tlbQ_entries, true, false))
   private val tlbMeta = RegEnable(tlbReqQ.io.deq.bits, tlbReqQ.io.deq.fire)
   private val cacheReq = Wire(new PendingCacheReq) // Pack TLB response to Cache
-  private val cacheAdaptor = Module(new PipeCache.CacheInterface(cacheReq.cloneType, 7, cfg.pAddressWidth, cfg.BLOCK_SIZE))
-  private val cacheReqQ = Module(new Queue(new PendingCacheReq, cfg.NB_THREADS, true, false))
+  private val cacheAdaptor = Module(new PipeCache.CacheInterface(cacheReq.cloneType, cacheInstsFlight_entries, cfg.pAddressWidth, cfg.BLOCK_SIZE))
+  private val cacheReqQ = Module(new Queue(new PendingCacheReq, cacheReqQ_entries, true, false))
   // This queue is here to send second transaction following a pair instruction block misaligned access
-  private val cacheReqMisalignedQ = Module(new Queue(new PendingCacheReq, cfg.NB_THREADS, true, false))
-  private val doneInst = Module(new Queue(new CommitInst(cfg.NB_THREADS), cfg.NB_THREADS, true, false))
+  private val cacheReqMisalignedQ = Module(new Queue(new PendingCacheReq, cacheReqQMisalignement_entries, true, false))
+  private val doneInst = Module(new Queue(new CommitInst(cfg.NB_THREADS), doneInsts_entries, true, false))
+  // Makes sure receiver has enough entries left
+  private val tlb2cache_credits = Module(new CreditQueueController(cacheReqQ_entries))
+  private val cache2cacheMisaligned_credits = Module(new CreditQueueController(cacheReqQMisalignement_entries))
+  private val cache2doneInst_credits = Module(new CreditQueueController(doneInsts_entries))
 
   // -----------------------------------------
   // -------------- TLB   Access -------------
@@ -347,10 +358,14 @@ class MemoryUnit(implicit cfg: ProcConfig) extends MultiIOModule {
   mem_io.tlb.resp.ready := false.B
   tlbReqQ.io.deq.ready := false.B
   cacheReqQ.io.enq.valid := false.B
-  mem_io.tlb.req.handshake(tlbReqQ.io.deq)
+  mem_io.tlb.req.handshake(tlbReqQ.io.deq, tlb2cache_credits.ready)
   // Receive only when not intermediate response
   cacheReqQ.io.enq.handshake(mem_io.tlb.resp, sTLB_state =/= sTLB_intermediateResp)
 
+  // Backpressure Management
+  tlb2cache_credits.trans.in := tlbReqQ.io.deq.fire
+  tlb2cache_credits.trans.out := cacheReqQ.io.deq.fire
+  tlb2cache_credits.trans.dropped := tlbDropInst
 
   // Data
   mem_io.tlb.req.bits.addr := Mux(sTLB_state === sTLB_pair_req,
@@ -476,16 +491,32 @@ class MemoryUnit(implicit cfg: ProcConfig) extends MultiIOModule {
   cacheReqMisalignedQ.io.enq.valid := false.B
   doneInst.io.enq.valid := false.B
 
+  // Credits for backpressure
+  cache2doneInst_credits.trans.in := false.B
+  cache2cacheMisaligned_credits.trans.in := false.B
+  cache2doneInst_credits.trans.dropped := false.B
+  cache2cacheMisaligned_credits.trans.dropped := false.B
+  when(cacheReqQ.io.deq.fire) {
+    when(cacheReqQ.io.deq.bits.blockMisaligned) {
+      cache2cacheMisaligned_credits.trans.in := true.B
+    }.otherwise {
+      cache2doneInst_credits.trans.in := true.B
+    }
+  }.elsewhen(cacheReqMisalignedQ.io.deq.fire) {
+    cache2doneInst_credits.trans.in := true.B
+  }
+  cache2cacheMisaligned_credits.trans.out := cacheReqMisalignedQ.io.deq.fire
+  cache2doneInst_credits.trans.out := doneInst.io.deq.fire
 
   // Manage requests to the cache, if pair pending, it has priority for execution
   when(cacheAdaptor.pipe_io.req.port.ready) {
-    when(cacheReqMisalignedQ.io.deq.valid) {
+    when(cacheReqMisalignedQ.io.deq.valid && cache2doneInst_credits.ready) {
       cacheReqMisalignedQ.io.deq.handshake(cacheAdaptor.pipe_io.req.port)
     }.otherwise {
       when(cacheReqQ.io.deq.bits.blockMisaligned) {
-        cacheReqQ.io.deq.handshake(cacheAdaptor.pipe_io.req.port)
+        cacheReqQ.io.deq.handshake(cacheAdaptor.pipe_io.req.port, cache2cacheMisaligned_credits.ready)
       }.otherwise {
-        cacheReqQ.io.deq.handshake(cacheAdaptor.pipe_io.req.port)
+        cacheReqQ.io.deq.handshake(cacheAdaptor.pipe_io.req.port, cache2doneInst_credits.ready)
       }
     }
   }
@@ -562,13 +593,18 @@ class MemoryUnit(implicit cfg: ProcConfig) extends MultiIOModule {
 
   pipe.resp <> doneInst.io.deq
 
-
-
   if(true) { // TODO Conditional asserts
     // --- TLB Stage ---
     when(mem_io.tlb.resp.fire && sTLB_state =/= sTLB_intermediateResp) {
       // Response should always take a single cycle
       assert(RegNext(mem_io.tlb.req.fire))
     }
+    when(mem_io.tlb.resp.valid) {
+      // Credit system should ensure that receiver has always enough entries left
+      assert(cacheReqQ.io.enq.ready)
+    }
+
+    // --- Cache Stage ---
+
   }
 }
