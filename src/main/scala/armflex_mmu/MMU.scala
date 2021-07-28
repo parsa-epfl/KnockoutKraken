@@ -125,6 +125,8 @@ class MMU(
 
   val lsu_page_delete_request_o = IO(u_page_deleter.lsu_page_delete_request_o.cloneType)
   lsu_page_delete_request_o <> u_page_deleter.lsu_page_delete_request_o
+  val lsu_complete_notify_o = IO(u_page_deleter.lsu_complete_notify_o.cloneType)
+  lsu_complete_notify_o <> u_page_deleter.lsu_complete_notify_o
 
   val dcache_flush_request_o = IO(u_page_deleter.dcache_flush_request_o.cloneType)
   u_page_deleter.dcache_flush_request_o <> dcache_flush_request_o

@@ -13,21 +13,19 @@ import chisel3.util._
  * 
  * This module will:
  * 0. Wait for the Ack signal from LSU so that all pending requests are finished.
- * 1. Lookup the Thread table for the thread. If not paried with a thread, go to 3.
- * 2. Flush TLB. If hit and dirty, update the entry.
- * 3. Notify QEMU that an eviction will start.
- * 4. Flush I$ and D$ according to the property of this page.
- * idea: judge the type of cache (I or D) by the permission. If read only, I$.
- * 5. Wait for the writing list to complete
- * 6. Push the page to the QEMU page buffer if this page is dirty
- * 7. Send message to QEMU that the eviction is complete
+ * 1. Flush TLB. If hit and dirty, update the entry.
+ * 2. Notify QEMU that an eviction will start.
+ * 3. Flush I$ and D$ according to the property of this page.
+ * 4. Wait for the writing list to complete
+ * 5. Send notification signal to the LSU so that LSU knows the flush is complete.
+ * 6. Send message to QEMU that the eviction is complete
  * 
  * @param param the parameter of the MemorySystem
  */ 
 class PageDeletor(
   param: MMUParameter
 ) extends MultiIOModule {
-  val sIdle :: sAck :: sFlushTLB :: sNotify :: sFlushPage :: sPipe :: sWait :: sSend :: Nil = Enum(8)
+  val sIdle :: sReqLSU :: sFlushTLB :: sNotify :: sFlushPage :: sPipe :: sWait :: sSend :: sNotifyLSU ::  Nil = Enum(9)
   val state_r = RegInit(sIdle)
 
   val page_delete_req_i = IO(Flipped(Decoupled(new PageTableItem(param.mem.toTLBParameter))))
@@ -36,7 +34,7 @@ class PageDeletor(
 
   // sAck
   val lsu_page_delete_request_o = IO(Decoupled())
-  lsu_page_delete_request_o.valid := state_r === sAck
+  lsu_page_delete_request_o.valid := state_r === sReqLSU
 
   class tlb_flush_request_t extends Bundle {
     val req = new PTTagPacket(param.mem.toTLBParameter)
@@ -56,8 +54,8 @@ class PageDeletor(
   when(page_delete_req_i.fire()){
     item_r := page_delete_req_i.bits
   }.elsewhen(
-    state_r === sFlushTLB && 
-    tlb_flush_request_o.fire() && 
+    state_r === sFlushTLB &&
+    tlb_flush_request_o.fire() &&
     tlb_frontend_reply_i.bits.hit
   ){
     assert(tlb_frontend_reply_i.valid)
@@ -94,7 +92,7 @@ class PageDeletor(
 
   icache_flush_request_o.bits.addr := Cat(item_r.entry.ppn, flush_cnt_r)
   dcache_flush_request_o.bits := icache_flush_request_o.bits
-  
+
   icache_flush_request_o.valid := state_r === sFlushPage && !flush_which
   dcache_flush_request_o.valid := state_r === sFlushPage && flush_which
 
@@ -129,13 +127,17 @@ class PageDeletor(
   done_message_o.bits.item := item_r
   done_message_o.valid := state_r === sSend
 
+  // sNotifyLSU
+  val lsu_complete_notify_o = IO(Decoupled())
+  lsu_complete_notify_o.valid := state_r === sNotifyLSU
+
   // Update logic of the state machine
   switch(state_r){
     is(sIdle){
-      state_r := Mux(page_delete_req_i.fire(), sAck, sIdle)
+      state_r := Mux(page_delete_req_i.fire(), sReqLSU, sIdle)
     }
-    is(sAck){
-      state_r := Mux(lsu_page_delete_request_o.fire(), sFlushTLB, sAck)
+    is(sReqLSU){
+      state_r := Mux(lsu_page_delete_request_o.fire(), sFlushTLB, sReqLSU)
     }
     is(sFlushTLB){
       state_r := Mux(tlb_flush_request_o.fire(), sNotify, sFlushTLB)
@@ -161,7 +163,10 @@ class PageDeletor(
       )
     }
     is(sSend){
-      state_r := Mux(done_message_o.fire(), sIdle, sSend)
+      state_r := Mux(done_message_o.fire(), sNotifyLSU, sSend)
+    }
+    is(sNotifyLSU){
+      state_r := Mux(lsu_complete_notify_o.fire(), sIdle, sNotifyLSU)
     }
   }
 

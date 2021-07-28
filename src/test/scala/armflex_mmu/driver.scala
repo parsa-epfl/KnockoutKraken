@@ -51,6 +51,7 @@ class MMUDUT(
 
   // Load Store Unit: Page deleting acknowledgement
   u_page_demander.lsu_page_delete_request_o.ready := true.B
+  u_page_demander.lsu_complete_notify_o.ready := true.B
 
   // TLB backend replies
   val itlb_backend_reply_o = IO(u_page_demander.itlb_backend_reply_o.cloneType)
