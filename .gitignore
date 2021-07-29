@@ -350,3 +350,4 @@ project/metals.sbt
 .test
 *.anno.json
 firrtl_black_box_resource_files.f
+.bsp/
