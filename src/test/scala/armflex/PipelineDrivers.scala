@@ -94,7 +94,7 @@ object TestDriversExtra {
           success := false.B
         }
       }
-      assert(success)
+      assert(success, "State didn't match with QEMU execution")
     }
   }
 

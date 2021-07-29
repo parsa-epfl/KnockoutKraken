@@ -183,7 +183,6 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
     commitNext.rd(0).bits := executer.io.einst.bits.rd.bits
     commitNext.res(0) := executer.io.einst.bits.res
   }
-  assert(!(executer.io.einst.valid && brancher.io.pcrel.valid))
 
   commitNext.nzcv.valid := executer.io.einst.bits.nzcv.valid && executer.io.einst.valid
   commitNext.nzcv.bits := executer.io.einst.bits.nzcv.bits
@@ -257,17 +256,18 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   dbg.issue.transplant := commitU.enq.bits.exceptions.valid || commitU.enq.bits.undef
 
   if(true) { // TODO Conditional Assertions
-    // Assertions:  Issuer Deq | memInst Req&Resp | CommitReg Enq
+    assert(!(executer.io.einst.valid && brancher.io.pcrel.valid), "Can't have both instruction valid at the same time")
+    // Assertions:  Issuer Deq | MemUnit | CommitReg Enq
     when(issuer.io.deq.fire) {
-        assert(commitU.enq.fire || memUnit.pipe.req.fire)
-      assert(!(commitU.enq.fire && memUnit.pipe.req.fire))
+      assert(commitU.enq.fire || memUnit.pipe.req.fire, "In case of Issue fire, either the MemUnit or the commit queue must receive the transaction")
+      assert(!(commitU.enq.fire && memUnit.pipe.req.fire), "Both the MemUnit and commit queue can't receive the transaction at the same time")
       when(commitU.commit.commited.valid) { 
-          assert(issuer.io.deq.tag =/= commitU.commit.commited.tag) 
+          assert(issuer.io.deq.tag =/= commitU.commit.commited.tag, "Instructions from the same context can't be present in two stages concurrently")
         }
     }
     when(commitU.enq.fire) {
-        assert(memUnit.pipe.resp.valid || issuer.io.deq.fire)
-      assert(!(memUnit.pipe.resp.valid && issuer.io.deq.fire))
+      assert(memUnit.pipe.resp.valid || issuer.io.deq.fire, "When the commit queue receives a transaction, it must either come from the MemUnit or Issue stage")
+      assert(!(memUnit.pipe.resp.valid && issuer.io.deq.fire), "When the commit queue receives a transaction, it can't come from both the MemUnit or Issue stage")
     }
   }
 }

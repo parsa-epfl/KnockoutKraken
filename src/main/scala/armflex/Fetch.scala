@@ -172,23 +172,19 @@ class FetchUnit(
 
   if (true) { // TODO, conditional asserts
     when(mem_io.tlb.resp.valid) {
-      // Credit system should ensure that qeues can always receive request
-      assert(cacheQ.io.enq.ready)
+      assert(cacheQ.io.enq.ready, "Credit system should ensure that qeues can always receive request")
     }
 
     when(mem_io.cache.resp.valid) {
-      // Credit system should ensure that qeues can always receive request
-      assert(instQueue.io.enq.ready)
+      assert(instQueue.io.enq.ready, "Credit system should ensure that qeues can always receive request")
     }
 
     // --- Flush assertions ---
     when(flushController.ctrl.stopTransactions) {
-      // A new translation should never be sent once starting to fill flushing permissions
-      assert(!mem_io.tlb.req.fire)
+      assert(!mem_io.tlb.req.fire, "A new translation should never be sent once starting to fill flushing permissions")
     }
     when(flushController.ctrl.waitingForMMU) {
-      // No new cache requests should ever appear given that we stopped translating
-      assert(!haveCacheReq && !havePendingCacheReq)
+      assert(!haveCacheReq && !havePendingCacheReq, "No new cache requests should ever appear given that we stopped translating")
     }
   }
 }

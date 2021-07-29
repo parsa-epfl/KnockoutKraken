@@ -611,24 +611,20 @@ class MemoryUnit(
   if(true) { // TODO Conditional asserts
     // --- TLB Stage ---
     when(mem_io.tlb.resp.fire && sTLB_state =/= sTLB_intermediateResp) {
-      // Response should always take a single cycle
-      assert(RegNext(mem_io.tlb.req.fire))
+      assert(RegNext(mem_io.tlb.req.fire), "Hit response of TLB should arrive in 1 cycle")
     }
     when(mem_io.tlb.resp.valid) {
-      // Credit system should ensure that receiver has always enough entries left
-      assert(cacheReqQ.io.enq.ready)
+      assert(cacheReqQ.io.enq.ready, "Credit system should ensure that receiver has always enough entries left")
     }
 
     // --- Cache Stage ---
 
     // --- Flush assertions ---
     when(flushController.ctrl.stopTransactions) {
-      // A new translation should never be sent once starting to fill flushing permissions
-      assert(!mem_io.tlb.req.fire)
+      assert(!mem_io.tlb.req.fire, "A new translation should never be sent once starting to fill flushing permissions")
     }
     when(flushController.ctrl.waitingForMMU) {
-      // No new cache requests should ever appear given that we stopped translating
-      assert(!haveCacheReq && !havePendingCacheReq)
+      assert(!haveCacheReq && !havePendingCacheReq, "No new cache requests should ever appear given that we stopped translating")
     }
   }
 }

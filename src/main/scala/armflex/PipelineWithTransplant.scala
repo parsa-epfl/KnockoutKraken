@@ -89,18 +89,18 @@ class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
   pipeline.hostIO.port <> uCSRToArchState.io.port
 
   // Memory port.
-  val mem = IO(pipeline.mem_io.cloneType)
-  pipeline.mem_io <> mem
+  val mem_io = IO(pipeline.mem_io.cloneType)
+  pipeline.mem_io <> mem_io
 
   // mem.inst.req
   uThreadTable.tid_i(0) := pipeline.mem_io.inst.tlb.req.bits.thid
-  mem.inst.tlb.req.bits.asid := uThreadTable.pid_o(0).bits
+  mem_io.inst.tlb.req.bits.asid := uThreadTable.pid_o(0).bits
   when(pipeline.mem_io.inst.tlb.req.valid) {
     assert(uThreadTable.pid_o(0).valid, "No instruction request is allowed if the hardware thread is not registed.")
   }
 
   uThreadTable.tid_i(1) := pipeline.mem_io.data.tlb.req.bits.thid
-  mem.data.tlb.req.bits.asid := uThreadTable.pid_o(1).bits
+  mem_io.data.tlb.req.bits.asid := uThreadTable.pid_o(1).bits
   when(pipeline.mem_io.data.tlb.req.valid){
     assert(uThreadTable.pid_o(1).valid, "No instruction request is allowed if the hardware thread is not registed.")
   }
