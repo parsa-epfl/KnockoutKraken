@@ -613,11 +613,50 @@ class MemoryUnit(
     when(mem_io.tlb.resp.fire && sTLB_state =/= sTLB_intermediateResp) {
       assert(RegNext(mem_io.tlb.req.fire), "Hit response of TLB should arrive in 1 cycle")
     }
-    when(mem_io.tlb.resp.valid) {
+
+    when(!tlb2cache_credits.ready) {
+      assert(!tlbReqQ.io.deq.fire, "Can't fire requests if not enough credits left")
+    }
+    when(!cache2doneInst_credits.ready) {
+      when(!cacheAdaptor.pipe_io.req.meta.blockMisaligned ||
+             (cacheAdaptor.pipe_io.req.meta.blockMisaligned && cacheAdaptor.pipe_io.req.meta.firstIsCompleted)) {
+        assert(!cacheAdaptor.pipe_io.req.port.fire, "Can't fire new request if instruction commit receiver doesn't have enough credits")
+      }
+    }
+    when(!cache2cacheMisaligned_credits.ready) {
+      when(cacheAdaptor.pipe_io.req.meta.blockMisaligned && !cacheAdaptor.pipe_io.req.meta.firstIsCompleted) {
+        assert(!cacheAdaptor.pipe_io.req.port.fire, "Can't fire new request if misaligned qeue doesn't have enough credits")
+      }
+    }
+    when(cacheReqQ.io.enq.valid) {
       assert(cacheReqQ.io.enq.ready, "Credit system should ensure that receiver has always enough entries left")
     }
-
-    // --- Cache Stage ---
+    when(cacheReqMisalignedQ.io.enq.valid) {
+      assert(cacheReqMisalignedQ.io.enq.ready, "Credit system should ensure that receiver has always enough entries left")
+    }
+    when(doneInst.io.enq.valid) {
+      assert(doneInst.io.enq.ready, "Credit system should ensure that receiver has always enough entries left")
+    }
+    when(mem_io.cache.resp.valid) {
+      assert(cacheAdaptor.pipe_io.resp.port.valid, "Cache Adaptor only acts as a module to forward meta data and has no latency")
+      assert(doneInst.io.enq.ready || cacheReqMisalignedQ.io.enq.ready, "Credit system should ensure that receiver has always enough entries left")
+    }
+    when(mem_io.cache.req.valid) {
+      assert(cacheAdaptor.pipe_io.req.port.valid, "Cache Adaptor only acts as a module to forward meta data and has no latency")
+      assert(cacheReqMisalignedQ.io.deq.valid || cacheReqQ.io.deq.valid, "Cache requests must come from one of two queues")
+    }
+    when(cacheAdaptor.pipe_io.resp.port.fire) {
+      when(cacheAdaptor.pipe_io.resp.meta.blockMisaligned && !cacheAdaptor.pipe_io.resp.meta.firstIsCompleted) {
+        assert(!doneInst.io.enq.fire, "On misaligned first pair access, instruction must not be pushed to completed insts")
+        assert(cacheReqMisalignedQ.io.enq.fire, "On misaligned first pair access, instruction must be pushed to rerun queue")
+        assert(cacheReqMisalignedQ.io.enq.bits.firstIsCompleted, "On misaligned first pair access, firstIsCompleted flag must be set")
+      }.elsewhen(cacheAdaptor.pipe_io.resp.meta.blockMisaligned && cacheAdaptor.pipe_io.resp.meta.firstIsCompleted) {
+        assert(!cacheReqMisalignedQ.io.enq.fire, "On misalgined second pair access, instruction must no be pushed to rerun queue")
+        assert(doneInst.io.enq.fire, "On misaligned second pair access, instruction must be pushed to completed insts")
+      }.otherwise {
+        assert(doneInst.io.enq.fire, "On normal access, instruction must be pushed to completed insts")
+      }
+    }
 
     // --- Flush assertions ---
     when(flushController.ctrl.stopTransactions) {
