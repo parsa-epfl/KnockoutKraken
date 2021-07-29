@@ -1,6 +1,6 @@
 package armflex_mmu.peripheral
 
-import armflex.{PTTagPacket, PageEvictNotification, PageTableItem, QEMUMessagesType}
+import armflex.{PTTagPacket, PageEvictNotification, PageTableItem, PipeMMUIO, QEMUMessagesType}
 import armflex_cache.{CacheFlushRequest, TLBFrontendReplyPacket}
 import armflex_mmu._
 import chisel3._
@@ -33,8 +33,11 @@ class PageDeletor(
   val item_r = Reg(new PageTableItem(param.mem.toTLBParameter))
 
   // sAck
-  val lsu_page_delete_request_o = IO(Decoupled())
-  lsu_page_delete_request_o.valid := state_r === sReqLSU
+  val lsu_handshake_o = IO(new PipeMMUIO)
+
+  // TODO: Consider the case for multiple pipelines
+  lsu_handshake_o.inst.flushPermReq.valid := state_r === sReqLSU && item_r.entry.permission === 2.U
+  lsu_handshake_o.data.flushPermReq.valid := state_r === sReqLSU && item_r.entry.permission =/= 2.U
 
   class tlb_flush_request_t extends Bundle {
     val req = new PTTagPacket(param.mem.toTLBParameter)
@@ -128,8 +131,8 @@ class PageDeletor(
   done_message_o.valid := state_r === sSend
 
   // sNotifyLSU
-  val lsu_complete_notify_o = IO(Decoupled())
-  lsu_complete_notify_o.valid := state_r === sNotifyLSU
+  lsu_handshake_o.inst.flushCompled.valid := state_r === sNotifyLSU && item_r.entry.permission === 2.U
+  lsu_handshake_o.data.flushCompled.valid := state_r === sNotifyLSU && item_r.entry.permission =/= 2.U
 
   // Update logic of the state machine
   switch(state_r){
@@ -137,7 +140,15 @@ class PageDeletor(
       state_r := Mux(page_delete_req_i.fire(), sReqLSU, sIdle)
     }
     is(sReqLSU){
-      state_r := Mux(lsu_page_delete_request_o.fire(), sFlushTLB, sReqLSU)
+      state_r := Mux(
+        Mux(
+          item_r.entry.permission === 2.U,
+          lsu_handshake_o.inst.flushPermReq.fire(),
+          lsu_handshake_o.data.flushPermReq.fire()
+        ),
+        sFlushTLB,
+        sReqLSU
+      )
     }
     is(sFlushTLB){
       state_r := Mux(tlb_flush_request_o.fire(), sNotify, sFlushTLB)
@@ -166,7 +177,15 @@ class PageDeletor(
       state_r := Mux(done_message_o.fire(), sNotifyLSU, sSend)
     }
     is(sNotifyLSU){
-      state_r := Mux(lsu_complete_notify_o.fire(), sIdle, sNotifyLSU)
+      state_r := Mux(
+        Mux(
+          item_r.entry.permission === 2.U,
+          lsu_handshake_o.inst.flushCompled.fire(),
+          lsu_handshake_o.data.flushCompled.fire()
+        ),
+        sIdle,
+        sNotifyLSU
+      )
     }
   }
 

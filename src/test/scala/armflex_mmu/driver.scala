@@ -50,8 +50,11 @@ class MMUDUT(
   // M_AXI_PTSet <> u_page_demander.M_AXI_PTSet
 
   // Load Store Unit: Page deleting acknowledgement
-  u_page_demander.lsu_page_delete_request_o.ready := true.B
-  u_page_demander.lsu_complete_notify_o.ready := true.B
+  u_page_demander.lsu_handshake_o.inst.flushPermReq.ready := true.B
+  u_page_demander.lsu_handshake_o.data.flushPermReq.ready := true.B
+  u_page_demander.lsu_handshake_o.inst.flushCompled.ready := true.B
+  u_page_demander.lsu_handshake_o.data.flushCompled.ready := true.B
+
 
   // TLB backend replies
   val itlb_backend_reply_o = IO(u_page_demander.itlb_backend_reply_o.cloneType)
