@@ -7,18 +7,18 @@ import chisel3.util.{MuxLookup, Valid, Cat}
 import arm.DECODE_CONTROL_SIGNALS._
 import arm.PROCESSOR_TYPES._
 
-class BInst(implicit val cfg: ProcConfig) extends Bundle {
+class BInst extends Bundle {
   val pc = Output(DATA_T)
   val unalignedExcp = Output(Bool())
 }
 
 // Writeback to register based on PC value instruction
-class PCRel(implicit val cfg: ProcConfig) extends Bundle {
+class PCRel extends Bundle {
   val rd = Output(REG_T)
   val res = Output(DATA_T)
 }
 
-class BranchUnitIO(implicit val cfg: ProcConfig) extends Bundle
+class BranchUnitIO extends Bundle
 {
   val dinst = Input(new DInst)
   val rVal1 = Input(DATA_T)
@@ -30,7 +30,7 @@ class BranchUnitIO(implicit val cfg: ProcConfig) extends Bundle
   val pcrel = Output(Valid(new PCRel))
 }
 
-class BranchUnit(implicit val cfg: ProcConfig) extends Module
+class BranchUnit extends Module
 {
   val io = IO(new BranchUnitIO)
 

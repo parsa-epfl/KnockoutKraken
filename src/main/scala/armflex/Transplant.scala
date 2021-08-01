@@ -10,50 +10,50 @@ import armflex.util._
 import Trans2State._
 
 object TransplantIO extends Bundle {
-  class Trans2CPU(val nbThreads: Int) extends Bundle {
-    val thread = Output(UInt(log2Ceil(nbThreads).W))
+  class Trans2CPU(val thidN: Int) extends Bundle {
+    val thread = Output(UInt(log2Ceil(thidN).W))
     val updatingPState = Output(Bool())
-    val rfile_wr = Flipped(new RFileIO.WRPort(nbThreads))
+    val rfile_wr = Flipped(new RFileIO.WRPort(thidN))
     val pregs = Output(new PStateRegs)
     val start = Output(Bool())
   }
-  class CPU2Trans(val nbThreads: Int) extends Bundle {
-    val rfile_wr = new RFileIO.WRPort(nbThreads)
+  class CPU2Trans(val thidN: Int) extends Bundle {
+    val rfile_wr = new RFileIO.WRPort(thidN)
     val pregs = Input(new PStateRegs)
-    val done = Input(ValidTag(nbThreads))
+    val done = Input(ValidTag(thidN))
   }
-  class Mem2Trans(val nbThreads: Int) extends Bundle {
-    val instFault = Input(ValidTag(nbThreads))
-    val dataFault = Input(ValidTag(nbThreads))
+  class Mem2Trans(val thidN: Int) extends Bundle {
+    val instFault = Input(ValidTag(thidN))
+    val dataFault = Input(ValidTag(thidN))
   }
-  class Host2Trans(val nbThreads: Int) extends Bundle {
-    val pending = Input(UInt(nbThreads.W))
+  class Host2Trans(val thidN: Int) extends Bundle {
+    val pending = Input(UInt(thidN.W))
   }
-  class Trans2Host(val nbThreads: Int, val bramCfg: BRAMConfig) extends Bundle {
-    val done = Output(ValidTag(nbThreads))
-    val clear = Output(ValidTag(nbThreads))
+  class Trans2Host(val thidN: Int, val bramCfg: BRAMParams) extends Bundle {
+    val done = Output(ValidTag(thidN))
+    val clear = Output(ValidTag(thidN))
   }
 }
-class TransplantUnit(nbThreads: Int) extends MultiIOModule {
-  val hostBRAMConfig =
-    new BRAMConfig(NB_COL = DATA_SZ / 8, COL_WIDTH = 8, NB_ELE = nbThreads * ARCH_MAX_OFFST)
-  val cpu2trans = IO(new TransplantIO.CPU2Trans(nbThreads))
-  val trans2cpu = IO(new TransplantIO.Trans2CPU(nbThreads))
-  val host2trans = IO(new TransplantIO.Host2Trans(nbThreads))
-  val trans2host = IO(new TransplantIO.Trans2Host(nbThreads, hostBRAMConfig))
-  val hostBramPort = IO(new BRAMPort()(hostBRAMConfig))
+class TransplantUnit(thidN: Int) extends MultiIOModule {
+  val hostBRAMParams =
+    new BRAMParams(NB_COL = DATA_SZ / 8, COL_WIDTH = 8, NB_ELE = thidN * ARCH_MAX_OFFST)
+  val cpu2trans = IO(new TransplantIO.CPU2Trans(thidN))
+  val trans2cpu = IO(new TransplantIO.Trans2CPU(thidN))
+  val host2trans = IO(new TransplantIO.Host2Trans(thidN))
+  val trans2host = IO(new TransplantIO.Trans2Host(thidN, hostBRAMParams))
+  val hostBramPort = IO(new BRAMPort()(hostBRAMParams))
 
-  val mem2trans = IO(new TransplantIO.Mem2Trans(nbThreads))
+  val mem2trans = IO(new TransplantIO.Mem2Trans(thidN))
 
   // Mantains always the latest state of the rfile
   private val stateBuffer = Module(
-    new BRAM()(new BRAMConfig(NB_COL = DATA_SZ / 8, COL_WIDTH = 8, NB_ELE = nbThreads * REG_N))
+    new BRAM()(new BRAMParams(NB_COL = DATA_SZ / 8, COL_WIDTH = 8, NB_ELE = thidN * REG_N))
   )
   private val stateBufferWrPort = stateBuffer.portA
   private val stateBufferRdPort = stateBuffer.portB
 
   // Buffer to communicate with Host by exposing BRAM Port
-  private val hostBuffer = Module(new BRAM()(hostBRAMConfig))
+  private val hostBuffer = Module(new BRAM()(hostBRAMParams))
   hostBramPort <> hostBuffer.portB
   private val hostTransPort = hostBuffer.portA
 
@@ -62,20 +62,20 @@ class TransplantUnit(nbThreads: Int) extends MultiIOModule {
   private val state = RegInit(s_IDLE) // Reads from State, pushes to BRAM
   private val stateDir = RegInit(s_BRAM2CPU) // Reads from BRAM, pushes to State
 
-  private val thread = RegInit(0.U(log2Ceil(nbThreads).W))
+  private val thread = RegInit(0.U(log2Ceil(thidN).W))
   private val thread_next = WireInit(thread)
   thread := thread_next
 
   private val stateRegType = RegInit(r_DONE)
-  private val bramOFFST = RegInit(0.U(log2Ceil(hostBuffer.cfg.NB_ELE).W))
+  private val bramOFFST = RegInit(0.U(log2Ceil(hostBuffer.params.NB_ELE).W))
   private val currReg = RegInit(0.U(log2Ceil(ARCH_MAX_OFFST).W))
 
-  private val cpu2transPending = RegInit(0.U(nbThreads.W))
-  private val cpu2transCpuTrans = Wire(UInt(nbThreads.W))
-  private val cpu2transInstFault = Wire(UInt(nbThreads.W))
-  private val cpu2transDataFault = Wire(UInt(nbThreads.W))
+  private val cpu2transPending = RegInit(0.U(thidN.W))
+  private val cpu2transCpuTrans = Wire(UInt(thidN.W))
+  private val cpu2transInstFault = Wire(UInt(thidN.W))
+  private val cpu2transDataFault = Wire(UInt(thidN.W))
   private val cpu2transInsert = WireInit(cpu2transCpuTrans | cpu2transDataFault | cpu2transInstFault)
-  private val cpu2transClear = WireInit(0.U(log2Ceil(nbThreads).W))
+  private val cpu2transClear = WireInit(0.U(log2Ceil(thidN).W))
   private val cpu2transClearEn = WireInit(false.B)
   private val cpu2transClearBit = WireInit(cpu2transClearEn.asUInt << cpu2transClear)
 
@@ -141,7 +141,7 @@ class TransplantUnit(nbThreads: Int) extends MultiIOModule {
   stateBufferRdPort.ADDR := Cat(thread, currReg)
 
   hostTransPort.EN := state === s_TRANS
-  hostTransPort.WE := Fill(hostTransPort.cfg.NB_COL, stateDir === s_CPU2BRAM)
+  hostTransPort.WE := Fill(hostTransPort.params.NB_COL, stateDir === s_CPU2BRAM)
   hostTransPort.ADDR := Mux(stateDir === s_BRAM2CPU, bramOFFST, RegNext(bramOFFST))
   hostTransPort.DI := stateBufferRdPort.DO
   private val stateRegTypeCurr = WireInit(RegNext(stateRegType))

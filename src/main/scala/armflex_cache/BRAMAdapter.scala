@@ -6,7 +6,7 @@ import chisel3.util._
 import chisel3.stage.ChiselStage
 
 import armflex.util.Diverter
-import armflex.util.BRAMConfig
+import armflex.util.BRAMParams
 import armflex.util.BRAMPort
 import armflex.util.BRAM
 import armflex.util.FlushQueue
@@ -16,7 +16,7 @@ import scala.collection.mutable
 //import treadle.executable.DataType
 //import scala.xml.dtd.impl.Base
 
-class BRAMorRegister(implementedWithRegister: Boolean = true)(implicit cfg: BRAMConfig) extends MultiIOModule{
+class BRAMorRegister(implementedWithRegister: Boolean = true)(implicit cfg: BRAMParams) extends MultiIOModule{
   val portA = IO(new BRAMPort)
   val portB = IO(new BRAMPort)
 
@@ -35,8 +35,8 @@ class BRAMorRegister(implementedWithRegister: Boolean = true)(implicit cfg: BRAM
       }
       pBdo(col) := reg_bank_r(portB.ADDR)
     }
-    portA.DO := pAdo.asUInt()
-    portB.DO := pBdo.asUInt()
+    portA.DO := pAdo.asUInt
+    portB.DO := pBdo.asUInt
 
   } else {
     val bram = Module(new BRAM())
@@ -46,35 +46,35 @@ class BRAMorRegister(implementedWithRegister: Boolean = true)(implicit cfg: BRAM
 }
 
 class BankWriteRequestPacket(
-  param: DatabankParameter
+  params: DatabankParams
 ) extends Bundle{
-  val addr = UInt(param.setWidth().W)
-  val which = UInt(param.wayWidth().W)
-  val data = new CacheEntry(param)
+  val addr = UInt(params.setWidth().W)
+  val which = UInt(params.wayWidth().W)
+  val data = new CacheEntry(params)
 
-  override def cloneType: this.type = new BankWriteRequestPacket(param).asInstanceOf[this.type]
+  override def cloneType: this.type = new BankWriteRequestPacket(params).asInstanceOf[this.type]
 }
 
 class BRAMPortAdapter(
-  param: DatabankParameter,
+  params: DatabankParams,
 ) extends MultiIOModule{
-  val set_t = Vec(param.associativity, new CacheEntry(param))
+  val set_t = Vec(params.associativity, new CacheEntry(params))
 
-  val frontend_read_request_i = IO(Flipped(Decoupled(UInt(param.setWidth().W))))
+  val frontend_read_request_i = IO(Flipped(Decoupled(UInt(params.setWidth().W))))
   val frontend_read_reply_data_o = IO(Decoupled(set_t.cloneType))
 
-  implicit val bramCfg = new BRAMConfig(
-    param.associativity, new CacheEntry(param).getWidth, param.setNumber, implementedWithRegister = param.implementedWithRegister
-  )
+  implicit val bramParams = new BRAMParams(
+    params.associativity, new CacheEntry(params).getWidth, params.setNumber, implementedWithRegister = params.implementedWithRegister
+    )
 
   val bram_ports = IO(Flipped(Vec(2, new BRAMPort())))
-  
+
   bram_ports(0).ADDR := frontend_read_request_i.bits
   bram_ports(0).EN := true.B
   bram_ports(0).WE := 0.U
   bram_ports(0).DI := 0.U
   frontend_read_reply_data_o.bits := bram_ports(0).DO.asTypeOf(set_t.cloneType)
-  if(param.implementedWithRegister){
+  if(params.implementedWithRegister){
     frontend_read_reply_data_o.valid := frontend_read_request_i.valid
     frontend_read_request_i.ready := true.B
   } else {
@@ -89,16 +89,16 @@ class BRAMPortAdapter(
     printf(p"BRAM: Reply Read Transaction: Data: ${frontend_read_reply_data_o.bits}\n")
   }
 
-  val frontend_write_request_i = IO(Flipped(Decoupled(new BankWriteRequestPacket(param))))
+  val frontend_write_request_i = IO(Flipped(Decoupled(new BankWriteRequestPacket(params))))
   bram_ports(1).ADDR := frontend_write_request_i.bits.addr
 
   val writeValue = Wire(set_t.cloneType)
   writeValue := 0.U.asTypeOf(set_t.cloneType)
   writeValue(frontend_write_request_i.bits.which) := frontend_write_request_i.bits.data
 
-  bram_ports(1).DI := writeValue.asUInt()
+  bram_ports(1).DI := writeValue.asUInt
   bram_ports(1).EN := frontend_write_request_i.valid
-  bram_ports(1).WE := UIntToOH(frontend_write_request_i.bits.which) & Fill(param.associativity, frontend_write_request_i.valid)
+  bram_ports(1).WE := UIntToOH(frontend_write_request_i.bits.which) & Fill(params.associativity, frontend_write_request_i.valid)
   frontend_write_request_i.ready := true.B
 
   when(frontend_write_request_i.valid){

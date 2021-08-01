@@ -47,16 +47,16 @@ class DUTTLB(
   packetArrive_o <> u_tlb.packet_arrive_o
 
   delay_chain_rep.i.valid := delay_chain_req.o.valid && !delay_chain_req.o.bits.w_v
-  delay_chain_rep.i.bits.tid := delay_chain_req.o.bits.tid
+  delay_chain_rep.i.bits.thid := delay_chain_req.o.bits.thid
   delay_chain_rep.i.bits.tag := delay_chain_req.o.bits.tag
 
   delay_chain_req.o.ready := delay_chain_rep.i.ready
 
-  val u_mem = Mem(1L << u_tlb.param.vPageWidth, new PTEntryPacket(u_tlb.param))
+  val u_mem = Mem(1L << u_tlb.params.vPageW, new PTEntryPacket(u_tlb.params))
 
   if(initialMem.nonEmpty) loadMemoryFromFile(u_mem, initialMem)
 
-  val mem_port = u_mem(delay_chain_req.o.bits.tag.asUInt())
+  val mem_port = u_mem(delay_chain_req.o.bits.tag.asUInt)
   val mod_mem_value = WireInit(mem_port)
   mod_mem_value.modified := true.B
   when(delay_chain_req.o.valid && delay_chain_req.o.bits.w_v){
@@ -68,18 +68,18 @@ class DUTTLB(
 implicit class BaseTLBDriver(target: DUTTLB){
   def setReadRequest(vpage: UInt, asid: UInt) = {
     target.frontendRequest_i.bits.tag.vpn.poke(vpage)
-    target.frontendRequest_i.bits.tid.poke(asid)
+    target.frontendRequest_i.bits.thid.poke(asid)
     target.frontendRequest_i.bits.tag.asid.poke(asid)
-    target.frontendRequest_i.bits.permission.poke(0.U)
+    target.frontendRequest_i.bits.perm.poke(0.U)
     target.frontendRequest_i.valid.poke(true.B)
     target.frontendRequest_i.ready.expect(true.B)
   }
 
   def setWriteRequest(vpage: UInt, asid: UInt) = {
     target.frontendRequest_i.bits.tag.vpn.poke(vpage)
-    target.frontendRequest_i.bits.tid.poke(vpage)
+    target.frontendRequest_i.bits.thid.poke(vpage)
     target.frontendRequest_i.bits.tag.asid.poke(asid)
-    target.frontendRequest_i.bits.permission.poke(1.U)
+    target.frontendRequest_i.bits.perm.poke(1.U)
     target.frontendRequest_i.valid.poke(true.B)
     target.frontendRequest_i.ready.expect(true.B)
   }
@@ -127,7 +127,7 @@ import chiseltest.internal.WriteVcdAnnotation
 import firrtl.options.TargetDirAnnotation
 
 class TLBTester extends FreeSpec with ChiselScalatestTester {
-  val param = new TLBParameter(
+  val param = new PageTableParams(
     8, 4, 2, 15, 1, 32, 32
   )
 
@@ -136,8 +136,8 @@ class TLBTester extends FreeSpec with ChiselScalatestTester {
   "Normal Access" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/tlb/normal_read"), WriteVcdAnnotation)
     test(new DUTTLB(
-      () => new BRAMTLB(param, () => new PseudoTreeLRUCore(param.associativity)), ""
-    )).withAnnotations(anno){ dut =>
+      () => new BRAMTLB(param, () => new PseudoTreeLRUCore(param.tlbAssociativity)), ""
+      )).withAnnotations(anno){ dut =>
       dut.setReadRequest(0.U, 0.U)
       dut.tick()
       dut.expectReply(violation = false, hit = false, 0.U)

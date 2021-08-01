@@ -30,8 +30,8 @@ object ValidTag {
   def apply[T <: Data](genTag:    UInt, genData: Option[T]): ValidTag[T] = new ValidTag(genTag, genData)
   def apply[T <: Data](genTag:    UInt, genData: T): ValidTag[T] = new ValidTag(genTag, Some(genData))
   def apply[T <: Data](genTag:    UInt): ValidTag[T] = new ValidTag(genTag, None)
-  def apply[T <: Data](nbThreads: Int, genData: T): ValidTag[T] = ValidTag(UInt(log2Ceil(nbThreads).W), genData)
-  def apply[T <: Data](nbThreads: Int): ValidTag[T] = ValidTag(UInt(log2Ceil(nbThreads).W), None)
+  def apply[T <: Data](thidN: Int, genData: T): ValidTag[T] = ValidTag(UInt(log2Ceil(thidN).W), genData)
+  def apply[T <: Data](thidN: Int): ValidTag[T] = ValidTag(UInt(log2Ceil(thidN).W), None)
 }
 
 class DecoupledTag[T1 <: UInt, T2 <: Data](genTag: T1, genData: T2) extends DecoupledIO[T2](genData) {
@@ -72,7 +72,7 @@ object ExtraUtils {
 }
 
 /** An I/O Bundle for FlushReg (FlushRegister)
-  * @param gen The type of data of the Reg
+  * @params gen The type of data of the Reg
   */
 class FlushRegIO[T1 <: UInt, T2 <: Data](private val genTag: T1, private val gen: T2) extends Bundle {
   val enq = Flipped(DecoupledTag(genTag, gen))

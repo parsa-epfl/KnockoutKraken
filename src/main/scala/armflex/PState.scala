@@ -31,7 +31,7 @@ class PStateRegs extends Bundle {
   val PC = DATA_T
   //val SP = DATA_T // Normaly 4 levels 32 bits
   // NOTE: QEMU uses Reg[31] as SP, so this is actually not used
-  //val EL = INST_T // Normaly 4 levels 32 bits
+  //val EL = Vec(4, UInt(32.W) // Normaly 4 levels 32 bits
 
   // PSTATE
   // Condition flags
@@ -51,7 +51,7 @@ class PStateRegs extends Bundle {
 
 object PStateRegs {
   def apply(): PStateRegs = {
-    val wire = Wire(new PStateRegs())
+    val wire = Wire(new PStateRegs)
     wire.PC := DATA_X
     //wire.SP := DATA_X
     //wire.EL := DATA_X
@@ -60,29 +60,29 @@ object PStateRegs {
   }
 }
 object RFileIO {
-  class RDPort(nbThreads: Int) extends Bundle {
+  class RDPort(thidN: Int) extends Bundle {
     val port = Vec(2, new Bundle {
         val addr = Input(REG_T)
         val data = Output(DATA_T)
       }
     )
-    val tag = Input(UInt(log2Ceil(nbThreads).W))
-    override def cloneType: this.type = new RDPort(nbThreads).asInstanceOf[this.type]
+    val tag = Input(UInt(log2Ceil(thidN).W))
+    override def cloneType: this.type = new RDPort(thidN).asInstanceOf[this.type]
   }
 
-  class WRPort(nbThreads: Int) extends Bundle {
+  class WRPort(thidN: Int) extends Bundle {
     val addr = Input(REG_T)
     val data = Input(DATA_T)
     val en = Input(Bool())
-    val tag = Input(UInt(log2Ceil(nbThreads).W))
-    override def cloneType: this.type = new WRPort(nbThreads).asInstanceOf[this.type]
+    val tag = Input(UInt(log2Ceil(thidN).W))
+    override def cloneType: this.type = new WRPort(thidN).asInstanceOf[this.type]
   }
 
   def wr2BRAM(port: BRAMPort, wr: WRPort) {
     port.ADDR := wr.addr
     port.DI := wr.data
     port.EN := wr.en.asUInt
-    port.WE := Fill(port.cfg.NB_COL, wr.en.asUInt)
+    port.WE := Fill(port.params.NB_COL, wr.en.asUInt)
   }
 
   def rdBRAM(rd: RDPort, rdPort: Int, port: BRAMPort):UInt = {
@@ -94,19 +94,19 @@ object RFileIO {
   }
 }
 
-class RFileBRAM[T <: UInt](nbThreads: Int) extends MultiIOModule {
-  val rd = IO(new RFileIO.RDPort(nbThreads))
-  val wr = IO(new RFileIO.WRPort(nbThreads))
+class RFileBRAM[T <: UInt](thidN: Int) extends MultiIOModule {
+  val rd = IO(new RFileIO.RDPort(thidN))
+  val wr = IO(new RFileIO.WRPort(thidN))
 
-  private val bramConfig = new BRAMConfig(DATA_SZ/8, 8, nbThreads * REG_N, "", false, false, true, false)
-  private val rd1_mem = Module(new BRAM()(bramConfig))
-  private val rd2_mem = Module(new BRAM()(bramConfig))
+  private val bramParams = new BRAMParams(DATA_SZ/8, 8, thidN * REG_N, "", false, false, true, false)
+  private val rd1_mem = Module(new BRAM()(bramParams))
+  private val rd2_mem = Module(new BRAM()(bramParams))
   private val rd_addr = Seq(
     Cat(rd.tag, rd.port(0).addr),
     Cat(rd.tag, rd.port(1).addr)
   )
   private val wr_addr = Cat(wr.tag, wr.addr)
-  private val regfile = Mem(nbThreads * REG_N, DATA_T)
+  private val regfile = Mem(thidN * REG_N, DATA_T)
 
   rd.port(0).data := RFileIO.rdBRAM(rd, 0, rd1_mem.portA)
   rd.port(1).data := RFileIO.rdBRAM(rd, 1, rd2_mem.portA)
@@ -115,31 +115,31 @@ class RFileBRAM[T <: UInt](nbThreads: Int) extends MultiIOModule {
   RFileIO.wr2BRAM(rd2_mem.portB, wr)
 }
 
-class PStateRegsIO(val nbThreads: Int) extends Bundle {
+class PStateRegsIO(val thidN: Int) extends Bundle {
   val commit = new Bundle {
     val curr = Output(new PStateRegs)
-    val next = Input(ValidTag(nbThreads, new PStateRegs))
+    val next = Input(ValidTag(thidN, new PStateRegs))
   }
   val transplant = new Bundle {
-    val thread = Input(UInt(log2Ceil(nbThreads).W))
+    val thread = Input(UInt(log2Ceil(thidN).W))
     val pregs = Output(new PStateRegs)
   }
   val issue = new Bundle {
-    val thread = Input(UInt(log2Ceil(nbThreads).W))
+    val thread = Input(UInt(log2Ceil(thidN).W))
     val pregs = Output(new PStateRegs)
   }
 }
 
-class ArchState(nbThreads: Int, withDbg: Boolean) extends MultiIOModule {
-  val rfile_rd = IO(new RFileIO.RDPort(nbThreads))
-  val rfile_wr = IO(new RFileIO.WRPort(nbThreads))
-  val pstate = IO(new PStateRegsIO(nbThreads))
+class ArchState(thidN: Int, withDbg: Boolean) extends MultiIOModule {
+  val rfile_rd = IO(new RFileIO.RDPort(thidN))
+  val rfile_wr = IO(new RFileIO.WRPort(thidN))
+  val pstate = IO(new PStateRegsIO(thidN))
 
-  private val rfile = Module(new RFileBRAM(nbThreads))
+  private val rfile = Module(new RFileBRAM(thidN))
   rfile.rd <> rfile_rd
   rfile.wr <> rfile_wr
 
-  private val pcMem = Mem(nbThreads, DATA_T)
+  private val pcMem = Mem(thidN, DATA_T)
 
   // This could be further optimized by using 2 BRAMs instead
   private val pcMem_rd1 = pcMem(pstate.issue.thread)    // Both of these can be optimized 
@@ -153,7 +153,7 @@ class ArchState(nbThreads: Int, withDbg: Boolean) extends MultiIOModule {
     pcMem(pstate.commit.next.tag) := pstate.commit.next.bits.get.PC
   }
 
-  private val nzcvMem = Mem(nbThreads, NZCV_T)
+  private val nzcvMem = Mem(thidN, NZCV_T)
   private val nzcvMem_rd1 = nzcvMem(pstate.issue.thread)    // Both of these can be optimized
   private val nzcvMem_rd2 = nzcvMem(pstate.commit.next.tag) // by carring them in the pipeline on fetch
   private val nzcvMem_rd3 = nzcvMem(pstate.transplant.thread)
@@ -167,17 +167,17 @@ class ArchState(nbThreads: Int, withDbg: Boolean) extends MultiIOModule {
   
 
   val dbg = IO(new Bundle {
-    val vecState = if(withDbg) Some(Output(Vec(nbThreads, new FullStateBundle))) else None
+    val vecState = if(withDbg) Some(Output(Vec(thidN, new FullStateBundle))) else None
   })
   if(withDbg) {
-    val pregsVec = Wire(Vec(nbThreads, new PStateRegs))
+    val pregsVec = Wire(Vec(thidN, new PStateRegs))
     // Copy of BRAM RegFile states
-    val dbgRFile = Mem(nbThreads * REG_N, DATA_T)
+    val dbgRFile = Mem(thidN * REG_N, DATA_T)
     val wrAddr = WireInit(Cat(rfile.wr.tag,rfile.wr.addr))
     when(rfile.wr.en) {
       dbgRFile(wrAddr) := rfile.wr.data
     }
-    for(thread <- 0 until nbThreads) {
+    for(thread <- 0 until thidN) {
       for(reg <- 0 until REG_N) {
         // RegNext because BRAM has rd delay of 1
         dbg.vecState.get(thread).rfile(reg) := dbgRFile(((thread << log2Ceil(REG_N))+reg).U)

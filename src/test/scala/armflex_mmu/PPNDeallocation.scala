@@ -18,7 +18,7 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
   "Normal case" in {
     import PageDemanderDriver._
     val anno = Seq(TargetDirAnnotation("test/demander/ppn_deallocation/normal"), VerilatorBackendAnnotation, WriteVcdAnnotation)
-    test(new MMUDUT(new MMUParameter())).withAnnotations(anno){ dut=>
+    test(new MMUDUT(new MemoryHierarchyParams())).withAnnotations(anno){ dut=>
       // 1. push page.
       // dut.registerThreadTable(0, 0x10)
       dut.sendPageFaultResponse(
@@ -36,7 +36,7 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
       dut.receivePageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
       dut.pageset_packet_o.ptes(0).ppn.expect(0x10000.U)
       dut.pageset_packet_o.ptes(0).modified.expect(false.B)
-      dut.pageset_packet_o.ptes(0).permission.expect(1.U)
+      dut.pageset_packet_o.ptes(0).perm.expect(1.U)
       dut.pageset_packet_o.tags(0).asid.expect(0x10.U)
       dut.pageset_packet_o.tags(0).vpn.expect(0xABC.U)
       dut.pageset_packet_o.valids.expect(1.U)
@@ -46,8 +46,8 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
       dut.dtlb_backend_reply_o.bits.tag.vpn.expect(0xABC.U)
       dut.dtlb_backend_reply_o.bits.data.modified.expect(false.B)
       dut.dtlb_backend_reply_o.bits.data.ppn.expect(0x10000.U)
-      dut.dtlb_backend_reply_o.bits.data.permission.expect(1.U)
-      dut.dtlb_backend_reply_o.bits.tid.expect(1.U)
+      dut.dtlb_backend_reply_o.bits.data.perm.expect(1.U)
+      dut.dtlb_backend_reply_o.bits.thid.expect(1.U)
 
       // 2. evict the page.
       dut.sendQEMUMessage(
@@ -62,7 +62,7 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
       // 3. lookup PT
       dut.pageset_packet_i.ptes(0).ppn.poke(0x10000.U)
       dut.pageset_packet_i.ptes(0).modified.poke(false.B)
-      dut.pageset_packet_i.ptes(0).permission.poke(1.U)
+      dut.pageset_packet_i.ptes(0).perm.poke(1.U)
       dut.pageset_packet_i.tags(0).asid.poke(0x10.U)
       dut.pageset_packet_i.tags(0).vpn.poke(0xABC.U)
       dut.pageset_packet_i.valids.poke(1.U)

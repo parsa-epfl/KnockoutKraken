@@ -89,7 +89,7 @@ class PipelineTest(val dut: PipelineHardDriverModule, traceDrv: VerificationDriv
 }
 
 class FullPipelineTest extends FreeSpec with ChiselScalatestTester {
-  val cfgProc: ProcConfig = new ProcConfig(NB_THREADS = 2, DebugSignals = true, simVerbose = false)
+  val cfgProc: PipelineParams = new PipelineParams(thidN = 2, DebugSignals = true, simVerbose = false)
   def runExample(traceName: String, start: Int = 0, end: Int = Integer.MAX_VALUE) {
     val annos = Seq(
       VerilatorBackendAnnotation,
@@ -99,7 +99,7 @@ class FullPipelineTest extends FreeSpec with ChiselScalatestTester {
     val traceDrv = new VerificationDriver(traceName)
     "Will verify pipeline's correctness with " + traceName + " file " + start + "" in {
 
-      test(new PipelineHardDriverModule()(cfgProc))
+      test(new PipelineHardDriverModule(cfgProc))
         .withAnnotations(annos) { dut =>
           val drv = new PipelineTest(dut, traceDrv)
           drv.run(start, end)

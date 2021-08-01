@@ -9,12 +9,12 @@ import antmicro.Bus._
 class AXILInterconnector(
   addrSegment: Seq[BigInt],
   addrMask: Seq[BigInt],
-  addrWidth: Int = 32,
-  dataWidth: Int = 32
+  addrW: Int = 32,
+  dataW: Int = 32
 ) extends MultiIOModule {
   assert(addrMask.length == addrSegment.length)
-  val S_AXIL = IO(Flipped(new AXI4Lite(addrWidth, dataWidth)))
-  val M_AXIL = IO(Vec(addrMask.length, new AXI4Lite(addrWidth, dataWidth)))
+  val S_AXIL = IO(Flipped(new AXI4Lite(addrW, dataW)))
+  val M_AXIL = IO(Vec(addrMask.length, new AXI4Lite(addrW, dataW)))
   // AR
   val read_which = OHToUInt(addrSegment.zip(addrMask).map { case (addr, mask) =>
     (S_AXIL.ar.araddr & mask.U) === addr.U
@@ -90,11 +90,11 @@ class AXIInterconnector(
   addrSegment: Seq[BigInt],
   addrMask: Seq[BigInt],
   addrWidth: Int = 64,
-  dataWidth: Int = 512
+  dataW: Int = 512
 ) extends MultiIOModule {
   assert(addrMask.length == addrSegment.length)
-  val S_AXI = IO(Flipped(new AXI4(addrWidth, dataWidth)))
-  val M_AXI = IO(Vec(addrMask.length, new AXI4(addrWidth, dataWidth)))
+  val S_AXI = IO(Flipped(new AXI4(addrWidth, dataW)))
+  val M_AXI = IO(Vec(addrMask.length, new AXI4(addrWidth, dataW)))
 
   // AR
   val read_which = OHToUInt(addrSegment.zip(addrMask).map { case (addr, mask) =>

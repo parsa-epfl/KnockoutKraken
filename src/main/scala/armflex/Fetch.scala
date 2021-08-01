@@ -8,18 +8,18 @@ import armflex.util._
 import armflex.util.ExtraUtils._
 import armflex.PipeTLB._
 
-class FetchUnitPC(implicit val cfg: ProcConfig) extends MultiIOModule {
+class FetchUnitPC(thidN: Int) extends MultiIOModule {
   val ctrl = IO(new Bundle {
-    val start = Input(ValidTag(cfg.TAG_T, DATA_T))
-    val commit = Input(ValidTag(cfg.TAG_T, DATA_T))
-    val memWake = Input(Vec(2, ValidTag(cfg.TAG_T)))
+    val start = Input(ValidTag(UInt(log2Ceil(thidN).W), DATA_T))
+    val commit = Input(ValidTag(UInt(log2Ceil(thidN).W), DATA_T))
+    val memWake = Input(Vec(2, ValidTag(UInt(log2Ceil(thidN).W))))
   })
 
-  val req = IO(DecoupledTag(cfg.TAG_T, DATA_T))
+  val req = IO(DecoupledTag(UInt(log2Ceil(thidN).W), DATA_T))
 
-  val pc = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(DATA_X)))
-  val en = RegInit(VecInit(Seq.fill(cfg.NB_THREADS)(false.B)))
-  val rra = Module(new RoundRobinArbiter(cfg.NB_THREADS))
+  val pc = RegInit(VecInit(Seq.fill(thidN)(DATA_X)))
+  val en = RegInit(VecInit(Seq.fill(thidN)(false.B)))
+  val rra = Module(new RoundRobinArbiter(thidN))
 
   rra.io.ready := en.asUInt
   req.handshake(rra.io.next)
@@ -50,25 +50,26 @@ class FetchUnitPC(implicit val cfg: ProcConfig) extends MultiIOModule {
 
 // TODO: Expose event when instruciton is ditched (TLB miss/permError/etc)
 class FetchUnit(
+  params: PipelineParams,
   cacheReqQ_entries: Int = 3,
   instQueue_entries: Int = 8
-)(implicit val cfg: ProcConfig) extends MultiIOModule {
+) extends MultiIOModule {
 
   // Generate PC
-  private val pcUnit = Module(new FetchUnitPC)
+  private val pcUnit = Module(new FetchUnitPC(params.thidN))
 
   val ctrl_i = IO(pcUnit.ctrl.cloneType)
-  val instQ_o = IO(Decoupled(new Tagged(cfg.TAG_T, INST_T)))
-  val mem_io = IO(new PipeMemPortIO(DATA_SZ, cfg.pAddressWidth, cfg.NB_THREADS_W, cfg.ASID_WIDTH, cfg.BLOCK_SIZE))
+  val instQ_o = IO(Decoupled(new Tagged(params.thidT, INST_T)))
+  val mem_io = IO(new PipeMemPortIO(DATA_SZ, params.pAddrW, params.thidW, params.asidW, params.blockSize))
   val mmu_io = IO(new PipeMMUPortIO)
 
   // ------- Modules
   // Get instruction blocks
   private val maxInstsInFlight = instQueue_entries
   private val cacheReqQ = Module(new Queue(new PendingCacheReq, cacheReqQ_entries, true, false))
-  private val cacheAdaptor = Module(new PipeCache.CacheInterface(new MetaData, maxInstsInFlight, cfg.pAddressWidth, cfg.BLOCK_SIZE))
+  private val cacheAdaptor = Module(new PipeCache.CacheInterface(new MetaData, maxInstsInFlight, params.pAddrW, params.blockSize))
   // Actual instructions
-  private val instQueue = Module(new Queue(new Tagged(cfg.TAG_T, INST_T), instQueue_entries, true, false))
+  private val instQueue = Module(new Queue(new Tagged(params.thidT, INST_T), instQueue_entries, true, false))
   // Make sure receiver has enough entries left
   private val pc2cache_credits = Module(new CreditQueueController(cacheReqQ_entries))
   private val cache2insts_credits = Module(new CreditQueueController(instQueue_entries))
@@ -84,11 +85,11 @@ class FetchUnit(
   mem_io.tlb.req.bits.addr := pcUnit.req.bits
   mem_io.tlb.req.bits.thid := pcUnit.req.tag
   mem_io.tlb.req.bits.asid := DontCare // Higher in the hierarchy is the mapped ASID
-  mem_io.tlb.req.bits.perm := 2.U // instruction permission
+  mem_io.tlb.req.bits.perm := INST_FETCH.U
 
   class MetaData extends Bundle {
     val pc = Output(DATA_T)
-    val id = Output(cfg.TAG_T)
+    val id = Output(params.thidT)
   }
   private val metaDataTLB_w = Wire(new MetaData)
   metaDataTLB_w.pc := pcUnit.req.bits
@@ -130,8 +131,8 @@ class FetchUnit(
   // Get 32 bit Instruction from response block
   private val respMetaData = WireInit(cacheAdaptor.pipe_io.resp.meta)
   private val dataBlock = WireInit(cacheAdaptor.pipe_io.resp.port.bits.data)
-  private val selectBlock = WireInit(respMetaData.pc(log2Ceil(cfg.BLOCK_SIZE/8) - 1, 0) >> 2.U)
-  private val blockInsts = VecInit.tabulate(cfg.BLOCK_SIZE/INST_SZ) {
+  private val selectBlock = WireInit(respMetaData.pc(log2Ceil(params.blockSize/8) - 1, 0) >> 2.U)
+  private val blockInsts = VecInit.tabulate(params.blockSize/INST_SZ) {
     idx => dataBlock((idx + 1) * 32 - 1, idx * 32)
   }
   private val instBits = WireInit(blockInsts(selectBlock.asUInt))

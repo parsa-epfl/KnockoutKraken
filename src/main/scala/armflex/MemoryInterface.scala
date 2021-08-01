@@ -7,71 +7,71 @@ import armflex.util.{DoubleLatencyQueue}
 
 object PipeTLB {
   class PipeTLBRequest(
-    val vaddrWidth: Int,
-    val thidWidth: Int,
-    val asidWidth: Int
+    val vAddrW: Int,
+    val thidW: Int,
+    val asidW: Int
   ) extends Bundle {
-    val addr = UInt(vaddrWidth.W)
-    val thid = UInt(thidWidth.W)
-    val asid = UInt(asidWidth.W)
-    val perm = UInt(2.W)
+    val addr = UInt(vAddrW.W)
+    val thid = UInt(thidW.W)
+    val asid = UInt(asidW.W)
+    val perm = UInt(2.W) // See ProcTypes.scala
   }
 
   class PipeTLBResponse(
-    val paddrWidth: Int
+    val pAddrW: Int
   ) extends Bundle {
-    val addr = UInt(paddrWidth.W)
+    val addr = UInt(pAddrW.W)
     val hit = Bool()
     val miss = Bool()
-    val permFault = Bool()
+    val violation = Bool()
   }
 
   class PipeTLBIO(
-    val vaddrWidth: Int,
-    val paddrWidth: Int,
-    val thidWidth: Int,
-    val asidWidth: Int
+    val vAddrW: Int,
+    val pAddrW: Int,
+    val thidW: Int,
+    val asidW: Int
   ) extends Bundle {
-    val req = Decoupled(new PipeTLBRequest(vaddrWidth, thidWidth, asidWidth))
-    val resp = Flipped(Decoupled(new PipeTLBResponse(paddrWidth)))
+    val req = Decoupled(new PipeTLBRequest(vAddrW, thidW, asidW))
+    val resp = Flipped(Decoupled(new PipeTLBResponse(pAddrW)))
   }
 }
 
 object PipeCache {
   class CacheRequest(
-    val paddrWidth: Int,
-    val blockWidth: Int
+    val pAddrW: Int,
+    val blockW: Int
   ) extends Bundle {
-    val addr = UInt(paddrWidth.W)
-    val data = UInt(blockWidth.W)
-    val w_en = UInt((blockWidth/8).W)
+    val addr = UInt(pAddrW.W)
+    val data = UInt(blockW.W)
+    val w_en = UInt((blockW/8).W)
   }
 
   class CacheResponse(
-    val blockWidth: Int
+    val blockW: Int
   ) extends Bundle {
-    val data = UInt(blockWidth.W)
+    val data = UInt(blockW.W)
     val hit = Bool()
     val miss = Bool()
     val miss2hit = Bool()
   }
 
   class PipeCacheIO[MetaT <: Data](
-    val paddrWidth: Int,
+    val pAddrW: Int,
     val blockSize: Int
   ) extends Bundle {
-    val req = Decoupled(new CacheRequest(paddrWidth, blockSize))
+    val req = Decoupled(new CacheRequest(pAddrW, blockSize))
     val resp = Flipped(Decoupled(new CacheResponse(blockSize)))
   }
 
   class PipeCacheRequest[MetaT <: Data](
     gen: MetaT,
-    val paddrWidth: Int,
-    val blockWidth: Int
+    val pAddrW: Int,
+    val blockW: Int
   ) extends Bundle {
-    val port = Flipped(Decoupled(new CacheRequest(paddrWidth, blockWidth)))
+    val port = Flipped(Decoupled(new CacheRequest(pAddrW, blockW)))
     val meta = Input(gen)
-    override def cloneType: this.type = new PipeCacheRequest[MetaT](gen, paddrWidth, blockWidth).asInstanceOf[this.type]
+    override def cloneType: this.type = new PipeCacheRequest[MetaT](gen, pAddrW, blockW).asInstanceOf[this.type]
   }
 
   class PipeCacheResponse[MetaT <: Data](
@@ -85,12 +85,12 @@ object PipeCache {
 
   class PipeCacheInterfaceIO[MetaT <: Data](
     genMeta: MetaT,
-    val paddrWidth: Int,
+    val pAddrW: Int,
     val blockSize: Int
   ) extends Bundle {
-    val req = new PipeCacheRequest(genMeta.cloneType, paddrWidth, blockSize)
+    val req = new PipeCacheRequest(genMeta.cloneType, pAddrW, blockSize)
     val resp = new PipeCacheResponse(genMeta.cloneType, blockSize)
-    override def cloneType: this.type = new PipeCacheInterfaceIO[MetaT](genMeta, paddrWidth, blockSize).asInstanceOf[this.type]
+    override def cloneType: this.type = new PipeCacheInterfaceIO[MetaT](genMeta, pAddrW, blockSize).asInstanceOf[this.type]
   }
 
   /* For Cache (not TLB), this module handles miss delays by using a double Queueing system
@@ -100,11 +100,11 @@ object PipeCache {
   class CacheInterface[MetaT <: Data](
     genMeta: MetaT,
     val maxInstsInFlight: Int,
-    val paddrWidth: Int,
+    val pAddrW: Int,
     val blockSize: Int
   ) extends MultiIOModule {
-    val pipe_io = IO(new PipeCacheInterfaceIO(genMeta, paddrWidth, blockSize))
-    val cache_io = IO(new PipeCacheIO(paddrWidth, blockSize))
+    val pipe_io = IO(new PipeCacheInterfaceIO(genMeta, pAddrW, blockSize))
+    val cache_io = IO(new PipeCacheIO(pAddrW, blockSize))
     val pending = IO(Output(UInt(log2Ceil(maxInstsInFlight).W)))
 
     pipe_io.req.port <> cache_io.req
@@ -182,14 +182,14 @@ object PipeCache {
 }
 
 class PipeMemPortIO(
-  val vaddrWidth: Int,
-  val paddrWidth: Int,
-  val thidWidth: Int,
-  val asidWidth: Int,
+  val vAddrW: Int,
+  val pAddrW: Int,
+  val thidW: Int,
+  val asidW: Int,
   val blockSize: Int
 ) extends Bundle {
-  val tlb = new PipeTLB.PipeTLBIO(vaddrWidth, paddrWidth, thidWidth, asidWidth)
-  val cache = new PipeCache.PipeCacheIO(paddrWidth, blockSize)
+  val tlb = new PipeTLB.PipeTLBIO(vAddrW, pAddrW, thidW, asidW)
+  val cache = new PipeCache.PipeCacheIO(pAddrW, blockSize)
 }
 
 class PipeMMUPortIO extends Bundle {

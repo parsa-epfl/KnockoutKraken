@@ -301,20 +301,21 @@ class LDSTUnit extends Module {
 import armflex.util.ExtraUtils._
 
 class MemoryUnit(
+  params: PipelineParams,
   tlbQ_entries: Int = 2,
   cacheReqQ_entries: Int = 3,
   cacheReqQMisalignement_entries: Int = 3,
   doneInsts_entries: Int = 4
-)(implicit cfg: ProcConfig) extends MultiIOModule {
+) extends MultiIOModule {
   val pipe = IO(new Bundle {
-    val req = Flipped(Decoupled(new MInstTag(cfg.TAG_T)))
-    val resp = Decoupled(new CommitInst(cfg.NB_THREADS))
+    val req = Flipped(Decoupled(new MInstTag(params.thidT)))
+    val resp = Decoupled(new CommitInst(params.thidN))
   })
-  val mem_io = IO(new PipeMemPortIO(DATA_SZ, cfg.pAddressWidth, cfg.NB_THREADS_W, 0, cfg.BLOCK_SIZE))
+  val mem_io = IO(new PipeMemPortIO(DATA_SZ, params.pAddrW, params.thidW, 0, params.blockSize))
   val mmu_io = IO(new PipeMMUPortIO)
 
   private class PendingCacheReq extends Bundle {
-    val inst = new MInstTag(cfg.TAG_T)
+    val inst = new MInstTag(params.thidT)
     // For Pair LoadStores, to execute second address, while keeping first access information
     val blockMisaligned = Output(Bool())
     val firstIsCompleted = Output(Bool())
@@ -322,14 +323,14 @@ class MemoryUnit(
   }
 
   private val cacheInstsFlight_entries = doneInsts_entries + cacheReqQMisalignement_entries
-  private val tlbReqQ = Module(new Queue(new MInstTag(cfg.TAG_T), tlbQ_entries, true, false))
+  private val tlbReqQ = Module(new Queue(new MInstTag(params.thidT), tlbQ_entries, true, false))
   private val tlbMeta = RegEnable(tlbReqQ.io.deq.bits, tlbReqQ.io.deq.fire)
   private val cacheReq = Wire(new PendingCacheReq) // Pack TLB response to Cache
-  private val cacheAdaptor = Module(new PipeCache.CacheInterface(cacheReq.cloneType, cacheInstsFlight_entries, cfg.pAddressWidth, cfg.BLOCK_SIZE))
+  private val cacheAdaptor = Module(new PipeCache.CacheInterface(cacheReq.cloneType, cacheInstsFlight_entries, params.pAddrW, params.blockSize))
   private val cacheReqQ = Module(new Queue(new PendingCacheReq, cacheReqQ_entries, true, false))
   // This queue is here to send second transaction following a pair instruction block misaligned access
   private val cacheReqMisalignedQ = Module(new Queue(new PendingCacheReq, cacheReqQMisalignement_entries, true, false))
-  private val doneInst = Module(new Queue(new CommitInst(cfg.NB_THREADS), doneInsts_entries, true, false))
+  private val doneInst = Module(new Queue(new CommitInst(params.thidN), doneInsts_entries, true, false))
   // Makes sure receiver has enough entries left
   private val tlb2cache_credits = Module(new CreditQueueController(cacheReqQ_entries))
   private val cache2cacheMisaligned_credits = Module(new CreditQueueController(cacheReqQMisalignement_entries))
@@ -348,7 +349,7 @@ class MemoryUnit(
   private def isPairPageMisaligned(minst: MInstTag[UInt]) = minst.isPair && // Is Pair
     minst.req(0).addr(12) =/= minst.req(1).addr(12) // Page is different
 
-  private def isBlockMisaligned(addr1: UInt, addr2: UInt) = addr1(log2Ceil(cfg.BLOCK_SIZE / 8)) =/= addr2(log2Ceil(cfg.BLOCK_SIZE / 8))
+  private def isBlockMisaligned(addr1: UInt, addr2: UInt) = addr1(log2Ceil(params.blockSize / 8)) =/= addr2(log2Ceil(params.blockSize / 8))
 
   private val tlbPair_paddr1 = RegEnable(mem_io.tlb.resp.bits.addr, mem_io.tlb.resp.fire)
   private val tlbDropInst = WireInit(false.B) // Drop instruction on miss
@@ -373,7 +374,7 @@ class MemoryUnit(
                                   tlbReqQ.io.deq.bits.req(0).addr + (1.U << tlbReqQ.io.deq.bits.size),
                                   tlbReqQ.io.deq.bits.req(0).addr)
   mem_io.tlb.req.bits.thid := tlbReqQ.io.deq.bits.tag
-  mem_io.tlb.req.bits.perm := Mux(tlbReqQ.io.deq.bits.isLoad, 0.U, 1.U)
+  mem_io.tlb.req.bits.perm := Mux(tlbReqQ.io.deq.bits.isLoad, DATA_LOAD.U, DATA_STORE.U)
   mem_io.tlb.req.bits.asid := DontCare // Defined higher in the hierarchy
   cacheReq.inst := tlbMeta
   cacheReq.paddr(0) := mem_io.tlb.resp.bits.addr
@@ -383,7 +384,7 @@ class MemoryUnit(
 
   // Req TLB management -----
   // Notably Load Store Pair instructions
-  // TODO: permFault here ditches the instruction, we might want to push an exception
+  // TODO: violation here ditches the instruction, we might want to push an exception
   //       to the commit instruction queue to trigger a transplanted later
   switch(sTLB_state) {
     is(sTLB_req) {
@@ -400,10 +401,10 @@ class MemoryUnit(
       mem_io.tlb.req.valid := false.B
       tlbReqQ.io.deq.ready := false.B
 
-      // If not hit, or permission fault on first address, ditch instruction
+      // If not hit, or violation on first address, ditch instruction
       when(mem_io.tlb.resp.fire) {
         sTLB_state := sTLB_pair_req
-        when(!mem_io.tlb.resp.bits.hit || mem_io.tlb.resp.bits.permFault) {
+        when(!mem_io.tlb.resp.bits.hit || mem_io.tlb.resp.bits.violation) {
           // Ditch request, Memory Hierarchy will manage miss
           tlbReqQ.io.deq.ready := true.B
           tlbDropInst := true.B
@@ -429,8 +430,8 @@ class MemoryUnit(
       cacheReq.blockMisaligned := true.B
     }
 
-    when(!mem_io.tlb.resp.bits.hit || mem_io.tlb.resp.bits.permFault) {
-      cacheReqQ.io.enq.valid := false.B // Ditch instruction on miss/fault
+    when(!mem_io.tlb.resp.bits.hit || mem_io.tlb.resp.bits.violation) {
+      cacheReqQ.io.enq.valid := false.B // Ditch instruction on miss/violation
       tlbDropInst := true.B
     }
   }
@@ -462,12 +463,12 @@ class MemoryUnit(
 
   // Select, align and mask bytes in block
   private val selReqIdx = secondAccessPair.asUInt // Select second one in case it is the second access
-  cacheAdaptorReqW_en := maskByteEn << cacheAdaptorMInstInput.inst.req(selReqIdx).addr(log2Ceil(cfg.BLOCK_SIZE / 8), 0)
-  cacheAdaptorReqData := cacheAdaptorMInstInput.inst.req(selReqIdx).data << Cat(cacheAdaptorMInstInput.inst.req(selReqIdx).addr(log2Ceil(cfg.BLOCK_SIZE / 8), 0), 0.U(3.W))
+  cacheAdaptorReqW_en := maskByteEn << cacheAdaptorMInstInput.inst.req(selReqIdx).addr(log2Ceil(params.blockSize / 8), 0)
+  cacheAdaptorReqData := cacheAdaptorMInstInput.inst.req(selReqIdx).data << Cat(cacheAdaptorMInstInput.inst.req(selReqIdx).addr(log2Ceil(params.blockSize / 8), 0), 0.U(3.W))
   when(singleAccessPair) {
     cacheAdaptorReqData :=
-      cacheAdaptorMInstInput.inst.req(1).data << Cat(cacheAdaptorMInstInput.inst.req(1).addr(log2Ceil(cfg.BLOCK_SIZE / 8), 0), 0.U(3.W)) |
-        cacheAdaptorMInstInput.inst.req(0).data << Cat(cacheAdaptorMInstInput.inst.req(0).addr(log2Ceil(cfg.BLOCK_SIZE / 8), 0), 0.U(3.W))
+      cacheAdaptorMInstInput.inst.req(1).data << Cat(cacheAdaptorMInstInput.inst.req(1).addr(log2Ceil(params.blockSize / 8), 0), 0.U(3.W)) |
+        cacheAdaptorMInstInput.inst.req(0).data << Cat(cacheAdaptorMInstInput.inst.req(0).addr(log2Ceil(params.blockSize / 8), 0), 0.U(3.W))
   }
 
   cacheAdaptor.pipe_io.req.port.bits.data := cacheAdaptorReqData
@@ -525,7 +526,7 @@ class MemoryUnit(
   // Manage responses from the cache, if pair not done, push it to be re-executed
   private val cachePipeResp = WireInit(cacheAdaptor.pipe_io.resp)
   private val respPairIdx = cachePipeResp.meta.firstIsCompleted.asUInt
-  private val alignedDataResp: UInt = WireInit(cachePipeResp.port.bits.data >> Cat(cachePipeResp.meta.inst.req(respPairIdx).addr(log2Ceil(cfg.BLOCK_SIZE / 8), 0), 0.U(3.W)))
+  private val alignedDataResp: UInt = WireInit(cachePipeResp.port.bits.data >> Cat(cachePipeResp.meta.inst.req(respPairIdx).addr(log2Ceil(params.blockSize / 8), 0), 0.U(3.W)))
   // If blockMisaligned, save initial load in req data
   // when(cachePipeResp.meta.inst.isLoad) { } // Not necessary, overwrite store data given already executed
   cacheAdaptor.pipe_io.resp.port.ready := true.B // Backpressure is managed by ensuring enough

@@ -1,7 +1,7 @@
 package armflex_mmu.peripheral
 
 import armflex.{PTTagPacket, PageEvictNotification, PageTableItem, PipeMMUIO, QEMUMessagesType}
-import armflex_cache.{CacheFlushRequest, TLBFrontendReplyPacket}
+import armflex_cache.{CacheFlushRequest, CacheParams, DatabankParams, TLBFrontendReplyPacket, PageTableParams}
 import armflex_mmu._
 import chisel3._
 import chisel3.util._
@@ -20,27 +20,27 @@ import chisel3.util._
  * 5. Send notification signal to the LSU so that LSU knows the flush is complete.
  * 6. Send message to QEMU that the eviction is complete
  * 
- * @param param the parameter of the MemorySystem
+ * @params params the parameter of the MemorySystem
  */ 
 class PageDeletor(
-  param: MMUParameter
+  params: MemoryHierarchyParams
 ) extends MultiIOModule {
   val sIdle :: sReqLSU :: sFlushTLB :: sNotify :: sFlushPage :: sPipe :: sWait :: sSend :: sNotifyLSU ::  Nil = Enum(9)
   val state_r = RegInit(sIdle)
 
-  val page_delete_req_i = IO(Flipped(Decoupled(new PageTableItem(param.mem.toTLBParameter))))
+  val page_delete_req_i = IO(Flipped(Decoupled(new PageTableItem(params.getPageTableParams))))
 
-  val item_r = Reg(new PageTableItem(param.mem.toTLBParameter))
+  val item_r = Reg(new PageTableItem(params.getPageTableParams))
 
   // sAck
-  val lsu_handshake_o = IO(new PipeMMUIO)
+  val lsu_handshake_o = IO(Flipped(new PipeMMUIO))
 
   // TODO: Consider the case for multiple pipelines
-  lsu_handshake_o.inst.flushPermReq.valid := state_r === sReqLSU && item_r.entry.permission === 2.U
-  lsu_handshake_o.data.flushPermReq.valid := state_r === sReqLSU && item_r.entry.permission =/= 2.U
+  lsu_handshake_o.inst.flushPermReq.valid := state_r === sReqLSU && item_r.entry.perm === 2.U
+  lsu_handshake_o.data.flushPermReq.valid := state_r === sReqLSU && item_r.entry.perm =/= 2.U
 
   class tlb_flush_request_t extends Bundle {
-    val req = new PTTagPacket(param.mem.toTLBParameter)
+    val req = new PTTagPacket(params.getPageTableParams)
     val which = UInt(1.W)
   }
 
@@ -49,9 +49,9 @@ class PageDeletor(
   // TODO: Let tlb_flush_request_o.bits.req and item_r.tag has the same type.
   tlb_flush_request_o.bits.req.asid := item_r.tag.asid
   tlb_flush_request_o.bits.req.vpn := item_r.tag.vpn
-  tlb_flush_request_o.bits.which := Mux(item_r.entry.permission === 2.U, 0.U, 1.U) // TODO: Support more than one TLB.
+  tlb_flush_request_o.bits.which := Mux(item_r.entry.perm === 2.U, 0.U, 1.U) // TODO: Support more than one TLB.
   tlb_flush_request_o.valid := state_r === sFlushTLB
-  val tlb_frontend_reply_i = IO(Flipped(Valid(new TLBFrontendReplyPacket(param.mem.toTLBParameter))))
+  val tlb_frontend_reply_i = IO(Flipped(Valid(new TLBFrontendReplyPacket(params.getPageTableParams))))
 
   // update the modified bit
   when(page_delete_req_i.fire()){
@@ -69,19 +69,19 @@ class PageDeletor(
   // Port to send a starting message.
   val start_message_o = IO(Decoupled(new PageEvictNotification(
     QEMUMessagesType.sEvictNotify,
-    param.mem.toTLBParameter
-  )))
+    params.getPageTableParams
+    )))
   start_message_o.bits.item := item_r
   start_message_o.valid := state_r === sNotify
 
   // sFlush
   // Ports for flushing cache
-  val icache_flush_request_o = IO(Decoupled(new CacheFlushRequest(param.mem.toCacheParameter)))
-  val dcache_flush_request_o = IO(Decoupled(new CacheFlushRequest(param.mem.toCacheParameter)))
+  val icache_flush_request_o = IO(Decoupled(new CacheFlushRequest(params.getCacheParams)))
+  val dcache_flush_request_o = IO(Decoupled(new CacheFlushRequest(params.getCacheParams)))
 
   // Counter to monitor the flush process
   val flush_cnt_r = RegInit(0.U(6.W))
-  val flush_which = Mux(item_r.entry.permission =/= 2.U, true.B, false.B) // true: D Cache, false: I Cache
+  val flush_which = Mux(item_r.entry.perm =/= 2.U, true.B, false.B) // true: D Cache, false: I Cache
   val flush_fired = Mux(flush_which, dcache_flush_request_o.fire(), icache_flush_request_o.fire())
   when(page_delete_req_i.fire()){
     flush_cnt_r := 0.U
@@ -112,12 +112,12 @@ class PageDeletor(
   // Eviction done? (You have to wait for like two / three cycles to get the correct result.)
   val icache_wb_queue_empty_i = IO(Input(Bool()))
   val stall_icache_vo = IO(Output(Bool()))
-  stall_icache_vo := state_r === sWait && item_r.entry.permission === 2.U || state_r === sPipe
+  stall_icache_vo := state_r === sWait && item_r.entry.perm === 2.U || state_r === sPipe
   val dcache_wb_queue_empty_i = IO(Input(Bool()))
   val stall_dcache_vo = IO(Output(Bool()))
-  stall_dcache_vo := state_r === sWait && item_r.entry.permission =/= 2.U || state_r === sPipe
+  stall_dcache_vo := state_r === sWait && item_r.entry.perm =/= 2.U || state_r === sPipe
 
-  val queue_empty = Mux(item_r.entry.permission =/= 2.U, dcache_wb_queue_empty_i, icache_wb_queue_empty_i)
+  val queue_empty = Mux(item_r.entry.perm =/= 2.U, dcache_wb_queue_empty_i, icache_wb_queue_empty_i)
 
   // sMove
 
@@ -125,14 +125,14 @@ class PageDeletor(
   // Port to send message to QEMU
   val done_message_o = IO(Decoupled(new PageEvictNotification(
     QEMUMessagesType.sEvictDone,
-    param.mem.toTLBParameter
-  )))
+    params.getPageTableParams
+    )))
   done_message_o.bits.item := item_r
   done_message_o.valid := state_r === sSend
 
   // sNotifyLSU
-  lsu_handshake_o.inst.flushCompled.valid := state_r === sNotifyLSU && item_r.entry.permission === 2.U
-  lsu_handshake_o.data.flushCompled.valid := state_r === sNotifyLSU && item_r.entry.permission =/= 2.U
+  lsu_handshake_o.inst.flushCompled.valid := state_r === sNotifyLSU && item_r.entry.perm === 2.U
+  lsu_handshake_o.data.flushCompled.valid := state_r === sNotifyLSU && item_r.entry.perm =/= 2.U
 
   // Update logic of the state machine
   switch(state_r){
@@ -142,10 +142,10 @@ class PageDeletor(
     is(sReqLSU){
       state_r := Mux(
         Mux(
-          item_r.entry.permission === 2.U,
+          item_r.entry.perm === 2.U,
           lsu_handshake_o.inst.flushPermReq.fire(),
           lsu_handshake_o.data.flushPermReq.fire()
-        ),
+          ),
         sFlushTLB,
         sReqLSU
       )
@@ -179,10 +179,10 @@ class PageDeletor(
     is(sNotifyLSU){
       state_r := Mux(
         Mux(
-          item_r.entry.permission === 2.U,
+          item_r.entry.perm === 2.U,
           lsu_handshake_o.inst.flushCompled.fire(),
           lsu_handshake_o.data.flushCompled.fire()
-        ),
+          ),
         sIdle,
         sNotifyLSU
       )
@@ -198,5 +198,5 @@ class PageDeletor(
 
 object PageDeletorVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
-  println(c.emitVerilog(new PageDeletor(new MMUParameter())))
+  println(c.emitVerilog(new PageDeletor(new MemoryHierarchyParams)))
 }

@@ -5,23 +5,25 @@ import chisel3._
 import java.nio.ByteBuffer
 
 object SoftwareStructs {
-  //import scala.language.implicitConversions
+  /* Implicit conversions for bigints
+  import scala.language.implicitConversions
 
-  //implicit def uint2bigint(bits: UInt): BigInt = { bits.litValue }
-  //implicit def bool2bigint(bits: Bool): BigInt = { bits.litValue }
-  //implicit def bool2boolean(bits: Bool): Boolean = {bits.litToBoolean }
+  implicit def uint2bigint(bits: UInt): BigInt = { bits.litValue }
+  implicit def bool2bigint(bits: Bool): BigInt = { bits.litValue }
+  implicit def bool2boolean(bits: Bool): Boolean = { bits.litToBoolean }
 
-  //implicit def bigint2short(bigint: BigInt): Short = { bigint.toShort }
-  //implicit def bigint2int(bigint: BigInt):   Int   = { bigint.toInt }
-  //implicit def bigint2long(bigint: BigInt):  Long  = { bigint.toLong }
+  implicit def bigint2short(bigint: BigInt): Short = { bigint.toShort }
+  implicit def bigint2int(bigint: BigInt):   Int   = { bigint.toInt }
+  implicit def bigint2long(bigint: BigInt):  Long  = { bigint.toLong }
 
-  //implicit def uint2short(bits: UInt): Short = { bigint2short(uint2bigint(bits)) }
-  //implicit def uint2int(bits: UInt):   Int   = { bigint2int(uint2bigint(bits)) }
-  //implicit def uint2long(bits: UInt):  Long  = { bigint2long(uint2bigint(bits)) }
+  implicit def uint2short(bits: UInt): Short = { bigint2short(uint2bigint(bits)) }
+  implicit def uint2int(bits: UInt):   Int   = { bigint2int(uint2bigint(bits)) }
+  implicit def uint2long(bits: UInt):  Long  = { bigint2long(uint2bigint(bits)) }
 
-  //implicit def bool2short(bits: Bool): Short = { bigint2short(bool2bigint(bits)) }
-  //implicit def bool2int(bits: Bool):   Int   = { bigint2int(bool2bigint(bits)) }
-  //implicit def bool2long(bits: Bool):  Long  = { bigint2long(bool2bigint(bits)) }
+  implicit def bool2short(bits: Bool): Short = { bigint2short(bool2bigint(bits)) }
+  implicit def bool2int(bits: Bool):   Int   = { bigint2int(bool2bigint(bits)) }
+  implicit def bool2long(bits: Bool):  Long  = { bigint2long(bool2bigint(bits)) }
+  */
 
   def asU(unsigned: Long): BigInt =
     BigInt(0.toByte +: ByteBuffer.allocate(8).putLong(unsigned).array())

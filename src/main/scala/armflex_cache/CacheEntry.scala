@@ -6,7 +6,7 @@ import chisel3.util._
 /**
  * Data bank entry for a simple cache.
  */ 
-class CacheEntry(param: DatabankParameter) extends Bundle {
+class CacheEntry(param: DatabankParams) extends Bundle {
   val tag = UInt(param.tagWidth().W)
   val data = UInt(param.blockBit.W)
   val v = Bool() // valid bit
@@ -24,7 +24,7 @@ class CacheEntry(param: DatabankParameter) extends Bundle {
   }
 
   /**
-   * @brief @return a new entry with its data updated by @param data and the @param mask . 
+   * @brief @return a new entry with its data updated by @params data and the @params mask .
    * Expected to be called when writing.
    */ 
   def write(data: UInt, mask: UInt, refill: Bool, valid: Bool = true.B): CacheEntry = {
@@ -41,7 +41,7 @@ class CacheEntry(param: DatabankParameter) extends Bundle {
     for(i <- 0 until param.blockBit){
       newdata(i) := Mux(mask(i), data(i), this.data(i))
     }
-    res.data := newdata.asUInt()
+    res.data := newdata.asUInt
     res
   }
 
@@ -62,7 +62,7 @@ class CacheEntry(param: DatabankParameter) extends Bundle {
   def valid(isWrite: Bool): Bool = true.B
 
   /**
-   * @return the actual address according to the @param setNumber
+   * @return the actual address according to the @params tlbSetNumber
    */ 
   def address(setNumber: UInt): UInt = {
     Cat(this.tag, setNumber)
@@ -72,7 +72,7 @@ class CacheEntry(param: DatabankParameter) extends Bundle {
    * @return the thread id for this entry.
    */
   def asid(): UInt = {
-    0.U(param.asidWidth.W)
+    0.U(param.asidW.W)
   }
 
   def getTagFromAddress(address: UInt, tagWidth: Int): UInt = {

@@ -14,7 +14,7 @@ class TestPseudoTreeLRU extends FreeSpec with ChiselScalatestTester{
   // Plan: Just print the iteration value and see the maximum period.
   "Trace Correction" in {
     val wayNumber = 16
-    val cacheParam = new CacheParameter(
+    val cacheParam = new CacheParams(
       36, 1, wayNumber
     )
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/Pseudo"), WriteVcdAnnotation)

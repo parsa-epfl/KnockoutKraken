@@ -155,18 +155,18 @@ class CommitTraceBundle(val blockSize: Int) extends Bundle {
 }
 
 import antmicro.CSR.ClearReg
-class PipelineHardDriverModule(implicit val cfg: ProcConfig) extends MultiIOModule {
-  val pipeline = Module(new PipelineWithTransplant)
+class PipelineHardDriverModule(params: PipelineParams) extends MultiIOModule {
+  val pipeline = Module(new PipelineWithTransplant(params))
   val hostIO = IO(new Bundle {
     val port = pipeline.hostIO.port.cloneType
-    val done = Input(ValidTag(cfg.NB_THREADS))
-    val transOut = Output(ValidTag(cfg.NB_THREADS))
+    val done = Input(ValidTag(params.thidN))
+    val transOut = Output(ValidTag(params.thidN))
   })
-  val traceIn = IO(Flipped(Decoupled(new CommitTraceBundle(cfg.BLOCK_SIZE))))
-  val traceExpect = IO(Flipped(Decoupled(new CommitTraceBundle(cfg.BLOCK_SIZE))))
+  val traceIn = IO(Flipped(Decoupled(new CommitTraceBundle(params.blockSize))))
+  val traceExpect = IO(Flipped(Decoupled(new CommitTraceBundle(params.blockSize))))
   val done = IO(Output(Bool()))
   val transplantOut = IO(new Bundle {
-    val expected = Valid(new CommitTraceBundle(cfg.BLOCK_SIZE))
+    val expected = Valid(new CommitTraceBundle(params.blockSize))
     val actual = Output(new FullStateBundle)
     val inst = Output(INST_T)
   })
@@ -174,20 +174,20 @@ class PipelineHardDriverModule(implicit val cfg: ProcConfig) extends MultiIOModu
 
   /* TODO: Redo Pipeline Test with new MemoryUnit
   pipeline.hostIO.port <> hostIO.port
-  val set = Wire(Valid(cfg.TAG_T))
+  val set = Wire(Valid(params.thidT))
   set.bits := hostIO.done.tag
   set.valid := hostIO.done.valid
-  val clear = Wire(Valid(cfg.TAG_T))
+  val clear = Wire(Valid(params.thidT))
   clear.bits := pipeline.hostIO.trans2host.clear.tag
   clear.valid := pipeline.hostIO.trans2host.clear.valid
-  val pendingHost = ClearReg(set, clear, cfg.NB_THREADS)
+  val pendingHost = ClearReg(set, clear, params.thidN)
   pipeline.hostIO.host2trans.pending := pendingHost
 
   hostIO.transOut := pipeline.hostIO.trans2host.done
 
-  val fetch = Module(new Queue(new CommitTraceBundle(cfg.BLOCK_SIZE), 128, true, true))
-  val issue = Module(new Queue(new CommitTraceBundle(cfg.BLOCK_SIZE), 128, true, true))
-  val memResp = Module(new Queue(new CommitTraceBundle(cfg.BLOCK_SIZE), 128, true, true))
+  val fetch = Module(new Queue(new CommitTraceBundle(params.blockSize), 128, true, true))
+  val issue = Module(new Queue(new CommitTraceBundle(params.blockSize), 128, true, true))
+  val memResp = Module(new Queue(new CommitTraceBundle(params.blockSize), 128, true, true))
 
   fetch.io.enq <> traceIn
 
@@ -212,14 +212,14 @@ class PipelineHardDriverModule(implicit val cfg: ProcConfig) extends MultiIOModu
   val pairReqIn = RegNext(pairJustFired)
   pipeline.mem.data.req.ready := true.B
   memResp.io.deq.ready := !pairReqIn && pipeline.mem.data.req.fire
-  val singleResponse = ShiftRegister(pipeline.mem.data.req.fire, cfg.cacheLatency)
-  val pairResponse = ShiftRegister(pairReqIn, cfg.cacheLatency)
-  val memRespBits = ShiftRegister(memResp.io.deq.bits, cfg.cacheLatency)
+  val singleResponse = ShiftRegister(pipeline.mem.data.req.fire, params.cacheLatency)
+  val pairResponse = ShiftRegister(pairReqIn, params.cacheLatency)
+  val memRespBits = ShiftRegister(memResp.io.deq.bits, params.cacheLatency)
 
   pipeline.mem.data.resp.valid := singleResponse || pairResponse
   // pipeline.mem.data.resp.bits.dirty := false.B
   pipeline.mem.data.resp.bits.hit := true.B
-  pipeline.mem.data.resp.bits.thread_id := 0.U
+  pipeline.mem.data.resp.bits.thid := 0.U
   pipeline.mem.data.resp.bits.data := memRespBits.memReq(0).block
   when(pairResponse) {
     printf("PairLoadST\n")
@@ -233,26 +233,26 @@ class PipelineHardDriverModule(implicit val cfg: ProcConfig) extends MultiIOModu
   pipeline.mem.instFault.valid := false.B
   pipeline.mem.dataFault.tag := 0.U
   pipeline.mem.instFault.tag := 0.U
-  val commit = Module(new Queue(new CommitTraceBundle(cfg.BLOCK_SIZE), 128, true, true))
+  val commit = Module(new Queue(new CommitTraceBundle(params.blockSize), 128, true, true))
   commit.io.enq <> traceExpect
   // 1 Cycle after commit singnal is rised, state is fully updated
   commit.io.deq.ready := ShiftRegister(pipeline.dbg.bits.get.commit.valid, 1)
   val commitTransplant = ShiftRegister(pipeline.dbg.bits.get.commitTransplant, 1)
 
   when(issue.io.deq.fire) {
-    cfg.simLog(p"Issuing:0x${Hexadecimal(pipeline.dbg.bits.get.issue.bits.get.regs.PC)}\n")
+    params.simLog(p"Issuing:0x${Hexadecimal(pipeline.dbg.bits.get.issue.bits.get.regs.PC)}\n")
     issue.io.deq.bits.state.compareAssert(pipeline.dbg.bits.get.issue.bits.get)
-    cfg.simLog("  Success Issue\n")
+    params.simLog("  Success Issue\n")
   }
   val commitCnt = RegInit(0.U(32.W))
   when(commit.io.deq.fire) {
-    cfg.simLog(
+    params.simLog(
       p"Commit :0x${Hexadecimal(pipeline.dbg.bits.get.commit.bits.get.regs.PC)}:${Hexadecimal(pipeline.dbg.bits.get.commit.bits.get.regs.PC)}\n"
     )
     when(!commitTransplant.valid) {
       commit.io.deq.bits.state.compareAssert(pipeline.dbg.bits.get.commit.bits.get)
-      cfg.simLog("  Success Commit\n")
-      if(!cfg.simVerbose) {
+      params.simLog("  Success Commit\n")
+      if(!params.simVerbose) {
         commitCnt := commitCnt + 1.U
         printf(p"Commit Success:${Hexadecimal(pipeline.dbg.bits.get.commit.bits.get.regs.PC)}${commitCnt}\n")
       }

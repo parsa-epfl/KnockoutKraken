@@ -28,12 +28,12 @@ import chiseltest.internal.WriteVcdAnnotation
 object CacheTestUtility{
 
 class BackendMemorySimulator(
-  param: CacheParameter,
+  param: CacheParams,
   srcFile: String = ""
 ) extends MultiIOModule{
-  val mem = SyncReadMem(1 << (param.blockAddressWidth), UInt(param.blockSizeInBit.W))
+  val mem = SyncReadMem(1 << (param.blockSize), UInt(param.blockSize.W))
   val request_i = IO(Flipped(Decoupled(new MergedBackendRequestPacket(param.databankParameter))))
-  val reply_o = IO(Decoupled(UInt(param.blockSizeInBit.W)))
+  val reply_o = IO(Decoupled(UInt(param.blockSize.W)))
   if(srcFile.nonEmpty) loadMemoryFromFile(mem, srcFile)
 
   request_i.ready := true.B
@@ -49,12 +49,12 @@ class BackendMemorySimulator(
   reply_o.bits := port
 }
 
-class DelayChain(param: CacheParameter, n: Int) extends MultiIOModule{
+class DelayChain(param: CacheParams, n: Int) extends MultiIOModule{
   val cacheRequest_i = IO(Flipped(Decoupled(new MergedBackendRequestPacket(param.databankParameter))))
-  val cacheReply_o = IO(Decoupled(UInt(param.blockSizeInBit.W)))
+  val cacheReply_o = IO(Decoupled(UInt(param.blockSize.W)))
 
   val backendRequest_o = IO(Decoupled(new MergedBackendRequestPacket(param.databankParameter)))
-  val backendReply_i = IO(Flipped(Decoupled(UInt(param.blockSizeInBit.W))))
+  val backendReply_i = IO(Flipped(Decoupled(UInt(param.blockSize.W))))
 
   val requestChain = Wire(Vec(n+1, cacheRequest_i.cloneType))
   requestChain(0) <> cacheRequest_i
@@ -96,7 +96,7 @@ class DTUCache(
 
 implicit class CacheDriver(target: DTUCache){
 
-  def blockOffsetWidth = log2Ceil(target.u_cache.param.blockSizeInBit / 8)
+  def blockOffsetWidth = log2Ceil(target.u_cache.param.blockSize / 8)
 
   def setReadRequest(blockAddr: Int):Unit = {
     target.frontendRequest_i.bits.addr.poke((blockAddr << blockOffsetWidth).U)
@@ -105,7 +105,7 @@ implicit class CacheDriver(target: DTUCache){
   }
 
   def setWriteRequest(blockAddr: Int, data: BigInt, wEn: BigInt): Unit = {
-    //assert(target.u_cache.param.writable, "Can not set a write request to a read-only cache")
+    //assert(target.u_cache.params.writable, "Can not set a write request to a read-only cache")
     target.frontendRequest_i.bits.addr.poke((blockAddr << blockOffsetWidth).U)
     target.frontendRequest_i.bits.data.poke(data.U)
     target.frontendRequest_i.bits.w_en.poke(wEn.U)
@@ -161,7 +161,7 @@ import TestOptionBuilder._
  */ 
 
 class CacheTester extends FreeSpec with ChiselScalatestTester {
-  val param = CacheParameter(
+  val param = CacheParams(
     12, 64, 2, 32, 32
   )
 
@@ -362,7 +362,7 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
 }
 
 class CacheLRUTester extends FreeSpec with ChiselScalatestTester {
-  val param = CacheParameter(
+  val param = CacheParams(
     12, 64, 2, 32, 32
   )
   import CacheTestUtility._
@@ -375,7 +375,7 @@ class CacheLRUTester extends FreeSpec with ChiselScalatestTester {
       () => BaseCache.generateCache(param, () => new PseudoTreeLRUCore(param.associativity)),
       "src/test/content/memory.txt"
     )).withAnnotations(anno){ dut =>
-      // set number is 64, associativity is 2.
+      // set number is 64, tlbAssociativity is 2.
       dut.setReadRequest(0)
       dut.tick()
       dut.clearRequest()

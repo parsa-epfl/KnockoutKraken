@@ -8,7 +8,7 @@ import chisel3.util._
 
 /**
  *  the interface of LRU updating logic. Pure combinational logic.
- *  @param wayNumber how many ways this LRU could handle.
+ *  @params wayNumber how many ways this LRU could handle.
  */ 
 sealed abstract class LRUCore(wayNumber: Int) extends Module{
   def encodingWidth(): Int  // how many bits are needed to store the encoding bits.
@@ -28,7 +28,7 @@ sealed abstract class LRUCore(wayNumber: Int) extends Module{
 /**
  *  Pseudo tree LRU updating logic. Implemented in recursive function instead of module.
  * 
- *  Tree LRU is appreciated when the associativity greater than 4, which can be normal in L1 TLB.
+ *  Tree LRU is appreciated when the tlbAssociativity greater than 4, which can be normal in L1 TLB.
  */ 
 class PseudoTreeLRUCore(wayNumber: Int) extends LRUCore(wayNumber){
   //assert(isPow2(wayNumber))
@@ -63,7 +63,7 @@ class PseudoTreeLRUCore(wayNumber: Int) extends LRUCore(wayNumber){
 
   updateEncoding(0, wayNumber)
 
-  io.encoding_o := updatedEncoding.asUInt()
+  io.encoding_o := updatedEncoding.asUInt
 }
 
 /**
@@ -105,7 +105,7 @@ class MatrixLRUCore(wayNumber: Int) extends LRUCore(wayNumber){
   
   // 3. output & flatten
   val allZeroRow = VecInit(matrix.map({x =>
-    x.asUInt() === 0.U
+    x.asUInt === 0.U
   }))
   io.lru_o := PriorityEncoder(allZeroRow)
 
@@ -121,5 +121,5 @@ class MatrixLRUCore(wayNumber: Int) extends LRUCore(wayNumber){
     }
   }
 
-  io.encoding_o := flattenedMatrix.asUInt()
+  io.encoding_o := flattenedMatrix.asUInt
 }
