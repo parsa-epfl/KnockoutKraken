@@ -12,17 +12,12 @@ import armflex.util.BRAM
 import armflex.util.FlushQueue
 
 case class DatabankParams(
-  // Cache properties
   setNumber: Int = 1024,
   associativity: Int = 4,
-  blockBit: Int = 512,
-  // Address
+  blockSize: Int = 512,
   addrW: Int = 55, // address to access the whole block instead of one byte
-  // Address space ID
-  asidW: Int = 15,
-  // thread Number
-  thidN: Int = 32,
-
+  asidW: Int = 15, // Address space ID
+  thidN: Int = 32, // thread count
   // the data bank is implemented in register?
   implementedWithRegister: Boolean = false
 ){
@@ -73,7 +68,7 @@ class DataBankFrontendRequestPacket(
   def this(params: DatabankParams) = this(
     params.addrW,
     params.asidW,
-    params.blockBit,
+    params.blockSize,
     log2Ceil(params.thidN)
     )
 
@@ -99,7 +94,7 @@ class DataBankFrontendReplyPacket(
 
   def this(param: DatabankParams) = this(
     param.asidW,
-    param.blockBit,
+    param.blockSize,
     log2Ceil(param.thidN)
     )
 }
@@ -115,8 +110,8 @@ class MissRequestPacket(params: DatabankParams) extends Bundle{
   val perm = UInt(2.W)
 
   // write request is also included here.
-  val wData = UInt(params.blockBit.W)
-  val wMask = UInt(params.blockBit.W)
+  val wData = UInt(params.blockSize.W)
+  val wMask = UInt(params.blockSize.W)
 
   val not_sync_with_data_v = Bool()
 
@@ -128,7 +123,7 @@ class MissRequestPacket(params: DatabankParams) extends Bundle{
  */
 class WriteBackRequestPacket(params: DatabankParams) extends Bundle{
   val addr = UInt(params.addrW.W)
-  val data = UInt(params.blockBit.W)
+  val data = UInt(params.blockSize.W)
 
   val flush_v = Bool() // True if this eviction is caused by flush
 
@@ -223,7 +218,7 @@ class DataBankManager(
   class writing_context_t extends Bundle{
     val addr = UInt(params.addrW.W)
     val asid = UInt(params.asidW.W)
-    val dataBlock = UInt(params.blockBit.W)
+    val dataBlock = UInt(params.blockSize.W)
     val flush_v = Bool() // The operation in the second stage (write) is a flush.
     def toEntry(): CacheEntry = {
       val res = Wire(new CacheEntry(params))
@@ -268,7 +263,7 @@ class DataBankManager(
   else
     frontend_write_to_bank.bits.addr := 0.U
 
-  val full_writing_request = Wire(Decoupled(new BankWriteRequestPacket(params))) // A full writing, which means a complete override to the block, so no original data needed. (refill should follow this path)
+  val full_writing_request = Wire(Decoupled(new BankWriteRequestPacket(params))) // A full writing, sel means a complete override to the block, so no original data needed. (refill should follow this path)
   if(params.setWidth() > 1)
     full_writing_request.bits.addr := s1_frontend_request_r.bits.addr(params.setWidth()-1, 0)
   else

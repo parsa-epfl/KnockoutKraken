@@ -1,7 +1,7 @@
 package armflex_mmu.peripheral
 
 import armflex.{PTTagPacket, PageEvictNotification, PageTableItem, PipeMMUIO, QEMUMessagesType}
-import armflex_cache.{CacheFlushRequest, CacheParams, DatabankParams, TLBFrontendReplyPacket, PageTableParams}
+import armflex_cache.{CacheFlushRequest, CacheParams, DatabankParams, TLBPipelineResp, PageTableParams}
 import armflex_mmu._
 import chisel3._
 import chisel3.util._
@@ -41,7 +41,7 @@ class PageDeletor(
 
   class tlb_flush_request_t extends Bundle {
     val req = new PTTagPacket(params.getPageTableParams)
-    val which = UInt(1.W)
+    val sel = UInt(1.W)
   }
 
   // sFlushTLB
@@ -49,9 +49,9 @@ class PageDeletor(
   // TODO: Let tlb_flush_request_o.bits.req and item_r.tag has the same type.
   tlb_flush_request_o.bits.req.asid := item_r.tag.asid
   tlb_flush_request_o.bits.req.vpn := item_r.tag.vpn
-  tlb_flush_request_o.bits.which := Mux(item_r.entry.perm === 2.U, 0.U, 1.U) // TODO: Support more than one TLB.
+  tlb_flush_request_o.bits.sel := Mux(item_r.entry.perm === 2.U, 0.U, 1.U) // TODO: Support more than one TLB.
   tlb_flush_request_o.valid := state_r === sFlushTLB
-  val tlb_frontend_reply_i = IO(Flipped(Valid(new TLBFrontendReplyPacket(params.getPageTableParams))))
+  val tlb_frontend_reply_i = IO(Flipped(Valid(new TLBPipelineResp(params.getPageTableParams))))
 
   // update the modified bit
   when(page_delete_req_i.fire()){

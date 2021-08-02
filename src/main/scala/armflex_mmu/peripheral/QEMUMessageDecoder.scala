@@ -32,7 +32,7 @@ class QEMUMessageDecoder(
   qemu_evict_page_req_q.valid := raw_message.message_type === QEMUMessagesType.sPageEvict && message_i.valid
   qemu_evict_page_req_o <> Queue(qemu_evict_page_req_q, fifoDepth)
 
-  // FIXME: RAW Hazard here. If qemu_miss (which resolves page fault) and qemu_evict_page (which evicts a page) pointing to the same page, we're done. The minimal latency between these two operations should be around 100 cycles!
+  // FIXME: RAW Hazard here. If qemu_miss (sel resolves page fault) and qemu_evict_page (sel evicts a page) pointing to the same page, we're done. The minimal latency between these two operations should be around 100 cycles!
 
   // Why default true here? Unrelated messages will be dropped directly.
   message_i.ready := MuxLookup(raw_message.message_type, true.B, Seq(

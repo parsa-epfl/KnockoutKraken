@@ -47,52 +47,51 @@ class MMUDUT(
   // M_AXI_PTSet <> u_page_demander.M_AXI_PTSet
 
   // Load Store Unit: Page deleting acknowledgement
-  u_page_demander.lsu_handshake_o.inst.flushPermReq.ready := true.B
-  u_page_demander.lsu_handshake_o.data.flushPermReq.ready := true.B
-  u_page_demander.lsu_handshake_o.inst.flushCompled.ready := true.B
-  u_page_demander.lsu_handshake_o.data.flushCompled.ready := true.B
-
+  u_page_demander.pipeline_io.data.flushPermReq.ready := true.B
+  u_page_demander.pipeline_io.inst.flushPermReq.ready := true.B
+  u_page_demander.pipeline_io.data.flushCompled.ready := true.B
+  u_page_demander.pipeline_io.inst.flushCompled.ready := true.B
 
   // TLB backend replies
-  val itlb_backend_reply_o = IO(u_page_demander.itlb_backend_reply_o.cloneType)
-  itlb_backend_reply_o <> u_page_demander.itlb_backend_reply_o
-  val dtlb_backend_reply_o = IO(u_page_demander.dtlb_backend_reply_o.cloneType)
-  dtlb_backend_reply_o <> u_page_demander.dtlb_backend_reply_o
+  val itlb_backend_reply_o = IO(u_page_demander.tlb_io.inst.refillResp.cloneType)
+  val dtlb_backend_reply_o = IO(u_page_demander.tlb_io.data.refillResp.cloneType)
+  itlb_backend_reply_o <> u_page_demander.tlb_io.inst.refillResp
+  dtlb_backend_reply_o <> u_page_demander.tlb_io.data.refillResp
 
   // TLB Flush requests
-  val itlb_flush_request_o = IO(u_page_demander.itlb_flush_request_o.cloneType)
-  itlb_flush_request_o <> u_page_demander.itlb_flush_request_o
-  val dtlb_flush_request_o = IO(u_page_demander.dtlb_flush_request_o.cloneType)
-  dtlb_flush_request_o <> u_page_demander.dtlb_flush_request_o
+  val itlb_flush_request_o = IO(u_page_demander.tlb_io.inst.flushReq.cloneType)
+  val dtlb_flush_request_o = IO(u_page_demander.tlb_io.data.flushReq.cloneType)
+  itlb_flush_request_o <> u_page_demander.tlb_io.inst.flushReq
+  dtlb_flush_request_o <> u_page_demander.tlb_io.data.flushReq
 
   // TLB Flush replies
-  val itlb_flush_reply_i = IO(Input(u_page_demander.itlb_flush_reply_i.cloneType))
-  itlb_flush_reply_i <> u_page_demander.itlb_flush_reply_i
-  val dtlb_flush_reply_i = IO(Input(u_page_demander.dtlb_flush_reply_i.cloneType))
-  dtlb_flush_reply_i <> u_page_demander.dtlb_flush_reply_i
+  val itlb_flush_reply_i = IO(Input(u_page_demander.tlb_io.inst.flushResp.cloneType))
+  val dtlb_flush_reply_i = IO(Input(u_page_demander.tlb_io.data.flushResp.cloneType))
+  itlb_flush_reply_i <> u_page_demander.tlb_io.inst.flushResp
+  dtlb_flush_reply_i <> u_page_demander.tlb_io.data.flushResp
 
   // D Cache flush request
-  val dcache_flush_request_o = IO(u_page_demander.dcache_flush_request_o.cloneType)
-  dcache_flush_request_o <> u_page_demander.dcache_flush_request_o
+  val dcache_flush_request_o = IO(u_page_demander.cache_io.data.flushReq.cloneType)
+  dcache_flush_request_o <> u_page_demander.cache_io.data.flushReq
   // D Cache flush complete
-  val dcache_wb_queue_empty_i = IO(Input(u_page_demander.dcache_wb_queue_empty_i.cloneType))
-  dcache_wb_queue_empty_i <> u_page_demander.dcache_wb_queue_empty_i
+  val dcache_wb_queue_empty_i = IO(Input(u_page_demander.cacheAxiCtrl_io.dcacheWbEmpty.cloneType))
+  dcache_wb_queue_empty_i <> u_page_demander.cacheAxiCtrl_io.dcacheWbEmpty
   // I Cache flush request
-  val icache_flush_request_o = IO(u_page_demander.icache_flush_request_o.cloneType)
-  icache_flush_request_o <> u_page_demander.icache_flush_request_o
+  val icache_flush_request_o = IO(u_page_demander.cache_io.inst.flushReq.cloneType)
+  icache_flush_request_o <> u_page_demander.cache_io.inst.flushReq
   // I Cache flush complete
-  val icache_wb_queue_empty_i = IO(Input(u_page_demander.icache_wb_queue_empty_i.cloneType))
-  icache_wb_queue_empty_i <> u_page_demander.icache_wb_queue_empty_i
+  val icache_wb_queue_empty_i = IO(Input(u_page_demander.cacheAxiCtrl_io.icacheWbEmpty.cloneType))
+  icache_wb_queue_empty_i <> u_page_demander.cacheAxiCtrl_io.icacheWbEmpty
   // AXI slave of the page buffer
-  val S_AXI = IO(Flipped(u_page_demander.S_AXI.cloneType))
-  S_AXI <> u_page_demander.S_AXI
+  val S_AXI = IO(Flipped(u_page_demander.axiShell_io.S_AXI.cloneType))
+  S_AXI <> u_page_demander.axiShell_io.S_AXI
   // AXI Master for pushing message to QEMU
   // I TLB backend request
-  val itlb_backend_request_i = IO(Flipped(u_page_demander.itlb_backend_request_i.cloneType))
-  itlb_backend_request_i <> u_page_demander.itlb_backend_request_i
+  val itlb_backend_request_i = IO(Flipped(u_page_demander.tlb_io.inst.missReq.cloneType))
+  itlb_backend_request_i <> u_page_demander.tlb_io.inst.missReq
   // D TLB backend request
-  val dtlb_backend_request_i = IO(Flipped(u_page_demander.dtlb_backend_request_i.cloneType))
-  dtlb_backend_request_i <> u_page_demander.dtlb_backend_request_i
+  val dtlb_backend_request_i = IO(Flipped(u_page_demander.tlb_io.data.missReq.cloneType))
+  dtlb_backend_request_i <> u_page_demander.tlb_io.data.missReq
   // AXI Slave for receiving message to QEMU
   // val S_AXIL_QEMU_MQ = IO(Flipped(u_page_demander.S_AXIL_QEMU_MQ.cloneType))
   // S_AXIL_QEMU_MQ <> u_page_demander.S_AXIL_QEMU_MQ
@@ -108,7 +107,7 @@ class MMUDUT(
     4
     ))
 
-  for(i <- 0 until 4) u_axi_read.S_IF(i) <> u_page_demander.M_DMA_R(i)
+  for(i <- 0 until 4) u_axi_read.S_IF(i) <> u_page_demander.axiShell_io.M_DMA_R(i)
 
   M_AXI.ar <> u_axi_read.M_AXI.ar
   M_AXI.r <> u_axi_read.M_AXI.r
@@ -122,7 +121,7 @@ class MMUDUT(
     3
     ))
 
-  for(i <- 0 until 3) u_axi_write.S_IF(i) <> u_page_demander.M_DMA_W(i)
+  for(i <- 0 until 3) u_axi_write.S_IF(i) <> u_page_demander.axiShell_io.M_DMA_W(i)
 
   M_AXI.aw <> u_axi_write.M_AXI.aw
   M_AXI.w <> u_axi_write.M_AXI.w
@@ -139,7 +138,7 @@ class MMUDUT(
   S_AXIL <> u_axil_inter.S_AXIL
 
   // u_axil_inter.M_AXIL(0) <> u_page_demander.S_AXIL_TT
-  u_axil_inter.M_AXIL(0) <> u_page_demander.S_AXIL_QEMU_MQ
+  u_axil_inter.M_AXIL(0) <> u_page_demander.axiShell_io.S_AXIL_QEMU_MQ
 
   // Helper 1: the page set converter
   val u_helper_page_set_converter = Module(new PageDemanderTestHelper.PageSetConverter(params.getPageTableParams))

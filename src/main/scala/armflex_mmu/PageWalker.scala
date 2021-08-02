@@ -45,7 +45,7 @@ class PageWalker(
   // u_buffer.lru_element_i.bits := DontCare
 
   // Reply to TLB
-  val tlb_backend_reply_o = IO(Vec(tlbNumber, Decoupled(new TLBBackendReplyPacket(params.getPageTableParams))))
+  val tlb_backend_reply_o = IO(Vec(tlbNumber, Decoupled(new TLBMMURespPacket(params.getPageTableParams))))
 
   // Message sent to QEMU
   val page_fault_req_o = IO(Decoupled(new PageFaultNotification(params.getPageTableParams)))

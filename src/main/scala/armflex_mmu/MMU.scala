@@ -1,8 +1,9 @@
 package armflex_mmu
 
-import armflex.PTTagPacket
+import antmicro.Bus.{AXI4, AXI4Lite}
+import armflex.{PipeMMUIO}
 import armflex.util.{AXIControlledMessageQueue, AXIReadMasterIF, AXIWriteMasterIF}
-import armflex_cache.{CacheParams, DatabankParams, TLBBackendReplyPacket, PageTableParams}
+import armflex_cache.{CacheMMUIO, CacheParams, PageTableParams, TLB2MMUIO, TLBMMURespPacket}
 import armflex_mmu.peripheral._
 import chisel3._
 import chisel3.util._
@@ -64,6 +65,19 @@ case class MemoryHierarchyParams(
   }
 }
 
+class MMU2ShellIO(params: MemoryHierarchyParams) extends Bundle {
+  // Amazon Shell IO
+  // AXI DMA wide access ports
+  val M_DMA_R = Vec(4, new AXIReadMasterIF(params.dramAddrW, params.dramdataW))
+  val M_DMA_W = Vec(3, new AXIWriteMasterIF(params.dramAddrW, params.dramdataW))
+  // AXIL DMA host access ports
+  // Minimal AXI address space is 128 bytes -> log2Ceil 128 bits for addressing
+  val S_AXI = Flipped(new AXI4(log2Ceil(128), 512)) // F1 AWS exposed 512-bit AXI bus
+  val S_AXIL_QEMU_MQ = Flipped(new AXI4Lite(32, 32)) // F1 AWS exposed 32-bit AXIL bus to host
+  // Host interrupt
+  val msgPendingInt = Output(Bool())
+}
+
 /**
  * Top module of MMU.
  *
@@ -73,175 +87,173 @@ case class MemoryHierarchyParams(
  */
 class MMU(
   params: MemoryHierarchyParams,
-  messageFIFODepth: Int = 2,
+  messageFIFODepth: Int = 2
 ) extends MultiIOModule {
-  // AXI DMA Access ports
-  val M_DMA_R = IO(Vec(4, new AXIReadMasterIF(
-    params.dramAddrW,
-    params.dramdataW
-    )))
 
-  val M_DMA_W = IO(Vec(3, new AXIWriteMasterIF(
-    params.dramAddrW,
-    params.dramdataW
-    )))
-
+  // ---- Modules -----
   // FIXME: Add a module to interact with multiple TLBs.
-
-  // TLB Message receiver
-  val u_itlb_mconv = Module(new TLBMessageConverter(params))
-  val itlb_backend_request_i = IO(Flipped(u_itlb_mconv.tlb_backend_request_i.cloneType))
-  u_itlb_mconv.tlb_backend_request_i <> itlb_backend_request_i
-
-  val u_dtlb_mconv = Module(new TLBMessageConverter(params))
-  val dtlb_backend_request_i = IO(Flipped(u_dtlb_mconv.tlb_backend_request_i.cloneType))
-  u_dtlb_mconv.tlb_backend_request_i <> dtlb_backend_request_i
-
-  // QEMU Message Decoder
-  val u_qmd = Module(new QEMUMessageDecoder(params))
-  u_qmd.qemu_evict_reply_o.ready := true.B // always ignore this message
-  assert(!u_qmd.qemu_evict_reply_o.valid, "QEMU Eviction Reply should be deprecated!")
 
   // Hardware page walker
   // TODO: Page walker and TLB writer back handler should be merged into one module in order to keep the consistency.
-  val u_page_walker = Module(new PageWalker(params))
-  u_page_walker.M_DMA_R <> M_DMA_R(0)
+  private val u_page_walker = Module(new PageWalker(params))
+  // Page Evictor
+  private val u_page_deleter = Module(new PageDeletor(params))
 
-  u_page_walker.tlb_miss_req_i(0) <> u_itlb_mconv.miss_request_o
-  u_page_walker.tlb_miss_req_i(1) <> u_dtlb_mconv.miss_request_o
+  // TLB Message receiver/decoder
+  private val u_itlbMsgHandler = Module(new TLBMessageConverter(params))
+  private val u_dtlbMsgHandler = Module(new TLBMessageConverter(params))
+  private val u_tlbEntryWbHandler = Module(new TLBWritebackHandler(params, 2))
 
+  // QEMU Message receiver/decoder
+  private val u_qemuMsgDecoder = Module(new QEMUMessageDecoder(params))
+  private val u_qemuMsgEncoder = Module(new QEMUMessageEncoder(params, messageFIFODepth))
+  private val u_qemuMsgQueue = Module(new AXIControlledMessageQueue)
+  private val u_qemuMissHandler = Module(new QEMUMissReplyHandler(params))
+  private val u_qemuPageEvictHandler = Module(new QEMUPageEvictHandler(params))
+  u_qemuMsgDecoder.qemu_evict_reply_o.ready := true.B // always ignore this message
+  assert(!u_qemuMsgDecoder.qemu_evict_reply_o.valid, "QEMU Eviction Reply should be deprecated!")
+
+  // ---- IO ----
+
+  // Amazon Shell IO
+  val axiShell_io = IO(new MMU2ShellIO(params))
+
+  // Cache-AXI controller
+  val cacheAxiCtrl_io = IO(new Bundle {
+    val icacheWbEmpty = Input(Bool())
+    val dcacheWbEmpty = Input(Bool())
+  })
+
+  // Pipeline IO:
+  val pipeline_io = IO(Flipped(new PipeMMUIO))
+
+  // TLB IO
+  val tlb_io = IO(new Bundle {
+    val inst = Flipped(new TLB2MMUIO(params.getPageTableParams))
+    val data = Flipped(new TLB2MMUIO(params.getPageTableParams))
+  })
+
+  // Cache IO
+  val cache_io = IO(new Bundle {
+    val inst = Flipped(new CacheMMUIO(params.getCacheParams))
+    val data = Flipped(new CacheMMUIO(params.getCacheParams))
+  })
+
+
+  // DRAM Access Modules
+  // Page Walker DRAM Accesses
+  axiShell_io.M_DMA_R(0) <> u_page_walker.M_DMA_R
   // TLB writeback handler
-  val u_tlb_wb = Module(new TLBWritebackHandler(params, 2))
-  u_tlb_wb.M_DMA_R <> M_DMA_R(1)
-  u_tlb_wb.M_DMA_W <> M_DMA_W(0)
-
-  u_tlb_wb.tlb_evict_req_i(0) <> u_itlb_mconv.eviction_request_o
-  u_tlb_wb.tlb_evict_req_i(1) <> u_dtlb_mconv.eviction_request_o
-
+  axiShell_io.M_DMA_R(1) <> u_tlbEntryWbHandler.M_DMA_R
+  axiShell_io.M_DMA_W(0) <> u_tlbEntryWbHandler.M_DMA_W
   // Miss request handler
-  val u_qemu_miss = Module(new QEMUMissReplyHandler(params))
-  u_qemu_miss.M_DMA_R <> M_DMA_R(2)
-  u_qemu_miss.M_DMA_W <> M_DMA_W(1)
-
+  axiShell_io.M_DMA_R(2) <> u_qemuMissHandler.M_DMA_R
+  axiShell_io.M_DMA_W(1) <> u_qemuMissHandler.M_DMA_W
   // Page Evict Handler
-  val u_qemu_page_evict = Module(new QEMUPageEvictHandler(params))
-  u_qemu_page_evict.M_DMA_R <> M_DMA_R(3)
-  u_qemu_page_evict.M_DMA_W <> M_DMA_W(2)
+  axiShell_io.M_DMA_R(3) <> u_qemuPageEvictHandler.M_DMA_R
+  axiShell_io.M_DMA_W(2) <> u_qemuPageEvictHandler.M_DMA_W
 
-  u_qemu_page_evict.evict_request_i <> u_qmd.qemu_evict_page_req_o
+  // Host access
+  axiShell_io.S_AXIL_QEMU_MQ <> u_qemuMsgQueue.S_AXIL
+  axiShell_io.S_AXI <> u_qemuMsgQueue.S_AXI
 
-  // export TLB backend reply
-  // two source: one from the page walk and one from the QEMU miss resolution
-  val itlb_backend_reply_o = IO(Decoupled(new TLBBackendReplyPacket(params.getPageTableParams)))
+  // Host interrupt TODO: We use polling at the moment, not interrupts
+  axiShell_io.msgPendingInt := u_qemuMsgEncoder.o.valid
+
+  // TLB Receive requests
+  u_itlbMsgHandler.tlb_backend_request_i <> tlb_io.inst.missReq
+  u_dtlbMsgHandler.tlb_backend_request_i <> tlb_io.data.missReq
+  // TLB Miss requests for Page Walking
+  u_itlbMsgHandler.miss_request_o <> u_page_walker.tlb_miss_req_i(0)
+  u_dtlbMsgHandler.miss_request_o <> u_page_walker.tlb_miss_req_i(1)
+  // TLB Eviction request for memory writeback
+  u_itlbMsgHandler.eviction_request_o <> u_tlbEntryWbHandler.tlb_evict_req_i(0)
+  u_dtlbMsgHandler.eviction_request_o <> u_tlbEntryWbHandler.tlb_evict_req_i(1)
+
+  u_qemuPageEvictHandler.evict_request_i <> u_qemuMsgDecoder.qemu_evict_page_req_o
+
+  // Arbitrer for TLB MMU port
+  // two sources:
+  // 0. Page walk hit
+  // 1. QEMU miss resolution
   // FIXME: Here I cannot use RRArbiter and I don't know why.
-  val u_itlb_backend_reply_arb = Module(new Arbiter(new TLBBackendReplyPacket(params.getPageTableParams), 2))
-  itlb_backend_reply_o <> u_itlb_backend_reply_arb.io.out
+  private val u_itlbPortArb = Module(new Arbiter(new TLBMMURespPacket(params.getPageTableParams), 2))
+  private val u_dtlbPortArb = Module(new Arbiter(new TLBMMURespPacket(params.getPageTableParams), 2))
+  tlb_io.inst.refillResp <> u_itlbPortArb.io.out
+  tlb_io.data.refillResp <> u_dtlbPortArb.io.out
   // 0: reply from the page walker
-  u_itlb_backend_reply_arb.io.in(0) <> u_page_walker.tlb_backend_reply_o(0)
+  u_itlbPortArb.io.in(0) <> u_page_walker.tlb_backend_reply_o(0)
+  u_dtlbPortArb.io.in(0) <> u_page_walker.tlb_backend_reply_o(1)
   // 1: reply from the page fault resolver
-  u_itlb_backend_reply_arb.io.in(1).bits := u_qemu_miss.tlb_backend_reply_o.bits
-  u_itlb_backend_reply_arb.io.in(1).valid := u_qemu_miss.tlb_backend_reply_o.valid && u_qemu_miss.tlb_backend_reply_o.bits.data.perm === 2.U
-
-  val dtlb_backend_reply_o = IO(u_page_walker.tlb_backend_reply_o(1).cloneType)
-  // FIXME: Here I cannot use RRArbiter and I don't know why.
-  val u_dtlb_backend_reply_arb = Module(new Arbiter(new TLBBackendReplyPacket(params.getPageTableParams), 2))
-  dtlb_backend_reply_o <> u_dtlb_backend_reply_arb.io.out
-  // 0: reply from the page walker
-  u_dtlb_backend_reply_arb.io.in(0) <> u_page_walker.tlb_backend_reply_o(1)
-  // 1: reply from the page fault resolver
-  u_dtlb_backend_reply_arb.io.in(1).bits := u_qemu_miss.tlb_backend_reply_o.bits
-  u_dtlb_backend_reply_arb.io.in(1).valid := u_qemu_miss.tlb_backend_reply_o.valid && u_qemu_miss.tlb_backend_reply_o.bits.data.perm =/= 2.U
+  u_itlbPortArb.io.in(1).bits := u_qemuMissHandler.tlb_backend_reply_o.bits
+  u_dtlbPortArb.io.in(1).bits := u_qemuMissHandler.tlb_backend_reply_o.bits
+  u_itlbPortArb.io.in(1).valid := u_qemuMissHandler.tlb_backend_reply_o.valid && u_qemuMissHandler.tlb_backend_reply_o.bits.data.perm === 2.U
+  u_dtlbPortArb.io.in(1).valid := u_qemuMissHandler.tlb_backend_reply_o.valid && u_qemuMissHandler.tlb_backend_reply_o.bits.data.perm =/= 2.U
   // ready signal of page fault resolver
-  u_qemu_miss.tlb_backend_reply_o.ready := Mux(
-    u_qemu_miss.tlb_backend_reply_o.bits.data.perm === 2.U,
-    u_itlb_backend_reply_arb.io.in(1).ready,
-    u_dtlb_backend_reply_arb.io.in(1).ready
-    )
-  // u_qemu_miss.tlb_backend_reply_o.ready := false.B
+  u_qemuMissHandler.tlb_backend_reply_o.ready := Mux(
+    u_qemuMissHandler.tlb_backend_reply_o.bits.data.perm === 2.U,
+    u_itlbPortArb.io.in(1).ready,
+    u_dtlbPortArb.io.in(1).ready)
 
-  u_qemu_miss.qemu_miss_reply_i <> u_qmd.qemu_miss_reply_o
+  // Page Eviction --------
+  // clears TLB entry and Cache blocks
+  pipeline_io <> u_page_deleter.lsu_handshake_o
 
-  // Page Deleter
-  val u_page_deleter = Module(new PageDeletor(params))
+  u_qemuMissHandler.qemu_miss_reply_i <> u_qemuMsgDecoder.qemu_miss_reply_o
+  u_qemuMissHandler.page_delete_done_i := u_page_deleter.done_o
+  u_qemuPageEvictHandler.page_delete_done_i := u_page_deleter.done_o
 
-  val lsu_handshake_o = IO(Flipped(u_page_deleter.lsu_handshake_o.cloneType))
-  lsu_handshake_o <> u_page_deleter.lsu_handshake_o
+  cache_io.inst.flushReq <> u_page_deleter.icache_flush_request_o
+  cache_io.data.flushReq <> u_page_deleter.dcache_flush_request_o
+  cache_io.inst.stallReq <> u_page_deleter.stall_icache_vo
+  cache_io.data.stallReq <> u_page_deleter.stall_dcache_vo
 
-  val dcache_flush_request_o = IO(u_page_deleter.dcache_flush_request_o.cloneType)
-  u_page_deleter.dcache_flush_request_o <> dcache_flush_request_o
-  val dcache_wb_queue_empty_i = IO(Input(Bool()))
-  u_page_deleter.dcache_wb_queue_empty_i <> dcache_wb_queue_empty_i
-  val dcache_stall_request_vo = IO(Output(Bool()))
-  dcache_stall_request_vo := u_page_deleter.stall_dcache_vo
+  u_page_deleter.icache_wb_queue_empty_i <> cacheAxiCtrl_io.icacheWbEmpty
+  u_page_deleter.dcache_wb_queue_empty_i <> cacheAxiCtrl_io.dcacheWbEmpty
 
-  u_qemu_miss.page_delete_done_i := u_page_deleter.done_o
-  u_qemu_page_evict.page_delete_done_i := u_page_deleter.done_o
-
-  val icache_flush_request_o = IO(u_page_deleter.icache_flush_request_o.cloneType)
-  u_page_deleter.icache_flush_request_o <> icache_flush_request_o
-  val icache_wb_queue_empty_i = IO(Input(Bool()))
-  u_page_deleter.icache_wb_queue_empty_i <> icache_wb_queue_empty_i
-  val icache_stall_request_vo = IO(Output(Bool()))
-  icache_stall_request_vo := u_page_deleter.stall_icache_vo
-
-  // FIXME: Here I cannot even use Arbiter and I don't know why. Temporary I use a manual Arbiter to solve the problem...
-//  val u_arb_page_delete_req = Module(new Arbiter(new PageTableItem(params.mem.getPageTableParams()), 2))
-//  u_arb_page_delete_req.io.in(0) <> u_qemu_miss.page_delete_req_o
-//  u_arb_page_delete_req.io.in(1) <> u_qemu_page_evict.page_delete_req_o
+  /* FIXME: Here I cannot even use Arbiter and I don't know why. Temporary I use a manual Arbiter to solve the problem...
+  val u_arb_page_delete_req = Module(new Arbiter(new PageTableItem(params.mem.getPageTableParams()), 2))
+  u_arb_page_delete_req.io.in(0) <> u_qemu_miss.page_delete_req_o
+  u_arb_page_delete_req.io.in(1) <> u_qemu_page_evict.page_delete_req_o
+  // */
   u_page_deleter.page_delete_req_i.bits := Mux(
-    u_qemu_miss.page_delete_req_o.valid,
-    u_qemu_miss.page_delete_req_o.bits,
-    u_qemu_page_evict.page_delete_req_o.bits
+    u_qemuMissHandler.page_delete_req_o.valid,
+    u_qemuMissHandler.page_delete_req_o.bits,
+    u_qemuPageEvictHandler.page_delete_req_o.bits
   )
 
-  u_page_deleter.page_delete_req_i.valid := u_qemu_miss.page_delete_req_o.valid || u_qemu_page_evict.page_delete_req_o.valid
-  u_qemu_miss.page_delete_req_o.ready := u_page_deleter.page_delete_req_i.ready
-  u_qemu_page_evict.page_delete_req_o.ready := u_page_deleter.page_delete_req_i.ready && !u_qemu_miss.page_delete_req_o.valid
+  u_page_deleter.page_delete_req_i.valid := u_qemuMissHandler.page_delete_req_o.valid || u_qemuPageEvictHandler.page_delete_req_o.valid
+  u_qemuMissHandler.page_delete_req_o.ready := u_page_deleter.page_delete_req_i.ready
+  u_qemuPageEvictHandler.page_delete_req_o.ready := u_page_deleter.page_delete_req_i.ready && !u_qemuMissHandler.page_delete_req_o.valid
 
-   val itlb_flush_request_o = IO(Decoupled(new PTTagPacket(params.getPageTableParams)))
-   itlb_flush_request_o.bits := u_page_deleter.tlb_flush_request_o.bits.req
-   itlb_flush_request_o.valid := u_page_deleter.tlb_flush_request_o.valid && u_page_deleter.tlb_flush_request_o.bits.which === 0.U
+  // Evict TLB Entry
+  tlb_io.inst.flushReq.bits := u_page_deleter.tlb_flush_request_o.bits.req
+  tlb_io.inst.flushReq.valid := u_page_deleter.tlb_flush_request_o.valid && u_page_deleter.tlb_flush_request_o.bits.sel === 0.U
 
-  val dtlb_flush_request_o = IO(Decoupled(new PTTagPacket(params.getPageTableParams)))
-  dtlb_flush_request_o.bits := u_page_deleter.tlb_flush_request_o.bits.req
-  dtlb_flush_request_o.valid := u_page_deleter.tlb_flush_request_o.valid && u_page_deleter.tlb_flush_request_o.bits.which === 1.U
+  tlb_io.data.flushReq.bits := u_page_deleter.tlb_flush_request_o.bits.req
+  tlb_io.data.flushReq.valid := u_page_deleter.tlb_flush_request_o.valid && u_page_deleter.tlb_flush_request_o.bits.sel === 1.U
 
+  // u_page_deleter.tlb_flush_request_o.bits.sel === 0 -> Instruction TLB; === 1 -> Data TLB
   u_page_deleter.tlb_flush_request_o.ready := Mux(
-    u_page_deleter.tlb_flush_request_o.bits.which === 0.U,
-    itlb_flush_request_o.ready,
-    dtlb_flush_request_o.ready
-  )
-
-  val itlb_flush_reply_i = IO(Flipped(u_page_deleter.tlb_frontend_reply_i.cloneType))
-  val dtlb_flush_reply_i = IO(Flipped(u_page_deleter.tlb_frontend_reply_i.cloneType))
+    u_page_deleter.tlb_flush_request_o.bits.sel === 0.U,
+    tlb_io.inst.flushReq.ready,
+    tlb_io.data.flushReq.ready
+    )
 
   u_page_deleter.tlb_frontend_reply_i := Mux(
-    u_page_deleter.tlb_flush_request_o.bits.which === 0.U,
-    itlb_flush_reply_i,
-    dtlb_flush_reply_i
-  )
+    u_page_deleter.tlb_flush_request_o.bits.sel === 0.U,
+    tlb_io.inst.flushResp,
+    tlb_io.data.flushResp
+    )
 
   // QEMU message encoder
-  val u_qme = Module(new QEMUMessageEncoder(params, messageFIFODepth))
-  u_qme.evict_done_req_i <> u_page_deleter.done_message_o
-  u_qme.evict_notify_req_i <> u_page_deleter.start_message_o
-  u_qme.page_fault_req_i <> u_page_walker.page_fault_req_o
+  u_qemuMsgEncoder.evict_done_req_i <> u_page_deleter.done_message_o
+  u_qemuMsgEncoder.evict_notify_req_i <> u_page_deleter.start_message_o
+  u_qemuMsgEncoder.page_fault_req_i <> u_page_walker.page_fault_req_o
 
   // QEMU Message FIFO
-  val u_qemu_mq = Module(new AXIControlledMessageQueue)
-  // val S_AXI_QEMU_MQ = IO(Flipped(u_qemu_mq.S_AXI.cloneType))
-  // u_qemu_mq.S_AXI <> S_AXI_QEMU_MQ
-  val S_AXIL_QEMU_MQ = IO(Flipped(u_qemu_mq.S_AXIL.cloneType))
-  u_qemu_mq.S_AXIL <> S_AXIL_QEMU_MQ
-  u_qemu_mq.fifo_i <> u_qme.o
-  u_qmd.message_i <> Queue(u_qemu_mq.fifo_o, 1)
-  // For interrupt
-  val qemu_message_available_o = IO(Output(Bool()))
-  qemu_message_available_o := u_qme.o.valid
-
-
-  val S_AXI = IO(Flipped(u_qemu_mq.S_AXI.cloneType))
-  S_AXI <> u_qemu_mq.S_AXI
+  u_qemuMsgQueue.fifo_i <> u_qemuMsgEncoder.o
+  u_qemuMsgDecoder.message_i <> Queue(u_qemuMsgQueue.fifo_o, 1)
 }
 
 object PageDemanderVerilogEmitter extends App{

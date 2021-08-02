@@ -24,39 +24,36 @@ case class PageTableParams(
 }
 
 /**
- * Frontend access (translate) request to TLB.
+ * Pipeline access (translate) request to TLB.
  * @params params the TLB Parameter
  */
-class TLBAccessRequestPacket(params: PageTableParams) extends Bundle {
+class TLBPipelineReq(params: PageTableParams) extends Bundle {
   val tag = new PTTagPacket(params)
   val perm = UInt(2.W)
   val thid = UInt(log2Ceil(params.thidN).W)
 
-  override def cloneType: this.type = new TLBAccessRequestPacket(params).asInstanceOf[this.type]
-
-  def := (o: armflex.PipeTLB.PipeTLBRequest): Unit = {
+  def := (o: PipeTLB.PipeTLBReq): Unit = {
     this.tag.asid := o.asid
     this.tag.vpn := o.addr >> 12 // page size
     this.perm := o.perm
     this.thid := o.thid
   }
+
+  override def cloneType: this.type = new TLBPipelineReq(params).asInstanceOf[this.type]
 }
 
 /**
  * The translation result we get from the TLB.
  * @params params the Page Table Parameter
  */
-class TLBFrontendReplyPacket(params: PageTableParams) extends Bundle {
-  // val pp = UInt(params.pPageW.W)
-  // val modified =
+class TLBPipelineResp(params: PageTableParams) extends Bundle {
   val entry = new PTEntryPacket(params)
   val hit = Bool()
   val violation = Bool()
-  // val dirty = Bool()
   val thid = UInt(log2Ceil(params.thidN).W)
 
-  def toPipeTLBResponse: PipeTLB.PipeTLBResponse = {
-    val res = Wire(new PipeTLB.PipeTLBResponse(params.pPageW))
+  def toPipeTLBResponse: PipeTLB.PipeTLBResp = {
+    val res = Wire(new PipeTLB.PipeTLBResp(params.pPageW))
     res.addr := entry.ppn << 12
     res.hit := hit
     res.miss := !hit
@@ -64,15 +61,15 @@ class TLBFrontendReplyPacket(params: PageTableParams) extends Bundle {
     res
   }
 
-  override def cloneType: this.type = new TLBFrontendReplyPacket(params).asInstanceOf[this.type]
+  override def cloneType: this.type = new TLBPipelineResp(params).asInstanceOf[this.type]
 }
 
 /**
- * Request TLB send to the backend for looking up the miss entry or writing back.
+ * Request TLB send to the mmu for looking up the miss entry or writing back.
  * @params params the TLB Parameter
  *
  */
-class TLBBackendRequestPacket(params: PageTableParams) extends Bundle {
+class TLBMMURequestPacket(params: PageTableParams) extends Bundle {
   val tag = new PTTagPacket(params)
   val entry = new PTEntryPacket(params)
   val w_v = Bool()
@@ -80,10 +77,10 @@ class TLBBackendRequestPacket(params: PageTableParams) extends Bundle {
   val perm = UInt(2.W)
   val thid = UInt(log2Ceil(params.thidN).W)
 
-  override def cloneType: this.type = new TLBBackendRequestPacket(params).asInstanceOf[this.type]
+  override def cloneType: this.type = new TLBMMURequestPacket(params).asInstanceOf[this.type]
 
-  def toAccessRequestPacket: TLBAccessRequestPacket = {
-    val res = new TLBAccessRequestPacket(params)
+  def toAccessRequestPacket: TLBPipelineReq = {
+    val res = new TLBPipelineReq(params)
     res.tag := this.tag
     res.perm := perm
     res.thid := this.thid
@@ -92,158 +89,157 @@ class TLBBackendRequestPacket(params: PageTableParams) extends Bundle {
 }
 
 /**
- * The reply from the backend to a TLB. We assume that the backend is stateless.
+ * The reply from the mmu to a TLB. We assume that the backend is stateless.
  * @params params the TLB Parameter
  */
-class TLBBackendReplyPacket(params: PageTableParams) extends Bundle {
+class TLBMMURespPacket(params: PageTableParams) extends Bundle {
   val tag = new PTTagPacket(params)
   val data = new PTEntryPacket(params)
   val thid = UInt(log2Ceil(params.thidN).W)
 
-  override def cloneType: this.type = new TLBBackendReplyPacket(params).asInstanceOf[this.type]
+  override def cloneType: this.type = new TLBMMURespPacket(params).asInstanceOf[this.type]
 }
 
-class BRAMTLB(
+class TLB2MMUIO(params: PageTableParams) extends Bundle {
+  val flushReq = Flipped(Decoupled(new PTTagPacket(params)))
+  val flushResp = Valid(new TLBPipelineResp(params))
+  val missReq = Decoupled(new TLBMMURequestPacket(params))
+  val refillResp = Flipped(Decoupled(new TLBMMURespPacket(params)))
+
+  override def cloneType: this.type = new TLB2MMUIO(params).asInstanceOf[this.type]
+}
+
+class TLB2PipelineIO(params: PageTableParams) extends Bundle {
+  val translationReq = Flipped(Decoupled(new TLBPipelineReq(params)))
+  val translationResp = Valid(new TLBPipelineResp(params))
+  val wakeAfterMiss = Valid(UInt(params.asidW.W))
+}
+
+class TLB(
   val params: PageTableParams,
   lruCore: () => LRUCore
 ) extends MultiIOModule {
 
   def tlbUpdateFunction(req: DataBankFrontendRequestPacket, oldEntry: CacheEntry): CacheEntry = {
     val oldTLBEntry = oldEntry.asTypeOf(new PTEntryPacket(params))
-    Mux(
-      oldTLBEntry.permValid(req.perm),
+    Mux(oldTLBEntry.permValid(req.perm),
       oldEntry.write(req.wData, req.wMask, false.B, true.B),
-      oldEntry
-      )
+      oldEntry)
   }
 
-  val u_bank_frontend = Module(new DataBankManager(params.getDatabankParams, tlbUpdateFunction))
-  val u_bram_adapter = Module(new BRAMPortAdapter(params.getDatabankParams))
+  val pipeline_io = IO(new TLB2PipelineIO(params))
+  val mmu_io = IO(new TLB2MMUIO(params))
 
-  implicit val bramParams = u_bram_adapter.bramParams
-  val bram = Module(new BRAMorRegister(false))
-  u_bram_adapter.bram_ports(0) <> bram.portA
-  u_bram_adapter.bram_ports(1) <> bram.portB
+  private val u_dataBankManager = Module(new DataBankManager(params.getDatabankParams, tlbUpdateFunction))
+  private val u_bramPortsAdapter = Module(new BRAMPortAdapter(params.getDatabankParams))
+  private val bram = Module(new BRAMorRegister(false)(u_bramPortsAdapter.bramParams))
 
-  u_bram_adapter.frontend_read_reply_data_o <> u_bank_frontend.bank_ram_reply_data_i
-  u_bram_adapter.frontend_read_request_i <> u_bank_frontend.bank_ram_request_addr_o
-  u_bram_adapter.frontend_write_request_i <> u_bank_frontend.bank_ram_write_request_o
+  u_bramPortsAdapter.frontend_read_reply_data_o <> u_dataBankManager.bank_ram_reply_data_i
+  u_bramPortsAdapter.frontend_read_request_i <> u_dataBankManager.bank_ram_request_addr_o
+  u_bramPortsAdapter.frontend_write_request_i <> u_dataBankManager.bank_ram_write_request_o
 
-  val u_lruCore = Module(new LRU(params.getDatabankParams, lruCore))
-  u_lruCore.addr_i <> u_bank_frontend.lru_addr_o
-  u_lruCore.index_i <> u_bank_frontend.lru_index_o
-  u_bank_frontend.lru_which_i := u_lruCore.lru_o
+  u_bramPortsAdapter.bram_ports(0) <> bram.portA
+  u_bramPortsAdapter.bram_ports(1) <> bram.portB
 
-  // frontend
-  val frontend_request_i = IO(Flipped(Decoupled(new TLBAccessRequestPacket(params))))
-  val frontend_reply_o = IO(Valid(new TLBFrontendReplyPacket(params)))
-  // flush
-  val flush_request_i = IO(Flipped(Decoupled(new PTTagPacket(params))))
-  val flush_reply_o = IO(Valid(new TLBFrontendReplyPacket(params)))
-  // backend
-  val miss_request_o = IO(Decoupled(new TLBBackendRequestPacket(params)))
-  val refill_request_i = IO(Flipped(Decoupled(new TLBBackendReplyPacket(params))))
-  // activate
-  val packet_arrive_o = IO(Valid(UInt(params.asidW.W)))
+  private val u_lruCore = Module(new LRU(params.getDatabankParams, lruCore))
+  u_lruCore.addr_i <> u_dataBankManager.lru_addr_o
+  u_lruCore.index_i <> u_dataBankManager.lru_index_o
+  u_dataBankManager.lru_which_i := u_lruCore.lru_o
 
-  val refill_request_internal = Wire(u_bank_frontend.frontend_request_i.cloneType)
-  refill_request_internal.valid := refill_request_i.valid
-  refill_request_internal.bits.addr := Cat(refill_request_i.bits.tag.asid, refill_request_i.bits.tag.vpn)
-  refill_request_internal.bits.flush_v := false.B
-  refill_request_internal.bits.thid := refill_request_i.bits.thid
-  refill_request_internal.bits.asid := refill_request_i.bits.tag.asid
-  refill_request_internal.bits.wData := DontCare
-  refill_request_internal.bits.wMask := DontCare
-  refill_request_internal.bits.refill_v := true.B
-  refill_request_internal.bits.perm := DontCare
-  refill_request_internal.bits.refillData := refill_request_i.bits.data.asUInt
 
-  refill_request_i.ready := refill_request_internal.ready
+  private val refill2databankReq = Wire(u_dataBankManager.frontend_request_i.cloneType)
+  refill2databankReq.valid := mmu_io.refillResp.valid
+  refill2databankReq.bits.addr := Cat(mmu_io.refillResp.bits.tag.asid, mmu_io.refillResp.bits.tag.vpn)
+  refill2databankReq.bits.flush_v := false.B
+  refill2databankReq.bits.thid := mmu_io.refillResp.bits.thid
+  refill2databankReq.bits.asid := mmu_io.refillResp.bits.tag.asid
+  refill2databankReq.bits.wData := DontCare
+  refill2databankReq.bits.wMask := DontCare
+  refill2databankReq.bits.refill_v := true.B
+  refill2databankReq.bits.perm := DontCare
+  refill2databankReq.bits.refillData := mmu_io.refillResp.bits.data.asUInt
 
-  packet_arrive_o.valid := refill_request_i.fire()
-  packet_arrive_o.bits := refill_request_i.bits.tag.asid
+  mmu_io.refillResp.ready := refill2databankReq.ready
 
-  //val flush_ack_o = IO(Output(Bool()))
+  pipeline_io.wakeAfterMiss.valid := mmu_io.refillResp.fire()
+  pipeline_io.wakeAfterMiss.bits := mmu_io.refillResp.bits.tag.asid
 
-  val u_frontend_arb = Module(new Arbiter(u_bank_frontend.frontend_request_i.bits.cloneType(), 3))
-  // the order:
-  // - 0: Flush
-  // - 1: Refill
-  // - 2: Request
+  private val u_3wayArbiter = Module(new Arbiter(u_dataBankManager.frontend_request_i.bits.cloneType(), 3))
+  private val arbFlushPort = u_3wayArbiter.io.in(0)
+  private val arbRefillPort = u_3wayArbiter.io.in(1)
+  private val arbPipelinePort = u_3wayArbiter.io.in(2)
 
   // The normal request from the pipeline
-  u_frontend_arb.io.in(2).valid := frontend_request_i.valid
-  u_frontend_arb.io.in(2).bits.thid := frontend_request_i.bits.thid
-  u_frontend_arb.io.in(2).bits.asid := frontend_request_i.bits.tag.asid
-  u_frontend_arb.io.in(2).bits.addr := Cat(frontend_request_i.bits.tag.asid, frontend_request_i.bits.tag.vpn)
-  val modified_pte = Wire(new PTEntryPacket(params))
+  arbPipelinePort.valid := pipeline_io.translationReq.valid
+  arbPipelinePort.bits.thid := pipeline_io.translationReq.bits.thid
+  arbPipelinePort.bits.asid := pipeline_io.translationReq.bits.tag.asid
+  arbPipelinePort.bits.addr := Cat(pipeline_io.translationReq.bits.tag.asid, pipeline_io.translationReq.bits.tag.vpn)
+
+  private val modified_pte = Wire(new PTEntryPacket(params))
   modified_pte.modified := true.B
   modified_pte.perm := 0.U
   modified_pte.ppn := 0.U
-  u_frontend_arb.io.in(2).bits.wData := modified_pte.asUInt
-  u_frontend_arb.io.in(2).bits.flush_v := false.B
-  u_frontend_arb.io.in(2).bits.wMask := Mux(frontend_request_i.bits.perm === 1.U, modified_pte.asUInt, 0.U)
-  u_frontend_arb.io.in(2).bits.perm := frontend_request_i.bits.perm
-  u_frontend_arb.io.in(2).bits.refill_v := false.B
-  u_frontend_arb.io.in(2).bits.refillData := DontCare
-
-  frontend_request_i.ready := !flush_request_i.valid && !refill_request_i.valid
+  arbPipelinePort.bits.wData := modified_pte.asUInt
+  arbPipelinePort.bits.flush_v := false.B
+  arbPipelinePort.bits.wMask := Mux(pipeline_io.translationReq.bits.perm === 1.U, modified_pte.asUInt, 0.U)
+  arbPipelinePort.bits.perm := pipeline_io.translationReq.bits.perm
+  arbPipelinePort.bits.refill_v := false.B
+  arbPipelinePort.bits.refillData := DontCare
+  pipeline_io.translationReq.ready := !mmu_io.flushReq.valid && !mmu_io.refillResp.valid
 
   // The flush request from other place
-  u_frontend_arb.io.in(0).valid := flush_request_i.valid
-  u_frontend_arb.io.in(0).bits.addr := Cat(frontend_request_i.bits.tag.asid, frontend_request_i.bits.tag.vpn)
-  u_frontend_arb.io.in(0).bits.thid := DontCare
-  u_frontend_arb.io.in(0).bits.asid := frontend_request_i.bits.tag.asid
-  u_frontend_arb.io.in(0).bits.wData := DontCare
-  u_frontend_arb.io.in(0).bits.flush_v := true.B
-  u_frontend_arb.io.in(0).bits.wMask := DontCare
-  u_frontend_arb.io.in(0).bits.perm := DontCare
-  u_frontend_arb.io.in(0).bits.refill_v := false.B
-  u_frontend_arb.io.in(0).bits.refillData := DontCare
+  arbFlushPort.valid := mmu_io.flushReq.valid
+  arbFlushPort.bits.addr := Cat(pipeline_io.translationReq.bits.tag.asid, pipeline_io.translationReq.bits.tag.vpn)
+  arbFlushPort.bits.thid := DontCare
+  arbFlushPort.bits.asid := pipeline_io.translationReq.bits.tag.asid
+  arbFlushPort.bits.wData := DontCare
+  arbFlushPort.bits.flush_v := true.B
+  arbFlushPort.bits.wMask := DontCare
+  arbFlushPort.bits.perm := DontCare
+  arbFlushPort.bits.refill_v := false.B
+  arbFlushPort.bits.refillData := DontCare
+  mmu_io.flushReq.ready := arbFlushPort.ready
 
-  flush_request_i.ready := u_frontend_arb.io.in(0).ready
   // The refilling request from the backend of the cache
-  u_frontend_arb.io.in(1) <> refill_request_internal
+  arbRefillPort <> refill2databankReq
 
-  u_bank_frontend.frontend_request_i.bits := u_frontend_arb.io.out.bits
-  u_bank_frontend.frontend_request_i.valid := u_frontend_arb.io.out.valid
-  u_frontend_arb.io.out.ready := u_bank_frontend.frontend_request_i.ready
+  u_dataBankManager.frontend_request_i.bits := u_3wayArbiter.io.out.bits
+  u_dataBankManager.frontend_request_i.valid := u_3wayArbiter.io.out.valid
+  u_3wayArbiter.io.out.ready := u_dataBankManager.frontend_request_i.ready
 
   // convert the reply to PTE.
-  val replied_pte = u_bank_frontend.frontend_reply_o.bits.rData.asTypeOf(new PTEntryPacket(params))
+  private val replied_pte = u_dataBankManager.frontend_reply_o.bits.rData.asTypeOf(pipeline_io.translationResp.bits.entry)
 
-  // frontend_reply_o: Response to the R/W request from the pipeline
-  frontend_reply_o.bits.hit := u_bank_frontend.frontend_reply_o.bits.hit
-  // frontend_reply_o.bits.dirty := u_bank_frontend.frontend_reply_o.bits.dirty
-  frontend_reply_o.bits.thid := u_bank_frontend.frontend_reply_o.bits.thid
-  frontend_reply_o.bits.violation := !replied_pte.permValid(RegNext(frontend_request_i.bits.perm))
-  frontend_reply_o.bits.entry := replied_pte
+  // pipeline_io.translationResp: Response to the R/W request from the pipeline
+  pipeline_io.translationResp.bits.hit := u_dataBankManager.frontend_reply_o.bits.hit
+  // pipeline_io.translationResp.bits.dirty := u_dataBankManager.pipeline_io.translationResp.bits.dirty
+  pipeline_io.translationResp.bits.thid := u_dataBankManager.frontend_reply_o.bits.thid
+  pipeline_io.translationResp.bits.violation := !replied_pte.permValid(RegNext(pipeline_io.translationReq.bits.perm))
+  pipeline_io.translationResp.bits.entry := replied_pte
 
-  frontend_reply_o.valid := u_bank_frontend.frontend_reply_o.valid && !u_bank_frontend.frontend_reply_o.bits.flush && !u_bank_frontend.frontend_reply_o.bits.refill
-  // val packet_arrive_o = IO(u_bank_frontend.packet_arrive_o.cloneType)
+  pipeline_io.translationResp.valid := u_dataBankManager.frontend_reply_o.valid && !u_dataBankManager.frontend_reply_o.bits.flush && !u_dataBankManager.frontend_reply_o.bits.refill
 
-  // flush_reply_o
-  flush_reply_o.bits.hit := u_bank_frontend.frontend_reply_o.bits.hit
-  flush_reply_o.bits.entry := replied_pte
-  flush_reply_o.bits.thid := u_bank_frontend.frontend_reply_o.bits.thid
-  // flush_reply_o.bits.dirty := u_bank_frontend.frontend_reply_o.bits.dirty
-  flush_reply_o.bits.violation := false.B // Flush will never cause perm violation.
-  flush_reply_o.valid := u_bank_frontend.frontend_reply_o.valid && u_bank_frontend.frontend_reply_o.bits.flush
+  // mmu_i.flushResp
+  mmu_io.flushResp.bits.hit := u_dataBankManager.frontend_reply_o.bits.hit
+  mmu_io.flushResp.bits.entry := replied_pte
+  mmu_io.flushResp.bits.thid := u_dataBankManager.frontend_reply_o.bits.thid
+  // mmu_i.flushResp.bits.dirty := u_dataBankManager.pipeline_io.translationResp.bits.dirty
+  mmu_io.flushResp.bits.violation := false.B // Flush will never cause perm violation.
+  mmu_io.flushResp.valid := u_dataBankManager.frontend_reply_o.valid && u_dataBankManager.frontend_reply_o.bits.flush
 
   // miss request
-  // val miss_request_o = IO(u_bank_frontend.miss_request_o.cloneType)
-  miss_request_o.valid := u_bank_frontend.miss_request_o.valid
-  miss_request_o.bits.tag.asid := u_bank_frontend.miss_request_o.bits.asid
-  miss_request_o.bits.tag.vpn := u_bank_frontend.miss_request_o.bits.addr // only reserve the lower bits.
-  miss_request_o.bits.perm := u_bank_frontend.miss_request_o.bits.perm
-  miss_request_o.bits.thid := u_bank_frontend.miss_request_o.bits.thid
-  miss_request_o.bits.flush_v := DontCare
-  miss_request_o.bits.entry := DontCare
-  miss_request_o.bits.w_v := u_bank_frontend.miss_request_o.bits.wMask =/= 0.U
-  u_bank_frontend.miss_request_o.ready := miss_request_o.ready
+  mmu_io.missReq.valid := u_dataBankManager.miss_request_o.valid
+  mmu_io.missReq.bits.tag.asid := u_dataBankManager.miss_request_o.bits.asid
+  mmu_io.missReq.bits.tag.vpn := u_dataBankManager.miss_request_o.bits.addr // only reserve the lower bits.
+  mmu_io.missReq.bits.perm := u_dataBankManager.miss_request_o.bits.perm
+  mmu_io.missReq.bits.thid := u_dataBankManager.miss_request_o.bits.thid
+  mmu_io.missReq.bits.flush_v := DontCare
+  mmu_io.missReq.bits.entry := DontCare
+  mmu_io.missReq.bits.w_v := u_dataBankManager.miss_request_o.bits.wMask =/= 0.U
+  u_dataBankManager.miss_request_o.ready := mmu_io.missReq.ready
 
   // write back request
   // So make the request pop all the time since we will not use it.
-  u_bank_frontend.writeback_request_o.ready := true.B
+  u_dataBankManager.writeback_request_o.ready := true.B
 }
 

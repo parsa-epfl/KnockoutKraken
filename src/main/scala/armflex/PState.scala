@@ -10,7 +10,7 @@ import armflex.util._
 
 /*
  * The 64-bit Execution state. This Execution state:
- * • Provides 31 64-bit general-purpose registers, of which X30 is used as the procedure link
+ * • Provides 31 64-bit general-purpose registers, of sel X30 is used as the procedure link
  * register.
  * • Provides a 64-bit program counter (PC), stack pointers (SPs), and exception link registers
  * (ELRs).
@@ -23,7 +23,7 @@ import armflex.util._
  * address ranges, see Chapter D4 The AArch64 Virtual Memory System Architecture.
  * • Defines a number of Process state (PSTATE) elements that hold PE state. The A64
  * instruction set includes instructions that operate directly on various PSTATE elements.
- * • Names each System register using a suffix that indicates the lowest Exception level at which
+ * • Names each System register using a suffix that indicates the lowest Exception level at sel
  * the register can be accessed.
  */
 

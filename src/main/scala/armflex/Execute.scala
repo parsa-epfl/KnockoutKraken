@@ -258,7 +258,7 @@ class DecodeBitMasks extends Module
     val is32bit = Input(Bool())
   })
 
-  // The bit patterns we create here are 64 bit patterns which
+  // The bit patterns we create here are 64 bit patterns sel
   // are vectors of identical elements of size e = 2, 4, 8, 16, 32 or
   // 64 bits each. Each element contains the same value: a run
   // of between 1 and e-1 non-zero bits, rotated within the

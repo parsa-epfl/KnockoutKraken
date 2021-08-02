@@ -6,7 +6,7 @@ import chisel3.util._
 import armflex.util.{DoubleLatencyQueue}
 
 object PipeTLB {
-  class PipeTLBRequest(
+  class PipeTLBReq(
     val vAddrW: Int,
     val thidW: Int,
     val asidW: Int
@@ -17,7 +17,7 @@ object PipeTLB {
     val perm = UInt(2.W) // See ProcTypes.scala
   }
 
-  class PipeTLBResponse(
+  class PipeTLBResp(
     val pAddrW: Int
   ) extends Bundle {
     val addr = UInt(pAddrW.W)
@@ -32,8 +32,8 @@ object PipeTLB {
     val thidW: Int,
     val asidW: Int
   ) extends Bundle {
-    val req = Decoupled(new PipeTLBRequest(vAddrW, thidW, asidW))
-    val resp = Flipped(Decoupled(new PipeTLBResponse(pAddrW)))
+    val req = Decoupled(new PipeTLBReq(vAddrW, thidW, asidW))
+    val resp = Flipped(Decoupled(new PipeTLBResp(pAddrW)))
   }
 }
 

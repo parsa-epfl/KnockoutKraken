@@ -8,7 +8,7 @@ import chisel3.util._
  */ 
 class CacheEntry(param: DatabankParams) extends Bundle {
   val tag = UInt(param.tagWidth().W)
-  val data = UInt(param.blockBit.W)
+  val data = UInt(param.blockSize.W)
   val v = Bool() // valid bit
   val d = Bool() // dirty bit.
 
@@ -37,8 +37,8 @@ class CacheEntry(param: DatabankParams) extends Bundle {
       mask.orR() =/= 0.U // no mask 
     res.tag := this.tag
     res.v := valid
-    val newdata = VecInit(0.U(param.blockBit.W).asBools())
-    for(i <- 0 until param.blockBit){
+    val newdata = VecInit(0.U(param.blockSize.W).asBools())
+    for(i <- 0 until param.blockSize){
       newdata(i) := Mux(mask(i), data(i), this.data(i))
     }
     res.data := newdata.asUInt

@@ -27,9 +27,7 @@ case class CacheParams(
  * Request packet from the pipeline to the Cache.
  * @params params the parameter of cache
  */
-class CacheFrontendRequestPacket(
-  params: CacheParams
-) extends Bundle {
+class CachePipelineReq(params: CacheParams) extends Bundle {
   val addr = UInt(params.pAddrWidth.W) // access address.
   val wData = UInt(params.blockSize.W)
   val wMask = UInt(params.blockSize.W)
@@ -59,11 +57,8 @@ class CacheFrontendRequestPacket(
  * @params params the parameter of cache
  */
 
-class CacheFlushRequest(
-  params: CacheParams
-) extends Bundle {
+class CacheFlushRequest(params: CacheParams) extends Bundle {
   val addr = UInt(params.pAddrWidth.W) // access address.
-
 
   def toInternalRequestPacket: DataBankFrontendRequestPacket = {
     val res = Wire(new DataBankFrontendRequestPacket(params.databankParameter))
@@ -89,9 +84,7 @@ class CacheFlushRequest(
  * Refill request from the DRAM.
  * @params params the parameter of cache
  */
-class CacheRefillRequest(
-  params: CacheParams
-) extends Bundle {
+class CacheRefillRequest(params: CacheParams) extends Bundle {
   val addr = UInt(params.pAddrWidth.W)
   // old request
   val wData = UInt(params.blockSize.W)
@@ -126,7 +119,7 @@ class MergedBackendRequestPacket(params: DatabankParams) extends Bundle{
   val perm = UInt(2.W)
   val w_v = Bool()
   val flush_v = Bool() // this request is caused by flush
-  val data = UInt(params.blockBit.W)
+  val data = UInt(params.blockSize.W)
 
   override def cloneType: this.type = new MergedBackendRequestPacket(params).asInstanceOf[this.type]
 }
@@ -165,49 +158,6 @@ class BackendRequestMerger(params: DatabankParams) extends MultiIOModule{
   backend_request_o <> merger_rr.io.out
 }
 
-/**
- *  Base class of LRU module.
- *  @params lruCore the LRU updating logic
- *  @params params Databank parameters
- */
-class LRU[T <: LRUCore](
-  params: DatabankParams,
-  lruCore: () => T
-) extends MultiIOModule{
-  val addr_i = IO(Input(UInt(params.setWidth().W)))
-  val index_i = IO(Flipped(ValidIO(UInt(params.wayWidth().W))))
-  val lru_o = IO(Output(UInt(params.wayWidth().W)))
-  // add an extra stage to store the addr. They will be used for the LRU bits writing back.
-  val addr_s1_r = if(params.implementedWithRegister) addr_i else RegNext(addr_i)
-
-  // Connected to the LRU Core
-  val core = Module(lruCore())
-
-  implicit val bramParams = new BRAMParams(
-    1,
-    core.encodingWidth(),
-    params.setNumber
-    )
-
-  val bram = Module(new BRAMorRegister(params.implementedWithRegister))
-
-  bram.portA.EN := true.B
-  bram.portA.ADDR := addr_i
-  bram.portA.WE := false.B
-  bram.portA.DI := 0.U
-
-
-  core.io.encoding_i := bram.portA.DO
-  core.io.lru_i := index_i.bits
-  lru_o := core.io.lru_o
-
-  // write back
-  bram.portB.EN := index_i.valid
-  bram.portB.ADDR := addr_s1_r
-  bram.portB.WE := index_i.valid
-  bram.portB.DI := core.io.encoding_o
-}
-
 class RefillQueue (
   param: CacheParams,
 ) extends MultiIOModule {
@@ -226,10 +176,20 @@ class RefillQueue (
   dramRefillData_i.ready := missRequest_qo.valid && refillRequest_o.ready
 }
 
+class CacheMMUIO(params: CacheParams) extends Bundle {
+  val flushReq = Flipped(Decoupled(new CacheFlushRequest(params)))
+  val stallReq = Input(Bool()) // When this signal is raised, no new requests will be accepted.
+}
+
+class CacheAxiMemoryIO(params: DatabankParams) extends Bundle {
+  val req = Decoupled(new MergedBackendRequestPacket(params))
+  val resp = Flipped(Decoupled(UInt(params.blockSize.W)))
+}
+
 /**
  * The generator for BRAM-based cache.
  *
- * The size of all operands is `params.blockBit`, which is typically 512bit
+ * The size of all operands is `params.blockSize`, sel is typically 512bit
  * for a cache. If you hope to access the cache by 32bit, please partition
  * the block manually.
  *
@@ -240,104 +200,99 @@ class RefillQueue (
  * @note updateFunction will only be considered when it's a neither flushing nor refilling request, and return the old entry will not trigger a writing.
  */
 class BaseCache(
-  val param: CacheParams,
+  val params: CacheParams,
   lruCore: () => LRUCore,
   updateFunction: (DataBankFrontendRequestPacket, CacheEntry) => CacheEntry // (req: DataBankFrontendRequestPacket, entryToUpdate: CacheEntry) => result
 ) extends MultiIOModule{
-  val u_bank_frontend = Module(new DataBankManager(param.databankParameter, updateFunction))
-  val u_bram_adapter = Module(new BRAMPortAdapter(param.databankParameter))
+  val pipeline_io = IO(Flipped(new PipeCache.PipeCacheIO(params.pAddrWidth, params.blockSize)))
+  val mmu_i = IO(new CacheMMUIO(params))
+  val axiMem_io = IO(new CacheAxiMemoryIO(params.databankParameter))
 
-  implicit val cfg = u_bram_adapter.bramParams
-  val bram = Module(new BRAMorRegister(false))
-  u_bram_adapter.bram_ports(0) <> bram.portA
-  u_bram_adapter.bram_ports(1) <> bram.portB
+  private val u_bramPortsAdapter = Module(new BRAMPortAdapter(params.databankParameter))
+  private val u_dataBankManager = Module(new DataBankManager(params.databankParameter, updateFunction))
+  private val bram = Module(new BRAMorRegister(false)(u_bramPortsAdapter.bramParams))
+  private val u_lruCore = Module(new LRU(params.databankParameter, lruCore))
+  private val u_refillQueue = Module(new RefillQueue(params))
+  private val u_backendMerger = Module(new BackendRequestMerger(params.databankParameter))
 
-  u_bram_adapter.frontend_read_reply_data_o <> u_bank_frontend.bank_ram_reply_data_i
-  u_bram_adapter.frontend_read_request_i <> u_bank_frontend.bank_ram_request_addr_o
-  u_bram_adapter.frontend_write_request_i <> u_bank_frontend.bank_ram_write_request_o
+  // Manage ports for DataBank -----
+  private val u_3wayArbiter = Module(new Arbiter(u_dataBankManager.frontend_request_i.bits.cloneType(), 3))
+  private val arbFlushPort = u_3wayArbiter.io.in(0)
+  private val arbRefillPort = u_3wayArbiter.io.in(1)
+  private val arbPipelinePort = u_3wayArbiter.io.in(2)
 
-  val u_lruCore = Module(new LRU(param.databankParameter, lruCore))
-  u_lruCore.addr_i <> u_bank_frontend.lru_addr_o
-  u_lruCore.index_i <> u_bank_frontend.lru_index_o
-  u_bank_frontend.lru_which_i := u_lruCore.lru_o
+  // Manage BRAM ports -----
+  u_bramPortsAdapter.bram_ports(0) <> bram.portA
+  u_bramPortsAdapter.bram_ports(1) <> bram.portB
 
-  val u_refill_queue = Module(new RefillQueue(param))
+  u_bramPortsAdapter.frontend_read_reply_data_o <> u_dataBankManager.bank_ram_reply_data_i
+  u_bramPortsAdapter.frontend_read_request_i <> u_dataBankManager.bank_ram_request_addr_o
+  u_bramPortsAdapter.frontend_write_request_i <> u_dataBankManager.bank_ram_write_request_o
 
-  val pipeline_request_i = IO(Flipped(Decoupled(new PipeCache.CacheRequest(
-    param.pAddrWidth, param.blockSize
-  ))))
+  // Connect LRU Policy -----
+  u_lruCore.addr_i <> u_dataBankManager.lru_addr_o
+  u_lruCore.index_i <> u_dataBankManager.lru_index_o
+  u_dataBankManager.lru_which_i := u_lruCore.lru_o
 
-  val flush_request_i = IO(Flipped(Decoupled(new CacheFlushRequest(param))))
-  val reject_request_vi = IO(Input(Bool())) // When this signal is raised, no new requests will be accepted.
-
-  val refill_data_i = IO(Flipped(Decoupled(UInt(param.blockSize.W))))
-  u_refill_queue.dramRefillData_i <> refill_data_i
-
-  val u_frontend_arb = Module(new Arbiter(u_bank_frontend.frontend_request_i.bits.cloneType(), 3))
-  // the order:
-  // - 0: Flush
-  // - 1: Refill
-  // - 2: Pipeline
+  u_refillQueue.dramRefillData_i <> axiMem_io.resp
 
   // The normal request from the pipeline
-  u_frontend_arb.io.in(2).valid := pipeline_request_i.valid
-  u_frontend_arb.io.in(2).bits.thid := DontCare
-  u_frontend_arb.io.in(2).bits.addr := pipeline_request_i.bits.addr >> log2Ceil(param.blockSize / 8)
-  u_frontend_arb.io.in(2).bits.asid := DontCare
-  u_frontend_arb.io.in(2).bits.flush_v := false.B
-  u_frontend_arb.io.in(2).bits.perm := DontCare
-  u_frontend_arb.io.in(2).bits.refillData := DontCare
-  u_frontend_arb.io.in(2).bits.refill_v := false.B
-  u_frontend_arb.io.in(2).bits.wData := pipeline_request_i.bits.data
-  u_frontend_arb.io.in(2).bits.wMask := Cat(pipeline_request_i.bits.w_en.asBools().map(Fill(8, _)).reverse)
-  pipeline_request_i.ready := !flush_request_i.valid && !u_refill_queue.refillRequest_o.valid && !reject_request_vi
-  // The flush request from other place
-  u_frontend_arb.io.in(0).valid := flush_request_i.valid
-  u_frontend_arb.io.in(0).bits := flush_request_i.bits.toInternalRequestPacket
-  flush_request_i.ready := u_frontend_arb.io.in(0).ready
-  // The refilling request from the backend of the cache
-  u_frontend_arb.io.in(1).valid := u_refill_queue.refillRequest_o.valid
-  u_frontend_arb.io.in(1).bits := u_refill_queue.refillRequest_o.bits.toInternalRequestPacket
-  u_refill_queue.refillRequest_o.ready := !flush_request_i.valid && !reject_request_vi
+  arbPipelinePort.valid := pipeline_io.req.valid
+  arbPipelinePort.bits.thid := DontCare
+  arbPipelinePort.bits.addr := pipeline_io.req.bits.addr >> log2Ceil(params.blockSize / 8)
+  arbPipelinePort.bits.asid := DontCare
+  arbPipelinePort.bits.flush_v := false.B
+  arbPipelinePort.bits.perm := DontCare
+  arbPipelinePort.bits.refillData := DontCare
+  arbPipelinePort.bits.refill_v := false.B
+  arbPipelinePort.bits.wData := pipeline_io.req.bits.data
+  arbPipelinePort.bits.wMask := Cat(pipeline_io.req.bits.w_en.asBools().map(Fill(8, _)).reverse)
+  pipeline_io.req.ready := !mmu_i.flushReq.valid && !u_refillQueue.refillRequest_o.valid && !mmu_i.stallReq
 
-  u_bank_frontend.frontend_request_i.bits := u_frontend_arb.io.out.bits
-  u_bank_frontend.frontend_request_i.valid := !reject_request_vi && u_frontend_arb.io.out.valid
-  u_frontend_arb.io.out.ready := !reject_request_vi && u_bank_frontend.frontend_request_i.ready
+  // The flush request from the mmu
+  arbFlushPort.valid := mmu_i.flushReq.valid
+  arbFlushPort.bits := mmu_i.flushReq.bits.toInternalRequestPacket
+  mmu_i.flushReq.ready := arbFlushPort.ready
 
-  // reply
-  val pipeline_response_o = IO(Valid(new PipeCache.CacheResponse(param.blockSize)))
-  pipeline_response_o.valid := u_bank_frontend.frontend_reply_o.valid && !u_bank_frontend.frontend_reply_o.bits.flush
-  pipeline_response_o.bits.data := Mux(
-    u_bank_frontend.frontend_reply_o.bits.refill,
-    u_bank_frontend.frontend_reply_o.bits.wData, // the data being written into BRAM will return in case it's a fetch
-    u_bank_frontend.frontend_reply_o.bits.rData
+  // The refilling/new block arrival request from DRAM
+  arbRefillPort.valid := u_refillQueue.refillRequest_o.valid
+  arbRefillPort.bits := u_refillQueue.refillRequest_o.bits.toInternalRequestPacket
+  u_refillQueue.refillRequest_o.ready := !mmu_i.flushReq.valid && !mmu_i.stallReq
+
+  u_dataBankManager.frontend_request_i.bits := u_3wayArbiter.io.out.bits
+  u_dataBankManager.frontend_request_i.valid := !mmu_i.stallReq && u_3wayArbiter.io.out.valid
+  u_3wayArbiter.io.out.ready := !mmu_i.stallReq && u_dataBankManager.frontend_request_i.ready
+
+  // Reply to pipeline ------
+  pipeline_io.resp.valid := u_dataBankManager.frontend_reply_o.valid && !u_dataBankManager.frontend_reply_o.bits.flush
+  pipeline_io.resp.bits.data := Mux(
+    u_dataBankManager.frontend_reply_o.bits.refill,
+    u_dataBankManager.frontend_reply_o.bits.wData, // the data being written into BRAM will return in case it's a fetch
+    u_dataBankManager.frontend_reply_o.bits.rData
   )
-  pipeline_response_o.bits.hit := u_bank_frontend.frontend_reply_o.bits.hit
-  pipeline_response_o.bits.miss2hit := u_bank_frontend.frontend_reply_o.bits.refill
-  pipeline_response_o.bits.miss := !pipeline_response_o.bits.hit
+  pipeline_io.resp.bits.hit := u_dataBankManager.frontend_reply_o.bits.hit
+  pipeline_io.resp.bits.miss2hit := u_dataBankManager.frontend_reply_o.bits.refill
+  pipeline_io.resp.bits.miss := !pipeline_io.resp.bits.hit
 
-  // Connect to the backend merger
-  val u_backend_merger = Module(new BackendRequestMerger(param.databankParameter))
-  u_backend_merger.write_request_i <> u_bank_frontend.writeback_request_o
+  // Connect to the backend merger ------
+  u_backendMerger.write_request_i <> u_dataBankManager.writeback_request_o
 
   // Backend Queue
-  val backend_request_o = IO(u_backend_merger.backend_request_o.cloneType)
-  backend_request_o <> u_backend_merger.backend_request_o
+  axiMem_io.req <> u_backendMerger.backend_request_o
 
-  u_refill_queue.missRequest_i.bits := u_bank_frontend.miss_request_o.bits
-  u_backend_merger.read_request_i.bits := u_bank_frontend.miss_request_o.bits
+  u_refillQueue.missRequest_i.bits := u_dataBankManager.miss_request_o.bits
+  u_backendMerger.read_request_i.bits := u_dataBankManager.miss_request_o.bits
 
-  u_bank_frontend.miss_request_o.ready := u_refill_queue.missRequest_i.ready && u_backend_merger.read_request_i.ready
-  u_refill_queue.missRequest_i.valid := u_bank_frontend.miss_request_o.valid && u_backend_merger.read_request_i.ready
-  u_backend_merger.read_request_i.valid := u_bank_frontend.miss_request_o.valid && u_refill_queue.missRequest_i.ready
-
+  u_dataBankManager.miss_request_o.ready := u_refillQueue.missRequest_i.ready && u_backendMerger.read_request_i.ready
+  u_refillQueue.missRequest_i.valid := u_dataBankManager.miss_request_o.valid && u_backendMerger.read_request_i.ready
+  u_backendMerger.read_request_i.valid := u_dataBankManager.miss_request_o.valid && u_refillQueue.missRequest_i.ready
 }
 
 object BaseCache {
-  def generateCache(
+  def apply(
     param: CacheParams,
     lruCore: () => LRUCore
- ): BaseCache = {
+  ): BaseCache = {
     def cacheUpdateFunction(req: DataBankFrontendRequestPacket, oldEntry: CacheEntry): CacheEntry = {
       oldEntry.write(req.wData, req.wMask, false.B, true.B)
     }

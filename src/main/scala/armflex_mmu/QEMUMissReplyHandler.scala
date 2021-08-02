@@ -84,7 +84,7 @@ class QEMUMissReplyHandler(
   M_DMA_W.req.valid := state_r === sMoveback
 
   // sReplyTLB
-  val tlb_backend_reply_o = IO(Decoupled(new TLBBackendReplyPacket(params.getPageTableParams)))
+  val tlb_backend_reply_o = IO(Decoupled(new TLBMMURespPacket(params.getPageTableParams)))
   tlb_backend_reply_o.bits.tag := request_r.tag
   tlb_backend_reply_o.bits.data.modified := false.B
   tlb_backend_reply_o.bits.data.perm := request_r.perm

@@ -58,8 +58,8 @@ class PipelineAxi(params: PipelineParams) extends MultiIOModule {
     uCSR2ToTransplant.io.bus <> uAxilToCSR.io.bus
   }
 
-  val S_AXI = IO(Flipped(new AXI4Lite(log2Ceil(bramRegCount*2) + log2Ceil(axidataW / 8), axidataW)))
-  S_AXI <> uAxilToCSR.io.ctl
+  val S_AXIL = IO(Flipped(new AXI4Lite(log2Ceil(bramRegCount*2) + log2Ceil(axidataW / 8), axidataW)))
+  S_AXIL <> uAxilToCSR.io.ctl
 
   val trans2host = WireInit(Mux(pipeline.hostIO.trans2host.done.valid, 1.U << pipeline.hostIO.trans2host.done.tag, 0.U))
   val host2transClear = WireInit(Mux(pipeline.hostIO.trans2host.clear.valid, 1.U << pipeline.hostIO.trans2host.clear.tag, 0.U))
@@ -73,7 +73,9 @@ class PipelineAxi(params: PipelineParams) extends MultiIOModule {
 
   // Memory port.
   val mem_io = IO(pipeline.mem_io.cloneType)
+  val mmu_io = IO(pipeline.mmu_io.cloneType)
   pipeline.mem_io <> mem_io
+  pipeline.mmu_io <> mmu_io
 
   // mem.inst.req
   thid2asidTable.thid_i(0) := pipeline.mem_io.inst.tlb.req.bits.thid

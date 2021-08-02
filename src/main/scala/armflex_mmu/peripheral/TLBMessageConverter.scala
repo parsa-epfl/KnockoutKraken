@@ -4,7 +4,7 @@ import armflex_mmu.MemoryHierarchyParams
 import armflex.{TLBEvictionMessage, TLBMissRequestMessage}
 import chisel3._
 import chisel3.util._
-import armflex_cache.{TLBBackendRequestPacket, PageTableParams}
+import armflex_cache.{TLBMMURequestPacket, PageTableParams}
 
 /**
  * This module converts a TLB backend request (evict or just flush) to a message.
@@ -19,7 +19,7 @@ import armflex_cache.{TLBBackendRequestPacket, PageTableParams}
 class TLBMessageConverter(
   param: MemoryHierarchyParams
 ) extends MultiIOModule {
-  val tlb_backend_request_i = IO(Flipped(Decoupled(new TLBBackendRequestPacket(param.getPageTableParams))))
+  val tlb_backend_request_i = IO(Flipped(Decoupled(new TLBMMURequestPacket(param.getPageTableParams))))
 
   val miss_request = Wire(Decoupled(new TLBMissRequestMessage(param.getPageTableParams)))
   miss_request.bits.tag:= tlb_backend_request_i.bits.tag
