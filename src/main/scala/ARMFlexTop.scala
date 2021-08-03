@@ -1,6 +1,8 @@
+import antmicro.Bus.{AXI4, AXI4AR, AXI4AW, AXI4B, AXI4R, AXI4W}
 import chisel3._
 import chisel3.util._
 import armflex._
+import armflex.util.AXILInterconnector
 import armflex_cache._
 import armflex_mmu.{MMU, MemoryHierarchyParams}
 import armflex.util.ExtraUtils._
@@ -103,6 +105,62 @@ class ARMFlexTop(
   AXI_MEM <> memory.axiShell_io
 }
 
+class ARMFlexTopSimulator(
+  paramsPipeline: PipelineParams,
+  paramsMemoryHierarchy: MemoryHierarchyParams
+) extends MultiIOModule {
+  import armflex.util.AXIReadMultiplexer
+  import armflex.util.AXIWriteMultiplexer
+  private val devteroFlexTop = Module(new ARMFlexTop(paramsPipeline, paramsMemoryHierarchy))
+  private val axiMulti_R = Module(new AXIReadMultiplexer(64, 512, 5))
+  private val axiMulti_W = Module(new AXIWriteMultiplexer(64, 512, 5))
+  private val axilMulti = Module(new AXILInterconnector(Seq(0x00000, 0x08000), Seq(0x08000,0x08000), 32, 32))
+  val S_AXI = IO(Flipped(devteroFlexTop.AXI_MEM.AXI_MMU.S_AXI.cloneType))
+  val S_AXIL = IO(Flipped(axilMulti.S_AXIL.cloneType))
+  S_AXI <> devteroFlexTop.AXI_MEM.AXI_MMU.S_AXI
+  S_AXIL <> axilMulti.S_AXIL
+  axilMulti.M_AXIL(0) <> devteroFlexTop.S_AXIL_TRANSPLANT
+  axilMulti.M_AXIL(1) <> devteroFlexTop.AXI_MEM.AXI_MMU.S_AXIL_QEMU_MQ
+  for(i <- 0 until devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_R.length)
+    axiMulti_R.S_IF(i) <> devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_R(i)
+  for(i <- 0 until devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_W.length)
+    axiMulti_W.S_IF(i) <> devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_W(i)
+  var W_IDX = devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_W.length
+  var R_IDX = devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_R.length
+  axiMulti_W.S_IF(W_IDX+0) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_icacheW
+  axiMulti_W.S_IF(W_IDX+1) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_dcacheW
+  axiMulti_R.S_IF(W_IDX+0) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_icacheR
+  axiMulti_R.S_IF(W_IDX+1) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_dcacheR
+
+  val M_AXI = IO(new AXI4(paramsMemoryHierarchy.dramAddrW, paramsMemoryHierarchy.cacheBlockSize))
+  // Interconnect Read ports
+  M_AXI.ar <> axiMulti_R.M_AXI.ar
+  M_AXI.r <> axiMulti_R.M_AXI.r
+  // Disable Write ports
+  axiMulti_R.M_AXI.aw <> AXI4AW.stub(paramsMemoryHierarchy.dramAddrW)
+  axiMulti_R.M_AXI.w <> AXI4W.stub(paramsMemoryHierarchy.cacheBlockSize)
+  axiMulti_R.M_AXI.b <> AXI4B.stub()
+  // Interconnect Write ports
+  M_AXI.aw <> axiMulti_W.M_AXI.aw
+  M_AXI.w <> axiMulti_W.M_AXI.w
+  M_AXI.b <> axiMulti_W.M_AXI.b
+  // Disable Read ports
+  axiMulti_W.M_AXI.ar <> AXI4AR.stub(paramsMemoryHierarchy.dramAddrW)
+  axiMulti_W.M_AXI.r <> AXI4R.stub(paramsMemoryHierarchy.cacheBlockSize)
+}
+
+object ARMFlexTopSimulatorVerilogEmitter extends App {
+  val c = new chisel3.stage.ChiselStage
+  import java.io._
+  val fr = new FileWriter(new File("test/genFiles/ArmflexTopSim/ARMFlexTop_SIM.v"))
+  fr.write(c.emitVerilog(
+    new ARMFlexTopSimulator(
+      new PipelineParams(thidN = 4),
+      new MemoryHierarchyParams(thidN = 4)
+      ), annotations = Seq(TargetDirAnnotation("test/genFiles/ArmflexTopSim"))))
+  fr.close()
+}
+
 object ARMFlexTopVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
   import java.io._
@@ -171,7 +229,6 @@ class PipelineAxiHacked(params: PipelineParams) extends MultiIOModule {
   pipeline.mem_io.inst.cache.resp.bits := Cat(for (idx <- 0 until regsPerBlock) yield SimpleCSR(csr.io.csr(currIdx+idx), axidataW)).asTypeOf(pipeline.mem_io.inst.cache.resp.bits)
   pipeline.mem_io.data.tlb.resp.bits := Cat(for (idx <- 0 until regsPerBlock) yield SimpleCSR(csr.io.csr(currIdx+regsPerBlock+idx), axidataW)).asTypeOf(pipeline.mem_io.data.tlb.resp.bits)
   pipeline.mem_io.data.cache.resp.bits := Cat(for (idx <- 0 until regsPerBlock) yield SimpleCSR(csr.io.csr(currIdx+regsPerBlock+idx), axidataW)).asTypeOf(pipeline.mem_io.data.cache.resp.bits)
-
 
   csr.io.csr(38) <> 0.U.asTypeOf(csr.io.csr(0))
   csr.io.csr(3) <> 0.U.asTypeOf(csr.io.csr(0))

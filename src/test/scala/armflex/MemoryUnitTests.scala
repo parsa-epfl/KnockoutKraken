@@ -36,12 +36,8 @@ object MemoryUnitDrivers {
 
   implicit class MemoryUnitDriver(dut: MemoryUnit) {
     implicit val clock = dut.clock
-    def f1 = {
-      dut.mem_io.tlb.req.bits.expect()
-    }
   }
 }
 
 class MemoryUnitTests extends FreeSpec with ChiselScalatestTester {
-  ""
 }
