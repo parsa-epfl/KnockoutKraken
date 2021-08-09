@@ -79,5 +79,11 @@ class CacheEntry(param: DatabankParams) extends Bundle {
     address(address.getWidth - 1, address.getWidth - tagWidth)
   }
 
+  override def toPrintable: Printable = {
+    def char(variable: Bool) = Mux(variable, 'v'.U, '-'.U)
+    p"CacheEntry(valid:${Character(char(v))}:dirty:${Character(char(d))}:tag:${Hexadecimal(tag)}\n" +
+    p"           data:0x${Hexadecimal(data)})\n"
+  }
+
   override def cloneType: this.type = new CacheEntry(param).asInstanceOf[this.type]
 }

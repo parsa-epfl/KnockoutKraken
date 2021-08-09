@@ -241,5 +241,26 @@ class TLB(
   // write back request
   // So make the request pop all the time since we will not use it.
   u_dataBankManager.writeback_request_o.ready := true.B
+
+  if(true) { // TODO Conditional printing
+    val location = "TLB"
+    when(u_dataBankManager.frontend_request_i.fire){
+      when(u_dataBankManager.frontend_request_i.bits.refill_v) {
+        printf(p"${location}:Bank:Refill[0x${Hexadecimal(u_dataBankManager.frontend_request_i.bits.addr)}]\n")
+      }.elsewhen(u_dataBankManager.frontend_request_i.bits.wMask =/= 0.U) {
+        printf(p"${location}:Bank:WR[0x${Hexadecimal(u_dataBankManager.frontend_request_i.bits.addr)}]\n")
+      }.otherwise {
+        printf(p"${location}:Bank:RD[0x${Hexadecimal(u_dataBankManager.frontend_request_i.bits.addr)}]\n")
+      }
+    }
+    when(u_dataBankManager.bank_ram_reply_data_i.fire){
+      when(u_dataBankManager.bank_ram_write_request_o.fire && u_dataBankManager.bank_ram_write_request_o.bits.addr === u_dataBankManager.bank_ram_request_addr_o.bits) {
+        // Forwarding from writeport
+        printf(p"${location}:Bank:Resp:Forward[${u_dataBankManager.bank_ram_write_request_o.bits.data}]\n")
+      }.otherwise{
+        printf(p"${location}:Bank:Resp:Get[SET TOO BIG TO PRINT]\n")
+      }
+    }
+  }
 }
 

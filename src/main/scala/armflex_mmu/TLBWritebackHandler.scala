@@ -57,7 +57,6 @@ class TLBWritebackHandler(
     request_r.tag := u_arb.io.out.bits.tag
     request_r.evicted_pte := u_arb.io.out.bits.entry
     request_r.source := u_arb.io.chosen
-    assert(u_arb.io.out.bits.entry.modified, "Only modified entry can be written back")
   }
 
   u_buffer.lookup_request_i := request_r.tag
@@ -70,7 +69,6 @@ class TLBWritebackHandler(
   // sPick
   val victim_index_r = RegInit(0.U(u_buffer.entryNumber.W))
   when(state_r === sPick){
-    assert(u_buffer.lookup_reply_o.hit_v)
     victim_index_r := u_buffer.lookup_reply_o.index
   }
 
@@ -80,7 +78,6 @@ class TLBWritebackHandler(
   u_buffer.write_request_i.bits.item.entry := request_r.evicted_pte
   u_buffer.write_request_i.bits.item.tag := request_r.tag
   u_buffer.write_request_i.valid := state_r === sUpdatePT
-
 
   // sMoveOut
   M_DMA_W.req.bits.address := M_DMA_R.req.bits.address
@@ -102,6 +99,18 @@ class TLBWritebackHandler(
     }
     is(sMoveOut){
       state_r := Mux(M_DMA_W.done, sIdle, sMoveOut)
+    }
+  }
+
+  if(true) { // TODO Conditional asserts
+    when(state_r === sPick){
+      when(u_buffer.lookup_reply_o.hit_v) {
+        printf("If picking entry, must be a hit")
+        //assert(u_buffer.lookup_reply_o.hit_v, "If picking entry, must be a hit")
+      }
+    }
+    when(u_arb.io.out.fire){
+      assert(u_arb.io.out.bits.entry.modified, "Only modified entry can be written back")
     }
   }
 }

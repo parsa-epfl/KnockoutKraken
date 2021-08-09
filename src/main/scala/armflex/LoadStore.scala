@@ -667,4 +667,21 @@ class MemoryUnit(
       assert(!haveCacheReq && !havePendingCacheReq, "No new cache requests should ever appear given that we stopped translating")
     }
   }
+  if(true) { // TODO Conditional printing
+    val location = "Pipeline:MemoryUnit"
+    when(mem_io.tlb.req.fire) {
+      printf(p"${location}:iTLB:Req:thid[${mem_io.tlb.req.bits.thid}]:PC[0x${Hexadecimal(mem_io.tlb.req.bits.addr)}]\n")
+    }
+    when(mem_io.tlb.resp.fire) {
+      printf(p"${location}:iTLB:Resp:thid[${tlbMeta.tag}]:VA[0x${Hexadecimal(tlbMeta.req(0).addr)}]:PA[0x${Hexadecimal(mem_io.tlb.resp.bits.addr)}]\n")
+    }
+    when(mem_io.cache.req.fire) {
+      printf(p"${location}:iCache:Req:thid[${cacheAdaptor.pipe_io.req.meta.inst.tag}]:PA[0x${Hexadecimal(mem_io.cache.req.bits.addr)}]\n")
+    }
+    when(mem_io.cache.resp.fire) {
+      printf(p"${location}:iCache:Resp:thid[${cacheAdaptor.pipe_io.resp.meta.inst.tag}]\n" +
+             p"   Hit[${mem_io.cache.resp.bits.hit}]:DATA[0x${Hexadecimal(cacheAdaptor.pipe_io.resp.port.bits.data)}]\n")
+    }
+  }
+
 }

@@ -160,6 +160,15 @@ class PipelineWithTransplant(params: PipelineParams) extends MultiIOModule {
   transplantU.trans2host <> hostIO.trans2host
   transplantU.hostBramPort <> hostIO.port
 
+  if(true) { // TODO Conditional assertions and printing
+    when(archstate.pstate.commit.next.valid) {
+      printf(p"Pipeline:Commit:THID[${archstate.pstate.commit.next.tag}]:PC[0x${Hexadecimal(pipeline.archstate.commit.regs.next.PC)}]->PC[0x${Hexadecimal(pipeline.archstate.commit.regs.next.PC)}]\n")
+    }
+    when(pipeline.transplantIO.done.valid) {
+      printf(p"Pipeline:Transplant:THID[${archstate.pstate.commit.next.tag}]:PC[0x${Hexadecimal(archstate.pstate.commit.curr.PC)}]->Transplant\n")
+    }
+  }
+
   //* DBG
   val dbg = IO(new Bundle {
     val bits =

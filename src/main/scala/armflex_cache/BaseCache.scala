@@ -286,6 +286,28 @@ class BaseCache(
   u_dataBankManager.miss_request_o.ready := u_refillQueue.missRequest_i.ready && u_backendMerger.read_request_i.ready
   u_refillQueue.missRequest_i.valid := u_dataBankManager.miss_request_o.valid && u_backendMerger.read_request_i.ready
   u_backendMerger.read_request_i.valid := u_dataBankManager.miss_request_o.valid && u_refillQueue.missRequest_i.ready
+
+  if(true) { // TODO Conditional printing
+    val location = "Cache"
+    when(u_dataBankManager.frontend_request_i.fire){
+      when(u_dataBankManager.frontend_request_i.bits.refill_v) {
+        printf(p"${location}:Bank:Refill[0x${Hexadecimal(u_dataBankManager.frontend_request_i.bits.addr)}]\n" +
+               p"     DATA[${Hexadecimal(u_dataBankManager.frontend_request_i.bits.wData)}]\n")
+      }.elsewhen(u_dataBankManager.frontend_request_i.bits.wMask =/= 0.U) {
+        printf(p"${location}:Bank:WR[0x${Hexadecimal(u_dataBankManager.frontend_request_i.bits.addr)}]\n")
+      }.otherwise {
+        printf(p"${location}:Bank:RD[0x${Hexadecimal(u_dataBankManager.frontend_request_i.bits.addr)}]\n")
+      }
+    }
+    when(u_dataBankManager.bank_ram_reply_data_i.fire){
+      when(u_dataBankManager.bank_ram_write_request_o.fire && u_dataBankManager.bank_ram_write_request_o.bits.addr === u_dataBankManager.bank_ram_request_addr_o.bits) {
+        // Forwarding from writeport
+        printf(p"${location}:Bank:Resp:Forward[${u_dataBankManager.bank_ram_write_request_o.bits.data}]\n")
+      }.otherwise{
+        printf(p"${location}:Bank:Resp:Get[SET TOO BIG TO PRINT]\n")
+      }
+    }
+  }
 }
 
 object BaseCache {

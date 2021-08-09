@@ -254,6 +254,34 @@ class MMU(
   // QEMU Message FIFO
   u_qemuMsgQueue.fifo_i <> u_qemuMsgEncoder.o
   u_qemuMsgDecoder.message_i <> Queue(u_qemuMsgQueue.fifo_o, 1)
+
+  if(true) { // TODO Conditional printing 
+    // Page Walker DRAM Accesses
+    when(u_page_walker.M_DMA_R.req.fire) {
+      printf(p"MMU:AXI DRAM: Page Walk, Get PT set\n")
+    }
+    // TLB writeback handler
+    when(u_tlbEntryWbHandler.M_DMA_R.req.fire) {
+      printf(p"MMU:AXI DRAM:TLB miss get PTE\n")
+    }
+    when(u_tlbEntryWbHandler.M_DMA_W.req.fire) {
+      printf(p"MMU:AXI DRAM:TLB eviction writeback PTE\n")
+    }
+    // Miss request handler
+    when(u_qemuMissHandler.M_DMA_R.req.fire) {
+      printf(p"MMU:AXI DRAM:QEMU get PT set to insert new PTE\n")
+    }
+    when(u_qemuMissHandler.M_DMA_W.req.fire) {
+      printf(p"MMU:AXI DRAM:QEMU push updated PT set\n")
+    }
+    // Page Evict Handler
+    when(u_qemuPageEvictHandler.M_DMA_R.req.fire){
+
+    }
+    when(u_qemuPageEvictHandler.M_DMA_W.req.fire) {
+      printf(p"MMU:AXI DRAM:Evict entry from PT\n")
+    }
+  }
 }
 
 object PageDemanderVerilogEmitter extends App{

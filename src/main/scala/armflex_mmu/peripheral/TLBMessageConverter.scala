@@ -32,9 +32,7 @@ class TLBMessageConverter(
   // Why not flush: Flushed element is handled by the module TLBWrapper.
   ev_request.valid := tlb_backend_request_i.valid && tlb_backend_request_i.bits.w_v && !tlb_backend_request_i.bits.flush_v
 
-  when(ev_request.valid){
-    assert(ev_request.bits.entry.perm === 1.U, "Eviction only occurs in dirty and perm-granted TLB entry.")
-  }
+
 
   // val miss_request_qo = Queue(miss_request, 4)
   val miss_request_o = IO(Decoupled(new TLBMissRequestMessage(param.getPageTableParams)))
@@ -49,6 +47,12 @@ class TLBMessageConverter(
     Mux(tlb_backend_request_i.bits.flush_v, true.B, eviction_request_o.ready),
     miss_request_o.ready
   )
+
+  if(true) { // TODO Conditional asserts
+    when(ev_request.valid){
+      assert(ev_request.bits.entry.perm === 1.U, "Eviction only occurs in dirty and perm-granted TLB entry.")
+    }
+  }
 }
 
 object TLBWrapperVerilogEmitter extends App {

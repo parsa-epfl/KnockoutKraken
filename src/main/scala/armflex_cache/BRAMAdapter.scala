@@ -82,13 +82,6 @@ class BRAMPortAdapter(
     frontend_read_request_i.ready := true.B
   }
 
-  when(frontend_read_request_i.valid){
-    printf(p"BRAM: Accept Read Transaction: Address: ${frontend_read_request_i.bits}\n")
-  }
-  when(frontend_read_reply_data_o.valid){
-    printf(p"BRAM: Reply Read Transaction: Data: ${frontend_read_reply_data_o.bits}\n")
-  }
-
   val frontend_write_request_i = IO(Flipped(Decoupled(new BankWriteRequestPacket(params))))
   bram_ports(1).ADDR := frontend_write_request_i.bits.addr
 
@@ -100,9 +93,4 @@ class BRAMPortAdapter(
   bram_ports(1).EN := frontend_write_request_i.valid
   bram_ports(1).WE := UIntToOH(frontend_write_request_i.bits.which) & Fill(params.associativity, frontend_write_request_i.valid)
   frontend_write_request_i.ready := true.B
-
-  when(frontend_write_request_i.valid){
-    printf(p"BRAM: Accept Write Transaction: Address: ${frontend_write_request_i.bits.addr}, Entry: ${frontend_write_request_i.bits.which}, Data: ${writeValue}\n")
-  }
-
 }

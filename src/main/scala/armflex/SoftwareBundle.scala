@@ -52,6 +52,7 @@ class PTTagPacket(params: PageTableParams) extends Bundle
     res.asInstanceOf[this.type]
   }
 
+  override def toPrintable: Printable = p"PTTagPacket(asid[${Hexadecimal(asid)}]:vpn[${Hexadecimal(vpn)}]\n"
   override def cloneType: this.type = new PTTagPacket(params).asInstanceOf[this.type]
 }
 

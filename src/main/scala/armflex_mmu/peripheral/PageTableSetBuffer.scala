@@ -136,13 +136,12 @@ class PageTableSetBuffer(
   val lookup_request_i = IO(Input(new PTTagPacket(params)))
   val hit_vector = pt_set_r.tags.zip(pt_set_r.valids.asBools()).map({
     case (tag, valid) =>
-    tag.asid === lookup_request_i.asid &&
-    tag.vpn === lookup_request_i.vpn &&
-    valid
+      tag.asid === lookup_request_i.asid && 
+      tag.vpn === lookup_request_i.vpn && 
+      valid
   })
 
   val hit_v = VecInit(hit_vector).asUInt =/= 0.U
-  assert(PopCount(hit_vector) === 1.U || PopCount(hit_vector) === 0.U, "There should be only one hit at most!!!")
 
   val hit_index = OHToUInt(hit_vector)
   val lookup_reply_o = IO(Output(new PageSetBufferLookupReplyPacket(params)))
@@ -179,6 +178,13 @@ class PageTableSetBuffer(
     }
   }
 
+  if(true) { // TODO Conditional asserts
+    val multiple_hit = (PopCount(hit_vector) === 1.U || PopCount(hit_vector) === 0.U)
+    when(!multiple_hit) {
+      printf(p"Multiple set hits detected:v[${Hexadecimal(pt_set_r.valids)}]:${pt_set_r.tags}\n")
+      assert(multiple_hit, "There should be only one hit at most!!!")
+    }
+  }
 }
 
 object PageTableSetBufferVerilogEmitter extends App {

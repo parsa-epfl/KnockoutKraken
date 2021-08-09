@@ -42,8 +42,24 @@ class FetchUnitPC(thidN: Int) extends MultiIOModule {
   }
   for(device <- 0 until 2) {
     when(ctrl.memWake(device).valid) {
-    // Wakeup from Memory miss
+      // Wakeup from Memory miss
       en(ctrl.memWake(device).tag) := true.B
+    }
+  }
+
+  if(true) { // TODO Conditional printing 
+    val location = "Pipeline:Fetch"
+    when(ctrl.start.valid) {
+      printf(p"${location}:Transplant Start:thid[${ctrl.start.tag}]:PC[0x${Hexadecimal(ctrl.start.bits.get)}]\n")
+    }
+    when(ctrl.commit.valid) {
+      printf(p"${location}:Commit:thid[${ctrl.commit.tag}]:PC[0x${Hexadecimal(ctrl.commit.bits.get)}]\n")
+    }
+    when(ctrl.memWake(0).valid) {
+      printf(p"${location}:Miss2Wake iTLB:thid[${ctrl.memWake(0).tag}]:PC[0x${Hexadecimal(pc(ctrl.memWake(0).tag))}]\n")
+    }
+    when(ctrl.memWake(1).valid) {
+      printf(p"${location}:Miss2Wake dTLB:thid[${ctrl.memWake(1).tag}]:PC[0x${Hexadecimal(pc(ctrl.memWake(1).tag))}]\n")
     }
   }
 }
@@ -207,6 +223,22 @@ class FetchUnit(
     }
     when(flushController.ctrl.waitingForMMU) {
       assert(!haveCacheReq && !havePendingCacheReq, "No new cache requests should ever appear given that we stopped translating")
+    }
+  }
+  if(true) { // TODO Conditional printing
+    val location = "Pipeline:Fetch"
+    when(mem_io.tlb.req.fire) {
+      printf(p"${location}:iTLB:Req:thid[${mem_io.tlb.req.bits.thid}]:PC[0x${Hexadecimal(mem_io.tlb.req.bits.addr)}]\n")
+    }
+    when(mem_io.tlb.resp.fire) {
+      printf(p"${location}:iTLB:Resp:thid[${metaDataTLB_r.id}]:PC[0x${Hexadecimal(metaDataTLB_r.pc)}]:paddr[0x${Hexadecimal(mem_io.tlb.resp.bits.addr)}]\n");
+    }
+    when(mem_io.cache.req.fire) {
+      printf(p"${location}:iCache:Req:thid[${cacheAdaptor.pipe_io.req.meta.id}]:PC[0x${Hexadecimal(cacheAdaptor.pipe_io.req.meta.pc)}]:paddr[0x${Hexadecimal(mem_io.cache.req.bits.addr)}]\n");
+    }
+    when(mem_io.cache.resp.fire) {
+      printf(p"${location}:iCache:Resp:thid[${cacheAdaptor.pipe_io.resp.meta.id}]:PC[0x${Hexadecimal(cacheAdaptor.pipe_io.resp.meta.pc)}]:\n" +
+             p"   Hit[${mem_io.cache.resp.bits.hit}]:DATA[0x${Hexadecimal(cacheAdaptor.pipe_io.resp.port.bits.data)}]\n");
     }
   }
 }
