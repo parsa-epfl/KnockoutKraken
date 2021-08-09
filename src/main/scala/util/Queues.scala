@@ -94,9 +94,9 @@ class CreditQueueController(size: Int) extends MultiIOModule {
   })
   val ready = IO(Output(Bool()))
 
-  private val cnt = RegInit(0.U(log2Ceil(size).W))
-  private val diff = WireInit(0.U(2.W))
-  diff := trans.in.asUInt - (trans.out.asUInt + trans.dropped.asUInt)
+  private val cnt = RegInit(0.S(log2Ceil(size).W))
+  private val diff = WireInit(0.S(2.W))
+  diff := trans.in.asSInt - (trans.out.asSInt + trans.dropped.asSInt)
   cnt := cnt + diff
-  ready := cnt < (size-1).U
+  ready := cnt < (size-1).S
 }
