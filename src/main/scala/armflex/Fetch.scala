@@ -118,7 +118,7 @@ class FetchUnit(
   // Handshakes management
   mem_io.tlb.req.valid := false.B
   pcUnit.req.ready := false.B
-  mem_io.tlb.resp.ready := false.B
+  mem_io.tlb.resp.ready := true.B // Managed by credits, always ready to receive
   cacheReqQ.io.enq.valid := false.B
   mem_io.tlb.req.handshake(pcUnit.req, pc2cache_credits.ready)
   when(mem_io.tlb.resp.valid && mem_io.tlb.resp.bits.hit) {
