@@ -112,7 +112,7 @@ class ARMFlexTopSimulator(
   import armflex.util.AXIReadMultiplexer
   import armflex.util.AXIWriteMultiplexer
   private val devteroFlexTop = Module(new ARMFlexTop(paramsPipeline, paramsMemoryHierarchy))
-  private val axiMulti_R = Module(new AXIReadMultiplexer(64, 512, 5))
+  private val axiMulti_R = Module(new AXIReadMultiplexer(64, 512, 6))
   private val axiMulti_W = Module(new AXIWriteMultiplexer(64, 512, 5))
   private val axilMulti = Module(new AXILInterconnector(Seq(0x00000, 0x08000), Seq(0x08000,0x08000), 32, 32))
   val S_AXI = IO(Flipped(devteroFlexTop.AXI_MEM.AXI_MMU.S_AXI.cloneType))
@@ -129,8 +129,8 @@ class ARMFlexTopSimulator(
   var R_IDX = devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_R.length
   axiMulti_W.S_IF(W_IDX+0) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_icacheW
   axiMulti_W.S_IF(W_IDX+1) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_dcacheW
-  axiMulti_R.S_IF(W_IDX+0) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_icacheR
-  axiMulti_R.S_IF(W_IDX+1) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_dcacheR
+  axiMulti_R.S_IF(R_IDX+0) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_icacheR
+  axiMulti_R.S_IF(R_IDX+1) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_dcacheR
 
   val M_AXI = IO(new AXI4(paramsMemoryHierarchy.dramAddrW, paramsMemoryHierarchy.cacheBlockSize))
   // Interconnect Read ports
