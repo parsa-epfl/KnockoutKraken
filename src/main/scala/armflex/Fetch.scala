@@ -121,7 +121,7 @@ class FetchUnit(
   mem_io.tlb.resp.ready := false.B
   cacheReqQ.io.enq.valid := false.B
   mem_io.tlb.req.handshake(pcUnit.req, pc2cache_credits.ready)
-  when(mem_io.tlb.resp.bits.hit) {
+  when(mem_io.tlb.resp.valid && mem_io.tlb.resp.bits.hit) {
     cacheReqQ.io.enq.handshake(mem_io.tlb.resp)
   }
 
