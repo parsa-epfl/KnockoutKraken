@@ -28,7 +28,8 @@ class TLBMessageConverter(
   miss_request.valid := tlb_backend_request_i.valid && !tlb_backend_request_i.bits.w_v
 
   val ev_request = Wire(Decoupled(new TLBEvictionMessage(param.getPageTableParams)))
-  ev_request.bits := tlb_backend_request_i.bits
+  ev_request.bits.tag := tlb_backend_request_i.bits.tag
+  ev_request.bits.entry := tlb_backend_request_i.bits.entry
   // Why not flush: Flushed element is handled by the module TLBWrapper.
   ev_request.valid := tlb_backend_request_i.valid && tlb_backend_request_i.bits.w_v && !tlb_backend_request_i.bits.flush_v
 
