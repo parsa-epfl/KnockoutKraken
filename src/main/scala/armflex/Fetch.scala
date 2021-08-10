@@ -225,6 +225,7 @@ class FetchUnit(
       assert(!haveCacheReq && !havePendingCacheReq, "No new cache requests should ever appear given that we stopped translating")
     }
   }
+
   if(true) { // TODO Conditional printing
     val location = "Pipeline:Fetch"
     when(mem_io.tlb.req.fire) {
@@ -238,7 +239,7 @@ class FetchUnit(
     }
     when(mem_io.cache.resp.fire) {
       printf(p"${location}:iCache:Resp:thid[${cacheAdaptor.pipe_io.resp.meta.id}]:PC[0x${Hexadecimal(cacheAdaptor.pipe_io.resp.meta.pc)}]:\n" +
-             p"   Hit[${mem_io.cache.resp.bits.hit}]:DATA[0x${Hexadecimal(cacheAdaptor.pipe_io.resp.port.bits.data)}]\n");
+             p"   Hit[${mem_io.cache.resp.bits.hit}]") // :DATA[0x${Hexadecimal(mem_io.cache.resp.bits.data.asUInt)}]\n");
     }
   }
 }
