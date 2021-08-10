@@ -100,8 +100,6 @@ class MMU(
   private val u_page_deleter = Module(new PageDeletor(params))
 
   // TLB Message receiver/decoder
-  private val u_itlbMsgHandler = Module(new TLBMessageConverter(params))
-  private val u_dtlbMsgHandler = Module(new TLBMessageConverter(params))
   private val u_tlbEntryWbHandler = Module(new TLBWritebackHandler(params, 2))
 
   // QEMU Message receiver/decoder
@@ -160,15 +158,12 @@ class MMU(
   // Host interrupt TODO: We use polling at the moment, not interrupts
   axiShell_io.msgPendingInt := u_qemuMsgEncoder.o.valid
 
-  // TLB Receive requests
-  u_itlbMsgHandler.tlb_backend_request_i <> tlb_io.inst.missReq
-  u_dtlbMsgHandler.tlb_backend_request_i <> tlb_io.data.missReq
   // TLB Miss requests for Page Walking
-  u_itlbMsgHandler.miss_request_o <> u_page_walker.tlb_miss_req_i(0)
-  u_dtlbMsgHandler.miss_request_o <> u_page_walker.tlb_miss_req_i(1)
+  tlb_io.inst.missReq <> u_page_walker.tlb_miss_req_i(0)
+  tlb_io.data.missReq <> u_page_walker.tlb_miss_req_i(1)
   // TLB Eviction request for memory writeback
-  u_itlbMsgHandler.eviction_request_o <> u_tlbEntryWbHandler.tlb_evict_req_i(0)
-  u_dtlbMsgHandler.eviction_request_o <> u_tlbEntryWbHandler.tlb_evict_req_i(1)
+  tlb_io.inst.writebackReq <> u_tlbEntryWbHandler.tlb_evict_req_i(0)
+  tlb_io.data.writebackReq <> u_tlbEntryWbHandler.tlb_evict_req_i(1)
 
   u_qemuPageEvictHandler.evict_request_i <> u_qemuMsgDecoder.qemu_evict_page_req_o
 

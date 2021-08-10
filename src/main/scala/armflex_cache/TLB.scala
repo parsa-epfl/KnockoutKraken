@@ -1,6 +1,6 @@
 package armflex_cache
 
-import armflex.{PTEntryPacket, PTTagPacket, PipeTLB}
+import armflex._
 import chisel3._
 import chisel3.util._
 
@@ -103,7 +103,8 @@ class TLBMMURespPacket(params: PageTableParams) extends Bundle {
 class TLB2MMUIO(params: PageTableParams) extends Bundle {
   val flushReq = Flipped(Decoupled(new PTTagPacket(params)))
   val flushResp = Valid(new TLBPipelineResp(params))
-  val missReq = Decoupled(new TLBMMURequestPacket(params))
+  val missReq = Decoupled(new TLBMissRequestMessage(params))
+  val writebackReq = Decoupled(new TLBEvictionMessage(params))
   val refillResp = Flipped(Decoupled(new TLBMMURespPacket(params)))
 
   override def cloneType: this.type = new TLB2MMUIO(params).asInstanceOf[this.type]
@@ -233,14 +234,19 @@ class TLB(
   mmu_io.missReq.bits.tag.vpn := u_dataBankManager.miss_request_o.bits.addr // only reserve the lower bits.
   mmu_io.missReq.bits.perm := u_dataBankManager.miss_request_o.bits.perm
   mmu_io.missReq.bits.thid := u_dataBankManager.miss_request_o.bits.thid
-  mmu_io.missReq.bits.flush_v := DontCare
-  mmu_io.missReq.bits.entry := DontCare
-  mmu_io.missReq.bits.w_v := u_dataBankManager.miss_request_o.bits.wMask =/= 0.U
   u_dataBankManager.miss_request_o.ready := mmu_io.missReq.ready
 
   // write back request
-  // So make the request pop all the time since we will not use it.
-  u_dataBankManager.writeback_request_o.ready := true.B
+  // Flush has its own path
+  mmu_io.writebackReq.valid := u_dataBankManager.writeback_request_o.valid && !u_dataBankManager.writeback_request_o.bits.flush_v
+  mmu_io.writebackReq.bits.tag.asid := (u_dataBankManager.writeback_request_o.bits.addr >> params.vPageW)
+  mmu_io.writebackReq.bits.tag.vpn := u_dataBankManager.writeback_request_o.bits.addr
+  mmu_io.writebackReq.bits.entry := u_dataBankManager.writeback_request_o.bits.data.asTypeOf(mmu_io.writebackReq.bits.entry.cloneType)
+  u_dataBankManager.writeback_request_o.ready := Mux(
+    u_dataBankManager.writeback_request_o.bits.flush_v,
+    true.B, // if flush request, ignored directly.
+    mmu_io.writebackReq.ready
+  )
 
   if(true) { // TODO Conditional printing
     val location = "TLB"

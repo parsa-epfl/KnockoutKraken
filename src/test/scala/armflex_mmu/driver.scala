@@ -87,11 +87,15 @@ class MMUDUT(
   S_AXI <> u_page_demander.axiShell_io.S_AXI
   // AXI Master for pushing message to QEMU
   // I TLB backend request
-  val itlb_backend_request_i = IO(Flipped(u_page_demander.tlb_io.inst.missReq.cloneType))
-  itlb_backend_request_i <> u_page_demander.tlb_io.inst.missReq
+  val itlb_miss_request_i = IO(Flipped(u_page_demander.tlb_io.inst.missReq.cloneType))
+  itlb_miss_request_i <> u_page_demander.tlb_io.inst.missReq
+  val itlb_wb_request_i = IO(Flipped(u_page_demander.tlb_io.inst.writebackReq.cloneType))
+  itlb_wb_request_i <> u_page_demander.tlb_io.inst.writebackReq
   // D TLB backend request
-  val dtlb_backend_request_i = IO(Flipped(u_page_demander.tlb_io.data.missReq.cloneType))
-  dtlb_backend_request_i <> u_page_demander.tlb_io.data.missReq
+  val dtlb_miss_request_i = IO(Flipped(u_page_demander.tlb_io.data.missReq.cloneType))
+  dtlb_miss_request_i <> u_page_demander.tlb_io.data.missReq
+  val dtlb_wb_request_i = IO(Flipped(u_page_demander.tlb_io.data.writebackReq.cloneType))
+  dtlb_wb_request_i <> u_page_demander.tlb_io.data.writebackReq
   // AXI Slave for receiving message to QEMU
   // val S_AXIL_QEMU_MQ = IO(Flipped(u_page_demander.S_AXIL_QEMU_MQ.cloneType))
   // S_AXIL_QEMU_MQ <> u_page_demander.S_AXIL_QEMU_MQ

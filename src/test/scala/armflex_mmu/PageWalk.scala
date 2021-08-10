@@ -24,13 +24,11 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
       // Set the thread table.
       // dut.registerThreadTable(0, 10)
       timescope {
-        dut.itlb_backend_request_i.bits.flush_v.poke(false.B)
-        dut.itlb_backend_request_i.bits.perm.poke(2.U)
-        dut.itlb_backend_request_i.bits.w_v.poke(false.B)
-        dut.itlb_backend_request_i.bits.tag.asid.poke(0x10.U)
-        dut.itlb_backend_request_i.bits.tag.vpn.poke(0xABC.U)
-        dut.itlb_backend_request_i.valid.poke(true.B)
-        dut.itlb_backend_request_i.ready.expect(true.B)
+        dut.itlb_miss_request_i.bits.perm.poke(2.U)
+        dut.itlb_miss_request_i.bits.tag.asid.poke(0x10.U)
+        dut.itlb_miss_request_i.bits.tag.vpn.poke(0xABC.U)
+        dut.itlb_miss_request_i.valid.poke(true.B)
+        dut.itlb_miss_request_i.ready.expect(true.B)
         dut.tk()
       }
 
@@ -61,14 +59,12 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
       // Set the thread table.
       // dut.registerThreadTable(0, 10)
       timescope {
-        dut.dtlb_backend_request_i.bits.flush_v.poke(false.B)
-        dut.dtlb_backend_request_i.bits.perm.poke(0.U)
-        dut.dtlb_backend_request_i.bits.w_v.poke(false.B)
-        dut.dtlb_backend_request_i.bits.tag.asid.poke(0x10.U)
-        dut.dtlb_backend_request_i.bits.tag.vpn.poke(0xABC.U)
-        dut.dtlb_backend_request_i.bits.thid.poke(1.U) // set pid.
-        dut.dtlb_backend_request_i.valid.poke(true.B)
-        dut.dtlb_backend_request_i.ready.expect(true.B)
+        dut.dtlb_miss_request_i.bits.perm.poke(0.U)
+        dut.dtlb_miss_request_i.bits.tag.asid.poke(0x10.U)
+        dut.dtlb_miss_request_i.bits.tag.vpn.poke(0xABC.U)
+        dut.dtlb_miss_request_i.bits.thid.poke(1.U) // set pid.
+        dut.dtlb_miss_request_i.valid.poke(true.B)
+        dut.dtlb_miss_request_i.ready.expect(true.B)
         dut.tk()
       }
       dut.sendPageTableSet(dut.M_AXI, (0xAB * 3 * 64).U)

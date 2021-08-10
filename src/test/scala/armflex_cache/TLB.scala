@@ -27,9 +27,12 @@ class DUTTLB(
 ) extends MultiIOModule {
   val u_tlb = Module(parent())
 
-  val delay_chain_req = Module(new DelayChain(u_tlb.mmu_io.missReq.bits.cloneType, 4))
-  delay_chain_req.i <> u_tlb.mmu_io.missReq
-  
+  val delay_chain_miss_req = Module(new DelayChain(u_tlb.mmu_io.missReq.bits.cloneType, 4))
+  delay_chain_miss_req.i <> u_tlb.mmu_io.missReq
+
+  val delay_chain_wb_req = Module(new DelayChain(u_tlb.mmu_io.writebackReq.bits.cloneType, 4))
+  delay_chain_wb_req.i <> u_tlb.mmu_io.writebackReq
+
   val delay_chain_rep = Module(new DelayChain(u_tlb.mmu_io.refillResp.bits.cloneType, 4))
   delay_chain_rep.o <> u_tlb.mmu_io.refillResp
 
@@ -46,23 +49,27 @@ class DUTTLB(
   val packetArrive_o = IO(u_tlb.pipeline_io.wakeAfterMiss.cloneType)
   packetArrive_o <> u_tlb.pipeline_io.wakeAfterMiss
 
-  delay_chain_rep.i.valid := delay_chain_req.o.valid && !delay_chain_req.o.bits.w_v
-  delay_chain_rep.i.bits.thid := delay_chain_req.o.bits.thid
-  delay_chain_rep.i.bits.tag := delay_chain_req.o.bits.tag
+  // TODO: combine two backend ports in the tester.
 
-  delay_chain_req.o.ready := delay_chain_rep.i.ready
+  delay_chain_rep.i.valid := delay_chain_miss_req.o.valid
+  delay_chain_rep.i.bits.thid := delay_chain_miss_req.o.bits.thid
+  delay_chain_rep.i.bits.tag := delay_chain_miss_req.o.bits.tag
 
-  val u_mem = Mem(1L << u_tlb.params.vPageW, new PTEntryPacket(u_tlb.params))
+  delay_chain_miss_req.o.ready := delay_chain_rep.i.ready
+
+  val u_mem = Mem(1L << (u_tlb.params.vPageW + u_tlb.params.asidW), new PTEntryPacket(u_tlb.params))
 
   if(initialMem.nonEmpty) loadMemoryFromFile(u_mem, initialMem)
 
-  val mem_port = u_mem(delay_chain_req.o.bits.tag.asUInt)
-  val mod_mem_value = WireInit(mem_port)
+  val mem_port_read = u_mem(delay_chain_miss_req.o.bits.tag.asUInt)
+  val mem_port_write = u_mem(delay_chain_wb_req.o.bits.tag.asUInt)
+  val mod_mem_value = WireInit(mem_port_write)
   mod_mem_value.modified := true.B
-  when(delay_chain_req.o.valid && delay_chain_req.o.bits.w_v){
-    mem_port := mod_mem_value
+  when(delay_chain_wb_req.o.valid){
+    mem_port_write := mod_mem_value
   }
-  delay_chain_rep.i.bits.data := mem_port
+  delay_chain_rep.i.bits.data := mem_port_read
+  delay_chain_wb_req.o.ready := true.B
 }
 
 implicit class BaseTLBDriver(target: DUTTLB){
@@ -128,7 +135,7 @@ import firrtl.options.TargetDirAnnotation
 
 class TLBTester extends FreeSpec with ChiselScalatestTester {
   val param = new PageTableParams(
-    8, 4, 2, 15, 1, 32, 32
+    8, 4, 2, 4, 1, 32, 32
   )
 
   import TLBTestUtility._

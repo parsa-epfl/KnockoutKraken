@@ -25,16 +25,13 @@ class TLBWritebackTester extends FreeSpec with ChiselScalatestTester {
       // dut.registerThreadTable(0, 10)
       // set TLB eviction up.
       timescope {
-        dut.dtlb_backend_request_i.bits.flush_v.poke(false.B)
-        dut.dtlb_backend_request_i.bits.perm.poke(1.U)
-        dut.dtlb_backend_request_i.bits.w_v.poke(true.B)
-        dut.dtlb_backend_request_i.bits.tag.asid.poke(10.U)
-        dut.dtlb_backend_request_i.bits.tag.vpn.poke(0xABC.U)
-        dut.dtlb_backend_request_i.bits.entry.modified.poke(true.B)
-        dut.dtlb_backend_request_i.bits.entry.ppn.poke(0xCBA.U)
-        dut.dtlb_backend_request_i.bits.entry.perm.poke(1.U)
-        dut.dtlb_backend_request_i.valid.poke(true.B)
-        dut.dtlb_backend_request_i.ready.expect(true.B)
+        dut.dtlb_wb_request_i.bits.tag.asid.poke(10.U)
+        dut.dtlb_wb_request_i.bits.tag.vpn.poke(0xABC.U)
+        dut.dtlb_wb_request_i.bits.entry.perm.poke(1.U)
+        dut.dtlb_wb_request_i.bits.entry.ppn.poke(0xCBA.U)
+        dut.dtlb_wb_request_i.bits.entry.modified.poke(true.B)
+        dut.dtlb_wb_request_i.valid.poke(true.B)
+        dut.dtlb_wb_request_i.ready.expect(true.B)
         dut.tk()
       }
       // prepare for the data
