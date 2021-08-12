@@ -609,6 +609,7 @@ class MemoryUnit(
 
   mmu_io <> flushController.mmu_io
 
+  val location = "Pipeline:MemoryUnit"
   if(true) { // TODO Conditional asserts
     // --- TLB Stage ---
     when(mem_io.tlb.resp.fire && sTLB_state =/= sTLB_intermediateResp) {
@@ -639,7 +640,11 @@ class MemoryUnit(
       assert(doneInst.io.enq.ready, "Credit system should ensure that receiver has always enough entries left")
     }
     when(mem_io.cache.resp.valid) {
-      assert(cacheAdaptor.pipe_io.resp.port.valid, "Cache Adaptor only acts as a module to forward meta data and has no latency")
+      when(mem_io.cache.resp.bits.hit) {
+        assert(cacheAdaptor.pipe_io.resp.port.valid, "Cache Adaptor only acts as a module to forward meta data and has no latency")
+      }.elsewhen(mem_io.cache.resp.bits.miss) {
+        assert(!cacheAdaptor.pipe_io.resp.port.valid, "Cache Adaptor should not forward transaction on miss")
+      }
       assert(doneInst.io.enq.ready || cacheReqMisalignedQ.io.enq.ready, "Credit system should ensure that receiver has always enough entries left")
     }
     when(mem_io.cache.req.valid) {
@@ -668,7 +673,6 @@ class MemoryUnit(
     }
   }
   if(true) { // TODO Conditional printing
-    val location = "Pipeline:MemoryUnit"
     when(mem_io.tlb.req.fire) {
       printf(p"${location}:iTLB:Req:thid[${mem_io.tlb.req.bits.thid}]:PC[0x${Hexadecimal(mem_io.tlb.req.bits.addr)}]\n")
     }

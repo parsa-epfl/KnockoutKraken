@@ -206,7 +206,11 @@ class FetchUnit(
       assert(instQueue.io.enq.ready, "Credit system should ensure that receiver has always enough entries left")
     }
     when(mem_io.cache.resp.valid) {
-      assert(cacheAdaptor.pipe_io.resp.port.valid, "Cache Adaptor only acts as a module to forward meta data and has no latency")
+      when(mem_io.cache.resp.bits.hit) {
+        assert(cacheAdaptor.pipe_io.resp.port.valid, "Cache Adaptor only acts as a module to forward meta data and has no latency")
+      }.elsewhen(mem_io.cache.resp.bits.miss) {
+        assert(!cacheAdaptor.pipe_io.resp.port.valid, "Cache Adaptor should not forward transaction on miss")
+      }
       assert(instQueue.io.enq.ready, "Credit system should ensure that receiver has always enough entries left")
     }
     when(mem_io.cache.req.valid) {

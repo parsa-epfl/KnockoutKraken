@@ -125,6 +125,7 @@ object PipeCache {
       metaQ.ctrl_i.done := hit && !miss2hit
       metaQ.ctrl_i.long := miss
       metaQ.ctrl_i.longDone := miss2hit
+      pipe_io.resp.port.valid := !miss
     }
 
     // If metaQ is full, wait for misses to complete
