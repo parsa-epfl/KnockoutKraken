@@ -163,7 +163,7 @@ class TLB(
   mmu_io.refillResp.ready := refill2databankReq.ready
 
   pipeline_io.wakeAfterMiss.valid := mmu_io.refillResp.fire()
-  pipeline_io.wakeAfterMiss.bits := mmu_io.refillResp.bits.tag.asid
+  pipeline_io.wakeAfterMiss.bits := mmu_io.refillResp.bits.thid
 
   private val u_3wayArbiter = Module(new Arbiter(u_dataBankManager.frontend_request_i.bits.cloneType(), 3))
   private val arbFlushPort = u_3wayArbiter.io.in(0)
