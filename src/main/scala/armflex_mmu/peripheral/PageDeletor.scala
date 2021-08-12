@@ -135,57 +135,52 @@ class PageDeletor(
   lsu_handshake_o.data.flushCompled.valid := state_r === sNotifyLSU && item_r.entry.perm =/= 2.U
 
   // Update logic of the state machine
+  val selCtrlPort = WireInit(Mux(item_r.entry.perm === 2.U, lsu_handshake_o.inst, lsu_handshake_o.data))
   switch(state_r){
     is(sIdle){
-      state_r := Mux(page_delete_req_i.fire(), sReqLSU, sIdle)
+      when(page_delete_req_i.fire) {
+        state_r := sReqLSU
+      }
     }
     is(sReqLSU){
-      state_r := Mux(
-        Mux(
-          item_r.entry.perm === 2.U,
-          lsu_handshake_o.inst.flushPermReq.fire(),
-          lsu_handshake_o.data.flushPermReq.fire()
-          ),
-        sFlushTLB,
-        sReqLSU
-      )
+      when(selCtrlPort.flushPermReq.fire) {
+        state_r := sFlushTLB
+      }
     }
     is(sFlushTLB){
-      state_r := Mux(tlb_flush_request_o.fire(), sNotify, sFlushTLB)
+      when(tlb_flush_request_o.fire) {
+        state_r := sNotify
+      }
     }
     is(sNotify){
-      state_r := Mux(
-        start_message_o.fire(),
-        sFlushPage,
-        sNotify
-      )
+      when(start_message_o.fire) {
+        state_r := sFlushPage
+      }
     }
     is(sFlushPage){
-      state_r := Mux(flush_cnt_r === 63.U && flush_fired, sPipe, sFlushPage)
+      when(flush_cnt_r === 63.U && flush_fired) {
+        state_r := sPipe
+      }
     }
     is(sPipe){
-      state_r := Mux(pipe_cnt_r === 3.U, sWait, sPipe)
+      when(pipe_cnt_r === 3.U) {
+        state_r := sWait
+      }
     }
     is(sWait){
-      state_r := Mux(
-        queue_empty,
-        sSend,
-        sWait
-      )
+      when(queue_empty) {
+        state_r := sSend
+      }
     }
     is(sSend){
-      state_r := Mux(done_message_o.fire(), sNotifyLSU, sSend)
+      when(done_message_o.fire) {
+        state_r := sNotifyLSU
+      }
     }
     is(sNotifyLSU){
-      state_r := Mux(
-        Mux(
-          item_r.entry.perm === 2.U,
-          lsu_handshake_o.inst.flushCompled.fire(),
-          lsu_handshake_o.data.flushCompled.fire()
-          ),
-        sIdle,
-        sNotifyLSU
-      )
+      when(selCtrlPort.flushCompled.fire) {
+        state_r := sIdle
+      }
     }
   }
 

@@ -20,25 +20,15 @@ class TLBWritebackHandler(
   u_arb.io.in <> tlb_evict_req_i
 
   // Add page table set buffer and axi dma
-  val u_buffer = Module(new peripheral.PageTableSetBuffer(
-    params.getPageTableParams,
-    new peripheral.PageTableSetPacket(params.getPageTableParams)
-    ))
+  val u_buffer = Module(new peripheral.PageTableSetBuffer(params.getPageTableParams,
+                        new peripheral.PageTableSetPacket(params.getPageTableParams)))
 
   // AXI DMA Read channels
-  val M_DMA_R = IO(new AXIReadMasterIF(
-    params.dramAddrW,
-    params.dramdataW
-    ))
+  val M_DMA_R = IO(new AXIReadMasterIF(params.dramAddrW, params.dramdataW))
+  // AXI DMA Write channels
+  val M_DMA_W = IO(new AXIWriteMasterIF(params.dramAddrW, params.dramdataW))
 
   u_buffer.dma_data_i <> M_DMA_R.data
-
-  // AXI DMA Write channels
-  val M_DMA_W = IO(new AXIWriteMasterIF(
-    params.dramAddrW,
-    params.dramdataW
-    ))
-
   M_DMA_W.data <> u_buffer.dma_data_o
 
   val sIdle :: sMoveIn :: sPick :: sUpdatePT :: sMoveOut :: Nil = Enum(5)
@@ -53,7 +43,7 @@ class TLBWritebackHandler(
   }
 
   val request_r = Reg(new request_t)
-  when(u_arb.io.out.fire()){
+  when(u_arb.io.out.fire){
     request_r.tag := u_arb.io.out.bits.tag
     request_r.evicted_pte := u_arb.io.out.bits.entry
     request_r.source := u_arb.io.chosen
@@ -86,19 +76,27 @@ class TLBWritebackHandler(
 
   switch(state_r){
     is(sIdle){
-      state_r := Mux(u_arb.io.out.fire(), sMoveIn, sIdle)
+      when(u_arb.io.out.fire) {
+        state_r := sMoveIn
+      }
     }
     is(sMoveIn){
-      state_r := Mux(M_DMA_R.done, sPick, sMoveIn)
+      when(M_DMA_R.done) {
+        state_r := sPick
+      }
     }
     is(sPick){
       state_r := sUpdatePT
     }
     is(sUpdatePT){
-      state_r := Mux(u_buffer.write_request_i.fire(), sMoveOut, sUpdatePT)
+      when(u_buffer.write_request_i.fire) {
+        state_r := sMoveOut
+      }
     }
     is(sMoveOut){
-      state_r := Mux(M_DMA_W.done, sIdle, sMoveOut)
+      when(M_DMA_W.done) {
+        state_r := sIdle
+      }
     }
   }
 

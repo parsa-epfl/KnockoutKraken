@@ -21,17 +21,9 @@ class QEMUPageEvictHandler(
     new PageTableSetPacket(params.getPageTableParams)
     ))
 
-  // AXI DMA Read channel
-  val M_DMA_R = IO(new AXIReadMasterIF(
-    params.dramAddrW,
-    params.dramdataW
-    ))
-
-  // AXI DMA Write channel
-  val M_DMA_W = IO(new AXIWriteMasterIF(
-    params.dramAddrW,
-    params.dramdataW
-    ))
+  // AXI DMA read and write channels
+  val M_DMA_R = IO(new AXIReadMasterIF(params.dramAddrW, params.dramdataW))
+  val M_DMA_W = IO(new AXIWriteMasterIF(params.dramAddrW, params.dramdataW))
 
   u_buffer.dma_data_i <> M_DMA_R.data
   u_buffer.dma_data_o <> M_DMA_W.data
@@ -78,25 +70,37 @@ class QEMUPageEvictHandler(
   // state machine
   switch(state_r){
     is(sIdle){
-      state_r := Mux(evict_request_i.fire(), sLoadSet, sIdle)
+      when(evict_request_i.fire) {
+        state_r := sLoadSet
+      }
     }
     is(sLoadSet){
-      state_r := Mux(M_DMA_R.done, sGetEntry, sLoadSet)
+      when(M_DMA_R.done) {
+        state_r := sGetEntry
+      }
     }
     is(sGetEntry){
       state_r := sDeletePageReq
     }
     is(sDeletePageReq){
-      state_r := Mux(page_delete_req_o.fire(), sDeletePage, sDeletePageReq)
+      when(page_delete_req_o.fire) {
+        state_r := sDeletePage
+      }
     }
     is(sDeletePage){
-      state_r := Mux(page_delete_done_i, sFlushEntry, sDeletePage)
+      when(page_delete_done_i) {
+        state_r := sFlushEntry
+      }
     }
     is(sFlushEntry){
-      state_r := Mux(u_buffer.write_request_i.fire(), sUpdatePT, sFlushEntry)
+      when(u_buffer.write_request_i.fire) {
+        state_r := sUpdatePT
+      }
     }
     is(sUpdatePT){
-      state_r := Mux(M_DMA_W.done, sIdle, sUpdatePT)
+      when(M_DMA_W.done){
+        state_r := sIdle
+      }
     }
   }
 }

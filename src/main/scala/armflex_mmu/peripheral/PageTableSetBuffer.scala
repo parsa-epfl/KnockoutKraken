@@ -161,20 +161,23 @@ class PageTableSetBuffer(
 
   switch(state_r){
     is(sIdle){
-      when(dma_data_i.fire()){
+      when(dma_data_i.fire){
         state_r := sMoveIn
-      }.elsewhen(dma_data_o.fire()){
+      }.elsewhen(dma_data_o.fire){
         state_r := sMoveOut
       }.otherwise {
         state_r := sIdle
       }
     }
     is(sMoveIn){
-      state_r := Mux(dma_data_i.fire() && dma_cnt_r === (requestPacketNumber - 1).U, sIdle, sMoveIn)
+      when(dma_data_i.fire && dma_cnt_r === (requestPacketNumber - 1).U) {
+        state_r := sIdle
+      }
     }
     is(sMoveOut){
-      state_r := Mux(dma_data_o.fire() && dma_cnt_r === (requestPacketNumber - 1).U, sIdle, sMoveOut)
-
+      when(dma_data_o.fire && dma_cnt_r === (requestPacketNumber - 1).U) {
+        state_r := sIdle
+      }
     }
   }
 

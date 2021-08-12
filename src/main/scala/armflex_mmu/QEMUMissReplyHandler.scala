@@ -15,16 +15,11 @@ class QEMUMissReplyHandler(
   val sIdle ::  sLoadSet :: sGetEvict :: sDeletePageReq :: sDeletePage :: sReplace ::  sMoveback :: sReplyToTLB :: Nil = Enum(8)
   val state_r = RegInit(sIdle)
 
-  val u_buffer = Module(new PageTableSetBuffer(
-    params.getPageTableParams,
-    new PageTableSetPacket(params.getPageTableParams)
-    ))
+  val u_buffer = Module(new PageTableSetBuffer(params.getPageTableParams, 
+                          new PageTableSetPacket(params.getPageTableParams)))
 
   // AXI DMA Read Channels
-  val M_DMA_R = IO(new AXIReadMasterIF(
-    params.dramAddrW,
-    params.dramdataW
-    ))
+  val M_DMA_R = IO(new AXIReadMasterIF(params.dramAddrW, params.dramdataW))
 
   u_buffer.dma_data_i <> M_DMA_R.data
 
@@ -95,36 +90,46 @@ class QEMUMissReplyHandler(
   // state machine
   switch(state_r){
     is(sIdle){
-      state_r := Mux(qemu_miss_reply_i.fire(), sLoadSet, sIdle)
+      when(qemu_miss_reply_i.fire) {
+        state_r := sLoadSet
+      }
     }
     is(sLoadSet){
-      state_r := Mux(M_DMA_R.done, sGetEvict, sLoadSet)
+      when(M_DMA_R.done) {
+        state_r := sGetEvict
+      }
     }
     is(sGetEvict){
-      state_r := Mux(u_buffer.lru_element_o.lru_v, sDeletePageReq, sReplace)
+      when(u_buffer.lru_element_o.lru_v) {
+        state_r := sDeletePageReq
+      }.otherwise {
+        state_r := sReplace
+      }
     }
     is(sDeletePageReq){
-      state_r := Mux(page_delete_req_o.fire(), sDeletePage, sDeletePageReq)
+      when(page_delete_req_o.fire) {
+        state_r := sDeletePage
+      }
     }
     is(sDeletePage){
-      state_r := Mux(page_delete_done_i, sReplace, sDeletePage)
+      when(page_delete_done_i) {
+        state_r := sReplace
+      }
     }
     is(sReplace){
-      state_r := Mux(
-        u_buffer.write_request_i.fire(),
-        sMoveback,
-        sReplace
-      )
+      when(u_buffer.write_request_i.fire) {
+        state_r := sMoveback
+      }
     }
     is(sMoveback){
-      state_r := Mux(
-        M_DMA_W.done,
-        Mux(request_r.thid_v, sReplyToTLB, sIdle),
-        sMoveback
-        )
+      when(M_DMA_W.done) {
+        state_r := Mux(request_r.thid_v, sReplyToTLB, sIdle)
+      }
     }
     is(sReplyToTLB){
-      state_r := Mux(tlb_backend_reply_o.fire(), sIdle, sReplyToTLB)
+      when(tlb_backend_reply_o.fire) {
+        state_r := sIdle
+      }
     }
   }
 }

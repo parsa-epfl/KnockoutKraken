@@ -114,20 +114,24 @@ class PageWalker(
   // state machine
   switch(state_r){
     is(sIdle){
-      state_r := Mux(u_miss_arb.io.out.fire(), sMove, sIdle)
+      when(u_miss_arb.io.out.fire) {
+        state_r := sMove
+      }
     }
     is(sMove){
-      state_r := Mux(M_DMA_R.done, sLookup, sMove)
+      when(M_DMA_R.done) {
+        state_r := sLookup
+      }
     }
     is(sLookup){
       state_r := sReply
     }
     is(sReply){
-      state_r := Mux(
-        VecInit(tlb_backend_reply_o.map(_.fire()) :+ page_fault_req_o.fire()).asUInt.orR(),
-        sIdle, 
-        sReply
-      )
+      val vectorOfFireBool = VecInit(tlb_backend_reply_o.map(_.fire()) :+ page_fault_req_o.fire())
+      when(vectorOfFireBool.asUInt.orR()) {
+        state_r := sReply
+
+      }
     }
   }
 }
