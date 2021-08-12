@@ -79,7 +79,7 @@ object RFileIO {
   }
 
   def wr2BRAM(port: BRAMPort, wr: WRPort) {
-    port.ADDR := wr.addr
+    port.ADDR := Cat(wr.tag, wr.addr)
     port.DI := wr.data
     port.EN := wr.en.asUInt
     port.WE := Fill(port.params.NB_COL, wr.en.asUInt)
@@ -101,11 +101,6 @@ class RFileBRAM[T <: UInt](thidN: Int) extends MultiIOModule {
   private val bramParams = new BRAMParams(DATA_SZ/8, 8, thidN * REG_N, "", false, false, true, false)
   private val rd1_mem = Module(new BRAM()(bramParams))
   private val rd2_mem = Module(new BRAM()(bramParams))
-  private val rd_addr = Seq(
-    Cat(rd.tag, rd.port(0).addr),
-    Cat(rd.tag, rd.port(1).addr)
-  )
-  private val wr_addr = Cat(wr.tag, wr.addr)
   private val regfile = Mem(thidN * REG_N, DATA_T)
 
   rd.port(0).data := RFileIO.rdBRAM(rd, 0, rd1_mem.portA)
