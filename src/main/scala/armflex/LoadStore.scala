@@ -34,6 +34,18 @@ class MInst extends Bundle {
 class MInstTag[T <: UInt](gen: T) extends MInst {
   val tag = Output(gen)
 
+  def :=(target: MInstTag[T]) = {
+    this.size     := target.size
+    this.isPair   := target.isPair
+    this.isLoad   := target.isLoad
+    this.is32bit  := target.is32bit
+    this.isSigned := target.isSigned
+    this.req      := target.req
+    this.rd_res   := target.rd_res
+    this.rd       := target.rd
+    this.exceptions := target.exceptions
+    this.tag      := target.tag
+  }
   def :=(target: MInst) = {
     this.size     := target.size
     this.isPair   := target.isPair
