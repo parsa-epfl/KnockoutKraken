@@ -129,8 +129,7 @@ class PageWalker(
     is(sReply){
       val vectorOfFireBool = VecInit(tlb_backend_reply_o.map(_.fire()) :+ page_fault_req_o.fire())
       when(vectorOfFireBool.asUInt.orR()) {
-        state_r := sReply
-
+        state_r := sIdle
       }
     }
   }
