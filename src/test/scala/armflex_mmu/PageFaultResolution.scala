@@ -82,6 +82,11 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
       // 3. The page deletor should be activated.
       // 3.1 TLB eviction
       dut.waitForSignalToBe(dut.dtlb_flush_request_o.valid)
+      timescope { // acknowledge the flush request.
+        dut.dtlb_flush_request_o.ready.poke(true.B)
+        dut.tk()
+      }
+      // One cycle later, return the flush result of TLB
       dut.dtlb_flush_request_o.bits.asid.expect(0x10.U)
       dut.dtlb_flush_request_o.bits.vpn.expect(0x20.U)
       // dut.dtlb_flush_reply_i.bits.dirty.poke(true.B)
@@ -93,7 +98,6 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
       dut.dtlb_flush_reply_i.valid.poke(true.B)
       timescope {
         dut.dtlb_flush_reply_i.valid.poke(true.B)
-        dut.dtlb_flush_request_o.ready.poke(true.B)
         dut.tk()
       }
       // 3.2 Send eviction start

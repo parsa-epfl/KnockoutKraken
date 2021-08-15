@@ -71,8 +71,12 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
       // 3. wait for TLB eviction. Let's assume not hit this time.
       dut.waitForSignalToBe(dut.dtlb_flush_request_o.valid)
       timescope {
-        dut.dtlb_flush_reply_i.valid.poke(true.B)
         dut.dtlb_flush_request_o.ready.poke(true.B)
+        dut.tk()
+      }
+      // reply the flush request
+      timescope {
+        dut.dtlb_flush_reply_i.valid.poke(true.B)
         dut.tk()
       }
       

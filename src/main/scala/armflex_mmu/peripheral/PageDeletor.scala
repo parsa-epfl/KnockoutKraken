@@ -25,7 +25,7 @@ import chisel3.util._
 class PageDeletor(
   params: MemoryHierarchyParams
 ) extends MultiIOModule {
-  val sIdle :: sReqLSU :: sFlushTLB :: sNotify :: sFlushPage :: sPipe :: sWait :: sSend :: sNotifyLSU ::  Nil = Enum(9)
+  val sIdle :: sReqLSU :: sFlushTLBReq :: sFlushTLBReply :: sNotify :: sFlushPage :: sPipe :: sWait :: sSend :: sNotifyLSU ::  Nil = Enum(10)
   val state_r = RegInit(sIdle)
 
   val page_delete_req_i = IO(Flipped(Decoupled(new PageTableItem(params.getPageTableParams))))
@@ -50,18 +50,13 @@ class PageDeletor(
   tlb_flush_request_o.bits.req.asid := item_r.tag.asid
   tlb_flush_request_o.bits.req.vpn := item_r.tag.vpn
   tlb_flush_request_o.bits.sel := Mux(item_r.entry.perm === 2.U, 0.U, 1.U) // TODO: Support more than one TLB.
-  tlb_flush_request_o.valid := state_r === sFlushTLB
+  tlb_flush_request_o.valid := state_r === sFlushTLBReq
   val tlb_frontend_reply_i = IO(Flipped(Valid(new TLBPipelineResp(params.getPageTableParams))))
 
   // update the modified bit
   when(page_delete_req_i.fire()){
     item_r := page_delete_req_i.bits
-  }.elsewhen(
-    state_r === sFlushTLB &&
-    tlb_flush_request_o.fire() &&
-    tlb_frontend_reply_i.bits.hit
-  ){
-    assert(tlb_frontend_reply_i.valid)
+  }.elsewhen(state_r === sFlushTLBReply && tlb_frontend_reply_i.valid && tlb_frontend_reply_i.bits.hit){
     item_r.entry.modified := tlb_frontend_reply_i.bits.entry.modified
   }
 
@@ -135,7 +130,17 @@ class PageDeletor(
   lsu_handshake_o.data.flushCompled.valid := state_r === sNotifyLSU && item_r.entry.perm =/= 2.U
 
   // Update logic of the state machine
-  val selCtrlPort = WireInit(Mux(item_r.entry.perm === 2.U, lsu_handshake_o.inst, lsu_handshake_o.data))
+  val flushPermissionRequestFire = Mux(
+    item_r.entry.perm === 2.U,
+    lsu_handshake_o.inst.flushPermReq.fire(),
+    lsu_handshake_o.data.flushPermReq.fire()
+  )
+  val flushCompleteRequestFire = Mux(
+    item_r.entry.perm === 2.U,
+    lsu_handshake_o.inst.flushCompled.fire(),
+    lsu_handshake_o.data.flushCompled.fire()
+  )
+
   switch(state_r){
     is(sIdle){
       when(page_delete_req_i.fire) {
@@ -143,12 +148,17 @@ class PageDeletor(
       }
     }
     is(sReqLSU){
-      when(selCtrlPort.flushPermReq.fire) {
-        state_r := sFlushTLB
+      when(flushPermissionRequestFire) {
+        state_r := sFlushTLBReq
       }
     }
-    is(sFlushTLB){
+    is(sFlushTLBReq){
       when(tlb_flush_request_o.fire) {
+        state_r := sFlushTLBReply
+      }
+    }
+    is(sFlushTLBReply){
+      when(tlb_frontend_reply_i.valid){
         state_r := sNotify
       }
     }
@@ -178,7 +188,7 @@ class PageDeletor(
       }
     }
     is(sNotifyLSU){
-      when(selCtrlPort.flushCompled.fire) {
+      when(flushCompleteRequestFire) {
         state_r := sIdle
       }
     }
