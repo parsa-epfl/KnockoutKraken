@@ -85,6 +85,14 @@ object RFileIO {
     port.WE := Fill(port.params.NB_COL, wr.en.asUInt)
   }
 
+  // Offset might be different depending on the BRAM
+  def wr2BRAM(port: BRAMPort, wr: WRPort, pad: Int) {
+    port.ADDR := Cat(wr.tag, 0.U(pad.W), wr.addr)
+    port.DI := wr.data
+    port.EN := wr.en.asUInt
+    port.WE := Fill(port.params.NB_COL, wr.en.asUInt)
+  }
+
   def rdBRAM(rd: RDPort, rdPort: Int, port: BRAMPort):UInt = {
     port.WE := 0.U
     port.DI := 0.U

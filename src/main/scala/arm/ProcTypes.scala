@@ -19,7 +19,8 @@ object PROCESSOR_TYPES
 
   // Regs
   val REG_N = 32
-  val REG_W = log2Ceil(REG_N).W
+  val REG_SZ = log2Ceil(REG_N)
+  val REG_W = REG_SZ.W
   def REG_T = UInt(REG_W)
   val REG_X = 0.U(REG_W)
 
