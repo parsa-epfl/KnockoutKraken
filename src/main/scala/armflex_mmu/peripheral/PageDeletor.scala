@@ -88,11 +88,11 @@ class PageDeletor(
     )
   }
 
-  icache_flush_request_o.bits.addr := Cat(item_r.entry.ppn, flush_cnt_r)
-  dcache_flush_request_o.bits := icache_flush_request_o.bits
+  icache_flush_request_o.bits.addr := Cat(Cat(item_r.entry.ppn, flush_cnt_r), 0.U(log2Ceil(params.cacheBlockSize/8).W))
+  dcache_flush_request_o.bits.addr := Cat(Cat(item_r.entry.ppn, flush_cnt_r), 0.U(log2Ceil(params.cacheBlockSize/8).W))
 
-  icache_flush_request_o.valid := state_r === sFlushPage && !flush_which
-  dcache_flush_request_o.valid := state_r === sFlushPage && flush_which
+  icache_flush_request_o.valid := state_r === sFlushPage && item_r.entry.perm === 2.U
+  dcache_flush_request_o.valid := state_r === sFlushPage && item_r.entry.perm =/= 2.U
 
   // sPipe
   // Wait 4 cycles so that the request has been piped.
