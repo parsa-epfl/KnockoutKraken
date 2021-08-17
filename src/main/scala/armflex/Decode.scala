@@ -173,8 +173,8 @@ class DInst extends Bundle
 }
 
 object DInst {
-  def genTypeUInt()(implicit cfg: ProcConfig): UInt = WireInit(new DInst, DontCare).asUInt.cloneType
-  def apply()(implicit cfg: ProcConfig): DInst = {
+  def genTypeUInt(): UInt = WireInit(new DInst, DontCare).asUInt.cloneType
+  def apply(): DInst = {
     val dinst = Wire(new DInst)
 
     // Data
@@ -205,7 +205,7 @@ object DInst {
   }
 }
 
-class DecodeUnit(implicit val cfg: ProcConfig) extends MultiIOModule 
+class DecodeUnit extends MultiIOModule
 {
   val inst = IO(Input(INST_T))
   val dinst = IO(Output(new DInst))

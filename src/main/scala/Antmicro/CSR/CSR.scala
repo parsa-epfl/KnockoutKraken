@@ -10,7 +10,7 @@ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
+The above copyright notice and this perm notice shall be included in all
 copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
@@ -54,9 +54,9 @@ class CSR(val dataWidth: Int, val regCount: Int) extends Module{
   }
 }
 
-import armflex.util.{BRAMPort, BRAMConfig}
+import armflex.util.{BRAMPort, BRAMParams}
 import chisel3.util.{Cat, Fill}
-class CSR2BRAM(val cfg: BRAMConfig) extends Module{
+class CSR2BRAM(val cfg: BRAMParams) extends Module{
   assert(cfg.NB_COL == 8)
   val io = IO(new Bundle{
     val bus = Flipped(new CSRBusBundle(32, cfg.RAM_DEPTH))

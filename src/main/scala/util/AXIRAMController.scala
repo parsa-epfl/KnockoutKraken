@@ -8,24 +8,24 @@ import antmicro.Bus.AXI4
 /**
  * Adaptor from AXI4 to normal memory port, with only INCR burst support.
  * 
- * @param addressWidth the width of the address bits.
- * @param dataWidth the width of the data bits.
+ * @params addrW the width of the address bits.
+ * @params dataW the width of the data bits.
  */
 class AXIRAMController(
-  addressWidth: Int = 64,
-  dataWidth: Int = 512
+  addrW: Int = 64,
+  dataW: Int = 512
 ) extends MultiIOModule {
   val S_AXI = IO(Flipped(new AXI4(
-    addressWidth, dataWidth
+    addrW, dataW
   )))
 
-  val read_request_o = IO(Decoupled(UInt(addressWidth.W)))
-  val read_reply_i = IO(Flipped(Decoupled(UInt(dataWidth.W))))
+  val read_request_o = IO(Decoupled(UInt(addrW.W)))
+  val read_reply_i = IO(Flipped(Decoupled(UInt(dataW.W))))
 
   class write_request_t extends Bundle {
-    val addr = UInt(addressWidth.W)
-    val mask = UInt((dataWidth / 8).W)
-    val data = UInt(dataWidth.W)
+    val addr = UInt(addrW.W)
+    val mask = UInt((dataW / 8).W)
+    val data = UInt(dataW.W)
   }
 
   val write_request_o = IO(Decoupled(new write_request_t))
@@ -33,7 +33,7 @@ class AXIRAMController(
 
   class context_t extends Bundle {
     val id = UInt(AXI4.idWidth.W)
-    val current_addr = UInt(addressWidth.W)
+    val current_addr = UInt(addrW.W)
     val current_send_cnt = UInt(AXI4.lenWidth.W)
     val send_done = Bool()
     val current_receive_cnt = UInt(AXI4.lenWidth.W)

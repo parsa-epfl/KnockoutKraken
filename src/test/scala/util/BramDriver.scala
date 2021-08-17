@@ -32,7 +32,7 @@ object BRAMPortDriver {
     def wr(bits:BigInt, offst: BigInt) = {
       target.EN.poke(true.B)
       target.WE.poke("b11111111".U) // Assumes 64bit
-      if(target.cfg.isAXI) {
+      if(target.params.isAXI) {
         target.ADDR.poke((offst << 2).U)
       } else {
         target.ADDR.poke(offst.U)
@@ -46,7 +46,7 @@ object BRAMPortDriver {
     def wr(bits:BigInt, offst: BigInt, strobe: BigInt) = {
       target.EN.poke(true.B)
       target.WE.poke(strobe.U)
-      if(target.cfg.isAXI) {
+      if(target.params.isAXI) {
         target.ADDR.poke((offst << 2).U)
       } else {
         target.ADDR.poke(offst.U)
@@ -74,7 +74,7 @@ object BRAMPortDriver {
     def rd(offst:BigInt): BigInt = {
       target.EN.poke(true.B)
       target.WE.poke(false.B)
-      if(target.cfg.isAXI) {
+      if(target.params.isAXI) {
         target.ADDR.poke((offst << 2).U)
       } else {
         target.ADDR.poke(offst.U)

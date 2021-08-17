@@ -9,24 +9,24 @@ import antmicro.Frontend._
 /**
  * A DMA with two AXI Master ports. The destination port writes what the source ports reads.
  * 
- * @param sourceAddressWidth the width of address line in the source AXI master.
- * @param destAddressWidth the width of address line in the dest AXI master.
- */ 
+ * @params srcAddrW the width of address line in the source AXI master.
+ * @params destAddrW the width of address line in the dest AXI master.
+ */
 class AXIDualMasterDMA(
-  sourceAddressWidth: Int,
-  destAddressWidth: Int
+  srcAddrW: Int,
+  destAddrW: Int
 ) extends MultiIOModule {
   class request_t extends Bundle {
-    val src_addr = UInt(sourceAddressWidth.W)
-    val dst_addr = UInt(destAddressWidth.W) 
+    val src_addr = UInt(srcAddrW.W)
+    val dst_addr = UInt(destAddrW.W)
   }
   val move_request_i = IO(Flipped(Decoupled(new request_t)))
   val done_o = IO(Output(Bool()))
-  val SRC_AXI_M = IO(new AXI4(sourceAddressWidth, 512))
-  val DST_AXI_M = IO(new AXI4(destAddressWidth, 512))
+  val SRC_AXI_M = IO(new AXI4(srcAddrW, 512))
+  val DST_AXI_M = IO(new AXI4(destAddrW, 512))
 
-  val u_src_to_stream = Module(new AXI4Reader(sourceAddressWidth, 512))
-  val u_stream_to_dst = Module(new AXI4Writer(destAddressWidth, 512))
+  val u_src_to_stream = Module(new AXI4Reader(srcAddrW, 512))
+  val u_stream_to_dst = Module(new AXI4Writer(destAddrW, 512))
 
   u_src_to_stream.io.dataOut <> u_stream_to_dst.io.dataIn
   u_src_to_stream.io.bus <> SRC_AXI_M

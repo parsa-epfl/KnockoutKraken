@@ -3,22 +3,23 @@ package armflex_mmu.peripheral
 import armflex.{PageEvictNotification, PageFaultNotification, QEMUMessagesType, TxMessage}
 import chisel3._
 import chisel3.util._
-import armflex_cache.TLBParameter
+import armflex_cache.PageTableParams
+import armflex_mmu.MemoryHierarchyParams
 
 class QEMUMessageEncoder(
-  param: TLBParameter,
+  param: MemoryHierarchyParams,
   fifoDepth: Int = 2
 ) extends MultiIOModule {
   val evict_notify_req_i = IO(Flipped(Decoupled(new PageEvictNotification(
     QEMUMessagesType.sEvictNotify,
-    param
+    param.getPageTableParams
   ))))
   val evict_done_req_i = IO(Flipped(Decoupled(new PageEvictNotification(
     QEMUMessagesType.sEvictDone,
-    param
+    param.getPageTableParams
   ))))
 
-  val page_fault_req_i = IO(Flipped(Decoupled(new PageFaultNotification(param))))
+  val page_fault_req_i = IO(Flipped(Decoupled(new PageFaultNotification(param.getPageTableParams))))
 
   val o = IO(Decoupled(UInt(512.W)))
   val oq = Wire(Decoupled(UInt(512.W)))
@@ -43,11 +44,11 @@ class QEMUMessageEncoder(
 
   oq.valid := u_arb.io.out.valid
   u_arb.io.out.ready := oq.ready
-  oq.bits := Cat(u_arb.io.out.bits.asVec(32).reverse)
+  oq.bits := Cat(u_arb.io.out.bits.asVec.reverse)
   o <> Queue(oq, 2) // 1k register.
 }
 
 object QEMUMessageEncoderVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
-  println(c.emitVerilog(new QEMUMessageEncoder(new TLBParameter)))
+  println(c.emitVerilog(new QEMUMessageEncoder(new MemoryHierarchyParams)))
 }

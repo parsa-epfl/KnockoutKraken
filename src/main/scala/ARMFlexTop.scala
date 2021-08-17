@@ -1,183 +1,191 @@
+import antmicro.Bus.{AXI4, AXI4AR, AXI4AW, AXI4B, AXI4R, AXI4W}
 import chisel3._
 import chisel3.util._
 import armflex._
+import armflex.util.AXILInterconnector
 import armflex_cache._
-import armflex_mmu.{MMU, MMUParameter}
-import armflex.util._
+import armflex_mmu.{MMU, MemoryHierarchyParams}
+import armflex.util.ExtraUtils._
+import firrtl.options.TargetDirAnnotation
 
-import antmicro.Bus._
+class MemorySystemPipelinePortIO(params: MemoryHierarchyParams) extends Bundle {
+  val cache = Flipped(new PipeCache.PipeCacheIO(params.getCacheParams.pAddrWidth, params.getCacheParams.blockSize))
+  val tlb = new TLB2PipelineIO(params.getPageTableParams)
+}
+
+class MemorySystemPipelineIO(params: MemoryHierarchyParams) extends Bundle {
+  val data = new MemorySystemPipelinePortIO(params)
+  val inst = new MemorySystemPipelinePortIO(params)
+  val mmu = Flipped(new PipeMMUIO)
+}
+
+class MemorySystem(params: MemoryHierarchyParams) extends MultiIOModule {
+
+  private val mmu = Module(new MMU(params))
+  private val itlb = Module(new TLB(params.getPageTableParams, () => new PseudoTreeLRUCore(params.tlbWayNumber)))
+  private val dtlb = Module(new TLB(params.getPageTableParams, () => new PseudoTreeLRUCore(params.tlbWayNumber)))
+  private val icache = Module(BaseCache(params.getCacheParams, () => new MatrixLRUCore(params.cacheWayNumber)))
+  private val dcache = Module(BaseCache(params.getCacheParams, () => new MatrixLRUCore(params.cacheWayNumber)))
+  private val icacheAdaptor = Module(new Cache2AXIAdaptor(params.getCacheParams.databankParameter, 16))
+  private val dcacheAdaptor = Module(new Cache2AXIAdaptor(params.getCacheParams.databankParameter, 16))
+  mmu.tlb_io.inst <> itlb.mmu_io
+  mmu.tlb_io.data <> dtlb.mmu_io
+  mmu.cache_io.inst <> icache.mmu_i
+  mmu.cache_io.data <> dcache.mmu_i
+  mmu.cacheAxiCtrl_io.icacheWbEmpty := icacheAdaptor.mmu_io_pendingQueueEmpty
+  mmu.cacheAxiCtrl_io.dcacheWbEmpty := dcacheAdaptor.mmu_io_pendingQueueEmpty
+  icache.axiMem_io <> icacheAdaptor.cache_io
+  dcache.axiMem_io <> dcacheAdaptor.cache_io
+
+  val pipeline_io = IO(new MemorySystemPipelineIO(params))
+  val axiShell_io = IO(new Bundle {
+    val AXI_MMU = mmu.axiShell_io.cloneType
+    val M_AXI_DMA_icacheR = icacheAdaptor.M_DMA_R.cloneType
+    val M_AXI_DMA_dcacheR = dcacheAdaptor.M_DMA_R.cloneType
+    val M_AXI_DMA_icacheW = icacheAdaptor.M_DMA_W.cloneType
+    val M_AXI_DMA_dcacheW = dcacheAdaptor.M_DMA_W.cloneType
+  })
+
+  pipeline_io.inst.cache <> icache.pipeline_io
+  pipeline_io.data.cache <> dcache.pipeline_io
+  pipeline_io.inst.tlb <> itlb.pipeline_io
+  pipeline_io.data.tlb <> dtlb.pipeline_io
+  pipeline_io.mmu <> mmu.pipeline_io
+  axiShell_io.AXI_MMU <> mmu.axiShell_io
+  axiShell_io.M_AXI_DMA_icacheR <> icacheAdaptor.M_DMA_R
+  axiShell_io.M_AXI_DMA_dcacheR <> dcacheAdaptor.M_DMA_R
+  axiShell_io.M_AXI_DMA_icacheW <> icacheAdaptor.M_DMA_W
+  axiShell_io.M_AXI_DMA_dcacheW <> dcacheAdaptor.M_DMA_W
+}
+
+object MemorySystemVerilogEmitter extends App {
+  val c = new chisel3.stage.ChiselStage
+  import java.io._
+  val fr = new FileWriter(new File("test/genFiles/ArmflexTop/MemorySystem.v"))
+  fr.write(c.emitVerilog(new MemorySystem(new MemoryHierarchyParams), annotations = Seq(TargetDirAnnotation("test/genFiles/ArmflexTop"))))
+  fr.close()
+}
 
 class ARMFlexTop(
-  forRTLSimulator: Boolean = true
+  paramsPipeline: PipelineParams,
+  paramsMemoryHierarchy: MemoryHierarchyParams
 ) extends MultiIOModule {
-  implicit val pipelineCfg = new ProcConfig(NB_THREADS = 8)
-  val memoryParameter = new MemorySystemParameter(
-    // FIXME: Remember to make it into 36 before actually exporting to the hardware for FPGA
-    pAddressWidth = if(forRTLSimulator) 24 else 34, // For scaling down
-    threadNumber = pipelineCfg.NB_THREADS,
-    tlbWayNumber = 2
-  )
-  val pdParam = new MMUParameter(memoryParameter)
+  // Assert that both systems have same parameters
+  assert(paramsPipeline.thidN == paramsMemoryHierarchy.thidN)
+  assert(paramsPipeline.asidW == paramsMemoryHierarchy.asidW)
+  assert(paramsPipeline.vAddrW == paramsMemoryHierarchy.vAddrW)
+  assert(paramsPipeline.pAddrW == paramsMemoryHierarchy.pAddrW)
+  assert(paramsPipeline.blockSize == paramsMemoryHierarchy.cacheBlockSize)
 
-  val u_pipeline = Module(new PipelineAxi)
+  private val u_pipeline = Module(new PipelineAxi(paramsPipeline))
+  private val memory = Module(new MemorySystem(paramsMemoryHierarchy))
+  u_pipeline.mmu_io <> memory.pipeline_io.mmu
+  // TLB interconnect
+  memory.pipeline_io.inst.tlb.translationReq.bits := u_pipeline.mem_io.inst.tlb.req.bits
+  memory.pipeline_io.inst.tlb.translationReq.handshake(u_pipeline.mem_io.inst.tlb.req)
+  memory.pipeline_io.data.tlb.translationReq.bits := u_pipeline.mem_io.data.tlb.req.bits
+  memory.pipeline_io.data.tlb.translationReq.handshake(u_pipeline.mem_io.data.tlb.req)
+  // Note, ready singal is stashed
+  u_pipeline.mem_io.inst.tlb.resp.bits := memory.pipeline_io.inst.tlb.translationResp.bits.toPipeTLBResponse
+  u_pipeline.mem_io.inst.tlb.resp.valid := memory.pipeline_io.inst.tlb.translationResp.valid
+  u_pipeline.mem_io.data.tlb.resp.bits := memory.pipeline_io.data.tlb.translationResp.bits.toPipeTLBResponse
+  u_pipeline.mem_io.data.tlb.resp.valid := memory.pipeline_io.data.tlb.translationResp.valid
+  // Wake up after a miss completed
+  u_pipeline.mem_io.wake(0).tag := memory.pipeline_io.inst.tlb.wakeAfterMiss.bits
+  u_pipeline.mem_io.wake(0).valid := memory.pipeline_io.inst.tlb.wakeAfterMiss.valid
+  u_pipeline.mem_io.wake(1).tag := memory.pipeline_io.data.tlb.wakeAfterMiss.bits
+  u_pipeline.mem_io.wake(1).valid := memory.pipeline_io.data.tlb.wakeAfterMiss.valid
 
-  // val S_AXIL_TRANSPLANT = IO(Flipped(u_pipeline.transplantIO.ctl.cloneType))
-  // S_AXIL_TRANSPLANT <> u_pipeline.transplantIO.ctl
+  memory.pipeline_io.inst.cache <> u_pipeline.mem_io.inst.cache
+  memory.pipeline_io.data.cache <> u_pipeline.mem_io.data.cache
 
-  val u_inst_path = Module(new TLBPlusCache(
-    memoryParameter,
-    () => new MatrixLRUCore(memoryParameter.cacheWayNumber),
-    () => new PseudoTreeLRUCore(memoryParameter.tlbWayNumber)
-  ))
+  val S_AXIL_TRANSPLANT = IO(Flipped(u_pipeline.S_AXIL.cloneType))
+  val AXI_MEM = IO(memory.axiShell_io.cloneType)
+  S_AXIL_TRANSPLANT <> u_pipeline.S_AXIL
+  AXI_MEM <> memory.axiShell_io
+}
 
-//  u_pipeline.mem.inst.req <> u_inst_path.frontend_request_i
-//  u_pipeline.mem.inst.resp <> u_inst_path.frontend_reply_o
-//
-//  u_pipeline.mem.wake(0).bits := u_inst_path.tlb_packet_arrive_o.bits
-//  u_pipeline.mem.wake(0).valid := u_inst_path.tlb_packet_arrive_o.valid
-//
-//  u_pipeline.mem.wake(1).bits := u_inst_path.cache_packet_arrive_o.bits
-//  u_pipeline.mem.wake(1).valid := u_inst_path.cache_packet_arrive_o.valid
-//
-//  u_pipeline.mem.instFault.bits := u_inst_path.tlb_violation_o.bits
-//  u_pipeline.mem.instFault.valid := u_inst_path.tlb_violation_o.valid
+class ARMFlexTopSimulator(
+  paramsPipeline: PipelineParams,
+  paramsMemoryHierarchy: MemoryHierarchyParams
+) extends MultiIOModule {
+  import armflex.util.AXIReadMultiplexer
+  import armflex.util.AXIWriteMultiplexer
+  private val devteroFlexTop = Module(new ARMFlexTop(paramsPipeline, paramsMemoryHierarchy))
+  private val axiMulti_R = Module(new AXIReadMultiplexer(64, 512, 6))
+  private val axiMulti_W = Module(new AXIWriteMultiplexer(64, 512, 5))
+  private val axilMulti = Module(new AXILInterconnector(Seq(0x00000, 0x08000), Seq(0x08000,0x08000), 32, 32))
+  val S_AXI = IO(Flipped(devteroFlexTop.AXI_MEM.AXI_MMU.S_AXI.cloneType))
+  val S_AXIL = IO(Flipped(axilMulti.S_AXIL.cloneType))
+  S_AXI <> devteroFlexTop.AXI_MEM.AXI_MMU.S_AXI
+  S_AXIL <> axilMulti.S_AXIL
+  axilMulti.M_AXIL(0) <> devteroFlexTop.S_AXIL_TRANSPLANT
+  axilMulti.M_AXIL(1) <> devteroFlexTop.AXI_MEM.AXI_MMU.S_AXIL_QEMU_MQ
+  for(i <- 0 until devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_R.length)
+    axiMulti_R.S_IF(i) <> devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_R(i)
+  for(i <- 0 until devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_W.length)
+    axiMulti_W.S_IF(i) <> devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_W(i)
+  var W_IDX = devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_W.length
+  var R_IDX = devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_R.length
+  axiMulti_W.S_IF(W_IDX+0) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_icacheW
+  axiMulti_W.S_IF(W_IDX+1) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_dcacheW
+  axiMulti_R.S_IF(R_IDX+0) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_icacheR
+  axiMulti_R.S_IF(R_IDX+1) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_dcacheR
 
-  // val u_inst_axi = Module(new CacheBackendToAXIInterface.CacheBackendAXIAdaptors(memoryParameter, pipelineCfg.NB_THREADS))
-  
-  // u_inst_axi.cache_backend_reply_o <> u_inst_path.cache_backend_reply_i
-  // u_inst_axi.cache_backend_request_i <> u_inst_path.cache_backend_request_o // TODO: Add FIFO here to buffer the backend request if timing is not good then.
+  val M_AXI = IO(new AXI4(paramsMemoryHierarchy.dramAddrW, paramsMemoryHierarchy.cacheBlockSize))
+  // Interconnect Read ports
+  M_AXI.ar <> axiMulti_R.M_AXI.ar
+  M_AXI.r <> axiMulti_R.M_AXI.r
+  // Disable Write ports
+  axiMulti_R.M_AXI.aw <> AXI4AW.stub(paramsMemoryHierarchy.dramAddrW)
+  axiMulti_R.M_AXI.w <> AXI4W.stub(paramsMemoryHierarchy.cacheBlockSize)
+  axiMulti_R.M_AXI.b <> AXI4B.stub()
+  // Interconnect Write ports
+  M_AXI.aw <> axiMulti_W.M_AXI.aw
+  M_AXI.w <> axiMulti_W.M_AXI.w
+  M_AXI.b <> axiMulti_W.M_AXI.b
+  // Disable Read ports
+  axiMulti_W.M_AXI.ar <> AXI4AR.stub(paramsMemoryHierarchy.dramAddrW)
+  axiMulti_W.M_AXI.r <> AXI4R.stub(paramsMemoryHierarchy.cacheBlockSize)
+}
 
-  val u_data_path = Module(new TLBPlusCache(
-    memoryParameter,
-    () => new MatrixLRUCore(memoryParameter.cacheWayNumber),
-    () => new PseudoTreeLRUCore(memoryParameter.tlbWayNumber)
-  ))
-
-//  u_pipeline.mem.data.req <> u_data_path.frontend_request_i
-//  u_pipeline.mem.data.resp <> u_data_path.frontend_reply_o
-//
-//  u_pipeline.mem.wake(2).bits := u_data_path.tlb_packet_arrive_o.bits
-//  u_pipeline.mem.wake(2).valid := u_data_path.tlb_packet_arrive_o.valid
-//
-//  u_pipeline.mem.wake(3).bits := u_data_path.cache_packet_arrive_o.bits
-//  u_pipeline.mem.wake(3).valid := u_data_path.cache_packet_arrive_o.valid
-//
-//  u_pipeline.mem.dataFault := u_data_path.tlb_violation_o
-//  u_pipeline.mem.dataFault.valid := u_data_path.tlb_violation_o.valid
-
-  // val u_data_axi = Module(new CacheBackendToAXIInterface.CacheBackendAXIAdaptors(memoryParameter, pipelineCfg.NB_THREADS * 2))
-  
-  // u_data_axi.cache_backend_reply_o <> u_data_path.cache_backend_reply_i
-  // u_data_axi.cache_backend_request_i <> u_data_path.cache_backend_request_o
-
-  val u_pd = Module(new MMU(pdParam, 2))
-  // ports of the page demander
-  val S_AXI = IO(Flipped(u_pd.S_AXI.cloneType))
-  u_pd.S_AXI <> S_AXI
-  
-  //val S_AXIL_TT = IO(u_pd.S_AXIL_TT.cloneType)
-  // u_pd.S_AXIL_TT <> S_AXIL_TT
-  // val S_AXIL_QEMU_MQ = IO(u_pd.S_AXIL_QEMU_MQ.cloneType)
-  // S_AXIL_QEMU_MQ <> u_pd.S_AXIL_QEMU_MQ
-
-//  // u_pd.dcache_flush_request_o
-//  u_pd.dcache_flush_request_o <> u_data_path.cache_flush_request_i
-//  // u_pd.dcache_stall_request_vo
-//  u_pd.dcache_stall_request_vo <> u_data_path.stall_request_i
-//  // u_pd.dcache_wb_queue_empty_i
-//  u_pd.dcache_wb_queue_empty_i <> u_data_axi.pending_queue_empty_o
-//
-//  // u_pd.dtlb_backend_reply_o
-//  u_pd.dtlb_backend_reply_o <> u_data_path.tlb_backend_reply_i
-//  // u_pd.dtlb_backend_request_i
-//  u_pd.dtlb_backend_request_i <> u_data_path.tlb_backend_request_o
-//  // u_pd.dtlb_flush_reply_i
-//  u_pd.dtlb_flush_reply_i := u_data_path.tlb_flush_reply_o
-//  // u_pd.dtlb_flush_request_o
-//  u_pd.dtlb_flush_request_o <> u_data_path.tlb_flush_request_i
-//
-//  // u_pd.icache_flush_request_o
-//  u_pd.icache_flush_request_o <> u_inst_path.cache_flush_request_i
-//  // u_pd.icache_stall_request_vo
-//  u_pd.icache_stall_request_vo <> u_inst_path.stall_request_i
-//  // u_pd.icache_wb_queue_empty_i
-//  u_pd.icache_wb_queue_empty_i <> u_inst_axi.pending_queue_empty_o
-//
-//  // u_pd.itlb_backend_reply_o
-//  u_pd.itlb_backend_reply_o <> u_inst_path.tlb_backend_reply_i
-//  // u_pd.itlb_backend_request_i
-//  u_pd.itlb_backend_request_i <> u_inst_path.tlb_backend_request_o
-//  // u_pd.itlb_flush_reply_i
-//  u_pd.itlb_flush_reply_i <> u_inst_path.tlb_flush_reply_o
-//  // u_pd.itlb_flush_request_o
-//  u_pd.itlb_flush_request_o <> u_inst_path.tlb_flush_request_i
-
-  val M_AXI = IO(new AXI4(
-    pdParam.dramAddrWidth, 
-    pdParam.dramDataWidth
-  ))
-
-  val u_axi_read = Module(new AXIReadMultiplexer(
-    pdParam.dramAddrWidth,
-    pdParam.dramDataWidth,
-    8
-  ))
-
-  for(i <- 0 until 6) u_axi_read.S_IF(i) <> u_pd.M_DMA_R(i)
-//  u_axi_read.S_IF(6) <> u_inst_axi.M_DMA_R
-//  u_axi_read.S_IF(7) <> u_data_axi.M_DMA_R
-
-  M_AXI.ar <> u_axi_read.M_AXI.ar
-  M_AXI.r <> u_axi_read.M_AXI.r
-  u_axi_read.M_AXI.aw <> AXI4AW.stub(pdParam.dramAddrWidth)
-  u_axi_read.M_AXI.w <> AXI4W.stub(pdParam.dramDataWidth)
-  u_axi_read.M_AXI.b <> AXI4B.stub()
-
-  val u_axi_write = Module(new AXIWriteMultiplexer(
-    pdParam.dramAddrWidth,
-    pdParam.dramDataWidth,
-    7
-  ))
-
-  for(i <- 0 until 5) u_axi_write.S_IF(i) <> u_pd.M_DMA_W(i)
-//  u_axi_write.S_IF(5) <> u_inst_axi.M_DMA_W
-//  u_axi_write.S_IF(6) <> u_data_axi.M_DMA_W
-
-  M_AXI.aw <> u_axi_write.M_AXI.aw
-  M_AXI.w <> u_axi_write.M_AXI.w
-  M_AXI.b <> u_axi_write.M_AXI.b
-
-  u_axi_write.M_AXI.ar <> AXI4AR.stub(pdParam.dramAddrWidth)
-  u_axi_write.M_AXI.r <> AXI4R.stub(pdParam.dramDataWidth)
-
-  val u_axil_inter = Module(new AXILInterconnector(
-    Seq(0x0000, 0x8000), Seq(0x8000, 0x8000), 32, 32
-  ))
-
-  val S_AXIL = IO(Flipped(u_axil_inter.S_AXIL.cloneType))
-  S_AXIL <> u_axil_inter.S_AXIL
-
-  u_axil_inter.M_AXIL(0) <> u_pipeline.S_AXI
-  u_axil_inter.M_AXIL(1) <> u_pd.S_AXIL_QEMU_MQ
+object ARMFlexTopSimulatorVerilogEmitter extends App {
+  val c = new chisel3.stage.ChiselStage
+  import java.io._
+  val fr = new FileWriter(new File("test/genFiles/ArmflexTopSim/ARMFlexTop_SIM.v"))
+  fr.write(c.emitVerilog(
+    new ARMFlexTopSimulator(
+      new PipelineParams(thidN = 4),
+      new MemoryHierarchyParams(thidN = 4)
+      ), annotations = Seq(TargetDirAnnotation("test/genFiles/ArmflexTopSim"))))
+  fr.close()
 }
 
 object ARMFlexTopVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
   import java.io._
-  val fr = new FileWriter(new File("ARMFlexTop_AWS.v"))
-  fr.write(c.emitVerilog(new ARMFlexTop(false)))
+  val fr = new FileWriter(new File("test/genFiles/ArmflexTop/ARMFlexTop_AWS.v"))
+  fr.write(c.emitVerilog(
+    new ARMFlexTop(
+      new PipelineParams(thidN = 2),
+      new MemoryHierarchyParams(thidN = 2)
+      ), annotations = Seq(TargetDirAnnotation("test/genFiles/ArmflexTop"))))
   fr.close()
 }
 
-// This module is wraps all Pipeline ports with a AxiLite register
-class PipelineAxiHacked(implicit val cfg: ProcConfig) extends MultiIOModule {
+/**
+ * This module is wraps all Pipeline ports with a AxiLite register, it is not meant to be functionally correct but
+ * actually just to get synthesis/area numbers without getting optimized.
+ * It can also be used to check for Chisel RTL generation faults.
+ * @params params
+ */
+class PipelineAxiHacked(params: PipelineParams) extends MultiIOModule {
   import antmicro.CSR._
-  import antmicro.Bus._
-  val axiDataWidth = 32
+  val axidataW = 32
   val regCount = 2
-  val pipeline = Module(new PipelineWithTransplant)
-  val axiLiteCSR = Module(new AXI4LiteCSR(axiDataWidth, 40))
-  val csr = Module(new CSR(axiDataWidth, 40))
+  val pipeline = Module(new PipelineWithTransplant(params))
+  val axiLiteCSR = Module(new AXI4LiteCSR(axidataW, 40))
+  val csr = Module(new CSR(axidataW, 40))
   csr.io.bus <> axiLiteCSR.io.bus
 
   val S_AXIL_TRANSPLANT = IO(Flipped(axiLiteCSR.io.ctl.cloneType))
@@ -189,13 +197,13 @@ class PipelineAxiHacked(implicit val cfg: ProcConfig) extends MultiIOModule {
   val trans2host = WireInit(Mux(pipeline.hostIO.trans2host.done.valid, 1.U << pipeline.hostIO.trans2host.done.tag, 0.U))
   val host2transClear = WireInit(Mux(pipeline.hostIO.trans2host.clear.valid, 1.U << pipeline.hostIO.trans2host.clear.tag, 0.U))
 
-  SetCSR(trans2host.asUInt(), csr.io.csr(0), axiDataWidth)
-  val pendingHostTrans = ClearCSR(host2transClear.asUInt(), csr.io.csr(1), axiDataWidth)
+  SetCSR(trans2host.asUInt, csr.io.csr(0), axidataW)
+  val pendingHostTrans = ClearCSR(host2transClear.asUInt, csr.io.csr(1), axidataW)
   pipeline.hostIO.host2trans.pending := pendingHostTrans
 
   // Hacked port
-  pipeline.mem_io.wake := SimpleCSR(csr.io.csr(2), axiDataWidth).asTypeOf(pipeline.mem_io.wake)
-  val handshakeReg = WireInit(SimpleCSR(csr.io.csr(4), axiDataWidth))
+  pipeline.mem_io.wake := SimpleCSR(csr.io.csr(2), axidataW).asTypeOf(pipeline.mem_io.wake)
+  val handshakeReg = WireInit(SimpleCSR(csr.io.csr(4), axidataW))
   pipeline.mem_io.inst.tlb.req.ready := handshakeReg(0)
   pipeline.mem_io.inst.tlb.resp.valid := handshakeReg(1)
   pipeline.mem_io.inst.cache.req.ready := handshakeReg(0)
@@ -205,9 +213,9 @@ class PipelineAxiHacked(implicit val cfg: ProcConfig) extends MultiIOModule {
   pipeline.mem_io.data.cache.req.ready := handshakeReg(0)
   pipeline.mem_io.data.cache.resp.valid := handshakeReg(1)
   pipeline.mem_io.wake.zipWithIndex.foreach {
-    case (bits, idx) => 
+    case (bits, idx) =>
       bits.valid := handshakeReg(3+idx)
-      bits.tag := SimpleCSR(csr.io.csr(4+idx), axiDataWidth)
+      bits.tag := SimpleCSR(csr.io.csr(4+idx), axidataW)
   }
 
   pipeline.mmu_io.data.flushCompled.valid := handshakeReg(2)
@@ -216,12 +224,11 @@ class PipelineAxiHacked(implicit val cfg: ProcConfig) extends MultiIOModule {
   pipeline.mmu_io.inst.flushPermReq.valid := handshakeReg(3)
 
   val currIdx = 4 + pipeline.mem_io.wake.length
-  val regsPerBlock = cfg.BLOCK_SIZE/axiDataWidth
-  pipeline.mem_io.inst.tlb.resp.bits := Cat(for (idx <- 0 until regsPerBlock) yield SimpleCSR(csr.io.csr(currIdx+idx), axiDataWidth)).asTypeOf(pipeline.mem_io.inst.tlb.resp.bits)
-  pipeline.mem_io.inst.cache.resp.bits := Cat(for (idx <- 0 until regsPerBlock) yield SimpleCSR(csr.io.csr(currIdx+idx), axiDataWidth)).asTypeOf(pipeline.mem_io.inst.cache.resp.bits)
-  pipeline.mem_io.data.tlb.resp.bits := Cat(for (idx <- 0 until regsPerBlock) yield SimpleCSR(csr.io.csr(currIdx+regsPerBlock+idx), axiDataWidth)).asTypeOf(pipeline.mem_io.data.tlb.resp.bits)
-  pipeline.mem_io.data.cache.resp.bits := Cat(for (idx <- 0 until regsPerBlock) yield SimpleCSR(csr.io.csr(currIdx+regsPerBlock+idx), axiDataWidth)).asTypeOf(pipeline.mem_io.data.cache.resp.bits)
-
+  val regsPerBlock = params.blockSize/axidataW
+  pipeline.mem_io.inst.tlb.resp.bits := Cat(for (idx <- 0 until regsPerBlock) yield SimpleCSR(csr.io.csr(currIdx+idx), axidataW)).asTypeOf(pipeline.mem_io.inst.tlb.resp.bits)
+  pipeline.mem_io.inst.cache.resp.bits := Cat(for (idx <- 0 until regsPerBlock) yield SimpleCSR(csr.io.csr(currIdx+idx), axidataW)).asTypeOf(pipeline.mem_io.inst.cache.resp.bits)
+  pipeline.mem_io.data.tlb.resp.bits := Cat(for (idx <- 0 until regsPerBlock) yield SimpleCSR(csr.io.csr(currIdx+regsPerBlock+idx), axidataW)).asTypeOf(pipeline.mem_io.data.tlb.resp.bits)
+  pipeline.mem_io.data.cache.resp.bits := Cat(for (idx <- 0 until regsPerBlock) yield SimpleCSR(csr.io.csr(currIdx+regsPerBlock+idx), axidataW)).asTypeOf(pipeline.mem_io.data.cache.resp.bits)
 
   csr.io.csr(38) <> 0.U.asTypeOf(csr.io.csr(0))
   csr.io.csr(3) <> 0.U.asTypeOf(csr.io.csr(0))
@@ -231,8 +238,8 @@ class PipelineAxiHacked(implicit val cfg: ProcConfig) extends MultiIOModule {
 object PipelineFakeTopVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
   import java.io._
-  val fr = new FileWriter(new File("Pipeline.v"))
-  val proc = new ProcConfig(NB_THREADS = 16)
-  fr.write(c.emitVerilog(new PipelineAxiHacked()(proc)))
+  val fr = new FileWriter(new File("test/genFiles/Pipeline/Pipeline.v"))
+  val proc = new PipelineParams(thidN = 16)
+  fr.write(c.emitVerilog(new PipelineAxiHacked(proc), annotations = Seq(TargetDirAnnotation("test/genFiles/Pipeline"))))
   fr.close()
 }

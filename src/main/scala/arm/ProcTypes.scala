@@ -3,10 +3,6 @@ package arm
 import chisel3._
 import chisel3.util.{BitPat,log2Ceil}
 
-/*
- * Bit Patterns for Instructions
- *
- */
 object PROCESSOR_TYPES
 {
   // Data
@@ -15,6 +11,7 @@ object PROCESSOR_TYPES
   def DATA_T = UInt(DATA_W)
   val DATA_X = 0.U(DATA_W)
 
+  // Inst
   val INST_SZ = 32
   val INST_W = INST_SZ.W
   def INST_T = UInt(INST_W)
@@ -22,7 +19,8 @@ object PROCESSOR_TYPES
 
   // Regs
   val REG_N = 32
-  val REG_W = log2Ceil(REG_N).W
+  val REG_SZ = log2Ceil(REG_N)
+  val REG_W = REG_SZ.W
   def REG_T = UInt(REG_W)
   val REG_X = 0.U(REG_W)
 
@@ -33,23 +31,10 @@ object PROCESSOR_TYPES
   def NZCV_T = UInt(NZCV_W)
   val NZCV_X = 0.U(NZCV_W)
 
-  // Virtual memory
-  val PAGE_BYTES = 4096
-  val PAGE_SZ = log2Ceil(PAGE_BYTES) // 12
-  val VADDR = 48
-  val PADDR = 32
-
-  // Miss type
+  // Permissions types (See QEMU MMU)
   def PERMISSION_T = UInt(2.W)
-  val DATA_LOAD  = 0 // FA_QflexCmds.DATA_LOAD
-  val DATA_STORE = 1 // FA_QflexCmds.DATA_STORE
-  val INST_FETCH = 2 // FA_QflexCmds.INST_FETCH
-
-  // TLB
-  val PG_OFFSET = 12 // 4K page
-  val TLB_ENTRIES = 256
-  val TLB_SZ = log2Ceil(TLB_ENTRIES)
-  val TLB_TAG =  VADDR - PG_OFFSET - TLB_SZ
-  val PPN = PADDR - PG_OFFSET
+  val DATA_LOAD  = 0
+  val DATA_STORE = 1
+  val INST_FETCH = 2
 }
 

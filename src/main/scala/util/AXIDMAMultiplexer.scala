@@ -7,48 +7,48 @@ import antmicro.Bus._
 import antmicro.Frontend._
 
 class AXIDMARequestPacket(
-  val addressWidth: Int
+  val addrW: Int
 ) extends Bundle {
-  val address = UInt(addressWidth.W)
-  val length = UInt(addressWidth.W)
+  val address = UInt(addrW.W)
+  val length = UInt(addrW.W)
 }
 
 /**
  * Master Interface for a module to communicate with a AXI Read DMA.
  * 
- * @param addressWidth the width of the address
- * @param dataWidth the width of the data
+ * @params addrW the width of the address
+ * @params dataW the width of the data
  * 
  * 
  * @note use Flipped(this) to create a slave interface.
  * 
  */ 
-class AXIReadMasterIF(addrWidth: Int, dataWidth: Int) extends Bundle {
-  val req = Decoupled(new AXIDMARequestPacket(addrWidth))
-  val data = Flipped(Decoupled(UInt(dataWidth.W)))
+class AXIReadMasterIF(addrW: Int, dataW: Int) extends Bundle {
+  val req = Decoupled(new AXIDMARequestPacket(addrW))
+  val data = Flipped(Decoupled(UInt(dataW.W)))
   val done = Input(Bool())
 
-  override def cloneType: this.type = new AXIReadMasterIF(addrWidth, dataWidth).asInstanceOf[this.type]
+  override def cloneType: this.type = new AXIReadMasterIF(addrW, dataW).asInstanceOf[this.type]
 }
 
 /**
  * DMA Worker to perform AXI read, with more than one master support.
  */ 
 class AXIReadMultiplexer(
-  addressWidth: Int = 64,
-  dataWidth: Int = 512,
+  addrW: Int = 64,
+  dataW: Int = 512,
   wayNumber: Int = 1
 ) extends MultiIOModule {
-  val S_IF = IO(Vec(wayNumber, Flipped(new AXIReadMasterIF(addressWidth, dataWidth))))
+  val S_IF = IO(Vec(wayNumber, Flipped(new AXIReadMasterIF(addrW, dataW))))
 
-  //val req_i = IO(Vec(wayNumber,Flipped(Decoupled(new AXIDMARequestPacket(addressWidth)))))
-  val u_arb = Module(new RRArbiter(new AXIDMARequestPacket(addressWidth), wayNumber))
+  //val req_i = IO(Vec(wayNumber,Flipped(Decoupled(new AXIDMARequestPacket(addrW)))))
+  val u_arb = Module(new RRArbiter(new AXIDMARequestPacket(addrW), wayNumber))
   for(i <- 0 until wayNumber) u_arb.io.in(i) <> S_IF(i).req
   val selected_req = u_arb.io.out
   val index_r = RegEnable(u_arb.io.chosen, 0.U, selected_req.fire())
   val index_vr = RegInit(false.B)
 
-  val u_axi_reader = Module(new AXI4Reader(addressWidth, dataWidth))
+  val u_axi_reader = Module(new AXI4Reader(addrW, dataW))
 
   u_axi_reader.io.xfer.address := selected_req.bits.address
   u_axi_reader.io.xfer.length := selected_req.bits.length
@@ -78,35 +78,35 @@ class AXIReadMultiplexer(
 /**
  * Master Interface for a module to communicate with a AXI Write DMA.
  * 
- * @param addressWidth the width of the address
- * @param dataWidth the width of the data
+ * @params addrW the width of the address
+ * @params dataW the width of the data
  * 
  * @note use Flipped(this) to create a slave interface.
  * 
  */ 
-class AXIWriteMasterIF(addrWidth: Int, dataWidth: Int) extends Bundle {
-  val req = Decoupled(new AXIDMARequestPacket(addrWidth))
-  val data = Decoupled(UInt(dataWidth.W))
+class AXIWriteMasterIF(addrW: Int, dataW: Int) extends Bundle {
+  val req = Decoupled(new AXIDMARequestPacket(addrW))
+  val data = Decoupled(UInt(dataW.W))
   val done = Input(Bool())
 
-  override def cloneType: this.type = new AXIWriteMasterIF(addrWidth, dataWidth).asInstanceOf[this.type]
+  override def cloneType: this.type = new AXIWriteMasterIF(addrW, dataW).asInstanceOf[this.type]
 }
 
 class AXIWriteMultiplexer(
-  addressWidth: Int = 64,
-  dataWidth: Int = 512,
+  addrW: Int = 64,
+  dataW: Int = 512,
   wayNumber: Int = 1
 ) extends MultiIOModule {
-  val S_IF = IO(Vec(wayNumber, Flipped(new AXIWriteMasterIF(addressWidth, dataWidth))))
-  //val req_i = IO(Vec(wayNumber,Flipped(Decoupled(new AXIDMARequestPacket(addressWidth)))))
-  val u_arb = Module(new RRArbiter(new AXIDMARequestPacket(addressWidth), wayNumber))
+  val S_IF = IO(Vec(wayNumber, Flipped(new AXIWriteMasterIF(addrW, dataW))))
+  //val req_i = IO(Vec(wayNumber,Flipped(Decoupled(new AXIDMARequestPacket(addrW)))))
+  val u_arb = Module(new RRArbiter(new AXIDMARequestPacket(addrW), wayNumber))
   for(i <- 0 until wayNumber) u_arb.io.in(i) <> S_IF(i).req
 
   val selected_req = u_arb.io.out
   val index_r = RegEnable(u_arb.io.chosen, 0.U, selected_req.fire())
   val index_vr = RegInit(false.B)
 
-  val u_axi_writer = Module(new AXI4Writer(addressWidth, dataWidth))
+  val u_axi_writer = Module(new AXI4Writer(addrW, dataW))
   u_axi_writer.io.xfer.address := selected_req.bits.address
   u_axi_writer.io.xfer.length := selected_req.bits.length
 

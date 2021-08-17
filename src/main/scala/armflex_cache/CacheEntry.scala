@@ -6,9 +6,9 @@ import chisel3.util._
 /**
  * Data bank entry for a simple cache.
  */ 
-class CacheEntry(param: DatabankParameter) extends Bundle {
+class CacheEntry(param: DatabankParams) extends Bundle {
   val tag = UInt(param.tagWidth().W)
-  val data = UInt(param.blockBit.W)
+  val data = UInt(param.blockSize.W)
   val v = Bool() // valid bit
   val d = Bool() // dirty bit.
 
@@ -24,7 +24,7 @@ class CacheEntry(param: DatabankParameter) extends Bundle {
   }
 
   /**
-   * @brief @return a new entry with its data updated by @param data and the @param mask . 
+   * @brief @return a new entry with its data updated by @params data and the @params mask .
    * Expected to be called when writing.
    */ 
   def write(data: UInt, mask: UInt, refill: Bool, valid: Bool = true.B): CacheEntry = {
@@ -37,11 +37,11 @@ class CacheEntry(param: DatabankParameter) extends Bundle {
       mask.orR() =/= 0.U // no mask 
     res.tag := this.tag
     res.v := valid
-    val newdata = VecInit(0.U(param.blockBit.W).asBools())
-    for(i <- 0 until param.blockBit){
+    val newdata = VecInit(0.U(param.blockSize.W).asBools())
+    for(i <- 0 until param.blockSize){
       newdata(i) := Mux(mask(i), data(i), this.data(i))
     }
-    res.data := newdata.asUInt()
+    res.data := newdata.asUInt
     res
   }
 
@@ -62,7 +62,7 @@ class CacheEntry(param: DatabankParameter) extends Bundle {
   def valid(isWrite: Bool): Bool = true.B
 
   /**
-   * @return the actual address according to the @param setNumber
+   * @return the actual address according to the @params tlbSetNumber
    */ 
   def address(setNumber: UInt): UInt = {
     Cat(this.tag, setNumber)
@@ -72,11 +72,17 @@ class CacheEntry(param: DatabankParameter) extends Bundle {
    * @return the thread id for this entry.
    */
   def asid(): UInt = {
-    0.U(param.asidWidth.W)
+    0.U(param.asidW.W)
   }
 
   def getTagFromAddress(address: UInt, tagWidth: Int): UInt = {
     address(address.getWidth - 1, address.getWidth - tagWidth)
+  }
+
+  override def toPrintable: Printable = {
+    def char(variable: Bool) = Mux(variable, 'v'.U, '-'.U)
+    p"CacheEntry(valid:${Character(char(v))}:dirty:${Character(char(d))}:tag:${Hexadecimal(tag)}\n" +
+    p"           data:0x${Hexadecimal(data)})\n"
   }
 
   override def cloneType: this.type = new CacheEntry(param).asInstanceOf[this.type]

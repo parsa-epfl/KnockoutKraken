@@ -22,64 +22,71 @@ class DelayChain[T <: Data](in: T, level: Integer) extends MultiIOModule {
 }
 
 class DUTTLB(
-  parent: () => BRAMTLB,
+  parent: () => TLB,
   initialMem: String = ""
 ) extends MultiIOModule {
   val u_tlb = Module(parent())
 
-  val delay_chain_req = Module(new DelayChain(u_tlb.miss_request_o.bits.cloneType, 4))
-  delay_chain_req.i <> u_tlb.miss_request_o
-  
-  val delay_chain_rep = Module(new DelayChain(u_tlb.refill_request_i.bits.cloneType, 4))
-  delay_chain_rep.o <> u_tlb.refill_request_i
+  val delay_chain_miss_req = Module(new DelayChain(u_tlb.mmu_io.missReq.bits.cloneType, 4))
+  delay_chain_miss_req.i <> u_tlb.mmu_io.missReq
+
+  val delay_chain_wb_req = Module(new DelayChain(u_tlb.mmu_io.writebackReq.bits.cloneType, 4))
+  delay_chain_wb_req.i <> u_tlb.mmu_io.writebackReq
+
+  val delay_chain_rep = Module(new DelayChain(u_tlb.mmu_io.refillResp.bits.cloneType, 4))
+  delay_chain_rep.o <> u_tlb.mmu_io.refillResp
 
 
-  val frontendRequest_i = IO(Flipped(u_tlb.frontend_request_i.cloneType))
-  frontendRequest_i <> u_tlb.frontend_request_i
+  val frontendRequest_i = IO(Flipped(u_tlb.pipeline_io.translationReq.cloneType))
+  frontendRequest_i <> u_tlb.pipeline_io.translationReq
 
-  val flushRequest_i = IO(Flipped(u_tlb.flush_request_i.cloneType))
-  flushRequest_i <> u_tlb.flush_request_i
+  val flushRequest_i = IO(Flipped(u_tlb.mmu_io.flushReq.cloneType))
+  flushRequest_i <> u_tlb.mmu_io.flushReq
 
-  val frontendReply_o = IO(u_tlb.frontend_reply_o.cloneType)
-  frontendReply_o <> u_tlb.frontend_reply_o
+  val frontendReply_o = IO(u_tlb.pipeline_io.translationResp.cloneType)
+  frontendReply_o <> u_tlb.pipeline_io.translationResp
 
-  val packetArrive_o = IO(u_tlb.packet_arrive_o.cloneType)
-  packetArrive_o <> u_tlb.packet_arrive_o
+  val packetArrive_o = IO(u_tlb.pipeline_io.wakeAfterMiss.cloneType)
+  packetArrive_o <> u_tlb.pipeline_io.wakeAfterMiss
 
-  delay_chain_rep.i.valid := delay_chain_req.o.valid && !delay_chain_req.o.bits.w_v
-  delay_chain_rep.i.bits.tid := delay_chain_req.o.bits.tid
-  delay_chain_rep.i.bits.tag := delay_chain_req.o.bits.tag
+  // TODO: combine two backend ports in the tester.
 
-  delay_chain_req.o.ready := delay_chain_rep.i.ready
+  delay_chain_rep.i.valid := delay_chain_miss_req.o.valid
+  delay_chain_rep.i.bits.thid := delay_chain_miss_req.o.bits.thid
+  delay_chain_rep.i.bits.tag := delay_chain_miss_req.o.bits.tag
 
-  val u_mem = Mem(1L << u_tlb.param.vPageWidth, new PTEntryPacket(u_tlb.param))
+  delay_chain_miss_req.o.ready := delay_chain_rep.i.ready
+
+  val u_mem = Mem(1L << (u_tlb.params.vPageW + u_tlb.params.asidW), new PTEntryPacket(u_tlb.params))
 
   if(initialMem.nonEmpty) loadMemoryFromFile(u_mem, initialMem)
 
-  val mem_port = u_mem(delay_chain_req.o.bits.tag.asUInt())
-  val mod_mem_value = WireInit(mem_port)
+  val mem_port_read = u_mem(delay_chain_miss_req.o.bits.tag.asUInt)
+  val mem_port_write = u_mem(delay_chain_wb_req.o.bits.tag.asUInt)
+  val mod_mem_value = WireInit(mem_port_write)
   mod_mem_value.modified := true.B
-  when(delay_chain_req.o.valid && delay_chain_req.o.bits.w_v){
-    mem_port := mod_mem_value
+  when(delay_chain_wb_req.o.valid){
+    mem_port_write := mod_mem_value
   }
-  delay_chain_rep.i.bits.data := mem_port
+  delay_chain_rep.i.bits.data := mem_port_read
+  delay_chain_wb_req.o.ready := true.B
 }
 
 implicit class BaseTLBDriver(target: DUTTLB){
   def setReadRequest(vpage: UInt, asid: UInt) = {
     target.frontendRequest_i.bits.tag.vpn.poke(vpage)
-    target.frontendRequest_i.bits.tid.poke(asid)
+    target.frontendRequest_i.bits.thid.poke(asid)
     target.frontendRequest_i.bits.tag.asid.poke(asid)
-    target.frontendRequest_i.bits.permission.poke(0.U)
+    target.frontendRequest_i.bits.perm.poke(0.U)
     target.frontendRequest_i.valid.poke(true.B)
     target.frontendRequest_i.ready.expect(true.B)
   }
 
   def setWriteRequest(vpage: UInt, asid: UInt) = {
     target.frontendRequest_i.bits.tag.vpn.poke(vpage)
-    target.frontendRequest_i.bits.tid.poke(vpage)
+    target.frontendRequest_i.bits.thid.poke(vpage)
     target.frontendRequest_i.bits.tag.asid.poke(asid)
-    target.frontendRequest_i.bits.permission.poke(1.U)
+    target.frontendRequest_i.bits.perm.poke(1.U)
     target.frontendRequest_i.valid.poke(true.B)
     target.frontendRequest_i.ready.expect(true.B)
   }
@@ -127,8 +134,8 @@ import chiseltest.internal.WriteVcdAnnotation
 import firrtl.options.TargetDirAnnotation
 
 class TLBTester extends FreeSpec with ChiselScalatestTester {
-  val param = new TLBParameter(
-    8, 4, 2, 15, 1, 32, 32
+  val param = new PageTableParams(
+    8, 4, 2, 4, 1, 32, 32
   )
 
   import TLBTestUtility._
@@ -136,8 +143,8 @@ class TLBTester extends FreeSpec with ChiselScalatestTester {
   "Normal Access" in {
     val anno = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/tlb/normal_read"), WriteVcdAnnotation)
     test(new DUTTLB(
-      () => new BRAMTLB(param, () => new PseudoTreeLRUCore(param.associativity)), ""
-    )).withAnnotations(anno){ dut =>
+      () => new TLB(param, () => new PseudoTreeLRUCore(param.tlbAssociativity)), ""
+      )).withAnnotations(anno){ dut =>
       dut.setReadRequest(0.U, 0.U)
       dut.tick()
       dut.expectReply(violation = false, hit = false, 0.U)

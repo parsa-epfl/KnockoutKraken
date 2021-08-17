@@ -6,41 +6,29 @@ import armflex_cache._
 import armflex.util._
 
 class TLBWritebackHandler(
-  param: MMUParameter,
+  params: MemoryHierarchyParams,
   tlbNumber: Int = 2
 ) extends MultiIOModule {
   import armflex.{PTEntryPacket, PTTagPacket, TLBEvictionMessage}
-  import antmicro.Frontend._
-  import antmicro.Bus._
 
   // the eviction request of the TLB
   val tlb_evict_req_i = IO(Vec(
-    tlbNumber, Flipped(Decoupled(new TLBEvictionMessage(param.mem.toTLBParameter)))
+    tlbNumber, Flipped(Decoupled(new TLBEvictionMessage(params.getPageTableParams)))
   ))
   // arbiter to select the evict request
-  val u_arb = Module(new RRArbiter(new TLBEvictionMessage(param.mem.toTLBParameter), tlbNumber))
+  val u_arb = Module(new RRArbiter(new TLBEvictionMessage(params.getPageTableParams), tlbNumber))
   u_arb.io.in <> tlb_evict_req_i
 
   // Add page table set buffer and axi dma
-  val u_buffer = Module(new peripheral.PageTableSetBuffer(
-    param.mem.toTLBParameter,
-    new peripheral.PageTableSetPacket(param.mem.toTLBParameter)
-  ))
+  val u_buffer = Module(new peripheral.PageTableSetBuffer(params.getPageTableParams,
+                        new peripheral.PageTableSetPacket(params.getPageTableParams)))
 
   // AXI DMA Read channels
-  val M_DMA_R = IO(new AXIReadMasterIF(
-    param.dramAddrWidth,
-    param.dramDataWidth
-  ))
+  val M_DMA_R = IO(new AXIReadMasterIF(params.dramAddrW, params.dramdataW))
+  // AXI DMA Write channels
+  val M_DMA_W = IO(new AXIWriteMasterIF(params.dramAddrW, params.dramdataW))
 
   u_buffer.dma_data_i <> M_DMA_R.data
-
-  // AXI DMA Write channels
-  val M_DMA_W = IO(new AXIWriteMasterIF(
-    param.dramAddrWidth,
-    param.dramDataWidth
-  ))
-
   M_DMA_W.data <> u_buffer.dma_data_o
 
   val sIdle :: sMoveIn :: sPick :: sUpdatePT :: sMoveOut :: Nil = Enum(5)
@@ -49,30 +37,28 @@ class TLBWritebackHandler(
   // sIdle
   u_arb.io.out.ready := state_r === sIdle
   class request_t extends Bundle {
-    val tag = new PTTagPacket(param.mem.toTLBParameter)
-    val evicted_pte = new PTEntryPacket(param.mem.toTLBParameter)
+    val tag = new PTTagPacket(params.getPageTableParams)
+    val evicted_pte = new PTEntryPacket(params.getPageTableParams)
     val source = UInt(log2Ceil(tlbNumber).W)
   }
 
   val request_r = Reg(new request_t)
-  when(u_arb.io.out.fire()){
+  when(u_arb.io.out.fire){
     request_r.tag := u_arb.io.out.bits.tag
     request_r.evicted_pte := u_arb.io.out.bits.entry
     request_r.source := u_arb.io.chosen
-    assert(u_arb.io.out.bits.entry.modified, "Only modified entry can be written back")
   }
 
   u_buffer.lookup_request_i := request_r.tag
 
   // sMoveIn
-  M_DMA_R.req.bits.address := param.getPageTableAddressByVPN(request_r.tag.vpn)
+  M_DMA_R.req.bits.address := params.vpn2ptSetPA(request_r.tag.vpn)
   M_DMA_R.req.bits.length := u_buffer.requestPacketNumber.U
   M_DMA_R.req.valid := state_r === sMoveIn
 
   // sPick
   val victim_index_r = RegInit(0.U(u_buffer.entryNumber.W))
   when(state_r === sPick){
-    assert(u_buffer.lookup_reply_o.hit_v)
     victim_index_r := u_buffer.lookup_reply_o.index
   }
 
@@ -83,7 +69,6 @@ class TLBWritebackHandler(
   u_buffer.write_request_i.bits.item.tag := request_r.tag
   u_buffer.write_request_i.valid := state_r === sUpdatePT
 
-
   // sMoveOut
   M_DMA_W.req.bits.address := M_DMA_R.req.bits.address
   M_DMA_W.req.bits.length := u_buffer.requestPacketNumber.U
@@ -91,24 +76,44 @@ class TLBWritebackHandler(
 
   switch(state_r){
     is(sIdle){
-      state_r := Mux(u_arb.io.out.fire(), sMoveIn, sIdle)
+      when(u_arb.io.out.fire) {
+        state_r := sMoveIn
+      }
     }
     is(sMoveIn){
-      state_r := Mux(M_DMA_R.done, sPick, sMoveIn)
+      when(M_DMA_R.done) {
+        state_r := sPick
+      }
     }
     is(sPick){
       state_r := sUpdatePT
     }
     is(sUpdatePT){
-      state_r := Mux(u_buffer.write_request_i.fire(), sMoveOut, sUpdatePT)
+      when(u_buffer.write_request_i.fire) {
+        state_r := sMoveOut
+      }
     }
     is(sMoveOut){
-      state_r := Mux(M_DMA_W.done, sIdle, sMoveOut)
+      when(M_DMA_W.done) {
+        state_r := sIdle
+      }
+    }
+  }
+
+  if(true) { // TODO Conditional asserts
+    when(state_r === sPick){
+      when(u_buffer.lookup_reply_o.hit_v) {
+        printf("If picking entry, must be a hit")
+        //assert(u_buffer.lookup_reply_o.hit_v, "If picking entry, must be a hit")
+      }
+    }
+    when(u_arb.io.out.fire){
+      assert(u_arb.io.out.bits.entry.modified, "Only modified entry can be written back")
     }
   }
 }
 
 object TLBWritebackHandlerVerilogEmitter extends App{
   val c = chisel3.stage.ChiselStage
-  println(c.emitVerilog(new TLBWritebackHandler(new MMUParameter())))
+  println(c.emitVerilog(new TLBWritebackHandler(new MemoryHierarchyParams())))
 }

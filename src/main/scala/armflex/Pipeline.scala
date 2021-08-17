@@ -11,62 +11,62 @@ import arm.DECODE_CONTROL_SIGNALS._
 import armflex.util._
 import armflex.util.ExtraUtils._
 
-class PipelineMemoryIO(paddrWidth: Int, thidWidth: Int, asidWidth: Int, blockSize: Int) extends Bundle {
-  val inst = new PipeMemPortIO(DATA_SZ, paddrWidth, thidWidth, asidWidth, blockSize)
-  val data = new PipeMemPortIO(DATA_SZ, paddrWidth, thidWidth, asidWidth, blockSize)
-  val wake = Input(Vec(2, ValidTag(UInt(thidWidth.W))))
+class PipelineMemoryIO(pAddrW: Int, thidW: Int, asidW: Int, blockSize: Int) extends Bundle {
+  val inst = new PipeMemPortIO(DATA_SZ, pAddrW, thidW, asidW, blockSize)
+  val data = new PipeMemPortIO(DATA_SZ, pAddrW, thidW, asidW, blockSize)
+  val wake = Input(Vec(2, ValidTag(UInt(thidW.W))))
 }
 
-class IssueArchStateIO(nbThreads: Int) extends Bundle {
-  val sel = Output(ValidTag(nbThreads))
+class IssueArchStateIO(thidN: Int) extends Bundle {
+  val sel = Output(ValidTag(thidN))
   val regs = new Bundle { val curr = Input(new PStateRegs) }
-  val rd = Flipped(new RFileIO.RDPort(nbThreads))
+  val rd = Flipped(new RFileIO.RDPort(thidN))
   val ready = Input(Bool())
 }
 
-class PipeArchStateIO(nbThreads: Int) extends Bundle {
-  val issue = new IssueArchStateIO(nbThreads)
-  val commit = new CommitArchStateIO(nbThreads)
-  override def cloneType: this.type = new PipeArchStateIO(nbThreads).asInstanceOf[this.type]
+class PipeArchStateIO(thidN: Int) extends Bundle {
+  val issue = new IssueArchStateIO(thidN)
+  val commit = new CommitArchStateIO(thidN)
+  override def cloneType: this.type = new PipeArchStateIO(thidN).asInstanceOf[this.type]
 }
 
 /** Processor
   */
-class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
+class Pipeline(params: PipelineParams) extends MultiIOModule {
   // --------- IO -----------
   // Memory Hierarchy
-  val mem_io = IO(new PipelineMemoryIO(cfg.pAddressWidth, cfg.NB_THREADS_W, cfg.ASID_WIDTH, cfg.BLOCK_SIZE))
+  val mem_io = IO(new PipelineMemoryIO(params.pAddrW, params.thidW, params.asidW, params.blockSize))
   val mmu_io = IO(new PipeMMUIO)
   // Transplant case
   val transplantIO = IO(new Bundle {
-    val start = Input(ValidTag(cfg.TAG_T, DATA_T))
-    val done = Output(ValidTag(cfg.TAG_T, INST_T))
+    val start = Input(ValidTag(params.thidT, DATA_T))
+    val done = Output(ValidTag(params.thidT, INST_T))
   })
   // ISA State
-  val archstate = IO(new PipeArchStateIO(cfg.NB_THREADS))
+  val archstate = IO(new PipeArchStateIO(params.thidN))
 
   // ----- System modules ------
 
   // Pipeline -----------------------------------------------
-  val fetch = Module(new FetchUnit)
+  val fetch = Module(new FetchUnit(params))
   // Decode
   val decoder = Module(new DecodeUnit)
-  val decReg = Module(new FlushReg(cfg.TAG_T, new DInst))
+  val decReg = Module(new FlushReg(params.thidT, new DInst))
   // Issue
-  val issuer = Module(new FlushReg(cfg.TAG_T, new DInst))
+  val issuer = Module(new FlushReg(params.thidT, new DInst))
   // |         |        |            |
   // | Execute |        |            |
   // |         | Branch |            |
   // |         |        | Load Store |
   // |         |        |            |
-  val executer = Module(new ExecuteUnit())
-  val brancher = Module(new BranchUnit())
-  val ldstU = Module(new LDSTUnit())
+  val executer = Module(new ExecuteUnit)
+  val brancher = Module(new BranchUnit)
+  val ldstU = Module(new LDSTUnit)
   // (MemInst || Issuer) -> CommitReg
 
-  val memUnit = Module(new MemoryUnit)
+  val memUnit = Module(new MemoryUnit(params))
   // Commit
-  val commitU = Module(new CommitUnit(cfg.NB_THREADS))
+  val commitU = Module(new CommitUnit(params.thidN))
 
   // Interconnect -------------------------------------------
 
@@ -121,7 +121,7 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   val rVal2 = Mux(stateReadArrives, archstate.issue.rd.port(1).data, rVal2_reg)
   val rVal3 = Mux(stateReadArrives, archstate.issue.rd.port(0).data, rVal3_reg) // TODO Triple source
   val curr_state = Mux(stateReadArrives, RegNext(archstate.issue.regs.curr), state_reg) // TODO Triple source
-  when(stateReadArrives) { 
+  when(stateReadArrives) {
     // Read Register arrived
     rVal1_reg := archstate.issue.rd.port(0).data
     rVal2_reg := archstate.issue.rd.port(1).data
@@ -173,7 +173,7 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   )
 
   // CommitReg
-  val commitNext = WireInit(CommitInst(cfg.NB_THREADS))
+  val commitNext = WireInit(CommitInst(params.thidN))
   when(brancher.io.pcrel.valid) {
     commitNext.rd(0).valid := true.B
     commitNext.rd(0).bits := brancher.io.pcrel.bits.rd
@@ -183,7 +183,6 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
     commitNext.rd(0).bits := executer.io.einst.bits.rd.bits
     commitNext.res(0) := executer.io.einst.bits.res
   }
-  assert(!(executer.io.einst.valid && brancher.io.pcrel.valid))
 
   commitNext.nzcv.valid := executer.io.einst.bits.nzcv.valid && executer.io.einst.valid
   commitNext.nzcv.bits := executer.io.einst.bits.nzcv.bits
@@ -246,7 +245,7 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   val dbg = IO(new Bundle {
     val issue = Output(new Bundle {
       val valid = Bool()
-      val thread = cfg.TAG_T
+      val thread = params.thidT
       val mem = Bool()
       val transplant = Bool()
     })
@@ -257,17 +256,18 @@ class Pipeline(implicit val cfg: ProcConfig) extends MultiIOModule {
   dbg.issue.transplant := commitU.enq.bits.exceptions.valid || commitU.enq.bits.undef
 
   if(true) { // TODO Conditional Assertions
-    // Assertions:  Issuer Deq | memInst Req&Resp | CommitReg Enq
+    assert(!(executer.io.einst.valid && brancher.io.pcrel.valid), "Can't have both instruction valid at the same time")
+    // Assertions:  Issuer Deq | MemUnit | CommitReg Enq
     when(issuer.io.deq.fire) {
-        assert(commitU.enq.fire || memUnit.pipe.req.fire)
-      assert(!(commitU.enq.fire && memUnit.pipe.req.fire))
+      assert(commitU.enq.fire || memUnit.pipe.req.fire, "In case of Issue fire, either the MemUnit or the commit queue must receive the transaction")
+      assert(!(commitU.enq.fire && memUnit.pipe.req.fire), "Both the MemUnit and commit queue can't receive the transaction at the same time")
       when(commitU.commit.commited.valid) { 
-          assert(issuer.io.deq.tag =/= commitU.commit.commited.tag) 
+          assert(issuer.io.deq.tag =/= commitU.commit.commited.tag, "Instructions from the same context can't be present in two stages concurrently")
         }
     }
     when(commitU.enq.fire) {
-        assert(memUnit.pipe.resp.valid || issuer.io.deq.fire)
-      assert(!(memUnit.pipe.resp.valid && issuer.io.deq.fire))
+      assert(memUnit.pipe.resp.valid || issuer.io.deq.fire, "When the commit queue receives a transaction, it must either come from the MemUnit or Issue stage")
+      assert(!(memUnit.pipe.resp.valid && issuer.io.deq.fire), "When the commit queue receives a transaction, it can't come from both the MemUnit or Issue stage")
     }
   }
 }

@@ -7,23 +7,23 @@ import chisel3.util._
 /**
  * Module to merge the wake up/sleep notification from more than one requesters. (TLB, Cache)
  * 
- * @param threadNumber The number threads to be manipulated.
- * @param inputPortNumber The number of requesters.
- * 
- */ 
+ * @params thidN The number threads to be manipulated.
+ * @params inputPortsN The number of requesters.
+ *
+ */
 class NotifyMerger(
-  threadNumber: Int,
-  inputPortNumber: Int
+  thidN: Int,
+  inputPortsN: Int
 ) extends Module{
-  val threadWidth = log2Ceil(threadNumber)
+  val threadWidth = log2Ceil(thidN)
   val io = IO(new Bundle{
-    val o = Output(UInt(threadNumber.W))
-    val i = Input(Vec(inputPortNumber, Flipped(ValidIO(UInt(threadWidth.W)))))
+    val o = Output(UInt(thidN.W))
+    val i = Input(Vec(inputPortsN, Flipped(ValidIO(UInt(threadWidth.W)))))
   })
 
-  val to_aggregate = Wire(Vec(inputPortNumber, UInt(threadNumber.W)))
-  for(i <- 0 until inputPortNumber){
-    to_aggregate(i) := UIntToOH(io.i(i).bits) & Fill(threadNumber, io.i(i).valid)
+  val to_aggregate = Wire(Vec(inputPortsN, UInt(thidN.W)))
+  for(i <- 0 until inputPortsN){
+    to_aggregate(i) := UIntToOH(io.i(i).bits) & Fill(thidN, io.i(i).valid)
   }
   io.o := to_aggregate.reduce({(x, y) => x | y})
 }

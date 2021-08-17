@@ -5,39 +5,24 @@ import chisel3._
 import chisel3.util._
 
 import arm.PROCESSOR_TYPES._
-import arm.DECODE_CONTROL_SIGNALS._
-
-import armflex_cache._
 import armflex.util._
-import armflex.util.ExtraUtils._
-
 import antmicro.CSR._
-import firrtl.PrimOps.Mul
 
-class ProcConfig(
-  // Address Space ID
-  val ASID_WIDTH:    Int = 15,
-  // Chisel Generator configs
-  val NB_THREADS:    Int = 2,
-  val BLOCK_SIZE:    Int = 512,
-  val pAddressWidth: Int = 36,
+class PipelineParams(
+  val asidW:    Int = 15,
+  val thidN:    Int = 32,
+  val pAddrW:   Int = 36,
+  val vAddrW:   Int = 64,
+  val blockSize:Int = 512,
   // Simulation settings
+  val assertEnabled: Boolean = false, // TODO use this variable for assertions
   val DebugSignals: Boolean = false,
   val rtlVerbose:   Boolean = false,
-  val simVerbose:   Boolean = false) {
-  // Threads
-  // val NB_THREADS
-  val NB_THREADS_W = log2Ceil(NB_THREADS) // 4 Threads
-  def TAG_T = UInt(NB_THREADS_W.W)
-  val TAG_X = 0.U(NB_THREADS_W.W)
-  val TAG_VEC_X = 0.U(NB_THREADS.W)
-  def TAG_VEC_T = UInt(NB_THREADS.W)
-
-  // Memory
-  val cacheLatency = 1
-
-  // BRAM Generator configs
-  val bramConfigState = new BRAMConfig(8, 8, 1024, "", false, false)
+  val simVerbose:   Boolean = false
+) {
+  assert(vAddrW == 64 || vAddrW == 32)
+  val thidW = log2Ceil(thidN)
+  def thidT = UInt(thidW.W)
 
   def simLog(str: Printable) {
     if (simVerbose) {
@@ -48,75 +33,79 @@ class ProcConfig(
 
 import antmicro.Bus.AXI4Lite
 
-class PipelineAxi(implicit val cfg: ProcConfig) extends MultiIOModule {
-  val axiDataWidth = 32
+class PipelineAxi(params: PipelineParams) extends MultiIOModule {
+  val axidataW = 32
   val regCount = 2
   val bramRegCount = 2*1024
 
-  val pipeline = Module(new PipelineWithTransplant)
-  val uThreadTable = Module(new ThreadTable(
-    cfg.NB_THREADS, cfg.ASID_WIDTH, 2, 0
-  ))
+  val pipeline = Module(new PipelineWithTransplant(params))
+  val thid2asidTable = Module(new LUT_thid2asid(params.thidN, params.asidW, 2))
 
-  val uAxilToCSR = Module(new AXI4LiteCSR(axiDataWidth, 2*bramRegCount))
+  val uAxilToCSR = Module(new AXI4LiteCSR(axidataW, 2*bramRegCount))
 
-  val uCSR2ToTransplant = Module(new CSR(axiDataWidth, regCount))
-  val uCSRToArchState = Module(new CSR2BRAM(pipeline.transplantU.hostBRAMConfig))
+  val uCSR2ToTransplant = Module(new CSR(axidataW, regCount))
+  val uCSRToArchState = Module(new CSR2BRAM(pipeline.transplantU.hostBRAMParams))
   uCSRToArchState.io.bus <> 0.U.asTypeOf(uCSRToArchState.io.bus.cloneType)
   uCSR2ToTransplant.io.bus <> 0.U.asTypeOf(uCSR2ToTransplant.io.bus)
-  uThreadTable.S_BUS <> 0.U.asTypeOf(uThreadTable.S_BUS)
+  thid2asidTable.S_BUS <> 0.U.asTypeOf(thid2asidTable.S_BUS)
 
-  // TODO: Replace this with a AXI arbiter. 
-  when((uAxilToCSR.io.bus.addr >> log2Ceil(bramRegCount)).asUInt() === 0.U) { // 0-2K
+  // TODO: Replace this with a AXI arbiter.
+  when((uAxilToCSR.io.bus.addr >> log2Ceil(bramRegCount)).asUInt === 0.U) { // 0-2K
     uCSRToArchState.io.bus <> uAxilToCSR.io.bus
-  }.elsewhen((uAxilToCSR.io.bus.addr >> (log2Ceil(bramRegCount) - 1)).asUInt() === 2.U) { // 2k - 3k
-    uThreadTable.S_BUS <> uAxilToCSR.io.bus
+  }.elsewhen((uAxilToCSR.io.bus.addr >> (log2Ceil(bramRegCount) - 1)).asUInt === 2.U) { // 2k - 3k
+    thid2asidTable.S_BUS <> uAxilToCSR.io.bus
   }.otherwise { // 3k - 4k
     uCSR2ToTransplant.io.bus <> uAxilToCSR.io.bus
   }
 
-  val S_AXI = IO(Flipped(new AXI4Lite(log2Ceil(bramRegCount*2) + log2Ceil(axiDataWidth / 8), axiDataWidth)))
-  S_AXI <> uAxilToCSR.io.ctl
+  val S_AXIL = IO(Flipped(new AXI4Lite(log2Ceil(bramRegCount*2) + log2Ceil(axidataW / 8), axidataW)))
+  S_AXIL <> uAxilToCSR.io.ctl
 
   val trans2host = WireInit(Mux(pipeline.hostIO.trans2host.done.valid, 1.U << pipeline.hostIO.trans2host.done.tag, 0.U))
   val host2transClear = WireInit(Mux(pipeline.hostIO.trans2host.clear.valid, 1.U << pipeline.hostIO.trans2host.clear.tag, 0.U))
 
-  SetCSR(trans2host.asUInt(), uCSR2ToTransplant.io.csr(0), axiDataWidth)
-  val pendingHostTrans = ClearCSR(host2transClear.asUInt(), uCSR2ToTransplant.io.csr(1), axiDataWidth)
+  SetCSR(trans2host.asUInt, uCSR2ToTransplant.io.csr(0), axidataW)
+  val pendingHostTrans = ClearCSR(host2transClear.asUInt, uCSR2ToTransplant.io.csr(1), axidataW)
   pipeline.hostIO.host2trans.pending := pendingHostTrans
-  
+
   // BRAM (Architecture State)
   pipeline.hostIO.port <> uCSRToArchState.io.port
 
   // Memory port.
-  val mem = IO(pipeline.mem_io.cloneType)
-  pipeline.mem_io <> mem
+  val mem_io = IO(pipeline.mem_io.cloneType)
+  val mmu_io = IO(pipeline.mmu_io.cloneType)
+  pipeline.mem_io <> mem_io
+  pipeline.mmu_io <> mmu_io
 
   // mem.inst.req
-  uThreadTable.tid_i(0) := pipeline.mem_io.inst.tlb.req.bits.thid
-  mem.inst.tlb.req.bits.asid := uThreadTable.pid_o(0).bits
-  when(pipeline.mem_io.inst.tlb.req.valid) {
-    assert(uThreadTable.pid_o(0).valid, "No instruction request is allowed if the hardware thread is not registed.")
-  }
+  thid2asidTable.thid_i(0) := pipeline.mem_io.inst.tlb.req.bits.thid
+  mem_io.inst.tlb.req.bits.asid := thid2asidTable.asid_o(0).bits
 
-  uThreadTable.tid_i(1) := pipeline.mem_io.data.tlb.req.bits.thid
-  mem.data.tlb.req.bits.asid := uThreadTable.pid_o(1).bits
-  when(pipeline.mem_io.data.tlb.req.valid){
-    assert(uThreadTable.pid_o(1).valid, "No instruction request is allowed if the hardware thread is not registed.")
+
+  thid2asidTable.thid_i(1) := pipeline.mem_io.data.tlb.req.bits.thid
+  mem_io.data.tlb.req.bits.asid := thid2asidTable.asid_o(1).bits
+
+  if(true) {// TODO conditional assertions
+    when(pipeline.mem_io.data.tlb.req.valid){
+      assert(thid2asidTable.asid_o(1).valid, "No memory request is allowed if the hardware thread is not registed.")
+    }
+    when(pipeline.mem_io.inst.tlb.req.valid) {
+      assert(thid2asidTable.asid_o(0).valid, "No memory request is allowed if the hardware thread is not registed.")
+    }
   }
 }
 
-class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule {
+class PipelineWithTransplant(params: PipelineParams) extends MultiIOModule {
 
   // Pipeline
-  val pipeline = Module(new Pipeline)
+  val pipeline = Module(new Pipeline(params))
   // State
   // Memory
   val mem_io = IO(pipeline.mem_io.cloneType)
   val mmu_io = IO(pipeline.mmu_io.cloneType)
   mem_io <> pipeline.mem_io
   mmu_io <> pipeline.mmu_io
-  val archstate = Module(new ArchState(cfg.NB_THREADS, cfg.DebugSignals))
+  val archstate = Module(new ArchState(params.thidN, params.DebugSignals))
 
   // -------- Pipeline ---------
   // Get state from Issue
@@ -136,7 +125,7 @@ class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule
   // TODO Performance counter stats
 
   // -------- Transplant ---------
-  val transplantU = Module(new TransplantUnit(cfg.NB_THREADS))
+  val transplantU = Module(new TransplantUnit(params.thidN))
   class HostIO extends Bundle {
     val port = transplantU.hostBramPort.cloneType
     val trans2host = transplantU.trans2host.cloneType
@@ -171,22 +160,31 @@ class PipelineWithTransplant(implicit val cfg: ProcConfig) extends MultiIOModule
   transplantU.trans2host <> hostIO.trans2host
   transplantU.hostBramPort <> hostIO.port
 
+  if(true) { // TODO Conditional assertions and printing
+    when(archstate.pstate.commit.next.valid) {
+      printf(p"Pipeline:Commit:THID[${archstate.pstate.commit.next.tag}]:PC[0x${Hexadecimal(pipeline.archstate.commit.regs.next.PC)}]->PC[0x${Hexadecimal(pipeline.archstate.commit.regs.next.PC)}]\n")
+    }
+    when(pipeline.transplantIO.done.valid) {
+      printf(p"Pipeline:Transplant:THID[${archstate.pstate.commit.next.tag}]:PC[0x${Hexadecimal(archstate.pstate.commit.curr.PC)}]->Transplant\n")
+    }
+  }
+
   //* DBG
   val dbg = IO(new Bundle {
     val bits =
-      if (cfg.DebugSignals) Some(Output(new Bundle {
-        val fetch = ValidTag(cfg.NB_THREADS, new FullStateBundle)
-        val issue = ValidTag(cfg.NB_THREADS, new FullStateBundle)
+      if (params.DebugSignals) Some(Output(new Bundle {
+        val fetch = ValidTag(params.thidN, new FullStateBundle)
+        val issue = ValidTag(params.thidN, new FullStateBundle)
         val issuingMem = Output(Bool())
         val issuingTransplant = Output(Bool())
-        val commit = ValidTag(cfg.NB_THREADS, new FullStateBundle)
+        val commit = ValidTag(params.thidN, new FullStateBundle)
         val commitTransplant = Output(Valid(INST_T))
         val stateVec = archstate.dbg.vecState.get.cloneType
       }))
       else None
   })
 
-  if(cfg.DebugSignals) {
+  if(params.DebugSignals) {
     dbg.bits.get.stateVec := archstate.dbg.vecState.get
     dbg.bits.get.fetch.valid := pipeline.mem_io.inst.tlb.req.valid
     dbg.bits.get.fetch.tag := pipeline.mem_io.inst.tlb.req.bits.thid

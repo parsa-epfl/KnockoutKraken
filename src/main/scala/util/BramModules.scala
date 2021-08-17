@@ -4,28 +4,28 @@ import chisel3._
 import chisel3.experimental._
 import chisel3.util._
 
-class BRAMTDP(implicit cfg: BRAMConfig) extends BlackBox(Map(
-  "NB_COL"    -> cfg.NB_COL,                    // Specify number of columns (number of bytes)
-  "COL_WIDTH" -> cfg.COL_WIDTH,              // Specify column width (byte width, typically 8 or 9)
-  "RAM_DEPTH" -> cfg.RAM_DEPTH,              // Specify RAM depth (number of entries)
-  "RAM_PERFORMANCE" -> cfg.RAM_PERFORMANCE,  // Select "HIGH_PERFORMANCE" or "LOW_LATENCY"
-  "INIT_FILE" ->  cfg.INIT_FILE              // Specify name/location of RAM initialization file if using one (leave blank if not)
-)) with HasBlackBoxInline {
+class BRAMTDP(implicit params: BRAMParams) extends BlackBox(Map(
+  "NB_COL"    -> params.NB_COL, // Specify number of columns (number of bytes)
+  "COL_WIDTH" -> params.COL_WIDTH, // Specify column width (byte width, typically 8 or 9)
+  "RAM_DEPTH" -> params.RAM_DEPTH, // Specify RAM depth (number of entries)
+  "RAM_PERFORMANCE" -> params.RAM_PERFORMANCE, // Select "HIGH_PERFORMANCE" or "LOW_LATENCY"
+  "INIT_FILE" ->  params.INIT_FILE // Specify name/location of RAM initialization file if using one (leave blank if not)
+  )) with HasBlackBoxInline {
   val io = IO(new Bundle(){
     val clk = Input(Bool())
     val rst = Input(Bool())
-    val addra = Input(UInt(log2Ceil(cfg.RAM_DEPTH).W))
-    val addrb = Input(UInt(log2Ceil(cfg.RAM_DEPTH).W))
-    val dina = Input(UInt((cfg.NB_COL*cfg.COL_WIDTH).W))
-    val dinb = Input(UInt((cfg.NB_COL*cfg.COL_WIDTH).W))
-    val wea = Input(UInt(cfg.NB_COL.W))
-    val web = Input(UInt(cfg.NB_COL.W))
+    val addra = Input(UInt(log2Ceil(params.RAM_DEPTH).W))
+    val addrb = Input(UInt(log2Ceil(params.RAM_DEPTH).W))
+    val dina = Input(UInt((params.NB_COL*params.COL_WIDTH).W))
+    val dinb = Input(UInt((params.NB_COL*params.COL_WIDTH).W))
+    val wea = Input(UInt(params.NB_COL.W))
+    val web = Input(UInt(params.NB_COL.W))
     val ena = Input(Bool())
     val enb = Input(Bool())
     val regcea = Input(Bool())
     val regceb = Input(Bool())
-    val douta = Output(UInt((cfg.NB_COL*cfg.COL_WIDTH).W))
-    val doutb = Output(UInt((cfg.NB_COL*cfg.COL_WIDTH).W))
+    val douta = Output(UInt((params.NB_COL*params.COL_WIDTH).W))
+    val doutb = Output(UInt((params.NB_COL*params.COL_WIDTH).W))
   })
 
   setInline("BRAMTDP.v",
@@ -170,7 +170,7 @@ class BRAMTDP(implicit cfg: BRAMConfig) extends BlackBox(Map(
   // */
 }
 
-class BRAMConfig(
+class BRAMParams(
   val NB_COL: Int = 4,
   val COL_WIDTH: Int = 9,
   val NB_ELE: Int = 1024,
@@ -198,38 +198,38 @@ class BRAMConfig(
   val RAM_PERFORMANCE = if(isRegistered) "HIGH_PERFORMANCE" else "LOW_LATENCY"
 
   // Clone function with set AXI ports
-  def apply(isAXI: Boolean): BRAMConfig =
-    new BRAMConfig(NB_COL, COL_WIDTH, NB_ELE, INIT_FILE, isRegistered, isAXI)
+  def apply(isAXI: Boolean): BRAMParams =
+    new BRAMParams(NB_COL, COL_WIDTH, NB_ELE, INIT_FILE, isRegistered, isAXI)
 }
 
 
-class BRAMPort(implicit val cfg: BRAMConfig) extends Bundle {
-  val WE_W = cfg.NB_COL
+class BRAMPort(implicit val params: BRAMParams) extends Bundle {
+  val WE_W = params.NB_COL
 
-  val CLK = if(cfg.isAXI) Some(Input(Bool())) else None
-  val RST = if(cfg.isAXI) Some(Input(Bool())) else None
+  val CLK = if(params.isAXI) Some(Input(Bool())) else None
+  val RST = if(params.isAXI) Some(Input(Bool())) else None
   val EN = Input(Bool())
   val WE = Input(UInt(WE_W.W))
-  val ADDR = Input(UInt(log2Ceil(cfg.RAM_DEPTH).W))
-  val DI = Input(UInt((cfg.NB_COL*cfg.COL_WIDTH).W))
-  val DO = Output(UInt((cfg.NB_COL*cfg.COL_WIDTH).W))
+  val ADDR = Input(UInt(log2Ceil(params.RAM_DEPTH).W))
+  val DI = Input(UInt((params.NB_COL*params.COL_WIDTH).W))
+  val DO = Output(UInt((params.NB_COL*params.COL_WIDTH).W))
   def <>(other: BRAMPort) = {
-    if(cfg.isAXI) CLK.get <> other.CLK.getOrElse(DontCare)
-    if(cfg.isAXI) RST.get <> other.RST.getOrElse(DontCare)
+    if(params.isAXI) CLK.get <> other.CLK.getOrElse(DontCare)
+    if(params.isAXI) RST.get <> other.RST.getOrElse(DontCare)
     EN <> other.EN
     WE <> other.WE
     DI <> other.DI
     DO <> other.DO
-    (cfg.isAXI, other.cfg.isAXI) match {
-      case (true,false) => (ADDR >> log2Ceil(cfg.NB_COL).U) <> other.ADDR
-      case (false,true) => ADDR <> (other.ADDR >> log2Ceil(cfg.NB_COL))
+    (params.isAXI, other.params.isAXI) match {
+      case (true,false) => (ADDR >> log2Ceil(params.NB_COL).U) <> other.ADDR
+      case (false,true) => ADDR <> (other.ADDR >> log2Ceil(params.NB_COL))
       case (true,true)  => ADDR <> other.ADDR
       case (false,false) => ADDR <> other.ADDR
     }
   }
 }
 
-class BRAM(implicit val cfg: BRAMConfig) extends MultiIOModule {
+class BRAM(implicit val params: BRAMParams) extends MultiIOModule {
   val portA = IO(new BRAMPort)
   val portB = IO(new BRAMPort)
   private val bramTDP = Module(new BRAMTDP)
@@ -253,21 +253,21 @@ class BRAM(implicit val cfg: BRAMConfig) extends MultiIOModule {
 }
 
 
-class FIFOIO(implicit val cfg: BRAMConfig) extends Bundle
+class FIFOIO(implicit val params: BRAMParams) extends Bundle
 {
-  val enq = Flipped(Decoupled(UInt((cfg.NB_COL*cfg.COL_WIDTH).W)))
-  val deq = Decoupled(UInt((cfg.NB_COL*cfg.COL_WIDTH).W))
+  val enq = Flipped(Decoupled(UInt((params.NB_COL*params.COL_WIDTH).W)))
+  val deq = Decoupled(UInt((params.NB_COL*params.COL_WIDTH).W))
   val flush = Input(Bool())
 }
 
-class FIFO(implicit val cfg: BRAMConfig) extends Module {
+class FIFO(implicit val params: BRAMParams) extends Module {
   val bram = Module(new BRAM())
 
   val io = IO(new FIFOIO)
 
 
-  val enq_ptr = RegInit(0.U(log2Ceil(cfg.RAM_DEPTH).W))
-  val deq_ptr = RegInit(0.U(log2Ceil(cfg.RAM_DEPTH).W))
+  val enq_ptr = RegInit(0.U(log2Ceil(params.RAM_DEPTH).W))
+  val deq_ptr = RegInit(0.U(log2Ceil(params.RAM_DEPTH).W))
 
   val maybe_full = RegInit(false.B)
 
@@ -285,13 +285,13 @@ class FIFO(implicit val cfg: BRAMConfig) extends Module {
   }
 
   bram.portA.EN := true.B
-  bram.portA.WE := Fill(cfg.NB_COL, do_enq.asUInt)
+  bram.portA.WE := Fill(params.NB_COL, do_enq.asUInt)
   bram.portA.ADDR := enq_ptr
   bram.portA.DI := io.enq.bits
 
   bram.portB.EN := do_deq.asUInt
   bram.portB.WE := 0.U
-  bram.portB.ADDR := deq_ptr 
+  bram.portB.ADDR := deq_ptr
   bram.portB.DI := DontCare
   val bitsOut = bram.portB.DO
 
@@ -310,14 +310,14 @@ class FIFO(implicit val cfg: BRAMConfig) extends Module {
 
 
 // This FIFO has output ready before dequing
-class FIFOReady(implicit val cfg: BRAMConfig) extends Module {
+class FIFOReady(implicit val params: BRAMParams) extends Module {
   val bram = Module(new BRAM())
 
   val io = IO(new FIFOIO)
 
 
-  val enq_ptr = RegInit(0.U(log2Ceil(cfg.RAM_DEPTH).W))
-  val deq_ptr = RegInit(0.U(log2Ceil(cfg.RAM_DEPTH).W))
+  val enq_ptr = RegInit(0.U(log2Ceil(params.RAM_DEPTH).W))
+  val deq_ptr = RegInit(0.U(log2Ceil(params.RAM_DEPTH).W))
 
   val maybe_full = RegInit(false.B)
 
@@ -337,7 +337,7 @@ class FIFOReady(implicit val cfg: BRAMConfig) extends Module {
   }
 
   bram.portA.EN := true.B
-  bram.portA.WE := Fill(cfg.NB_COL, do_enq.asUInt)
+  bram.portA.WE := Fill(params.NB_COL, do_enq.asUInt)
   bram.portA.ADDR := enq_ptr
   bram.portA.DI := io.enq.bits
 

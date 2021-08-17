@@ -4,27 +4,46 @@ import armflex_cache._
 import chisel3._
 import chisel3.util._
 
-abstract class SoftwareControlledBundle extends Bundle {
-  def asVec(width: Int): Vec[UInt]
+object QEMUMessagesType {
+  val encodingW = 3
+  val sPageFaultNotify = 4.U(encodingW.W)
+  val sEvictNotify = 5.U(encodingW.W)
+  val sEvictDone = 6.U(encodingW.W)
+
+  val sPageEvict = 7.U(encodingW.W)
+  val sMissReply = 2.U(encodingW.W)
+  val sEvictReply = 3.U(encodingW.W)
+}
+
+trait VectorSerializable {
+  /**
+   * Width of vector elements
+   */
+  val vecSerialiazedWidth: Int = 32 // Only support 32 bits for now
+
+  /**
+   * Takes the current bundle and serializes it in a vector with subelements of `vecWidth` lenght
+   * @return Bundle serialized in a vector with elements of size 32
+   */
+  def asVec: Vec[UInt]
+
+  /**
+   *
+   * @params vec
+   * @return A vector from the pre-serialized elements of size `width`
+   */
   def parseFromVec(vec: Vec[UInt]): this.type
 }
 
 /**
- * This file records all the hardware structures defined in the demander.cc 
+ * This file records all the hardware structures defined in the demander.cc
  */
+class PTTagPacket(params: PageTableParams) extends Bundle
+  with VectorSerializable {
+  val vpn = UInt(params.vPageW.W)
+  val asid = UInt(params.asidW.W)
 
-class PTTagPacket(param: TLBParameter) extends SoftwareControlledBundle {
-  val vpn = UInt(param.vPageWidth.W) // 52
-  val asid = UInt(param.asidWidth.W) // 16
-
-  def asVec(width: Int): Vec[UInt] = {
-    assert(width == 32)
-    VecInit(Seq(
-      vpn(31, 0),
-      vpn(param.vPageWidth-1, 32),
-      asid
-    ))
-  }
+  def asVec: Vec[UInt] = VecInit(Seq(vpn(31, 0), vpn(params.vPageW-1, 32).pad(32), asid))
 
   def parseFromVec(f: Vec[UInt]): this.type = {
     val res = Wire(this.cloneType)
@@ -33,56 +52,41 @@ class PTTagPacket(param: TLBParameter) extends SoftwareControlledBundle {
     res.asInstanceOf[this.type]
   }
 
-  override def cloneType: this.type = {
-    new PTTagPacket(param).asInstanceOf[this.type]
-  }
+  override def toPrintable: Printable = p"PTTagPacket(asid[${Hexadecimal(asid)}]:vpn[${Hexadecimal(vpn)}]\n"
+  override def cloneType: this.type = new PTTagPacket(params).asInstanceOf[this.type]
 }
 
-class PTEntryPacket(param: TLBParameter) extends SoftwareControlledBundle {
-  val ppn = UInt(param.pPageWidth.W) // 24
-  val permission = UInt(param.permissionWidth.W) // 2
+class PTEntryPacket(params: PageTableParams) extends Bundle
+  with VectorSerializable {
+  val ppn = UInt(params.pPageW.W) // 24
+  val perm = UInt(params.permW.W) // 2
   val modified = Bool() // 1
 
-  def asVec(width: Int): Vec[UInt] = {
-    assert(width == 32)
-    VecInit(Seq(
-      ppn,
-      permission,
-      modified
+  def permValid(targetPerm: UInt): Bool = MuxLookup(targetPerm, false.B, Seq(
+    0.U -> (perm === 0.U || perm === 1.U),
+    1.U -> (perm === 1.U),
+    2.U -> (perm === 2.U)
     ))
-  }
+
+  def asVec: Vec[UInt] = VecInit(Seq(ppn, perm, modified))
 
   def parseFromVec(f: Vec[UInt]): this.type = {
     val res = Wire(this.cloneType)
     res.ppn := f(0)
-    res.permission := f(1)
+    res.perm := f(1)
     res.modified := f(2)
     res.asInstanceOf[this.type]
   }
 
-  override def cloneType: this.type = {
-    new PTEntryPacket(param).asInstanceOf[this.type]
-  }
-
-  def permissionValid(targetPermission: UInt): Bool = MuxLookup(
-    targetPermission,
-    false.B,
-    Seq(
-      0.U -> (permission === 0.U || permission === 1.U),
-      1.U -> (permission === 1.U),
-      2.U -> (permission === 2.U)
-    )
-  )
+  override def cloneType: this.type = new PTEntryPacket(params).asInstanceOf[this.type]
 }
 
-class PageTableItem(param: TLBParameter) extends SoftwareControlledBundle {
-  val tag = new PTTagPacket(param)     // 3
-  val entry = new PTEntryPacket(param) // 3
+class PageTableItem(params: PageTableParams) extends Bundle
+  with VectorSerializable {
+  val tag = new PTTagPacket(params)     // 3
+  val entry = new PTEntryPacket(params) // 3
 
-  def asVec(width: Int): Vec[UInt] = {
-    assert(width == 32)
-    VecInit(tag.asVec(width) ++ entry.asVec(width))
-  }
+  def asVec: Vec[UInt] = VecInit(tag.asVec ++ entry.asVec)
 
   def parseFromVec(f: Vec[UInt]): this.type = {
     val res = Wire(this.cloneType)
@@ -91,53 +95,37 @@ class PageTableItem(param: TLBParameter) extends SoftwareControlledBundle {
     res.asInstanceOf[this.type]
   }
 
-  override def cloneType: this.type = {
-    new PageTableItem(param).asInstanceOf[this.type]
-  }
+  override def cloneType: this.type = new PageTableItem(params).asInstanceOf[this.type]
 }
 
 
-class TLBMissRequestMessage(param: TLBParameter) extends Bundle {
-  val tag = new PTTagPacket(param)
-  val permission = UInt(param.permissionWidth.W)
-  val tid = UInt(log2Ceil(param.threadNumber).W)
+class TLBMissRequestMessage(params: PageTableParams) extends Bundle {
+  val tag = new PTTagPacket(params)
+  val perm = UInt(params.permW.W)
+  val thid = UInt(log2Ceil(params.thidN).W)
 
-  override def cloneType: this.type = {
-    new TLBMissRequestMessage(param).asInstanceOf[this.type]
-  }
+  override def cloneType: this.type = new TLBMissRequestMessage(params).asInstanceOf[this.type]
 }
 
-class TLBEvictionMessage(param: TLBParameter) extends Bundle {
+class TLBEvictionMessage(param: PageTableParams) extends Bundle {
   val tag = new PTTagPacket(param)
   val entry = new PTEntryPacket(param)
 
-  override def cloneType: this.type = {
-    new TLBEvictionMessage(param).asInstanceOf[this.type]
-  }
+  override def cloneType: this.type = new TLBEvictionMessage(param).asInstanceOf[this.type]
 }
 
-
-abstract class RawMessage extends SoftwareControlledBundle {
+trait RawMessage extends Bundle
+  with VectorSerializable {
   val message_type: UInt
   val data: Vec[UInt]
 }
 
-object QEMUMessagesType {
-  val sPageFaultNotify = 4.U(3.W)
-  val sEvictNotify = 5.U(3.W)
-  val sEvictDone = 6.U(3.W)
-  
-  val sPageEvict = 7.U(3.W)
-  val sMissReply = 2.U(3.W)
-  val sEvictReply = 3.U(3.W)
-}
-
-class RxMessage extends RawMessage {
-  val message_type = UInt(2.W)
+class RxMessage extends RawMessage
+  with VectorSerializable {
+  val message_type = UInt(QEMUMessagesType.encodingW.W)
   val data = Vec(8, UInt(32.W))
-  def asVec(width: Int): Vec[UInt] = {
-    VecInit(Seq(message_type) ++ data)
-  }
+
+  def asVec: Vec[UInt] = VecInit(Seq(message_type) ++ data)
 
   def parseFromVec(f: Vec[UInt]): this.type = {
     val res = Wire(this.cloneType)
@@ -148,14 +136,12 @@ class RxMessage extends RawMessage {
 }
 
 //TODO: Mark the parseFromVec to a static member
-class TxMessage extends RawMessage {
-  val message_type = UInt(3.W)
+class TxMessage extends RawMessage
+  with VectorSerializable {
+  val message_type = UInt(QEMUMessagesType.encodingW.W)
   val data = Vec(15, UInt(32.W)) // Maximum is 512bit
 
-  def asVec(width: Int): Vec[UInt] = {
-    assert(width == 32)
-    VecInit(Seq(message_type) ++ data)
-  }
+  def asVec: Vec[UInt] = VecInit(Seq(message_type) ++ data)
 
   def parseFromVec(f: Vec[UInt]): this.type = {
     assert(f.size <= 16 && f.size > 1)
@@ -166,91 +152,71 @@ class TxMessage extends RawMessage {
   }
 }
 
-abstract class MessageUnionSubtype[T <: RawMessage](mess: T) extends SoftwareControlledBundle {
-  def messageType: UInt
+abstract class SerializableToRaw[T <: RawMessage](msg: T) extends Bundle
+  with VectorSerializable {
+
+  def getMessageType: UInt
+
   def getRawMessage: T = {
-    val res = Wire(mess.cloneType)
-    res.message_type := messageType
-    val rawVec = asVec(32)
-    for(i <- 0 until res.data.length){
-      if(i >= rawVec.length)
-        res.data(i) := 0.U
-      else
-        res.data(i) := rawVec(i)
-    }
+    val res = WireInit(msg.cloneType, 0.U.asTypeOf(msg))
+    val rawVec = this.asVec
+    assert(rawVec.length < res.data.length)
+    res.message_type := this.getMessageType
+    for(i <- 0 until rawVec.length)
+      res.data(i) := rawVec(i)
+
     res
   }
 }
 
-class QEMUPageEvictRequest(param: TLBParameter) extends MessageUnionSubtype(new RxMessage){
-  val tag = new PTTagPacket(param)
-  def asVec(width: Int): Vec[UInt] = {
-    tag.asVec(width)
-  }
+class QEMUPageEvictRequest(params: PageTableParams) extends SerializableToRaw(new RxMessage){
+  val tag = new PTTagPacket(params)
+
+  def asVec: Vec[UInt] = tag.asVec
+
   def parseFromVec(vec: Vec[UInt]): this.type = {
     val res = Wire(this.cloneType)
     res.tag := res.tag.parseFromVec(vec)
     res.asInstanceOf[this.type]
   }
 
-  def messageType: UInt = QEMUMessagesType.sPageEvict
+  def getMessageType: UInt = QEMUMessagesType.sPageEvict
 
-  override def cloneType: this.type = {
-    new QEMUPageEvictRequest(param).asInstanceOf[this.type]
-  }
+  override def cloneType: this.type = new QEMUPageEvictRequest(params).asInstanceOf[this.type]
 }
 
 
-class QEMUMissReply(param: TLBParameter) extends MessageUnionSubtype(new RxMessage) {
-  val tag = new PTTagPacket(param)
-  val permission = UInt(param.permissionWidth.W)
-  val tid = UInt(log2Ceil(param.threadNumber).W)
-  val tid_v = Bool()
-  val ppn = UInt(param.pPageWidth.W)
+class QEMUMissReply(params: PageTableParams) extends SerializableToRaw(new RxMessage) {
+  val tag = new PTTagPacket(params)
+  val perm = UInt(params.permW.W)
+  val thid = UInt(log2Ceil(params.thidN).W)
+  val thid_v = Bool()
+  val ppn = UInt(params.pPageW.W)
 
-  def asVec(width: Int): Vec[UInt] = {
-    assert(width == 32)
-    VecInit(
-      tag.asVec(width) ++
-      Seq(
-        permission,
-        ppn
-      )
-    )
-  }
+  def asVec: Vec[UInt] = VecInit(tag.asVec ++ Seq(perm, ppn))
 
   def parseFromVec(f: Vec[UInt]): this.type = {
     val res = Wire(this.cloneType)
     res.tag := res.tag.parseFromVec(VecInit(f.slice(0, 3)))
-    res.permission := f(3)
-    res.tid := f(4)
-    res.tid_v := f(4) =/= -1.S(32.W).asUInt()
+    res.perm := f(3)
+    res.thid := f(4)
+    res.thid_v := f(4) =/= -1.S(32.W).asUInt
     res.ppn := f(5)
     res.asInstanceOf[this.type]
   }
 
-  def messageType: UInt = QEMUMessagesType.sMissReply
+  def getMessageType: UInt = QEMUMessagesType.sMissReply
 
-  override def cloneType: this.type = {
-    new QEMUMissReply(param).asInstanceOf[this.type]
-  }
-
+  override def cloneType: this.type = new QEMUMissReply(params).asInstanceOf[this.type]
 }
 
-class QEMUEvictReply(param: TLBParameter) extends MessageUnionSubtype(new RxMessage) {
-  val tag = new PTTagPacket(param)
-  val old_ppn = UInt(param.pPageWidth.W)
+class QEMUEvictReply(params: PageTableParams) extends SerializableToRaw(new RxMessage) {
+  val tag = new PTTagPacket(params)
+  val old_ppn = UInt(params.pPageW.W)
   // val synonym_v = Bool()
-  def asVec(width: Int): Vec[UInt] = {
-    assert(width == 32)
-    VecInit(
-      tag.asVec(width) ++
-      Seq(
-        old_ppn,
-        // synonym_v
-      )
-    )
-  }
+
+  def asVec: Vec[UInt] = VecInit(tag.asVec ++ Seq(old_ppn /*, synonym_v */))
+
   def parseFromVec(f: Vec[UInt]): this.type = {
     val res = Wire(this.cloneType)
     res.tag := res.tag.parseFromVec(VecInit(f.slice(0, 3)))
@@ -258,43 +224,36 @@ class QEMUEvictReply(param: TLBParameter) extends MessageUnionSubtype(new RxMess
     res.asInstanceOf[this.type]
   }
 
-  override def cloneType: this.type = {
-    new QEMUEvictReply(param).asInstanceOf[this.type]
-  }
+  def getMessageType: UInt = QEMUMessagesType.sEvictReply
 
-  def messageType: UInt = QEMUMessagesType.sEvictReply
+  override def cloneType: this.type = new QEMUEvictReply(params).asInstanceOf[this.type]
 }
 
 
-class PageFaultNotification(param: TLBParameter) extends MessageUnionSubtype(new TxMessage) {
-  val tag = new PTTagPacket(param)
-  val permission = UInt(param.permissionWidth.W)
-  val tid = UInt(log2Ceil(param.threadNumber).W)
+class PageFaultNotification(params: PageTableParams) extends SerializableToRaw(new TxMessage) {
+  val tag = new PTTagPacket(params)
+  val perm = UInt(params.permW.W)
+  val thid = UInt(log2Ceil(params.thidN).W)
 
-  def asVec(width: Int): Vec[UInt] = {
-    assert(width == 32)
-    VecInit(tag.asVec(width) ++ Seq(permission, tid))
-  }
+  def asVec: Vec[UInt] = VecInit(tag.asVec ++ Seq(perm, thid))
 
   def parseFromVec(f: Vec[UInt]): this.type = {
     val res = Wire(this.cloneType)
     res.tag := tag.parseFromVec(VecInit(f.slice(0, 3)))
-    res.permission := f(3)
-    res.tid := f(4)
+    res.perm := f(3)
+    res.thid := f(4)
     res.asInstanceOf[this.type]
   }
 
-  def messageType: UInt = QEMUMessagesType.sPageFaultNotify
+  def getMessageType: UInt = QEMUMessagesType.sPageFaultNotify
 
-  override def cloneType: this.type = {
-    new PageFaultNotification(param).asInstanceOf[this.type]
-  }
+  override def cloneType: this.type = new PageFaultNotification(params).asInstanceOf[this.type]
 }
 
-class PageEvictNotification(message_type: UInt, param: TLBParameter) extends MessageUnionSubtype(new TxMessage) {
-  val item = new PageTableItem(param)
+class PageEvictNotification(message_type: UInt, params: PageTableParams) extends SerializableToRaw(new TxMessage) {
+  val item = new PageTableItem(params)
 
-  def asVec(width: Int): Vec[UInt] = item.asVec(width)
+  def asVec: Vec[UInt] = item.asVec
 
   def parseFromVec(f: Vec[UInt]): this.type = {
     val res = Wire(this.cloneType)
@@ -302,9 +261,7 @@ class PageEvictNotification(message_type: UInt, param: TLBParameter) extends Mes
     res.asInstanceOf[this.type]
   }
 
-  override def cloneType: this.type = {
-    new PageEvictNotification(message_type, param).asInstanceOf[this.type]
-  }
+  def getMessageType: UInt = message_type
 
-  def messageType: UInt = message_type
+  override def cloneType: this.type = new PageEvictNotification(message_type, params).asInstanceOf[this.type]
 }

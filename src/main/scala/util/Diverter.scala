@@ -45,8 +45,8 @@ object Diverter{
   /**
    * Generate a dataflow diverter.
    * 
-   * @param wayNumber The number of output channels.
-   * @param input The input channel.
+   * @params wayNumber The number of output channels.
+   * @params input The input channel.
    * @return The output channels
    * 
    * @example {{{

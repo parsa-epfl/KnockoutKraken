@@ -14,25 +14,21 @@ import firrtl.options.TargetDirAnnotation
 
 
 import org.scalatest.FreeSpec
-import armflex_cache.MemorySystemParameter
-
 
 class PageWalkTester extends FreeSpec with ChiselScalatestTester {
   import PageDemanderDriver._
   "Normal" in {
     val anno = Seq(TargetDirAnnotation("test/demander/pagewalk/normal"), VerilatorBackendAnnotation, WriteVcdAnnotation)
-    test(new MMUDUT(new MMUParameter())).withAnnotations(anno){ dut =>
+    test(new MMUDUT(new MemoryHierarchyParams())).withAnnotations(anno){ dut =>
       // apply a miss request
       // Set the thread table.
       // dut.registerThreadTable(0, 10)
       timescope {
-        dut.itlb_backend_request_i.bits.flush_v.poke(false.B)
-        dut.itlb_backend_request_i.bits.permission.poke(2.U)
-        dut.itlb_backend_request_i.bits.w_v.poke(false.B)
-        dut.itlb_backend_request_i.bits.tag.asid.poke(0x10.U)
-        dut.itlb_backend_request_i.bits.tag.vpn.poke(0xABC.U)
-        dut.itlb_backend_request_i.valid.poke(true.B)
-        dut.itlb_backend_request_i.ready.expect(true.B)
+        dut.itlb_miss_request_i.bits.perm.poke(2.U)
+        dut.itlb_miss_request_i.bits.tag.asid.poke(0x10.U)
+        dut.itlb_miss_request_i.bits.tag.vpn.poke(0xABC.U)
+        dut.itlb_miss_request_i.valid.poke(true.B)
+        dut.itlb_miss_request_i.ready.expect(true.B)
         dut.tk()
       }
 
@@ -43,7 +39,7 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
       dut.pageset_packet_i.tags(0).asid.poke(0x10.U)
       dut.pageset_packet_i.ptes(0).ppn.poke(0xCBA.U)
       dut.pageset_packet_i.ptes(0).modified.poke(false.B)
-      dut.pageset_packet_i.ptes(0).permission.poke(2.U)
+      dut.pageset_packet_i.ptes(0).perm.poke(2.U)
 
       dut.sendPageTableSet(dut.M_AXI, (0xAB * 3 * 64).U)
       // wait for the reply to the TLB
@@ -52,25 +48,23 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
       dut.itlb_backend_reply_o.bits.tag.vpn.expect(0xABC.U)
       dut.itlb_backend_reply_o.bits.data.modified.expect(false.B)
       dut.itlb_backend_reply_o.bits.data.ppn.expect(0xCBA.U)
-      dut.itlb_backend_reply_o.bits.data.permission.expect(2.U)
+      dut.itlb_backend_reply_o.bits.data.perm.expect(2.U)
     }
   }
 
   "Page Fault" in {
     val anno = Seq(TargetDirAnnotation("test/demander/pagefault/pagefault"), VerilatorBackendAnnotation, WriteVcdAnnotation)
-    test(new MMUDUT(new MMUParameter())).withAnnotations(anno){ dut =>
+    test(new MMUDUT(new MemoryHierarchyParams())).withAnnotations(anno){ dut =>
       // apply a miss request
       // Set the thread table.
       // dut.registerThreadTable(0, 10)
       timescope {
-        dut.dtlb_backend_request_i.bits.flush_v.poke(false.B)
-        dut.dtlb_backend_request_i.bits.permission.poke(0.U)
-        dut.dtlb_backend_request_i.bits.w_v.poke(false.B)
-        dut.dtlb_backend_request_i.bits.tag.asid.poke(0x10.U)
-        dut.dtlb_backend_request_i.bits.tag.vpn.poke(0xABC.U)
-        dut.dtlb_backend_request_i.bits.tid.poke(1.U) // set pid.
-        dut.dtlb_backend_request_i.valid.poke(true.B)
-        dut.dtlb_backend_request_i.ready.expect(true.B)
+        dut.dtlb_miss_request_i.bits.perm.poke(0.U)
+        dut.dtlb_miss_request_i.bits.tag.asid.poke(0x10.U)
+        dut.dtlb_miss_request_i.bits.tag.vpn.poke(0xABC.U)
+        dut.dtlb_miss_request_i.bits.thid.poke(1.U) // set pid.
+        dut.dtlb_miss_request_i.valid.poke(true.B)
+        dut.dtlb_miss_request_i.ready.expect(true.B)
         dut.tk()
       }
       dut.sendPageTableSet(dut.M_AXI, (0xAB * 3 * 64).U)
@@ -92,7 +86,7 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
       // println("Wait for the data part to be there")
       // dut.waitForSignalToBe(dut.M_AXI_QEMUTX.w.wvalid)
       // // What's the data?
-      // // 0: valid 1: message_type(4.U) 2: tag.vpn(31:0), 3: tag.vpn(51, 32), 4: process_id, 5: permission
+      // // 0: valid 1: message_type(4.U) 2: tag.vpn(31:0), 3: tag.vpn(51, 32), 4: process_id, 5: perm
       // val data_seq = Seq[BigInt](1, 4, 0xABC, 0, 10, 0)
       // dut.M_AXI_QEMUTX.w.wdata.expect(
       //   data_seq.reverse.foldLeft(BigInt(0))({ case(res, cur) =>

@@ -6,16 +6,16 @@ import chisel3.util._
 
 import arm.DECODE_CONTROL_SIGNALS._
 import arm.PROCESSOR_TYPES._
-import util.MACC
+import armflex.util.MACC
 
-class EInst(implicit val cfg: ProcConfig) extends Bundle {
+class EInst extends Bundle {
   val rd = Valid(REG_T)
   val nzcv = Valid(NZCV_T)
 
   val res = Output(DATA_T)
 }
 
-class LogicALU(implicit val cfg: ProcConfig) extends Module {
+class LogicALU extends Module {
   val io = IO(new Bundle {
     val a = Input(DATA_T)
     val b = Input(DATA_T)
@@ -39,7 +39,7 @@ class LogicALU(implicit val cfg: ProcConfig) extends Module {
   io.nzcv := Cat(Mux(io.is32bit, res(31), res(63)), (res === 0.U).asUInt, 0.U(2.W))
 }
 
-class ConditionHolds(implicit val cfg: ProcConfig) extends Module
+class ConditionHolds extends Module
 {
   val io = IO( new Bundle {
                 val cond = Input(COND_T)
@@ -67,7 +67,7 @@ class ConditionHolds(implicit val cfg: ProcConfig) extends Module
   }
 }
 
-class AddWithCarry(implicit val cfg: ProcConfig) extends Module
+class AddWithCarry extends Module
 {
   val io = IO(new Bundle {
                 val is32bit = Input(Bool())
@@ -131,7 +131,7 @@ object ALU {
   def getByte(bits: UInt, idx: Int): UInt = bits((idx+1)*8-1, idx*8)
 }
 
-class BitfieldALU(implicit val cfg: ProcConfig) extends Module {
+class BitfieldALU extends Module {
   val io = IO(new Bundle {
                 val op = Input(OP_T)
                 val immr = Input(UInt(6.W))
@@ -179,7 +179,7 @@ class BitfieldALU(implicit val cfg: ProcConfig) extends Module {
 }
 
 // Move (wide immediate)
-class Move(implicit val cfg: ProcConfig) extends Module {
+class Move extends Module {
   val io = IO(new Bundle {
                 val op = Input(OP_T)
                 val hw = Input(UInt(2.W))
@@ -213,7 +213,7 @@ class Move(implicit val cfg: ProcConfig) extends Module {
   io.res := Mux(io.op === OP_MOVN, ~res, res)
 }
 
-class ShiftALU(implicit val cfg: ProcConfig) extends Module {
+class ShiftALU extends Module {
   val io = IO(new Bundle {
     val word = Input(DATA_T)
     val amount = Input(SHIFT_VAL_T)
@@ -226,7 +226,7 @@ class ShiftALU(implicit val cfg: ProcConfig) extends Module {
   val res = MuxLookup(io.opcode, io.word, Array(
     LSL -> (io.word << io.amount),
     LSR -> (io.word >> io.amount),
-    ASR -> (io.word.asSInt() >> io.amount).asUInt(),
+    ASR -> (io.word.asSInt() >> io.amount).asUInt,
     ROR -> ALU.rotateRight(VecInit(io.word.asBools), io.amount).asUInt
   ))
 
@@ -235,7 +235,7 @@ class ShiftALU(implicit val cfg: ProcConfig) extends Module {
   val res32 = MuxLookup(io.opcode, word32, Array(
     LSL -> (word32 << amount32),
     LSR -> (word32 >> amount32),
-    ASR -> (word32.asSInt() >> amount32).asUInt(),
+    ASR -> (word32.asSInt() >> amount32).asUInt,
     ROR -> ALU.rotateRight(VecInit(word32.asBools), amount32).asUInt
   ))
 
@@ -246,7 +246,7 @@ class ShiftALU(implicit val cfg: ProcConfig) extends Module {
 // aarch64/instrs/integer/bitmasks/DecodeBitMasks
 // (bits(M), bits(M)) DecodeBitMasks(bit immN, bits(6) imms, bits(6) immr, boolean immediate)
 // M = 64, immN = 1
-class DecodeBitMasks(implicit val cfg: ProcConfig) extends Module
+class DecodeBitMasks extends Module
 {
   // 64 bits -> immn = 1
   val io = IO(new Bundle {
@@ -258,7 +258,7 @@ class DecodeBitMasks(implicit val cfg: ProcConfig) extends Module
     val is32bit = Input(Bool())
   })
 
-  // The bit patterns we create here are 64 bit patterns which
+  // The bit patterns we create here are 64 bit patterns sel
   // are vectors of identical elements of size e = 2, 4, 8, 16, 32 or
   // 64 bits each. Each element contains the same value: a run
   // of between 1 and e-1 non-zero bits, rotated within the
@@ -311,7 +311,7 @@ class DecodeBitMasks(implicit val cfg: ProcConfig) extends Module
   }
 }
 
-class DataProcessing(implicit val cfg: ProcConfig) extends Module
+class DataProcessing extends Module
 {
   val io = IO(new Bundle {
     val a = Input(DATA_T)
@@ -377,7 +377,7 @@ class DataProcessing(implicit val cfg: ProcConfig) extends Module
   }
 }
 
-class DataProc3S(implicit val cfg: ProcConfig) extends Module
+class DataProc3S extends Module
 {
   val io = IO(new Bundle {
     val op = Input(OP_T)
@@ -396,7 +396,7 @@ class DataProc3S(implicit val cfg: ProcConfig) extends Module
   io.res := Mux(io.is32bit, macc32.io.res.asUInt, 0.U) // 64 bit not supported yet
 }
 
-class ExecuteUnit(implicit val cfg: ProcConfig) extends Module
+class ExecuteUnit extends Module
 {
   val io = IO(new Bundle {
     val dinst = Input(new DInst)

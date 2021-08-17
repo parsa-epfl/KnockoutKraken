@@ -41,11 +41,8 @@ class AXIControlledMessageQueue extends MultiIOModule {
 
   // Read from any address will trigger a pop
   // write to any address will trigger a insersion.
-  val S_AXI = IO(Flipped(
-    new AXI4(
-      7, 512
-    )
-  ))
+  // Minimal AXI4 address spacce is 128 bytes
+  val S_AXI = IO(Flipped(new AXI4(log2Ceil(128), 512)))
 
   val u_axi_trans_converter = Module(new AXIRAMController(7, 512))
   u_axi_trans_converter.S_AXI <> S_AXI

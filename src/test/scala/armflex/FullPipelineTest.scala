@@ -23,6 +23,7 @@ import armflex.PipelineDrivers._
 import org.scalatest.exceptions.TestFailedException
 import armflex.util.SoftwareStructs._
 
+/*
 class PipelineTest(val dut: PipelineHardDriverModule, traceDrv: VerificationDriver) {
   private val init: Unit = {
     dut.initIO
@@ -89,7 +90,7 @@ class PipelineTest(val dut: PipelineHardDriverModule, traceDrv: VerificationDriv
 }
 
 class FullPipelineTest extends FreeSpec with ChiselScalatestTester {
-  val cfgProc: ProcConfig = new ProcConfig(NB_THREADS = 2, DebugSignals = true, simVerbose = false)
+  val cfgProc: PipelineParams = new PipelineParams(thidN = 2, DebugSignals = true, simVerbose = false)
   def runExample(traceName: String, start: Int = 0, end: Int = Integer.MAX_VALUE) {
     val annos = Seq(
       VerilatorBackendAnnotation,
@@ -99,7 +100,7 @@ class FullPipelineTest extends FreeSpec with ChiselScalatestTester {
     val traceDrv = new VerificationDriver(traceName)
     "Will verify pipeline's correctness with " + traceName + " file " + start + "" in {
 
-      test(new PipelineHardDriverModule()(cfgProc))
+      test(new PipelineHardDriverModule(cfgProc))
         .withAnnotations(annos) { dut =>
           val drv = new PipelineTest(dut, traceDrv)
           drv.run(start, end)
@@ -109,9 +110,10 @@ class FullPipelineTest extends FreeSpec with ChiselScalatestTester {
 
   //runExample("binary100_1") // User
   //runExample("binary1000")
-  runExample("binary10000", 4000, 5000)
+  //runExample("binary10000", 4000, 5000)
   //runExample("binary10000_0")
   //runExample("binary10000_1")
   //runExample("binary10000_2")
   //runExample("binary100_1") // Kernel
 }
+ */
