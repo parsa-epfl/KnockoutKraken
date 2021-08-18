@@ -61,7 +61,7 @@ object PStateRegs {
 }
 object RFileIO {
   class RDPort(thidN: Int) extends Bundle {
-    val port = Vec(2, new Bundle {
+    val port = Vec(3, new Bundle {
         val addr = Input(REG_T)
         val data = Output(DATA_T)
       }
@@ -109,13 +109,16 @@ class RFileBRAM[T <: UInt](thidN: Int) extends MultiIOModule {
   private val bramParams = new BRAMParams(DATA_SZ/8, 8, thidN * REG_N, "", false, false, true, false)
   private val rd1_mem = Module(new BRAM()(bramParams))
   private val rd2_mem = Module(new BRAM()(bramParams))
+  private val rd3_mem = Module(new BRAM()(bramParams))
   private val regfile = Mem(thidN * REG_N, DATA_T)
 
   rd.port(0).data := RFileIO.rdBRAM(rd, 0, rd1_mem.portA)
   rd.port(1).data := RFileIO.rdBRAM(rd, 1, rd2_mem.portA)
+  rd.port(2).data := RFileIO.rdBRAM(rd, 2, rd3_mem.portA)
 
   RFileIO.wr2BRAM(rd1_mem.portB, wr)
   RFileIO.wr2BRAM(rd2_mem.portB, wr)
+  RFileIO.wr2BRAM(rd3_mem.portB, wr)
 }
 
 class PStateRegsIO(val thidN: Int) extends Bundle {
