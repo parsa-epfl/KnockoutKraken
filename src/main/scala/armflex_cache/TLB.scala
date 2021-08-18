@@ -190,9 +190,9 @@ class TLB(
 
   // The flush request from other place
   arbFlushPort.valid := mmu_io.flushReq.valid
-  arbFlushPort.bits.addr := Cat(pipeline_io.translationReq.bits.tag.asid, pipeline_io.translationReq.bits.tag.vpn)
+  arbFlushPort.bits.addr := Cat(mmu_io.flushReq.bits.asid, mmu_io.flushReq.bits.vpn)
   arbFlushPort.bits.thid := DontCare
-  arbFlushPort.bits.asid := pipeline_io.translationReq.bits.tag.asid
+  arbFlushPort.bits.asid := mmu_io.flushReq.bits.asid
   arbFlushPort.bits.wData := DontCare
   arbFlushPort.bits.flush_v := true.B
   arbFlushPort.bits.wMask := DontCare
