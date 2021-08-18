@@ -478,6 +478,9 @@ class MemoryUnit(
   // Select, align and mask bytes in block
   private val selReqIdx = secondAccessPair.asUInt // Select second one in case it is the second access
   cacheAdaptorReqW_en := maskByteEn << cacheAdaptorMInstInput.inst.req(selReqIdx).addr(log2Ceil(params.blockSize / 8), 0)
+  when(cacheAdaptorMInstInput.inst.isLoad) {
+    cacheAdaptorReqW_en := 0.U
+  }
   cacheAdaptorReqData := cacheAdaptorMInstInput.inst.req(selReqIdx).data << Cat(cacheAdaptorMInstInput.inst.req(selReqIdx).addr(log2Ceil(params.blockSize / 8), 0), 0.U(3.W))
   when(singleAccessPair) {
     cacheAdaptorReqData :=
