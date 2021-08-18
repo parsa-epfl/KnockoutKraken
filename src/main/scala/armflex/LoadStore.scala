@@ -65,6 +65,7 @@ class LDSTUnitIO extends Bundle {
   val dinst = Input(new DInst)
   val rVal1 = Input(DATA_T) // Rn
   val rVal2 = Input(DATA_T) // Rt in some cases
+  val rVal3 = Input(DATA_T) // Rt in some cases
   val pstate = Input(new PStateRegs)
 
   val minst = Output(Valid(new MInst))
@@ -209,7 +210,8 @@ class LDSTUnit extends Module {
   // data = X[t]
   // Mem[address, datasize DIV 8, AccType_NORMAL] = data
 
-  val data = WireInit(io.rVal2) // data = Rt = rVal2
+  val data_1 = WireInit(io.rVal2) // data_1 = Rt = rVal2
+  val data_2 = WireInit(io.rVal3) // data_2 = Rt2 = rVal3
 
   // Prepare MInst
   val minst = Wire(new MInst)
@@ -219,7 +221,7 @@ class LDSTUnit extends Module {
   minst.isLoad := isLoad
 
   minst.req(0).addr := ldst_address
-  minst.req(0).data := data
+  minst.req(0).data := data_2
   minst.req(0).reg := io.dinst.rd.bits
   // For Pair LD/ST
   val dbytes = 1.U << size
@@ -228,7 +230,7 @@ class LDSTUnit extends Module {
       io.dinst.itype === I_LSPair ||
       io.dinst.itype === I_LSPairPo)
   minst.req(1).addr := ldst_address + dbytes
-  minst.req(1).data := DontCare // Read 3 ports from RFile in single cycle Rd;Rt;Rt2
+  minst.req(1).data := data_1
   minst.req(1).reg := io.dinst.rs2
 
   // if wback then
