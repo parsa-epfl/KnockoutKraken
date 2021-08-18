@@ -129,7 +129,7 @@ object DECODE_CONTROL_SIGNALS
   val SIZEH  = DEC_LITS.SIZEH.U(2.W)
   val SIZE32 = DEC_LITS.SIZE32.U(2.W)
   val SIZE64 = DEC_LITS.SIZE64.U(2.W)
-  val SIZE128 = DEC_LITS.SIZE64.U(3.W) // Only used for Cache access
+  val SIZE128 = DEC_LITS.SIZE128.U(3.W) // Only used for Cache access
 
   val OP_STRB   = DEC_LITS.OP_STRB.U(OP_W)
   val OP_STRH   = DEC_LITS.OP_STRH.U(OP_W)

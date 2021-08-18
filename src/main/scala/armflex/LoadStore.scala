@@ -463,14 +463,14 @@ class MemoryUnit(
   private val cacheAdaptorReqW_en = WireInit(cacheAdaptor.pipe_io.req.port.bits.w_en.cloneType, 0.U)
 
   // Align store data with byte and address for block
-  private val maskSize = cacheAdaptorMInstInput.inst.size + singleAccessPair.asUInt
+  private val maskSize = WireInit(cacheAdaptorMInstInput.inst.size +& singleAccessPair.asUInt)
   private val maskByteEn: UInt = MuxLookup(maskSize, 1.U, Array(
     // Mask for size = 2**(bytes in maskSize+1) - 1
-    SIZEB -> ((1 << (log2Ceil(1) + 1)) - 1).U, // 0b1
-    SIZEH -> ((1 << (log2Ceil(2) + 1)) - 1).U, // 0b11
-    SIZE32 -> ((1 << (log2Ceil(4) + 1)) - 1).U, // 0b1111
-    SIZE64 -> ((1 << (log2Ceil(8) + 1)) - 1).U, // 0b11111111
-    SIZE128 -> ((1 << (log2Ceil(16) + 1)) - 1).U // 0b1111111111111111 // Only for pair 64 bit instructions
+    SIZEB -> ((1 << 1) - 1).U, // 0b1
+    SIZEH -> ((1 << 2) - 1).U, // 0b11
+    SIZE32 -> ((1 << 4) - 1).U, // 0b1111
+    SIZE64 -> ((1 << 8) - 1).U, // 0b11111111
+    SIZE128 -> ((1 << 16) - 1).U // 0b1111111111111111 // Only for pair 64 bit instructions
     ))
 
   // Select, align and mask bytes in block
