@@ -320,7 +320,7 @@ class DataBankManager(
 
 
   full_writing_request.bits.data := refillEntry
-  full_writing_request.bits.which := lru_which_i
+  full_writing_request.bits.which := Mux(hit_v, match_which, lru_which_i)
   full_writing_request.valid := s1_frontend_request_r.valid && full_writing_v
 
   bank_ram_write_request_o.bits := Mux(
