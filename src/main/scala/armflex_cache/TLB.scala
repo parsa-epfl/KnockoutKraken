@@ -17,7 +17,7 @@ case class PageTableParams(
     tlbSetNumber,
     tlbAssociativity,
     pPageW + permW + 1, // PPN + perm + dirty
-    vPageW,
+    vPageW + asidW,
     asidW,
     thidN
     )
