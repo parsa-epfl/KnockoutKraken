@@ -121,13 +121,13 @@ class Pipeline(params: PipelineParams) extends MultiIOModule {
   val rVal1 = WireInit(Mux(stateReadArrives, archstate.issue.rd.port(0).data, rVal1_reg))
   val rVal2 = WireInit(Mux(stateReadArrives, archstate.issue.rd.port(1).data, rVal2_reg))
   val rVal3 = WireInit(Mux(stateReadArrives, archstate.issue.rd.port(2).data, rVal3_reg)) // TODO Triple source
-  val curr_state = Mux(stateReadArrives, RegNext(archstate.issue.regs.curr), state_reg) // TODO Triple source
+  val curr_state = WireInit(Mux(stateReadArrives, RegNext(archstate.issue.regs.curr), state_reg)) // TODO Triple source
   when(stateReadArrives) {
     // Read Register arrived
     rVal1_reg := archstate.issue.rd.port(0).data
     rVal2_reg := archstate.issue.rd.port(1).data
     rVal3_reg := archstate.issue.rd.port(2).data
-    state_reg := archstate.issue.regs.curr
+    state_reg := RegNext(archstate.issue.regs.curr)
   }
 
   // connect executeUnit interface
@@ -216,7 +216,6 @@ class Pipeline(params: PipelineParams) extends MultiIOModule {
   commitU.enq.valid := false.B
 
   val ldstInstruction = ldstU.io.minst.valid && !ldstU.io.minst.bits.exceptions.valid
-  val commitAsIssue = commitU.commit.commited.valid && issuer.io.deq.tag === commitU.commit.commited.tag
   when(memUnit.pipe.resp.valid) {
     // When memory response arrives, don't take from issue but from response
     commitU.enq <> memUnit.pipe.resp
@@ -262,14 +261,14 @@ class Pipeline(params: PipelineParams) extends MultiIOModule {
     // Assertions:  Issuer Deq | MemUnit | CommitReg Enq
     when(issuer.io.deq.fire) {
       assert(commitU.enq.fire || memUnit.pipe.req.fire, "In case of Issue fire, either the MemUnit or the commit queue must receive the transaction")
-      assert(!(commitU.enq.fire && memUnit.pipe.req.fire), "Both the MemUnit and commit queue can't receive the transaction at the same time")
+      assert(!((commitU.enq.fire && !memUnit.pipe.resp.fire) && memUnit.pipe.req.fire), "Both the MemUnit and commit queue can't receive the transaction at the same time")
       when(commitU.commit.commited.valid) { 
-          assert(issuer.io.deq.tag =/= commitU.commit.commited.tag, "Instructions from the same context can't be present in two stages concurrently")
-        }
+        assert(issuer.io.deq.tag =/= commitU.commit.commited.tag, "Instructions from the same context can't be present in two stages concurrently")
+      }
     }
     when(commitU.enq.fire) {
-      assert(memUnit.pipe.resp.valid || issuer.io.deq.fire, "When the commit queue receives a transaction, it must either come from the MemUnit or Issue stage")
-      assert(!(memUnit.pipe.resp.valid && issuer.io.deq.fire), "When the commit queue receives a transaction, it can't come from both the MemUnit or Issue stage")
+      assert(memUnit.pipe.resp.valid || (issuer.io.deq.fire && !memUnit.pipe.req.fire), "When the commit queue receives a transaction, it must either come from the MemUnit or Issue stage")
+      assert(!(memUnit.pipe.resp.valid && (issuer.io.deq.fire && !memUnit.pipe.req.fire)), "When the commit queue receives a transaction, it can't come from both the MemUnit or Issue stage")
     }
   }
 }
