@@ -114,7 +114,7 @@ class ARMFlexTopSimulator(
   private val devteroFlexTop = Module(new ARMFlexTop(paramsPipeline, paramsMemoryHierarchy))
   private val axiMulti_R = Module(new AXIReadMultiplexer(64, 512, 6))
   private val axiMulti_W = Module(new AXIWriteMultiplexer(64, 512, 5))
-  private val axilMulti = Module(new AXILInterconnector(Seq(0x00000, 0x08000), Seq(0x08000,0x08000), 32, 32))
+  private val axilMulti = Module(new AXILInterconnector(Seq(0x00000, 0x10000), Seq(0x08000,0x10000), 32, 32))
   val S_AXI = IO(Flipped(devteroFlexTop.AXI_MEM.AXI_MMU.S_AXI.cloneType))
   val S_AXIL = IO(Flipped(axilMulti.S_AXIL.cloneType))
   S_AXI <> devteroFlexTop.AXI_MEM.AXI_MMU.S_AXI
