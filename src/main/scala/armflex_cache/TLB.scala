@@ -5,6 +5,7 @@ import chisel3._
 import chisel3.util._
 
 case class PageTableParams(
+  pageW: Int = 4096,
   vPageW: Int = 52,
   pPageW: Int = 24,
   permW: Int = 2,
@@ -34,7 +35,7 @@ class TLBPipelineReq(params: PageTableParams) extends Bundle {
 
   def := (o: PipeTLB.PipeTLBReq): Unit = {
     this.tag.asid := o.asid
-    this.tag.vpn := o.addr >> 12 // page size
+    this.tag.vpn := o.addr >> params.pageW
     this.perm := o.perm
     this.thid := o.thid
   }
@@ -53,8 +54,8 @@ class TLBPipelineResp(params: PageTableParams) extends Bundle {
   val thid = UInt(log2Ceil(params.thidN).W)
 
   def toPipeTLBResponse: PipeTLB.PipeTLBResp = {
-    val res = Wire(new PipeTLB.PipeTLBResp(params.pPageW))
-    res.addr := entry.ppn << 12
+    val res = Wire(new PipeTLB.PipeTLBResp(params.pPageW + params.pageW))
+    res.addr := entry.ppn << params.pageW
     res.hit := hit
     res.miss := !hit
     res.violation := violation

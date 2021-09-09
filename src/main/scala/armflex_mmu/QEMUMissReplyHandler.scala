@@ -45,7 +45,7 @@ class QEMUMissReplyHandler(
   u_buffer.lookup_request_i := request_r.tag
 
   // sLoadSet
-  M_DMA_R.req.bits.address := params.vpn2ptSetPA(request_r.tag.vpn)
+  M_DMA_R.req.bits.address := params.vpn2ptSetPA(request_r.tag.asid, request_r.tag.vpn)
   M_DMA_R.req.bits.length := u_buffer.requestPacketNumber.U
   M_DMA_R.req.valid := state_r === sLoadSet
 
@@ -74,7 +74,7 @@ class QEMUMissReplyHandler(
   u_buffer.write_request_i.valid := state_r === sReplace
 
   // sMoveback
-  M_DMA_W.req.bits.address := params.vpn2ptSetPA(request_r.tag.vpn)
+  M_DMA_W.req.bits.address := params.vpn2ptSetPA(request_r.tag.asid, request_r.tag.vpn)
   M_DMA_W.req.bits.length := u_buffer.requestPacketNumber.U
   M_DMA_W.req.valid := state_r === sMoveback
 
