@@ -36,7 +36,7 @@ object TransplantIO extends Bundle {
 }
 class TransplantUnit(thidN: Int) extends MultiIOModule {
   val hostBRAMParams =
-    new BRAMParams(NB_COL = DATA_SZ / 8, COL_WIDTH = 8, NB_ELE = thidN * ARCH_MAX_OFFST)
+    new BRAMParams(NB_COL = DATA_SZ / 8, COL_WIDTH = 8, NB_ELE = thidN * (1 << log2Ceil(ARCH_MAX_OFFST)))
   val cpu2trans = IO(new TransplantIO.CPU2Trans(thidN))
   val trans2cpu = IO(new TransplantIO.Trans2CPU(thidN))
   val host2trans = IO(new TransplantIO.Host2Trans(thidN))
@@ -46,9 +46,7 @@ class TransplantUnit(thidN: Int) extends MultiIOModule {
   val mem2trans = IO(new TransplantIO.Mem2Trans(thidN))
 
   // Mantains always the latest state of the rfile
-  private val stateBuffer = Module(
-    new BRAM()(new BRAMParams(NB_COL = DATA_SZ / 8, COL_WIDTH = 8, NB_ELE = thidN * REG_N))
-  )
+  private val stateBuffer = Module(new BRAM()(new BRAMParams(NB_COL = DATA_SZ / 8, COL_WIDTH = 8, NB_ELE = thidN * REG_N)))
   private val stateBufferWrPort = stateBuffer.portA
   private val stateBufferRdPort = stateBuffer.portB
 

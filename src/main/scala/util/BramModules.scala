@@ -183,8 +183,8 @@ class BRAMParams(
 
   // TODO Size inference of BRAM might be broken
   private val NB_ELE_PER_BRAM = scala.math.max(1024, 1024*4/NB_COL)
-  private val nbBlocks = {
-    val size = NB_ELE/NB_ELE_PER_BRAM
+  private val nbBlocks: Double = {
+    val size = NB_ELE.toDouble/NB_ELE_PER_BRAM.toDouble
     if(size == 0) 1 else size
   }
   private val sizeBRAM = java.lang.Math.ceil(nbBlocks)
