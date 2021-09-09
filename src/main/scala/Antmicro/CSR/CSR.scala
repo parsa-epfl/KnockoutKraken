@@ -59,7 +59,7 @@ import chisel3.util.{Cat, Fill}
 class CSR2BRAM(val cfg: BRAMParams) extends Module{
   assert(cfg.NB_COL == 8)
   val io = IO(new Bundle{
-    val bus = Flipped(new CSRBusBundle(32, cfg.RAM_DEPTH))
+    val bus = Flipped(new CSRBusBundle(32, cfg.RAM_DEPTH * 2))
     val port = Flipped(new BRAMPort()(cfg))
   })
 
