@@ -24,6 +24,8 @@ class PipelineParams(
   val thidW = log2Ceil(thidN)
   def thidT = UInt(thidW.W)
 
+  val axiDataW = 32
+
   def simLog(str: Printable) {
     if (simVerbose) {
       printf(str)
@@ -34,38 +36,36 @@ class PipelineParams(
 import antmicro.Bus.AXI4Lite
 
 class PipelineAxi(params: PipelineParams) extends MultiIOModule {
-  val axidataW = 32
-  val regCount = 2
-  val bramRegCount = 2*1024
+  private val axiAddr_range = (0, 0xA000)
+  private val csrAddr_range = (axiAddr_range._1 >> 2, axiAddr_range._2 >> 2)
 
-  val pipeline = Module(new PipelineWithTransplant(params))
-  val thid2asidTable = Module(new LUT_thid2asid(params.thidN, params.asidW, 2))
+  private val pipeline = Module(new PipelineWithTransplant(params))
 
-  val uAxilToCSR = Module(new AXI4LiteCSR(axidataW, 2*bramRegCount))
+  private val uAxilToCSR = Module(new AXI4LiteCSR(params.axiDataW, csrAddr_range._2 - csrAddr_range._1))
 
-  val uCSR2ToTransplant = Module(new CSR(axidataW, regCount))
-  val uCSRToArchState = Module(new CSR2BRAM(pipeline.transplantU.hostBRAMParams))
-  uCSRToArchState.io.bus <> 0.U.asTypeOf(uCSRToArchState.io.bus.cloneType)
-  uCSR2ToTransplant.io.bus <> 0.U.asTypeOf(uCSR2ToTransplant.io.bus)
-  thid2asidTable.S_BUS <> 0.U.asTypeOf(thid2asidTable.S_BUS)
+  private val transplantCtrl_regCount = 2
+  private val cfgBusCSR_archstate = new CSRBusSlave(0, 0x8000 >> 2)
+  private val cfgBusCSR_thid2asid = new CSRBusSlave(0x8000 >> 2, params.thidN) // Address is 32b word addressed
+  private val cfgBusCSR_transplant = new CSRBusSlave(0x9000 >> 2, transplantCtrl_regCount) // Address is 32b word addressed
 
-  // TODO: Replace this with a AXI arbiter.
-  when((uAxilToCSR.io.bus.addr >> log2Ceil(bramRegCount)).asUInt === 0.U) { // 0-2K
-    uCSRToArchState.io.bus <> uAxilToCSR.io.bus
-  }.elsewhen((uAxilToCSR.io.bus.addr >> (log2Ceil(bramRegCount) - 1)).asUInt === 2.U) { // 2k - 3k
-    thid2asidTable.S_BUS <> uAxilToCSR.io.bus
-  }.otherwise { // 3k - 4k
-    uCSR2ToTransplant.io.bus <> uAxilToCSR.io.bus
-  }
+  private val uCSRToArchState = Module(new CSR2BRAM(pipeline.transplantU.hostBRAMParams))
+  private val uCSRthid2asid = Module(new CSR_thid2asid(params.thidN, params.asidW, thid2asidPortsN = 2))
+  private val uCSR2ToTransplant = Module(new CSR(params.axiDataW, transplantCtrl_regCount))
 
-  val S_AXIL = IO(Flipped(new AXI4Lite(log2Ceil(bramRegCount*2) + log2Ceil(axidataW / 8), axidataW)))
+  private val uCSRmux = Module(new CSRBusMasterToNSlaves(params.axiDataW, Seq(cfgBusCSR_archstate, cfgBusCSR_thid2asid, cfgBusCSR_transplant), csrAddr_range))
+  uCSRmux.masterBus <> uAxilToCSR.io.bus
+  uCSRmux.slavesBus(0) <> uCSRToArchState.io.bus
+  uCSRmux.slavesBus(1) <> uCSRthid2asid.bus
+  uCSRmux.slavesBus(2) <> uCSR2ToTransplant.io.bus
+
+  val S_AXIL = IO(Flipped(uAxilToCSR.io.ctl.cloneType))
   S_AXIL <> uAxilToCSR.io.ctl
 
   val trans2host = WireInit(Mux(pipeline.hostIO.trans2host.done.valid, 1.U << pipeline.hostIO.trans2host.done.tag, 0.U))
   val host2transClear = WireInit(Mux(pipeline.hostIO.trans2host.clear.valid, 1.U << pipeline.hostIO.trans2host.clear.tag, 0.U))
 
-  SetCSR(trans2host.asUInt, uCSR2ToTransplant.io.csr(0), axidataW)
-  val pendingHostTrans = ClearCSR(host2transClear.asUInt, uCSR2ToTransplant.io.csr(1), axidataW)
+  SetCSR(trans2host.asUInt, uCSR2ToTransplant.io.csr(0), params.axiDataW)
+  val pendingHostTrans = ClearCSR(host2transClear.asUInt, uCSR2ToTransplant.io.csr(1), params.axiDataW)
   pipeline.hostIO.host2trans.pending := pendingHostTrans
 
   // BRAM (Architecture State)
@@ -78,19 +78,19 @@ class PipelineAxi(params: PipelineParams) extends MultiIOModule {
   pipeline.mmu_io <> mmu_io
 
   // mem.inst.req
-  thid2asidTable.thid_i(0) := pipeline.mem_io.inst.tlb.req.bits.thid
-  mem_io.inst.tlb.req.bits.asid := thid2asidTable.asid_o(0).bits
+  uCSRthid2asid.thid_i(0) := pipeline.mem_io.inst.tlb.req.bits.thid
+  mem_io.inst.tlb.req.bits.asid := uCSRthid2asid.asid_o(0).bits
 
 
-  thid2asidTable.thid_i(1) := pipeline.mem_io.data.tlb.req.bits.thid
-  mem_io.data.tlb.req.bits.asid := thid2asidTable.asid_o(1).bits
+  uCSRthid2asid.thid_i(1) := pipeline.mem_io.data.tlb.req.bits.thid
+  mem_io.data.tlb.req.bits.asid := uCSRthid2asid.asid_o(1).bits
 
   if(true) {// TODO conditional assertions
     when(pipeline.mem_io.data.tlb.req.valid){
-      assert(thid2asidTable.asid_o(1).valid, "No memory request is allowed if the hardware thread is not registed.")
+      assert(uCSRthid2asid.asid_o(1).valid, "No memory request is allowed if the hardware thread is not registed.")
     }
     when(pipeline.mem_io.inst.tlb.req.valid) {
-      assert(thid2asidTable.asid_o(0).valid, "No memory request is allowed if the hardware thread is not registed.")
+      assert(uCSRthid2asid.asid_o(0).valid, "No memory request is allowed if the hardware thread is not registed.")
     }
   }
 }

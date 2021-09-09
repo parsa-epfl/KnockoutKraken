@@ -24,7 +24,7 @@ SOFTWARE.
 package antmicro.CSR
 
 import chisel3._
-import chisel3.util.log2Ceil
+import chisel3.util.{log2Ceil, MixedVec, PopCount}
 
 class CSRBusBundle(val dataWidth: Int, val regCount: Int) extends Bundle {
   val addr = Output(UInt(log2Ceil(regCount).W))
@@ -32,4 +32,38 @@ class CSRBusBundle(val dataWidth: Int, val regCount: Int) extends Bundle {
   val dataIn = Input(UInt(dataWidth.W))
   val write = Output(Bool())
   val read = Output(Bool())
+}
+
+// Below here it does not belong to Antmicro
+case class CSRBusSlave(val addrStart: Int, val regCount: Int)
+
+class CSRBusMasterToNSlaves(val dataWidth: Int, val slaves: Seq[CSRBusSlave], val addrRange: (Int, Int)) extends MultiIOModule {
+  val slavesBus = IO(MixedVec(slaves.map(slave => new CSRBusBundle(dataWidth, slave.regCount))))
+  val masterBus = IO(Flipped(new CSRBusBundle(dataWidth, addrRange._2 - addrRange._1)))
+  private val dataIn = WireInit(masterBus.dataOut.cloneType, 0xDEAD2BAD.S.asUInt)
+  private val matches = Wire(Vec(slaves.length, Bool()))
+
+  masterBus.dataIn := dataIn
+  for((slave, idx) <- slaves.zipWithIndex) {
+    slavesBus(idx).dataOut := masterBus.dataOut
+    slavesBus(idx).addr := masterBus.addr - slave.addrStart.U
+    when(slave.addrStart.U <= masterBus.addr && masterBus.addr < (slave.addrStart + slave.regCount).U) {
+      dataIn := slavesBus(idx).dataIn
+      slavesBus(idx).read := masterBus.read
+      slavesBus(idx).write := masterBus.write
+      matches(idx) := true.B
+    }.otherwise {
+      slavesBus(idx).read := false.B
+      slavesBus(idx).write := false.B
+      matches(idx) := false.B
+    }
+  }
+
+  if(true) { // TODO Conditional assertions
+    for(slave <- slaves) { assert(addrRange._1 <= slave.addrStart && slave.addrStart + slave.regCount <= addrRange._2, "Addressed must be between allocated range") }
+    assert(PopCount(matches.asUInt) <= 1.U, "It's impossible to hit multiple entries for CSR bus.")
+    when(masterBus.read || masterBus.write) {
+      assert(PopCount(matches.asUInt) === 1.U, "If an operation is performed, the accessed address must match one and only one of the slaves") 
+    }
+  }
 }
