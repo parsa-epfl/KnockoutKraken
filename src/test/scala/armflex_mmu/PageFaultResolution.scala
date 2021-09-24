@@ -31,11 +31,11 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
         0x10000
       )
       // 1. wait for the response of fetching PTEs and response with nothing.
-      dut.sendPageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
+      dut.sendPageTableSet(dut.M_AXI, dut.vpn2ptSetPA(0x10, 0xABC).U)
       // 2. It should allocate Free PPN
       
       // 3. It should insert the PTE to page table
-      dut.receivePageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
+      dut.receivePageTableSet(dut.M_AXI, dut.vpn2ptSetPA(0x10, 0xABC).U)
       dut.pageset_packet_o.ptes(0).ppn.expect(0x10000.U)
       dut.pageset_packet_o.ptes(0).modified.expect(false.B)
       dut.pageset_packet_o.ptes(0).perm.expect(1.U)
@@ -76,7 +76,7 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
         dut.pageset_packet_i.tags(i).vpn.poke((0x20 + i).U)
       }
       // 1. wait for the response of fetching PTEs and response with nothing.
-      dut.sendPageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
+      dut.sendPageTableSet(dut.M_AXI, dut.vpn2ptSetPA(0x10, 0xABC).U)
       // 2. It should allocate Free PPN
 
       // 3. The page deletor should be activated.
@@ -108,7 +108,7 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
       // 3.3 Cache Eviction
       for(i <- 0 until 64){
         dut.waitForSignalToBe(dut.dcache_flush_request_o.valid)
-        dut.dcache_flush_request_o.bits.addr.expect((0x10 * 64 + i).U)
+        dut.dcache_flush_request_o.bits.addr.expect((0x10 * 4096 + i * 64).U)
         timescope {
           dut.dcache_flush_request_o.ready.poke(true.B)
           dut.tk()
@@ -125,7 +125,7 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
       )
 
       // 4. It should insert the PTE to page table
-      dut.receivePageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
+      dut.receivePageTableSet(dut.M_AXI, dut.vpn2ptSetPA(0x10, 0xABC).U)
       dut.pageset_packet_o.ptes(0).ppn.expect(0x10000.U)
       dut.pageset_packet_o.ptes(0).modified.expect(false.B)
       dut.pageset_packet_o.ptes(0).perm.expect(1.U)

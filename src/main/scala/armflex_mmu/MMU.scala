@@ -56,10 +56,15 @@ case class MemoryHierarchyParams(
    * Function returns the physical address in DRAM to access the Page Table Set containing the
    * `vpn` page table entry.
    *
-   * @params vpn
+   * @param asid the address space id.
+   * @param vpn the virtual page number
    * @return physical address of the page table set containing the `vpn` PTE
+   *
+   * @note sync this function with PageDemanderDriver.vpn2ptSetPA
    */
   def vpn2ptSetPA(asid: UInt, vpn: UInt) = {
+
+
     def entryNumberInLog2 = pAddrW - log2Ceil(pageSize)
     //val reducedAsid: Iterator[Seq[Bool]] = asid.asBools.sliding(asid.getWidth/4, asid.getWidth/4)
     //val resAsidReduced = reducedAsid.map { case boolSeq: Seq[Bool] => 

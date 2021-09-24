@@ -5,6 +5,7 @@ import armflex.util._
 import armflex_cache.PageTableParams
 import armflex_mmu.peripheral.PageTableSetPacket
 import chisel3._
+import chisel3.util.log2Ceil
 import chiseltest._
 
 object PageDemanderTestHelper {
@@ -36,7 +37,7 @@ object PageDemanderTestHelper {
  *
  */
 class MMUDUT(
-  params: MemoryHierarchyParams
+  val params: MemoryHierarchyParams
 ) extends MultiIOModule {
   val u_page_demander = Module(new MMU(params, 2))
   // AXI Bus for thread table
@@ -181,6 +182,13 @@ object PageDemanderDriver {
         interval += 1
       }
       return interval
+    }
+
+    def vpn2ptSetPA(asid: BigInt, vpn: BigInt) = {
+      val entryNumberInLog2 = target.params.pAddrW - log2Ceil(target.params.pageSize)
+      val mask = (BigInt(1) << entryNumberInLog2) - 1
+      // Waring: Sync this function with MemoryHierarchyParams.vpn2ptSetPA
+      (((((vpn >> 6) << target.params.asidW) | asid) & mask) * 3) << 6
     }
 
     def sendQEMUMessage(message_type: BigInt, rawMessage: Seq[BigInt]) = timescope {
