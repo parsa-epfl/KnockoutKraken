@@ -187,7 +187,7 @@ class TLB(
   arbPipelinePort.bits.perm := pipeline_io.translationReq.bits.perm
   arbPipelinePort.bits.refill_v := false.B
   arbPipelinePort.bits.refillData := DontCare
-  pipeline_io.translationReq.ready := !mmu_io.flushReq.valid && !mmu_io.refillResp.valid
+  pipeline_io.translationReq.ready := arbPipelinePort.ready
 
   // The flush request from other place
   arbFlushPort.valid := mmu_io.flushReq.valid
