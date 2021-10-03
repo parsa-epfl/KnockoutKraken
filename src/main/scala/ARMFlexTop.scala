@@ -26,8 +26,8 @@ class MemorySystem(params: MemoryHierarchyParams) extends MultiIOModule {
   private val dtlb = Module(new TLB(params.getPageTableParams, () => new PseudoTreeLRUCore(params.tlbWayNumber)))
   private val icache = Module(BaseCache(params.getCacheParams, () => new MatrixLRUCore(params.cacheWayNumber)))
   private val dcache = Module(BaseCache(params.getCacheParams, () => new MatrixLRUCore(params.cacheWayNumber)))
-  private val icacheAdaptor = Module(new Cache2AXIAdaptor(params.getCacheParams.databankParameter, 16))
-  private val dcacheAdaptor = Module(new Cache2AXIAdaptor(params.getCacheParams.databankParameter, 16))
+  private val icacheAdaptor = Module(new Cache2AXIAdaptor(params.getCacheParams.databankParameter, params.thidN + 1))
+  private val dcacheAdaptor = Module(new Cache2AXIAdaptor(params.getCacheParams.databankParameter, params.thidN + 1))
   mmu.tlb_io.inst <> itlb.mmu_io
   mmu.tlb_io.data <> dtlb.mmu_io
   mmu.cache_io.inst <> icache.mmu_i

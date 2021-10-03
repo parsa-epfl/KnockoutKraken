@@ -230,12 +230,13 @@ class TLB(
   mmu_io.flushResp.valid := u_dataBankManager.frontend_reply_o.valid && u_dataBankManager.frontend_reply_o.bits.flush
 
   // miss request
-  mmu_io.missReq.valid := u_dataBankManager.miss_request_o.valid
-  mmu_io.missReq.bits.tag.asid := u_dataBankManager.miss_request_o.bits.asid
-  mmu_io.missReq.bits.tag.vpn := u_dataBankManager.miss_request_o.bits.addr // only reserve the lower bits.
-  mmu_io.missReq.bits.perm := u_dataBankManager.miss_request_o.bits.perm
-  mmu_io.missReq.bits.thid := u_dataBankManager.miss_request_o.bits.thid
-  u_dataBankManager.miss_request_o.ready := mmu_io.missReq.ready
+  val uMissReqQueueOut = Queue(u_dataBankManager.miss_request_o, params.thidN + 1) // the extra 1 is for refilling.
+  mmu_io.missReq.valid := uMissReqQueueOut.valid
+  mmu_io.missReq.bits.tag.asid := uMissReqQueueOut.bits.asid
+  mmu_io.missReq.bits.tag.vpn := uMissReqQueueOut.bits.addr // only reserve the lower bits.
+  mmu_io.missReq.bits.perm := uMissReqQueueOut.bits.perm
+  mmu_io.missReq.bits.thid := uMissReqQueueOut.bits.thid
+  uMissReqQueueOut.ready := mmu_io.missReq.ready
 
   // write back request
   // Flush has its own path

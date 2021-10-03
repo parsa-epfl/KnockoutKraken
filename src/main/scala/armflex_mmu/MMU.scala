@@ -49,7 +49,8 @@ case class MemoryHierarchyParams(
     pAddrW,
     cacheSetNumber,
     cacheWayNumber,
-    cacheBlockSize
+    cacheBlockSize,
+    thidN + 1 // + 1 is for refilling.
   )
 
   /**
