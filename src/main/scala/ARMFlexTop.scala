@@ -155,8 +155,8 @@ object ARMFlexTopSimulatorVerilogEmitter extends App {
   val fr = new FileWriter(new File("test/genFiles/ArmflexTopSim/ARMFlexTop_SIM.v"))
   fr.write(c.emitVerilog(
     new ARMFlexTopSimulator(
-      new PipelineParams(thidN = 4, pAddrW =  24),
-      new MemoryHierarchyParams(thidN = 4, pAddrW = 24)
+      new PipelineParams(thidN = 32, pAddrW =  24),
+      new MemoryHierarchyParams(thidN = 32, pAddrW = 24)
       ), annotations = Seq(TargetDirAnnotation("test/genFiles/ArmflexTopSim"))))
   fr.close()
 }
