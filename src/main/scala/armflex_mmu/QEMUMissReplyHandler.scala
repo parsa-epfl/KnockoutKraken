@@ -12,7 +12,7 @@ class QEMUMissReplyHandler(
 ) extends MultiIOModule {
   val qemu_miss_reply_i = IO(Flipped(Decoupled(new QEMUMissReply(params.getPageTableParams))))
 
-  val sIdle ::  sLoadSet :: sGetEvict :: sDeletePageReq :: sDeletePage :: sReplace ::  sMoveback :: sReplyToTLB :: Nil = Enum(8)
+  val sIdle ::  sLoadSet :: sCheckHit :: sGetEvict :: sDeletePageReq :: sDeletePage :: sReplace ::  sMoveback :: sReplyToTLB :: Nil = Enum(9)
   val state_r = RegInit(sIdle)
 
   val u_buffer = Module(new PageTableSetBuffer(params.getPageTableParams, 
@@ -48,6 +48,9 @@ class QEMUMissReplyHandler(
   M_DMA_R.req.bits.address := params.vpn2ptSetPA(request_r.tag.asid, request_r.tag.vpn)
   M_DMA_R.req.bits.length := u_buffer.requestPacketNumber.U
   M_DMA_R.req.valid := state_r === sLoadSet
+
+  // sCheckHit
+  val pte_hit_rv = RegNext(u_buffer.lookup_reply_o.hit_v)
 
   // sGetEvict
   val victim_r = Reg(new PageTableItem(params.getPageTableParams))
@@ -96,6 +99,13 @@ class QEMUMissReplyHandler(
     }
     is(sLoadSet){
       when(M_DMA_R.done) {
+        state_r := sCheckHit
+      }
+    }
+    is(sCheckHit){
+      when(pte_hit_rv){
+        state_r := Mux(request_r.thid_v, sReplyToTLB, sIdle)
+      }.otherwise {
         state_r := sGetEvict
       }
     }
