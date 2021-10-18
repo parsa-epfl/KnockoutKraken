@@ -187,7 +187,7 @@ class FetchUnit(
 
   mmu_io <> flushController.mmu_io
 
-  if (true) { // TODO, conditional asserts
+  if (false) { // TODO, conditional asserts
     // --- TLB Stage ---
     when(mem_io.tlb.resp.fire) {
       assert(RegNext(mem_io.tlb.req.fire), "Hit response of TLB should arrive in 1 cycle")
@@ -230,7 +230,7 @@ class FetchUnit(
     }
   }
 
-  if(true) { // TODO Conditional printing
+  if(false) { // TODO Conditional printing
     val location = "Pipeline:Fetch"
     when(mem_io.tlb.req.fire) {
       printf(p"${location}:iTLB:Req:thid[${mem_io.tlb.req.bits.thid}]:PC[0x${Hexadecimal(mem_io.tlb.req.bits.addr)}]\n")

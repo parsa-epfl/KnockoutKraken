@@ -689,7 +689,7 @@ class MemoryUnit(
       assert(!haveCacheReq && !havePendingCacheReq, "No new cache requests should ever appear given that we stopped translating")
     }
   }
-  if(true) { // TODO Conditional printing
+  if(false) { // TODO Conditional printing
     when(mem_io.tlb.req.fire) {
       printf(p"${location}:iTLB:Req:thid[${mem_io.tlb.req.bits.thid}]:PC[0x${Hexadecimal(mem_io.tlb.req.bits.addr)}]\n")
     }

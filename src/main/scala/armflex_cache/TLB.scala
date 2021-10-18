@@ -250,7 +250,7 @@ class TLB(
     mmu_io.writebackReq.ready
   )
 
-  if(true) { // TODO Conditional printing
+  if(false) { // TODO Conditional printing
     val location = "TLB"
     when(u_dataBankManager.frontend_request_i.fire){
       when(u_dataBankManager.frontend_request_i.bits.refill_v) {
