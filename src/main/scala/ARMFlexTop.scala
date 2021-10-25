@@ -166,10 +166,10 @@ object ARMFlexTopVerilogEmitter extends App {
   import java.io._
   val fr = new FileWriter(new File("test/genFiles/ArmflexTop/ARMFlexTop_AWS.v"))
   fr.write(c.emitVerilog(
-    new ARMFlexTop(
-      new PipelineParams(thidN = 2),
-      new MemoryHierarchyParams(thidN = 2)
-      ), annotations = Seq(TargetDirAnnotation("test/genFiles/ArmflexTop"))))
+    new ARMFlexTopSimulator(
+      new PipelineParams(thidN = 32, pAddrW =  34),
+      new MemoryHierarchyParams(thidN = 32, pAddrW = 34)
+    ), annotations = Seq(TargetDirAnnotation("test/genFiles/ArmflexTop"))))
   fr.close()
 }
 
