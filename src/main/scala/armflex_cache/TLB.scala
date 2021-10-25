@@ -5,6 +5,7 @@ import chisel3._
 import chisel3.util._
 
 case class PageTableParams(
+  pageW: Int = 4096,
   vPageW: Int = 52,
   pPageW: Int = 24,
   permW: Int = 2,
@@ -17,7 +18,7 @@ case class PageTableParams(
     tlbSetNumber,
     tlbAssociativity,
     pPageW + permW + 1, // PPN + perm + dirty
-    vPageW,
+    vPageW + asidW,
     asidW,
     thidN
     )
@@ -34,7 +35,7 @@ class TLBPipelineReq(params: PageTableParams) extends Bundle {
 
   def := (o: PipeTLB.PipeTLBReq): Unit = {
     this.tag.asid := o.asid
-    this.tag.vpn := o.addr >> 12 // page size
+    this.tag.vpn := o.addr >> params.pageW
     this.perm := o.perm
     this.thid := o.thid
   }
@@ -53,8 +54,8 @@ class TLBPipelineResp(params: PageTableParams) extends Bundle {
   val thid = UInt(log2Ceil(params.thidN).W)
 
   def toPipeTLBResponse: PipeTLB.PipeTLBResp = {
-    val res = Wire(new PipeTLB.PipeTLBResp(params.pPageW))
-    res.addr := entry.ppn << 12
+    val res = Wire(new PipeTLB.PipeTLBResp(params.pPageW + params.pageW))
+    res.addr := entry.ppn << params.pageW
     res.hit := hit
     res.miss := !hit
     res.violation := violation
@@ -186,13 +187,13 @@ class TLB(
   arbPipelinePort.bits.perm := pipeline_io.translationReq.bits.perm
   arbPipelinePort.bits.refill_v := false.B
   arbPipelinePort.bits.refillData := DontCare
-  pipeline_io.translationReq.ready := !mmu_io.flushReq.valid && !mmu_io.refillResp.valid
+  pipeline_io.translationReq.ready := arbPipelinePort.ready
 
   // The flush request from other place
   arbFlushPort.valid := mmu_io.flushReq.valid
-  arbFlushPort.bits.addr := Cat(pipeline_io.translationReq.bits.tag.asid, pipeline_io.translationReq.bits.tag.vpn)
+  arbFlushPort.bits.addr := Cat(mmu_io.flushReq.bits.asid, mmu_io.flushReq.bits.vpn)
   arbFlushPort.bits.thid := DontCare
-  arbFlushPort.bits.asid := pipeline_io.translationReq.bits.tag.asid
+  arbFlushPort.bits.asid := mmu_io.flushReq.bits.asid
   arbFlushPort.bits.wData := DontCare
   arbFlushPort.bits.flush_v := true.B
   arbFlushPort.bits.wMask := DontCare
@@ -229,12 +230,13 @@ class TLB(
   mmu_io.flushResp.valid := u_dataBankManager.frontend_reply_o.valid && u_dataBankManager.frontend_reply_o.bits.flush
 
   // miss request
-  mmu_io.missReq.valid := u_dataBankManager.miss_request_o.valid
-  mmu_io.missReq.bits.tag.asid := u_dataBankManager.miss_request_o.bits.asid
-  mmu_io.missReq.bits.tag.vpn := u_dataBankManager.miss_request_o.bits.addr // only reserve the lower bits.
-  mmu_io.missReq.bits.perm := u_dataBankManager.miss_request_o.bits.perm
-  mmu_io.missReq.bits.thid := u_dataBankManager.miss_request_o.bits.thid
-  u_dataBankManager.miss_request_o.ready := mmu_io.missReq.ready
+  val uMissReqQueueOut = Queue(u_dataBankManager.miss_request_o, params.thidN + 1) // the extra 1 is for refilling.
+  mmu_io.missReq.valid := uMissReqQueueOut.valid
+  mmu_io.missReq.bits.tag.asid := uMissReqQueueOut.bits.asid
+  mmu_io.missReq.bits.tag.vpn := uMissReqQueueOut.bits.addr // only reserve the lower bits.
+  mmu_io.missReq.bits.perm := uMissReqQueueOut.bits.perm
+  mmu_io.missReq.bits.thid := uMissReqQueueOut.bits.thid
+  uMissReqQueueOut.ready := mmu_io.missReq.ready
 
   // write back request
   // Flush has its own path
@@ -248,7 +250,7 @@ class TLB(
     mmu_io.writebackReq.ready
   )
 
-  if(true) { // TODO Conditional printing
+  if(false) { // TODO Conditional printing
     val location = "TLB"
     when(u_dataBankManager.frontend_request_i.fire){
       when(u_dataBankManager.frontend_request_i.bits.refill_v) {

@@ -135,7 +135,7 @@ import firrtl.options.TargetDirAnnotation
 
 class TLBTester extends FreeSpec with ChiselScalatestTester {
   val param = new PageTableParams(
-    8, 4, 2, 4, 1, 32, 32
+    12, 8, 4, 2, 4, 1, 32, 32
   )
 
   import TLBTestUtility._

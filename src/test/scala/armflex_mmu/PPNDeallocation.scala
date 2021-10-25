@@ -29,11 +29,11 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
         0x10000,
       )
       // 1.1. wait for the response of fetching PTEs and response with nothing.
-      dut.sendPageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
+      dut.sendPageTableSet(dut.M_AXI, dut.vpn2ptSetPA(0x10, 0xABC).U)
       // 1.2. It should allocate Free PPN
 
       // 1.3. It should insert the PTE to page table
-      dut.receivePageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
+      dut.receivePageTableSet(dut.M_AXI, dut.vpn2ptSetPA(0x10, 0xABC).U)
       dut.pageset_packet_o.ptes(0).ppn.expect(0x10000.U)
       dut.pageset_packet_o.ptes(0).modified.expect(false.B)
       dut.pageset_packet_o.ptes(0).perm.expect(1.U)
@@ -66,7 +66,7 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
       dut.pageset_packet_i.tags(0).asid.poke(0x10.U)
       dut.pageset_packet_i.tags(0).vpn.poke(0xABC.U)
       dut.pageset_packet_i.valids.poke(1.U)
-      dut.sendPageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
+      dut.sendPageTableSet(dut.M_AXI, dut.vpn2ptSetPA(0x10, 0xABC).U)
 
       // 3. wait for TLB eviction. Let's assume not hit this time.
       dut.waitForSignalToBe(dut.dtlb_flush_request_o.valid)
@@ -89,7 +89,7 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
       // 5. flush cache
       for(i <- 0 until 64){
         dut.waitForSignalToBe(dut.dcache_flush_request_o.valid)
-        dut.dcache_flush_request_o.bits.addr.expect((0x10000 * 64 + i).U)
+        dut.dcache_flush_request_o.bits.addr.expect((0x10000 * 4096 + i * 64).U)
         timescope {
           dut.dcache_flush_request_o.ready.poke(true.B)
           dut.tk()
@@ -100,7 +100,7 @@ class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
       dut.dcache_wb_queue_empty_i.poke(true.B)
 
       // 7. The PTE should be invalid.
-      dut.receivePageTableSet(dut.M_AXI, (0xAB * 64 * 3).U)
+      dut.receivePageTableSet(dut.M_AXI, dut.vpn2ptSetPA(0x10, 0xABC).U)
       dut.pageset_packet_o.valids.expect(0.U)
 
     }

@@ -26,8 +26,8 @@ class MemorySystem(params: MemoryHierarchyParams) extends MultiIOModule {
   private val dtlb = Module(new TLB(params.getPageTableParams, () => new PseudoTreeLRUCore(params.tlbWayNumber)))
   private val icache = Module(BaseCache(params.getCacheParams, () => new MatrixLRUCore(params.cacheWayNumber)))
   private val dcache = Module(BaseCache(params.getCacheParams, () => new MatrixLRUCore(params.cacheWayNumber)))
-  private val icacheAdaptor = Module(new Cache2AXIAdaptor(params.getCacheParams.databankParameter, 16))
-  private val dcacheAdaptor = Module(new Cache2AXIAdaptor(params.getCacheParams.databankParameter, 16))
+  private val icacheAdaptor = Module(new Cache2AXIAdaptor(params.getCacheParams.databankParameter, params.thidN + 1))
+  private val dcacheAdaptor = Module(new Cache2AXIAdaptor(params.getCacheParams.databankParameter, params.thidN + 1))
   mmu.tlb_io.inst <> itlb.mmu_io
   mmu.tlb_io.data <> dtlb.mmu_io
   mmu.cache_io.inst <> icache.mmu_i
@@ -112,9 +112,9 @@ class ARMFlexTopSimulator(
   import armflex.util.AXIReadMultiplexer
   import armflex.util.AXIWriteMultiplexer
   private val devteroFlexTop = Module(new ARMFlexTop(paramsPipeline, paramsMemoryHierarchy))
-  private val axiMulti_R = Module(new AXIReadMultiplexer(64, 512, 6))
-  private val axiMulti_W = Module(new AXIWriteMultiplexer(64, 512, 5))
-  private val axilMulti = Module(new AXILInterconnector(Seq(0x00000, 0x08000), Seq(0x08000,0x08000), 32, 32))
+  private val axiMulti_R = Module(new AXIReadMultiplexer(paramsMemoryHierarchy.dramAddrW, 512, 6))
+  private val axiMulti_W = Module(new AXIWriteMultiplexer(paramsMemoryHierarchy.dramAddrW, 512, 5))
+  private val axilMulti = Module(new AXILInterconnector(Seq(0x00000, 0x10000), Seq(0x08000,0x10000), 32, 32))
   val S_AXI = IO(Flipped(devteroFlexTop.AXI_MEM.AXI_MMU.S_AXI.cloneType))
   val S_AXIL = IO(Flipped(axilMulti.S_AXIL.cloneType))
   S_AXI <> devteroFlexTop.AXI_MEM.AXI_MMU.S_AXI
@@ -155,8 +155,8 @@ object ARMFlexTopSimulatorVerilogEmitter extends App {
   val fr = new FileWriter(new File("test/genFiles/ArmflexTopSim/ARMFlexTop_SIM.v"))
   fr.write(c.emitVerilog(
     new ARMFlexTopSimulator(
-      new PipelineParams(thidN = 4),
-      new MemoryHierarchyParams(thidN = 4)
+      new PipelineParams(thidN = 32, pAddrW =  24),
+      new MemoryHierarchyParams(thidN = 32, pAddrW = 24)
       ), annotations = Seq(TargetDirAnnotation("test/genFiles/ArmflexTopSim"))))
   fr.close()
 }
@@ -166,10 +166,10 @@ object ARMFlexTopVerilogEmitter extends App {
   import java.io._
   val fr = new FileWriter(new File("test/genFiles/ArmflexTop/ARMFlexTop_AWS.v"))
   fr.write(c.emitVerilog(
-    new ARMFlexTop(
-      new PipelineParams(thidN = 2),
-      new MemoryHierarchyParams(thidN = 2)
-      ), annotations = Seq(TargetDirAnnotation("test/genFiles/ArmflexTop"))))
+    new ARMFlexTopSimulator(
+      new PipelineParams(thidN = 32, pAddrW =  34),
+      new MemoryHierarchyParams(thidN = 32, pAddrW = 34)
+    ), annotations = Seq(TargetDirAnnotation("test/genFiles/ArmflexTop"))))
   fr.close()
 }
 

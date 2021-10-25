@@ -114,8 +114,6 @@ class PageDeletor(
 
   val queue_empty = Mux(item_r.entry.perm =/= 2.U, dcache_wb_queue_empty_i, icache_wb_queue_empty_i)
 
-  // sMove
-
   // sSend
   // Port to send message to QEMU
   val done_message_o = IO(Decoupled(new PageEvictNotification(

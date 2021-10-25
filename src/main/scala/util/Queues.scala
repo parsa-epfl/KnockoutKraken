@@ -59,7 +59,7 @@ class DoubleLatencyQueue[T <: Data](gen: T, maxElements: Int) extends MultiIOMod
   // ---- Track Pending Requests ----
   pending := baseQ.io.count + longQ.io.count
 
-  if (true) { // TODO, conditional asserts
+  if (false) { // TODO, conditional asserts
     // A request must be pending in order to pop it
     when(baseQ.io.deq.ready) { assert(baseQ.io.deq.valid) }
     when(longQ.io.deq.ready) { assert(longQ.io.deq.valid) }

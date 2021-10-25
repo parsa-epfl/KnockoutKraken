@@ -68,12 +68,12 @@ class AXI4LiteCSR(dataWidth: Int, regCount: Int) extends Module {
     is(sIdle){
       when(io.ctl.aw.awvalid){
         state := sWriteAddr
-        addr := io.ctl.aw.awaddr >> 2.U // TODO Is this correct instead of (5,2)?
+        addr := io.ctl.aw.awaddr >> 2.U
         awready := true.B
 
       }.elsewhen(io.ctl.ar.arvalid){
         state := sReadAddr
-        addr := io.ctl.ar.araddr >> 2.U // TODO Is this correct instead of (5,2)?
+        addr := io.ctl.ar.araddr >> 2.U
         arready := true.B
       }
     }

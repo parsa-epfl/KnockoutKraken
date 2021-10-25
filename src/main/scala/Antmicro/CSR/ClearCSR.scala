@@ -21,6 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
+// THIS IS NOT THE ORIGINAL ANTMICRO FILE
 package antmicro.CSR
 
 import chisel3._
@@ -38,7 +39,7 @@ class ClearCSR(dataWidth: Int) extends Module{
   io.value := reg
 
   when(io.csr.dataWrite){
-    reg := io.csr.dataOut
+    reg := reg | io.csr.dataOut
   }.otherwise{
     reg := reg & (~io.clear).asUInt
   }

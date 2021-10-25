@@ -35,6 +35,7 @@ case class MemoryHierarchyParams(
   val dramdataW: Int = cacheBlockSize
 
   def getPageTableParams: PageTableParams = new PageTableParams(
+    log2Ceil(pageSize),
     vPageW,
     pPageW,
     2,
@@ -48,20 +49,33 @@ case class MemoryHierarchyParams(
     pAddrW,
     cacheSetNumber,
     cacheWayNumber,
-    cacheBlockSize
+    cacheBlockSize,
+    thidN + 1 // + 1 is for refilling.
   )
 
   /**
    * Function returns the physical address in DRAM to access the Page Table Set containing the
    * `vpn` page table entry.
    *
-   * @params vpn
+   * @param asid the address space id.
+   * @param vpn the virtual page number
    * @return physical address of the page table set containing the `vpn` PTE
+   *
+   * @note sync this function with PageDemanderDriver.vpn2ptSetPA
    */
-  def vpn2ptSetPA(vpn: UInt) = {
+  def vpn2ptSetPA(asid: UInt, vpn: UInt) = {
+
+
     def entryNumberInLog2 = pAddrW - log2Ceil(pageSize)
-    val pageset_number = vpn(entryNumberInLog2-1, 4)
-    Cat(pageset_number * 3.U(2.W), 0.U(6.W)) // Zero pad 6
+    //val reducedAsid: Iterator[Seq[Bool]] = asid.asBools.sliding(asid.getWidth/4, asid.getWidth/4)
+    //val resAsidReduced = reducedAsid.map { case boolSeq: Seq[Bool] => 
+    //    val vecBool: Vec[Bool] = VecInit(boolSeq)
+    //    val res: Bool = vecBool.asUInt.xorR
+    //    res.asUInt
+    //}
+    //resAsidReduced.reduce(Cat(_,_))
+    val pageset_number = Cat(vpn(vpn.getWidth-1, 6), asid)
+    Cat(pageset_number(entryNumberInLog2-1, 0) * 3.U(2.W), 0.U(6.W)) // Zero pad 6
   }
 }
 

@@ -42,21 +42,61 @@ class AXIControlledMessageQueue extends MultiIOModule {
   // Read from any address will trigger a pop
   // write to any address will trigger a insersion.
   // Minimal AXI4 address spacce is 128 bytes
+
   val S_AXI = IO(Flipped(new AXI4(log2Ceil(128), 512)))
 
-  val u_axi_trans_converter = Module(new AXIRAMController(7, 512))
-  u_axi_trans_converter.S_AXI <> S_AXI
+  // read logic
+  val axi_rid_r = RegEnable(S_AXI.ar.arid, S_AXI.ar.arvalid && S_AXI.ar.arready)
+  val axi_rv = RegInit(false.B) // whether the bus is in read state.
+  S_AXI.ar.arready := !axi_rv
 
-  val read_req_q = Queue(u_axi_trans_converter.read_request_o)
+  S_AXI.r.rvalid := fifo_i.valid && axi_rv
+  S_AXI.r.rdata := fifo_i.bits
+  S_AXI.r.rresp := 0.U
+  S_AXI.r.rlast := true.B
+  S_AXI.r.rid := axi_rid_r
+  fifo_i.ready := axi_rv && S_AXI.r.rready
 
-  u_axi_trans_converter.read_reply_i.bits := fifo_i.bits
-  u_axi_trans_converter.read_reply_i.valid := read_req_q.valid && fifo_i.valid
-  read_req_q.ready := fifo_i.valid && u_axi_trans_converter.read_reply_i.ready
-  fifo_i.ready := read_req_q.valid && u_axi_trans_converter.read_reply_i.ready
+  when(S_AXI.r.rvalid && S_AXI.r.rready){
+    axi_rv := false.B
+  }.elsewhen(S_AXI.ar.arready && S_AXI.ar.arvalid){
+    axi_rv := true.B
+  }
 
-  fifo_o.bits := u_axi_trans_converter.write_request_o.bits.data
-  fifo_o.valid := u_axi_trans_converter.write_request_o.valid
-  u_axi_trans_converter.write_request_o.ready := fifo_o.ready
+  // write logic
+  val axi_wid_r = RegEnable(S_AXI.aw.awid, S_AXI.aw.awvalid && S_AXI.aw.awready)
+  val sAXI_AW :: sAXI_W :: sAXI_B :: Nil = Enum(3)
+  val axi_w_state_r = RegInit(sAXI_AW)
+
+  S_AXI.aw.awready := axi_w_state_r === sAXI_AW
+
+  S_AXI.w.wready := axi_w_state_r === sAXI_W && fifo_o.ready
+  fifo_o.valid := S_AXI.w.wvalid && axi_w_state_r === sAXI_W
+  fifo_o.bits := S_AXI.w.wdata
+
+  S_AXI.b.bresp := 0.U
+  S_AXI.b.bid := axi_wid_r
+  S_AXI.b.bvalid := axi_w_state_r === sAXI_B
+
+  switch(axi_w_state_r){
+    is(sAXI_AW){
+      when(S_AXI.aw.awready && S_AXI.aw.awvalid) {
+        axi_w_state_r := sAXI_W
+      }
+    }
+    is(sAXI_W){
+      when(S_AXI.w.wready && S_AXI.w.wvalid && S_AXI.w.wlast){
+        axi_w_state_r := sAXI_B
+      }
+    }
+    is(sAXI_B){
+      when(S_AXI.b.bvalid && S_AXI.b.bready){
+        axi_w_state_r := sAXI_AW
+      }
+    }
+  }
+
+
 
 }
 

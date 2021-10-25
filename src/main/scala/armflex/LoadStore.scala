@@ -65,6 +65,7 @@ class LDSTUnitIO extends Bundle {
   val dinst = Input(new DInst)
   val rVal1 = Input(DATA_T) // Rn
   val rVal2 = Input(DATA_T) // Rt in some cases
+  val rVal3 = Input(DATA_T) // Rt in some cases
   val pstate = Input(new PStateRegs)
 
   val minst = Output(Valid(new MInst))
@@ -209,7 +210,8 @@ class LDSTUnit extends Module {
   // data = X[t]
   // Mem[address, datasize DIV 8, AccType_NORMAL] = data
 
-  val data = WireInit(io.rVal2) // data = Rt = rVal2
+  val data_1 = WireInit(io.rVal2) // data_1 = Rt = rVal2
+  val data_2 = WireInit(io.rVal3) // data_2 = Rt2 = rVal3
 
   // Prepare MInst
   val minst = Wire(new MInst)
@@ -219,7 +221,7 @@ class LDSTUnit extends Module {
   minst.isLoad := isLoad
 
   minst.req(0).addr := ldst_address
-  minst.req(0).data := data
+  minst.req(0).data := data_2
   minst.req(0).reg := io.dinst.rd.bits
   // For Pair LD/ST
   val dbytes = 1.U << size
@@ -228,7 +230,7 @@ class LDSTUnit extends Module {
       io.dinst.itype === I_LSPair ||
       io.dinst.itype === I_LSPairPo)
   minst.req(1).addr := ldst_address + dbytes
-  minst.req(1).data := DontCare // Read 3 ports from RFile in single cycle Rd;Rt;Rt2
+  minst.req(1).data := data_1
   minst.req(1).reg := io.dinst.rs2
 
   // if wback then
@@ -463,19 +465,22 @@ class MemoryUnit(
   private val cacheAdaptorReqW_en = WireInit(cacheAdaptor.pipe_io.req.port.bits.w_en.cloneType, 0.U)
 
   // Align store data with byte and address for block
-  private val maskSize = cacheAdaptorMInstInput.inst.size + singleAccessPair.asUInt
+  private val maskSize = WireInit(cacheAdaptorMInstInput.inst.size +& singleAccessPair.asUInt)
   private val maskByteEn: UInt = MuxLookup(maskSize, 1.U, Array(
     // Mask for size = 2**(bytes in maskSize+1) - 1
-    SIZEB -> ((1 << (log2Ceil(1) + 1)) - 1).U, // 0b1
-    SIZEH -> ((1 << (log2Ceil(2) + 1)) - 1).U, // 0b11
-    SIZE32 -> ((1 << (log2Ceil(4) + 1)) - 1).U, // 0b1111
-    SIZE64 -> ((1 << (log2Ceil(8) + 1)) - 1).U, // 0b11111111
-    SIZE128 -> ((1 << (log2Ceil(16) + 1)) - 1).U // 0b1111111111111111 // Only for pair 64 bit instructions
+    SIZEB -> ((1 << 1) - 1).U, // 0b1
+    SIZEH -> ((1 << 2) - 1).U, // 0b11
+    SIZE32 -> ((1 << 4) - 1).U, // 0b1111
+    SIZE64 -> ((1 << 8) - 1).U, // 0b11111111
+    SIZE128 -> ((1 << 16) - 1).U // 0b1111111111111111 // Only for pair 64 bit instructions
     ))
 
   // Select, align and mask bytes in block
   private val selReqIdx = secondAccessPair.asUInt // Select second one in case it is the second access
   cacheAdaptorReqW_en := maskByteEn << cacheAdaptorMInstInput.inst.req(selReqIdx).addr(log2Ceil(params.blockSize / 8), 0)
+  when(cacheAdaptorMInstInput.inst.isLoad) {
+    cacheAdaptorReqW_en := 0.U
+  }
   cacheAdaptorReqData := cacheAdaptorMInstInput.inst.req(selReqIdx).data << Cat(cacheAdaptorMInstInput.inst.req(selReqIdx).addr(log2Ceil(params.blockSize / 8), 0), 0.U(3.W))
   when(singleAccessPair) {
     cacheAdaptorReqData :=
@@ -684,7 +689,7 @@ class MemoryUnit(
       assert(!haveCacheReq && !havePendingCacheReq, "No new cache requests should ever appear given that we stopped translating")
     }
   }
-  if(true) { // TODO Conditional printing
+  if(false) { // TODO Conditional printing
     when(mem_io.tlb.req.fire) {
       printf(p"${location}:iTLB:Req:thid[${mem_io.tlb.req.bits.thid}]:PC[0x${Hexadecimal(mem_io.tlb.req.bits.addr)}]\n")
     }

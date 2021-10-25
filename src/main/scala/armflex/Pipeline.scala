@@ -97,6 +97,7 @@ class Pipeline(params: PipelineParams) extends MultiIOModule {
   archstate.issue.rd.tag := decReg.io.deq.tag
   archstate.issue.rd.port(0).addr := decReg.io.deq.bits.rs1
   archstate.issue.rd.port(1).addr := decReg.io.deq.bits.rs2
+  archstate.issue.rd.port(2).addr := decReg.io.deq.bits.rd.bits
   issuer.io.enq <> decReg.io.deq // Issue is always ready, so no check for archstate.issue.ready necessary
   // TODO When Issuer io deq ! ready -> register RFile RD output
 
@@ -117,23 +118,23 @@ class Pipeline(params: PipelineParams) extends MultiIOModule {
   val rVal2_reg = RegInit(DATA_X)
   val rVal3_reg = RegInit(DATA_X)
   val state_reg = RegInit(PStateRegs())
-  val rVal1 = Mux(stateReadArrives, archstate.issue.rd.port(0).data, rVal1_reg)
-  val rVal2 = Mux(stateReadArrives, archstate.issue.rd.port(1).data, rVal2_reg)
-  val rVal3 = Mux(stateReadArrives, archstate.issue.rd.port(0).data, rVal3_reg) // TODO Triple source
-  val curr_state = Mux(stateReadArrives, RegNext(archstate.issue.regs.curr), state_reg) // TODO Triple source
+  val rVal1 = WireInit(Mux(stateReadArrives, archstate.issue.rd.port(0).data, rVal1_reg))
+  val rVal2 = WireInit(Mux(stateReadArrives, archstate.issue.rd.port(1).data, rVal2_reg))
+  val rVal3 = WireInit(Mux(stateReadArrives, archstate.issue.rd.port(2).data, rVal3_reg)) // TODO Triple source
+  val curr_state = WireInit(Mux(stateReadArrives, RegNext(archstate.issue.regs.curr), state_reg)) // TODO Triple source
   when(stateReadArrives) {
     // Read Register arrived
     rVal1_reg := archstate.issue.rd.port(0).data
     rVal2_reg := archstate.issue.rd.port(1).data
-    rVal3_reg := archstate.issue.rd.port(0).data
-    state_reg := archstate.issue.regs.curr
+    rVal3_reg := archstate.issue.rd.port(2).data
+    state_reg := RegNext(archstate.issue.regs.curr)
   }
 
   // connect executeUnit interface
   executer.io.dinst := issued_dinst
   executer.io.rVal1 := rVal1
   executer.io.rVal2 := rVal2
-  executer.io.rVal3 := rVal3 // rVal3 takes an extra cycle to arrive -> Take RegNext()
+  executer.io.rVal3 := rVal3
   executer.io.nzcv := curr_state.NZCV
 
   // connect BranchUnit interface
@@ -147,6 +148,7 @@ class Pipeline(params: PipelineParams) extends MultiIOModule {
   ldstU.io.dinst := issued_dinst
   ldstU.io.rVal1 := rVal1
   ldstU.io.rVal2 := rVal2
+  ldstU.io.rVal3 := rVal3
   ldstU.io.pstate := curr_state
 
   // ------ Pack Execute/LDST result
@@ -214,7 +216,6 @@ class Pipeline(params: PipelineParams) extends MultiIOModule {
   commitU.enq.valid := false.B
 
   val ldstInstruction = ldstU.io.minst.valid && !ldstU.io.minst.bits.exceptions.valid
-  val commitAsIssue = commitU.commit.commited.valid && issuer.io.deq.tag === commitU.commit.commited.tag
   when(memUnit.pipe.resp.valid) {
     // When memory response arrives, don't take from issue but from response
     commitU.enq <> memUnit.pipe.resp
@@ -260,14 +261,14 @@ class Pipeline(params: PipelineParams) extends MultiIOModule {
     // Assertions:  Issuer Deq | MemUnit | CommitReg Enq
     when(issuer.io.deq.fire) {
       assert(commitU.enq.fire || memUnit.pipe.req.fire, "In case of Issue fire, either the MemUnit or the commit queue must receive the transaction")
-      assert(!(commitU.enq.fire && memUnit.pipe.req.fire), "Both the MemUnit and commit queue can't receive the transaction at the same time")
+      assert(!((commitU.enq.fire && !memUnit.pipe.resp.fire) && memUnit.pipe.req.fire), "Both the MemUnit and commit queue can't receive the transaction at the same time")
       when(commitU.commit.commited.valid) { 
-          assert(issuer.io.deq.tag =/= commitU.commit.commited.tag, "Instructions from the same context can't be present in two stages concurrently")
-        }
+        assert(issuer.io.deq.tag =/= commitU.commit.commited.tag, "Instructions from the same context can't be present in two stages concurrently")
+      }
     }
     when(commitU.enq.fire) {
-      assert(memUnit.pipe.resp.valid || issuer.io.deq.fire, "When the commit queue receives a transaction, it must either come from the MemUnit or Issue stage")
-      assert(!(memUnit.pipe.resp.valid && issuer.io.deq.fire), "When the commit queue receives a transaction, it can't come from both the MemUnit or Issue stage")
+      assert(memUnit.pipe.resp.valid || (issuer.io.deq.fire && !memUnit.pipe.req.fire), "When the commit queue receives a transaction, it must either come from the MemUnit or Issue stage")
+      assert(!(memUnit.pipe.resp.valid && (issuer.io.deq.fire && !memUnit.pipe.req.fire)), "When the commit queue receives a transaction, it can't come from both the MemUnit or Issue stage")
     }
   }
 }

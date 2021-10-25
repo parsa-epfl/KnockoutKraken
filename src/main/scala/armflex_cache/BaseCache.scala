@@ -287,7 +287,7 @@ class BaseCache(
   u_refillQueue.missRequest_i.valid := u_dataBankManager.miss_request_o.valid && u_backendMerger.read_request_i.ready
   u_backendMerger.read_request_i.valid := u_dataBankManager.miss_request_o.valid && u_refillQueue.missRequest_i.ready
 
-  if(true) { // TODO Conditional printing
+  if(false) { // TODO Conditional printing
     val location = "Cache"
     when(u_dataBankManager.frontend_request_i.fire){
       when(u_dataBankManager.frontend_request_i.bits.refill_v) {
