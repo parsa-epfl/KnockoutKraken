@@ -68,12 +68,12 @@ class AXI4LiteCSR(dataWidth: Int, regCount: Int) extends Module {
     is(sIdle){
       when(io.ctl.aw.awvalid){
         state := sWriteAddr
-        addr := io.ctl.aw.awaddr >> 2.U
+        addr := io.ctl.aw.awaddr >> log2Ceil(dataWidth/8).U
         awready := true.B
 
       }.elsewhen(io.ctl.ar.arvalid){
         state := sReadAddr
-        addr := io.ctl.ar.araddr >> 2.U
+        addr := io.ctl.ar.araddr >> log2Ceil(dataWidth/8).U
         arready := true.B
       }
     }
