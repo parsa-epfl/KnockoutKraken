@@ -68,7 +68,7 @@ static int test_stress_memory(
   for(uint32_t thid = 0; thid < thidN; thid++) {
     printf("Registering thid:%i --\n", thid);
     initArchState(&state[thid], 0);
-    asid[thid] = GET_PID(thid);
+    asid[thid] = GET_asid(thid);
     curr_ld_page_paddr[thid] = page_data_ld_paddr + thid*nDataPagesPerThread*PAGE_SIZE;
     curr_st_page_paddr[thid] = page_data_st_paddr + thid*nDataPagesPerThread*PAGE_SIZE;
     curr_ld_page_vaddr[thid] = vaddr_ld;
@@ -86,7 +86,7 @@ static int test_stress_memory(
   }
 
   INFO("- Push Instruction Pages to each thread");
-  QEMUMissReply pf_reply;
+  MessageFPGA pf_reply;
   pushPageToFPGA(ctx, page_inst_paddr, page);
   for(uint32_t thid = 0; thid < thidN; thid++) {
     makeMissReply(INST_FETCH, -1, asid[thid], pc, page_inst_paddr, &pf_reply);
@@ -128,12 +128,11 @@ static int test_stress_memory(
    REQUIRE(transplant_start(ctx, thid) == 0);
   }
 
-  INFO("- Wait program complete")
+  INFO("- Wait program complete");
   completed = 0;
   pending_threads = 0;
   iterations = 0;
-  uint8_t message[64];
-  PageFaultNotification *notif;
+  MessageFPGA message;
   while(completed != threadsMask) {
     transplant_pending(ctx, &pending_threads);
     if(pending_threads)  {
@@ -143,18 +142,17 @@ static int test_stress_memory(
       printf("Detected pending transplants: 0x%x, curr completed: 0x%x\n", pending_threads, completed);
     }
     if(hasMessagePending(ctx)) {
-      getMessagePending(ctx, message);
-      notif = (PageFaultNotification *) message;
-      REQUIRE(notif->type == sPageFaultNotify); // NOTE: running out of entries in a PT set could send another request type
-      if(notif->permission == DATA_LOAD) {
+      getMessagePending(ctx, (uint8_t *) &message);
+      REQUIRE(message.type == sPageFaultNotify); // NOTE: running out of entries in a PT set could send another request type
+      if(message.PageFaultNotif.permission == DATA_LOAD) {
         INFO("Load page fault detected");
-        uint32_t thid = notif->tid;
+        uint32_t thid = message.PageFaultNotif.thid;
         uint32_t pageIdx = curr_ld_page_idx[thid];
         uint64_t paddr = curr_ld_page_paddr[thid];
         uint64_t vaddr = curr_ld_page_vaddr[thid];
-        REQUIRE(notif->pid == asid[thid]);
-        REQUIRE(notif->vpn_hi == VPN_GET_HI(vaddr));
-        REQUIRE(notif->vpn_lo == VPN_GET_LO(vaddr));
+        REQUIRE(message.asid == asid[thid]);
+        REQUIRE(message.vpn_hi == VPN_GET_HI(vaddr));
+        REQUIRE(message.vpn_lo == VPN_GET_LO(vaddr));
         //printf("Thread[%i]:PAGE_FAULT:VA[%lx]\n", thid, vaddr);
         pushPageToFPGA(ctx, paddr, &pages[thid*nDataPagesPerThread*PAGE_SIZE+pageIdx*PAGE_SIZE]);
         makeMissReply(DATA_LOAD, thid, asid[thid], vaddr, paddr, &pf_reply);
@@ -163,17 +161,17 @@ static int test_stress_memory(
         curr_ld_page_paddr[thid]+=PAGE_SIZE;
         curr_ld_page_vaddr[thid]+=PAGE_SIZE;
         curr_ld_page_idx[thid]++;
-      } else if (notif->permission == DATA_STORE) {
+      } else if (message.PageFaultNotif.permission == DATA_STORE) {
         INFO("Store page fault detected");
-        uint32_t thid = notif->tid;
+        uint32_t thid = message.PageFaultNotif.thid;
         uint32_t pageIdx = curr_st_page_idx[thid];
         uint64_t paddr = curr_st_page_paddr[thid];
         uint64_t vaddr = curr_st_page_vaddr[thid];
-        REQUIRE(notif->pid == asid[thid]);
-        REQUIRE(notif->vpn_hi == VPN_GET_HI(vaddr));
-        REQUIRE(notif->vpn_lo == VPN_GET_LO(vaddr));
+        REQUIRE(message.asid == asid[thid]);
+        REQUIRE(message.vpn_hi == VPN_GET_HI(vaddr));
+        REQUIRE(message.vpn_lo == VPN_GET_LO(vaddr));
         pushPageToFPGA(ctx, paddr, &pages[thid*nDataPagesPerThread*PAGE_SIZE+pageIdx*PAGE_SIZE]);
-        makeMissReply(DATA_STORE, thid, asid[notif->tid], vaddr, paddr, &pf_reply);
+        makeMissReply(DATA_STORE, thid, asid[thid], vaddr, paddr, &pf_reply);
         sendMessageToFPGA(ctx, &pf_reply, sizeof(pf_reply));
         curr_st_page_paddr[thid]+=PAGE_SIZE;
         curr_st_page_vaddr[thid]+=PAGE_SIZE;

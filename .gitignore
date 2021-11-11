@@ -351,3 +351,4 @@ project/metals.sbt
 *.anno.json
 firrtl_black_box_resource_files.f
 .bsp/
+.scalafmt.conf

@@ -2,35 +2,6 @@
 #include "fpga.h"
 #include "fpga_interface.h"
 
-void makeEvictRequest(int pid, uint64_t va,
-                      QEMUPageEvictRequest *evict_request) {
-  evict_request->type = sPageEvict;
-  evict_request->pid = pid;
-  evict_request->vpn_hi = VPN_GET_HI(va);
-  evict_request->vpn_lo = VPN_GET_LO(va);
-}
-
-void makeEvictReply(PageEvictNotification *notif, QEMUEvictReply *evict_reply) {
-  evict_reply->type = sEvictReply;
-  evict_reply->old_ppn = notif->ppn;
-  evict_reply->pid = notif->pid;
-  evict_reply->vpn_hi = notif->vpn_hi;
-  evict_reply->vpn_lo = notif->vpn_lo;
-}
-
-void makeMissReply(int type, int tid, int pid, uint64_t va, uint64_t paddr,
-                   QEMUMissReply *miss_reply) {
-  miss_reply->type = sMissReply;
-  miss_reply->tid = tid;
-  miss_reply->pid = pid;
-  miss_reply->vpn_hi = VPN_GET_HI(va);
-  miss_reply->vpn_lo = VPN_GET_LO(va);
-
-  miss_reply->permission = type;
-
-  miss_reply->ppn = GET_PPN_FROM_PADDR(paddr);
-}
-
 void requireStateIsIdentical(const ArmflexArchState &state1,
                              const ArmflexArchState &state2) {
   REQUIRE(state1.pc == state2.pc);
@@ -53,33 +24,31 @@ void initArchState(ArmflexArchState *state, uint64_t pc) {
 void synchronizePage(FPGAContext *ctx, int asid, uint8_t *page, uint64_t vaddr,
                      uint64_t paddr, bool expect_modified) {
   INFO("Synchronize page");
-  QEMUPageEvictRequest evict_request;
+  MessageFPGA evict_request;
   makeEvictRequest(asid, vaddr, &evict_request);
   sendMessageToFPGA(ctx, &evict_request, sizeof(evict_request));
 
   // Let's query message. It should send an eviction message
   INFO("1. Query Eviction Notification");
-  uint32_t buffer[16] = {0};
-  queryMessageFromFPGA(ctx, (uint8_t *)buffer);
+  MessageFPGA message;
+  queryMessageFromFPGA(ctx, (uint8_t *)&message);
 
-  PageEvictNotification *evict_notify = (PageEvictNotification *)buffer;
-  REQUIRE(evict_notify->type == sEvictNotify);
-  REQUIRE(evict_notify->pid == asid);
-  REQUIRE(evict_notify->vpn_hi == VPN_GET_HI(vaddr));
-  REQUIRE(evict_notify->vpn_lo == VPN_GET_LO(vaddr));
+  REQUIRE(message.type == sEvictNotify);
+  REQUIRE(message.asid == asid);
+  REQUIRE(message.vpn_hi == VPN_GET_HI(vaddr));
+  REQUIRE(message.vpn_lo == VPN_GET_LO(vaddr));
 
   // Let's query message. It should send an eviction completed message
   INFO("2. Query Eviction Notification Complete");
-  queryMessageFromFPGA(ctx, (uint8_t *)buffer);
+  queryMessageFromFPGA(ctx, (uint8_t *)&message);
 
-  evict_notify = (PageEvictNotification *)buffer;
-  REQUIRE(evict_notify->type == sEvictDone);
-  REQUIRE(evict_notify->pid == asid);
-  REQUIRE(evict_notify->vpn_hi == VPN_GET_HI(vaddr));
-  REQUIRE(evict_notify->vpn_lo == VPN_GET_LO(vaddr));
-  REQUIRE(evict_notify->ppn == GET_PPN_FROM_PADDR(paddr));
-  REQUIRE(evict_notify->permission == DATA_STORE);
-  REQUIRE(evict_notify->modified == expect_modified);
+  REQUIRE(message.type == sEvictDone);
+  REQUIRE(message.asid == asid);
+  REQUIRE(message.vpn_hi == VPN_GET_HI(vaddr));
+  REQUIRE(message.vpn_lo == VPN_GET_LO(vaddr));
+  REQUIRE(message.EvictDone.ppn == GET_PPN_FROM_PADDR(paddr));
+  REQUIRE(message.EvictDone.permission == DATA_STORE);
+  REQUIRE(message.EvictDone.modified == expect_modified);
 
   fetchPageFromFPGA(ctx, paddr, page);
 }

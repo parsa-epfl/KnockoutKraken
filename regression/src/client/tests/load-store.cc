@@ -91,7 +91,7 @@ static int test_ldst_all_sizes_pair(FPGAContext *ctx) {
   fclose(f);
 
   INFO("- Push Instruction Page");
-  QEMUMissReply pf_reply;
+  MessageFPGA pf_reply;
   pushPageToFPGA(ctx, page_inst_paddr, page);
   makeMissReply(INST_FETCH, -1, asid, pc, page_inst_paddr, &pf_reply);
   sendMessageToFPGA(ctx, &pf_reply, sizeof(pf_reply));
@@ -210,18 +210,17 @@ TEST_CASE("out-of-page-bound-pair-load") {
   REQUIRE(transplant_start(&ctx, thid) == 0);
 
   // FPGA requires instruction page.
-  uint8_t message_buffer[64] = {0};
-  queryMessageFromFPGA(&ctx, message_buffer);
+  MessageFPGA message;
+  queryMessageFromFPGA(&ctx, (uint8_t *) &message);
   INFO("- Check page fault request");
-  PageFaultNotification *page_fault = (PageFaultNotification *)message_buffer;
-  REQUIRE(page_fault->type == sPageFaultNotify);
-  REQUIRE(page_fault->permission == INST_FETCH);
-  REQUIRE(page_fault->pid == asid);
-  REQUIRE(page_fault->vpn_lo == VPN_GET_LO(state.pc));
-  REQUIRE(page_fault->vpn_hi == VPN_GET_HI(state.pc));
+  REQUIRE(message.type == sPageFaultNotify);
+  REQUIRE(message.asid == asid);
+  REQUIRE(message.vpn_lo == VPN_GET_LO(state.pc));
+  REQUIRE(message.vpn_hi == VPN_GET_HI(state.pc));
+  REQUIRE(message.PageFaultNotif.permission == INST_FETCH);
 
   INFO("- Push instruction page");
-  QEMUMissReply pf_reply;
+  MessageFPGA pf_reply;
   pushPageToFPGA(&ctx, inst_pa, page);
   makeMissReply(INST_FETCH, thid, asid, state.pc, inst_pa, &pf_reply);
   sendMessageToFPGA(&ctx, &pf_reply, sizeof(pf_reply));
@@ -241,19 +240,17 @@ TEST_CASE("out-of-page-bound-pair-load") {
   MemoryAccessType expected_access_types[] = {DATA_LOAD, DATA_LOAD, DATA_STORE};
   for(int i = 0; i < 3; ++i){
     INFO("- Query " << i << " page fault message");
-    queryMessageFromFPGA(&ctx, message_buffer);
-    PageFaultNotification *page_fault = (PageFaultNotification *)message_buffer;
-    REQUIRE(page_fault->type == sPageFaultNotify);
-    CHECK(page_fault->permission == expected_access_types[i]);
-    REQUIRE(page_fault->pid == asid);
-    REQUIRE(page_fault->vpn_lo == VPN_GET_LO(expected_vas[i]));
-    REQUIRE(page_fault->vpn_hi == VPN_GET_HI(expected_vas[i]));
+    queryMessageFromFPGA(&ctx, (uint8_t *) &message);
+    REQUIRE(message.type == sPageFaultNotify);
+    REQUIRE(message.asid == asid);
+    REQUIRE(message.vpn_lo == VPN_GET_LO(expected_vas[i]));
+    REQUIRE(message.vpn_hi == VPN_GET_HI(expected_vas[i]));
+    CHECK(message.PageFaultNotif.permission == expected_access_types[i]);
 
     INFO("- Resolve " << i << " page fault");
-    QEMUMissReply data_pf_reply;
     pushPageToFPGA(&ctx, pas[i], data_pages[i]);
-    makeMissReply(expected_access_types[i], thid, asid, expected_vas[i], pas[i], &data_pf_reply);
-    sendMessageToFPGA(&ctx, &data_pf_reply, sizeof(data_pf_reply));
+    makeMissReply(expected_access_types[i], thid, asid, expected_vas[i], pas[i], &pf_reply);
+    sendMessageToFPGA(&ctx, &pf_reply, sizeof(pf_reply));
   }
 
   INFO("- Transplat back");

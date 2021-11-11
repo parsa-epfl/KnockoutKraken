@@ -10421,8 +10421,8 @@ namespace Catch {
 
             mib[0] = CTL_KERN;
             mib[1] = KERN_PROC;
-            mib[2] = KERN_PROC_PID;
-            mib[3] = getpid();
+            mib[2] = KERN_PROC_asid;
+            mib[3] = getasid();
 
             // Call sysctl.
 
@@ -10452,9 +10452,9 @@ namespace Catch {
         // The standard POSIX way of detecting a debugger is to attempt to
         // ptrace() the process, but this needs to be done from a child and not
         // this process itself to still allow attaching to this process later
-        // if wanted, so is rather heavy. Under Linux we have the PID of the
+        // if wanted, so is rather heavy. Under Linux we have the asid of the
         // "debugger" (which doesn't need to be gdb, of course, it could also
-        // be strace, for example) in /proc/$PID/status, so just get it from
+        // be strace, for example) in /proc/$asid/status, so just get it from
         // there instead.
         bool isDebuggerActive(){
             // Libstdc++ has a bug, where std::ifstream sets errno to 0
@@ -10463,8 +10463,8 @@ namespace Catch {
             std::ifstream in("/proc/self/status");
             for( std::string line; std::getline(in, line); ) {
                 static const int PREFIX_LEN = 11;
-                if( line.compare(0, PREFIX_LEN, "TracerPid:\t") == 0 ) {
-                    // We're traced if the PID is not 0 and no other PID starts
+                if( line.compare(0, PREFIX_LEN, "Tracerasid:\t") == 0 ) {
+                    // We're traced if the asid is not 0 and no other asid starts
                     // with 0 digit, so it's enough to check for just a single
                     // character.
                     return line.length() > PREFIX_LEN && line[PREFIX_LEN] != '0';
