@@ -31,17 +31,22 @@ typedef struct MessageFPGA
     {
         struct
         { // Common types
-            MessageType type;
-            uint32_t vpn_lo;
-            uint32_t vpn_hi;
+            uint32_t type;
             uint32_t asid;
+            union {
+                uint64_t vpn;
+                struct {
+                    uint32_t vpn_lo;
+                    uint32_t vpn_hi;
+                };
+            };
         };
         struct
         { // type == 2
             MessageType type;
+            uint32_t asid;
             uint32_t vpn_lo;
             uint32_t vpn_hi;
-            uint32_t asid;
             uint32_t permission;
             uint32_t thid; // -1 means no wake up.
             uint32_t ppn;
@@ -49,26 +54,28 @@ typedef struct MessageFPGA
         struct
         { // type == 3
             MessageType type;
+            uint32_t asid;
             uint32_t vpn_lo;
             uint32_t vpn_hi;
-            uint32_t asid;
             uint32_t old_ppn;
         } EvictReply;
         struct
         { // type == 4
             MessageType type;
+            uint32_t asid;
             uint32_t vpn_lo;
             uint32_t vpn_hi;
-            uint32_t asid;
+
             uint32_t permission;
             uint32_t thid;
         } PageFaultNotif;
         struct
         { // type == 5
             MessageType type;
+            uint32_t asid;
             uint32_t vpn_lo;
             uint32_t vpn_hi;
-            uint32_t asid;
+
             uint32_t ppn;
             uint32_t permission;
             uint32_t modified;
@@ -76,9 +83,10 @@ typedef struct MessageFPGA
         struct
         { // type == 6
             MessageType type;
+            uint32_t asid;
             uint32_t vpn_lo;
             uint32_t vpn_hi;
-            uint32_t asid;
+
             uint32_t ppn;
             uint32_t permission;
             uint32_t modified;
@@ -86,15 +94,14 @@ typedef struct MessageFPGA
         struct
         { // type == 7
             MessageType type;
+            uint32_t asid;
             uint32_t vpn_lo;
             uint32_t vpn_hi;
-            uint32_t asid;
         } PageEvictRequest;
         uint32_t words[16];
         uint8_t bytes[64];
     };
 } MessageFPGA;
-
 
 // QEMU resolves a page fault.
 #define VPN_ALIGN(va) (va >> 12)
