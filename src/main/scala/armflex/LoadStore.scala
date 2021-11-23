@@ -406,8 +406,8 @@ class MemoryUnit(
   mem_io.tlb.req.bits.perm := Mux(tlbReqQ.io.deq.bits.isLoad, DATA_LOAD.U, DATA_STORE.U)
   mem_io.tlb.req.bits.asid := DontCare // Defined higher in the hierarchy
   cacheReq.inst := tlbMeta
-  cacheReq.paddr(0) := mem_io.tlb.resp.bits.addr
-  cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr
+  cacheReq.paddr(0) := mem_io.tlb.resp.bits.addr | tlbReqQ.io.deq.bits.req(0).addr(11,0) // PAGE_SIZE
+  cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr | tlbReqQ.io.deq.bits.req(1).addr(11,0)
   cacheReq.firstIsCompleted := false.B
   cacheReqQ.io.enq.bits := cacheReq
 
@@ -451,11 +451,11 @@ class MemoryUnit(
   // Resp TLB management -----
   cacheReq.blockMisaligned := isBlockMisaligned(cacheReq.paddr(0), cacheReq.paddr(1))
   when(mem_io.tlb.resp.fire && sTLB_state =/= sTLB_intermediateResp) {
-    cacheReq.paddr(0) := mem_io.tlb.resp.bits.addr
-    cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr + (1.U << tlbMeta.size)
+    cacheReq.paddr(0) := mem_io.tlb.resp.bits.addr                            | tlbReqQ.io.deq.bits.req(0).addr(11,0)
+    cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr + (1.U << tlbMeta.size)    | tlbReqQ.io.deq.bits.req(1).addr(11,0)
     when(isPairPageMisaligned(tlbMeta)) {
-      cacheReq.paddr(0) := tlbPair_paddr1
-      cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr
+      cacheReq.paddr(0) := tlbPair_paddr1            | tlbReqQ.io.deq.bits.req(0).addr(11,0)
+      cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr | tlbReqQ.io.deq.bits.req(1).addr(11,0)
       cacheReq.blockMisaligned := true.B
     }
 
