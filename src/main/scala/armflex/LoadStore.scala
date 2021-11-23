@@ -232,17 +232,21 @@ class LDSTUnit extends Module {
   minst.isLoad := isLoad
 
   minst.req(0).addr := ldst_address
-  minst.req(0).data := data_2
-  minst.req(0).reg := io.dinst.rd.bits
+  minst.req(0).data := data_1
+  minst.req(0).reg := io.dinst.rs2
   // For Pair LD/ST
   val dbytes = 1.U << size
-  minst.isPair :=
-    (io.dinst.itype === I_LSPairPr ||
-      io.dinst.itype === I_LSPair ||
-      io.dinst.itype === I_LSPairPo)
+  minst.isPair := isPair
   minst.req(1).addr := ldst_address + dbytes
   minst.req(1).data := data_1
   minst.req(1).reg := io.dinst.rs2
+
+  when(isPair) {
+    // Pair stores changes destination
+    minst.req(0).data := data_2
+    minst.req(0).reg := io.dinst.rd.bits
+  }
+
 
   // if wback then
   //   if wb_unknown then
