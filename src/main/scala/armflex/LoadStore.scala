@@ -378,7 +378,7 @@ class MemoryUnit(
   private def isPairPageMisaligned(minst: MInstTag[UInt]) = minst.isPair && // Is Pair
     minst.req(0).addr(12) =/= minst.req(1).addr(12) // Page is different
 
-  private def isBlockMisaligned(addr1: UInt, addr2: UInt) = addr1(log2Ceil(params.blockSize / 8)) =/= addr2(log2Ceil(params.blockSize / 8))
+  private def isBlockMisaligned(addr1: UInt, addr2: UInt) = params.getBlockAddrBits(addr1) =/= params.getBlockAddrBits(addr2)
 
   private val tlbPair_paddr1 = RegEnable(mem_io.tlb.resp.bits.addr, mem_io.tlb.resp.fire)
   private val tlbDropInst = WireInit(false.B) // Drop instruction on miss
@@ -492,15 +492,18 @@ class MemoryUnit(
 
   // Select, align and mask bytes in block
   private val selReqIdx = secondAccessPair.asUInt // Select second one in case it is the second access
-  cacheAdaptorReqW_en := maskByteEn << cacheAdaptorMInstInput.inst.req(selReqIdx).addr(log2Ceil(params.blockSize / 8), 0)
+  private val maskEn_shift = WireInit(params.getBlockAddrBits(cacheAdaptorMInstInput.inst.req(selReqIdx).addr))
   when(cacheAdaptorMInstInput.inst.isLoad) {
     cacheAdaptorReqW_en := 0.U
+  }.otherwise {
+    cacheAdaptorReqW_en := maskByteEn << maskEn_shift
   }
-  cacheAdaptorReqData := cacheAdaptorMInstInput.inst.req(selReqIdx).data << Cat(cacheAdaptorMInstInput.inst.req(selReqIdx).addr(log2Ceil(params.blockSize / 8), 0), 0.U(3.W))
+
+ cacheAdaptorReqData := cacheAdaptorMInstInput.inst.req(selReqIdx).data << Cat(params.getBlockAddrBits(cacheAdaptorMInstInput.inst.req(selReqIdx).addr), 0.U(3.W))
   when(singleAccessPair) {
     cacheAdaptorReqData :=
-      cacheAdaptorMInstInput.inst.req(1).data << Cat(cacheAdaptorMInstInput.inst.req(1).addr(log2Ceil(params.blockSize / 8), 0), 0.U(3.W)) |
-        cacheAdaptorMInstInput.inst.req(0).data << Cat(cacheAdaptorMInstInput.inst.req(0).addr(log2Ceil(params.blockSize / 8), 0), 0.U(3.W))
+      cacheAdaptorMInstInput.inst.req(1).data << Cat(params.getBlockAddrBits(cacheAdaptorMInstInput.inst.req(1).addr), 0.U(3.W)) |
+        cacheAdaptorMInstInput.inst.req(0).data << Cat(params.getBlockAddrBits(cacheAdaptorMInstInput.inst.req(0).addr), 0.U(3.W))
   }
 
   cacheAdaptor.pipe_io.req.port.bits.data := cacheAdaptorReqData

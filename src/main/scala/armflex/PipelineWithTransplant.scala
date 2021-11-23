@@ -26,6 +26,8 @@ class PipelineParams(
 
   val axiDataW = 32
 
+  def getBlockAddrBits(addr: UInt) = addr(log2Ceil(blockSize / 8) - 1, 0)
+
   def simLog(str: Printable) {
     if (simVerbose) {
       printf(str)
