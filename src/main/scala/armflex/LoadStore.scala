@@ -400,7 +400,7 @@ class MemoryUnit(
 
   // Data
   mem_io.tlb.req.bits.addr := Mux(sTLB_state === sTLB_pair_req,
-                                  tlbReqQ.io.deq.bits.req(0).addr + (1.U << tlbReqQ.io.deq.bits.size),
+                                  tlbReqQ.io.deq.bits.req(1).addr,
                                   tlbReqQ.io.deq.bits.req(0).addr)
   mem_io.tlb.req.bits.thid := tlbReqQ.io.deq.bits.tag
   mem_io.tlb.req.bits.perm := Mux(tlbReqQ.io.deq.bits.isLoad, DATA_LOAD.U, DATA_STORE.U)
