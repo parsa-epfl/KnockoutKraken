@@ -113,6 +113,11 @@ class LDSTUnit extends Module {
 
   val io = IO(new LDSTUnitIO)
 
+  // WZR, XZR, and SP
+  val rVal1 = WireInit(Mux(io.dinst.rs1 === 31.U, 0.U, io.rVal1))
+  val rVal2 = WireInit(Mux(io.dinst.rs2 === 31.U, 0.U, io.rVal2))
+  val rVal3 = WireInit(Mux(io.dinst.imm(4,0) === 31.U, 0.U, io.rVal3))
+
   // Decode All variants
   val size = WireInit(io.dinst.op(1, 0))
   val isLoad = WireInit(io.dinst.op(2))
@@ -129,10 +134,15 @@ class LDSTUnit extends Module {
   val option = io.dinst.shift_val.bits
   val shift = Mux(io.dinst.shift_val.valid, size, 0.U)
   val extendReg = Module(new ExtendReg)
-  extendReg.io.value := io.rVal2
+  extendReg.io.value := rVal2
   extendReg.io.option := option
   extendReg.io.shift := shift
 
+  private val isPair = WireInit(
+    io.dinst.itype === I_LSPairPr ||
+    io.dinst.itype === I_LSPair   ||
+    io.dinst.itype === I_LSPairPo)
+ 
   when(io.dinst.itype === I_LSUImm) {
     wback := false.B
     postindex := false.B
@@ -173,8 +183,9 @@ class LDSTUnit extends Module {
   //
   when(io.dinst.rs1 === 31.U) {
     // CheckSPAAligment(); Checked in MemoryArbiter - DataAligner
+    rVal1 := io.rVal1
   }
-  val base_address = WireInit(io.rVal1)
+  val base_address = WireInit(rVal1)
 
   //  if !postindex then
   //     address = address + offset
@@ -210,8 +221,8 @@ class LDSTUnit extends Module {
   // data = X[t]
   // Mem[address, datasize DIV 8, AccType_NORMAL] = data
 
-  val data_1 = WireInit(io.rVal2) // data_1 = Rt = rVal2
-  val data_2 = WireInit(io.rVal3) // data_2 = Rt2 = rVal3
+  val data_1 = WireInit(rVal2) // data_1 = Rt = rVal2
+  val data_2 = WireInit(rVal3) // data_2 = Rt2 = rVal3
 
   // Prepare MInst
   val minst = Wire(new MInst)
