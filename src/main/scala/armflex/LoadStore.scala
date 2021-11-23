@@ -687,13 +687,15 @@ class MemoryUnit(
       assert(cacheReqMisalignedQ.io.deq.valid || cacheReqQ.io.deq.valid, "Cache requests must come from one of two queues")
     }
     when(cacheAdaptor.pipe_io.resp.port.fire) {
-      when(cacheAdaptor.pipe_io.resp.meta.blockMisaligned && !cacheAdaptor.pipe_io.resp.meta.firstIsCompleted) {
-        assert(!doneInst.io.enq.fire, "On misaligned first pair access, instruction must not be pushed to completed insts")
-        assert(cacheReqMisalignedQ.io.enq.fire, "On misaligned first pair access, instruction must be pushed to rerun queue")
-        assert(cacheReqMisalignedQ.io.enq.bits.firstIsCompleted, "On misaligned first pair access, firstIsCompleted flag must be set")
-      }.elsewhen(cacheAdaptor.pipe_io.resp.meta.blockMisaligned && cacheAdaptor.pipe_io.resp.meta.firstIsCompleted) {
-        assert(!cacheReqMisalignedQ.io.enq.fire, "On misalgined second pair access, instruction must no be pushed to rerun queue")
-        assert(doneInst.io.enq.fire, "On misaligned second pair access, instruction must be pushed to completed insts")
+      when(cacheAdaptor.pipe_io.resp.meta.inst.isPair) {
+        when(cacheAdaptor.pipe_io.resp.meta.blockMisaligned && !cacheAdaptor.pipe_io.resp.meta.firstIsCompleted) {
+          assert(!doneInst.io.enq.fire, "On misaligned first pair access, instruction must not be pushed to completed insts")
+          assert(cacheReqMisalignedQ.io.enq.fire, "On misaligned first pair access, instruction must be pushed to rerun queue")
+          assert(cacheReqMisalignedQ.io.enq.bits.firstIsCompleted, "On misaligned first pair access, firstIsCompleted flag must be set")
+        }.elsewhen(cacheAdaptor.pipe_io.resp.meta.blockMisaligned && cacheAdaptor.pipe_io.resp.meta.firstIsCompleted) {
+          assert(!cacheReqMisalignedQ.io.enq.fire, "On misalgined second pair access, instruction must no be pushed to rerun queue")
+          assert(doneInst.io.enq.fire, "On misaligned second pair access, instruction must be pushed to completed insts")
+        }
       }.otherwise {
         assert(doneInst.io.enq.fire, "On normal access, instruction must be pushed to completed insts")
       }
