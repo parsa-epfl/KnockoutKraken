@@ -561,7 +561,7 @@ class MemoryUnit(
   // Manage responses from the cache, if pair not done, push it to be re-executed
   private val cachePipeResp = WireInit(cacheAdaptor.pipe_io.resp)
   private val respPairIdx = cachePipeResp.meta.firstIsCompleted.asUInt
-  private val alignedDataResp: UInt = WireInit(cachePipeResp.port.bits.data >> Cat(cachePipeResp.meta.inst.req(respPairIdx).addr(log2Ceil(params.blockSize / 8), 0), 0.U(3.W)))
+  private val alignedDataResp: UInt = WireInit(cachePipeResp.port.bits.data >> Cat(params.getBlockAddrBits(cachePipeResp.meta.inst.req(respPairIdx).addr), 0.U(3.W)))
   // If blockMisaligned, save initial load in req data
   // when(cachePipeResp.meta.inst.isLoad) { } // Not necessary, overwrite store data given already executed
   cacheAdaptor.pipe_io.resp.port.ready := true.B // Backpressure is managed by ensuring enough
