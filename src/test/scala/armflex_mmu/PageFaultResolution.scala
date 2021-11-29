@@ -103,7 +103,7 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
       // 3.2 Send eviction start
       dut.expectQEMUMessage(
         5,
-        Seq(0x20, 0x0, 0x10, 0x10, 1, 1)
+        Seq(0x10, 0x20, 0x0, 0x10, 1, 1)
       )
       // 3.3 Cache Eviction
       for(i <- 0 until 64){
@@ -121,7 +121,7 @@ class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
       // 3.5 Send eviction done
       dut.expectQEMUMessage(
         6,
-        Seq(0x20, 0x0, 0x10, 0x10, 1, 1)
+        Seq(0x10, 0x20, 0x0, 0x10, 1, 1)
       )
 
       // 4. It should insert the PTE to page table

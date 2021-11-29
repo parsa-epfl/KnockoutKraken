@@ -72,40 +72,8 @@ class PageWalkTester extends FreeSpec with ChiselScalatestTester {
       println("Page fault should have been triggered. Check it now.")
       
       dut.expectQEMUMessage(
-        4, Seq(0xABC, 0, 0x10, 0, 1)
+        4, Seq(0x10, 0xABC, 0, 0, 1)
       )
-
-      // dut.waitForSignalToBe(dut.M_AXI_QEMU_MQ.aw.awvalid)
-      // dut.M_AXI_QEMUTX.aw.awaddr.expect(0.U)
-      // // ack it
-      // timescope {
-      //   dut.M_AXI_QEMUTX.aw.awready.poke(true.B)
-      //   dut.tk()
-      // }
-      // // wait for the data
-      // println("Wait for the data part to be there")
-      // dut.waitForSignalToBe(dut.M_AXI_QEMUTX.w.wvalid)
-      // // What's the data?
-      // // 0: valid 1: message_type(4.U) 2: tag.vpn(31:0), 3: tag.vpn(51, 32), 4: process_id, 5: perm
-      // val data_seq = Seq[BigInt](1, 4, 0xABC, 0, 10, 0)
-      // dut.M_AXI_QEMUTX.w.wdata.expect(
-      //   data_seq.reverse.foldLeft(BigInt(0))({ case(res, cur) =>
-      //     (res << 32) | cur
-      //   }).U
-      // )
-      // dut.M_AXI_QEMUTX.w.wlast.expect(true.B)
-      // // Mark the writeback accepted.
-      // timescope {
-      //   dut.M_AXI_QEMUTX.w.wready.poke(true.B)
-      //   dut.tk()
-      // }
-      // // write response
-      // timescope {
-      //   dut.M_AXI_QEMUTX.b.bvalid.poke(true.B)
-      //   dut.M_AXI_QEMUTX.b.bresp.poke(0.U)
-      //   dut.M_AXI_QEMUTX.b.bready.expect(true.B)
-      //   dut.tk()
-      // }
     }
   }
 }
