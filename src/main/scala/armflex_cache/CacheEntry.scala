@@ -34,7 +34,7 @@ class CacheEntry(param: DatabankParams) extends Bundle {
     val res = Wire(new CacheEntry(param))
     res.d := 
       !refill && // refilling should not cause the dirty
-      mask.orR() =/= 0.U // no mask 
+        (mask.orR() =/= 0.U || this.d) // no mask, or the original block is dirty.
     res.tag := this.tag
     res.v := valid
     val newdata = VecInit(0.U(param.blockSize.W).asBools())
