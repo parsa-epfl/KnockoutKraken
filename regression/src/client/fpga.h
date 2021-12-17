@@ -9,6 +9,7 @@ typedef struct AXIBaseAddress {
   uint32_t tt;
   uint32_t transplant_data;
   uint32_t transplant_ctl;
+  uint32_t transplant_stopCPU;
   uint32_t message_queue; 
 
   uint64_t dram_base;

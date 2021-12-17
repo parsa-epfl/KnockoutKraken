@@ -16,6 +16,7 @@ add_executable(
   src/client/tests/asm/asm_helpers.c
   src/client/tests/load-store.cc
   src/client/tests/back-pressure.cc
+  src/client/tests/host-control.cc
 )
 
 if(AWS_FPGA_LIBRARY_PATH)

@@ -21,6 +21,7 @@ object TransplantIO extends Bundle {
     val rfile_wr = new RFileIO.WRPort(thidN)
     val pregs = Input(new PStateRegs)
     val done = Input(ValidTag(thidN))
+    val stopCPU = Output(UInt(thidN.W))
   }
   class Mem2Trans(val thidN: Int) extends Bundle {
     val instFault = Input(ValidTag(thidN))
@@ -28,6 +29,7 @@ object TransplantIO extends Bundle {
   }
   class Host2Trans(val thidN: Int) extends Bundle {
     val pending = Input(UInt(thidN.W))
+    val stopCPU = Input(UInt(thidN.W))
   }
   class Trans2Host(val thidN: Int, val bramCfg: BRAMParams) extends Bundle {
     val done = Output(ValidTag(thidN))
@@ -162,6 +164,7 @@ class TransplantUnit(thidN: Int) extends MultiIOModule {
   trans2cpu.rfile_wr.addr := RegNext(Cat(thread, currReg))
   trans2cpu.rfile_wr.data := hostTransPort.DO
   trans2cpu.rfile_wr.tag := RegNext(thread)
+  cpu2trans.stopCPU := host2trans.stopCPU
 
   RFileIO.wr2BRAM(stateBufferWrPort, cpu2trans.rfile_wr, (currReg.getWidth - REG_SZ))
   when(state === s_TRANS && stateDir === s_BRAM2CPU) {

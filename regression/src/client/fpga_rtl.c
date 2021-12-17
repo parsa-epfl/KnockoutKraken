@@ -12,9 +12,7 @@
 #include <string.h>
 #include <stdbool.h>
 
-#ifndef AWS_FPGA
 #define DRAM_AXI_BASE_ADDR (1UL << 40)
-#endif
 
 /**
  * @file the interface for simulator.
@@ -48,6 +46,7 @@ int initFPGAContext(FPGAContext *c){
     goto failed;
   }
 
+  printf("Done with sockets\n");
   return 0;
 
 failed:
