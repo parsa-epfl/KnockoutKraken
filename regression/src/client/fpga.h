@@ -51,3 +51,10 @@ int writeAXIL(const struct FPGAContext *c, uint32_t addr, uint32_t data);
 int readAXI(const struct FPGAContext *c, uint64_t addr, void *data, uint64_t size_in_byte);
 int writeAXI(const struct FPGAContext *c, uint64_t addr, void *data, uint64_t size_in_byte);
 int releaseFPGAContext(struct FPGAContext *c);
+
+#ifndef AWS_FPGA
+enum MagicTypes {
+  cycleStep
+};
+int writeAXILMagic(const struct FPGAContext *c, uint32_t addr, uint32_t data);
+#endif

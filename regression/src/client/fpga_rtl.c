@@ -142,4 +142,21 @@ int writeAXI(const FPGAContext *c, uint64_t addr, void *data, uint64_t size_in_b
   return 0;
 }
 
+int writeAXILMagic(const FPGAContext *c, uint32_t addr, uint32_t data){
+  MemoryRequestAXIL request;
+  request.addr = addr;
+  request.byte_size = 4;
+  request.is_write = 0xDEED;
+  request.w_data = data;
+  if(c->axil_fd < 0){
+    perror("AXIL socket not valid.\n");
+    return -1;
+  }
+  int res = sendIPC((uint8_t *) &request, c->axil_fd, sizeof(MemoryRequestAXIL));
+  if(res != 0) return res;
+  uint32_t ack_data;
+  res = recvIPC((uint8_t *) &ack_data, c->axil_fd,  4);
+  if(res != 0) return res;
+  return 0;
+}
 #endif

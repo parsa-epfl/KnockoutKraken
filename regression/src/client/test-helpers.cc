@@ -66,3 +66,7 @@ void makeZeroPage(uint8_t *page) {
     page_word[word] = 0xFFFFFFFF;
   }
 }
+
+void advanceTicks(const FPGAContext *c, int ticks) {
+  writeSimCtrl(c, cycleStep, ticks);
+}

@@ -127,6 +127,21 @@ void AXILRoutine(TopDUT &dut, IPCServer &ipc) {
       TICK(dut);
     }
 
+    if (result.is_write == 0xDEED) {
+      // Sim magic command to advance cycles
+      for(int cycle = 0; cycle < result.w_data; cycle ++) {
+        TICK(dut);
+      }
+      uint32_t success = 0;
+      if (!ipc.reply(&success, 1)) {
+        dut.reportError("   ERROR:SOCKET:AXIL:WR:REPLY\n");
+        TICK(dut);
+        goto wait_for_join;
+      }
+      continue; // Get next message
+    }
+    assert(result.is_write != 0xDEED);
+
     CHECK(dut, result.byte_size == 4, "AXIL write size must be 4B."); // only one word.
     if (result.is_write) {
       printf("SHELL:HOST:AXIL:WR[0x%lx]:BURST[%lu]:DATA[%x]\n", result.addr, result.byte_size, result.w_data);
