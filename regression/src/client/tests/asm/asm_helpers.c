@@ -48,3 +48,14 @@ void initState_ldst_all_sizes_pair(
   state->xregs[3] = mem_addr_st;
   state->xregs[4] = step_size;
 };
+
+void initState_infinite_loop(
+  ArmflexArchState *state,
+  bool loop
+) {
+  if(loop) {
+    state->xregs[0] = 0;
+  } else {
+    state->xregs[0] = 1;
+  }
+};
