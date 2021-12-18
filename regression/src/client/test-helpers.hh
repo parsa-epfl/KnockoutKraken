@@ -28,3 +28,4 @@ void synchronizePage(FPGAContext *ctx, int asid, uint8_t *page, uint64_t vaddr,
 // Page initialization
 void makeDeadbeefPage(uint8_t *pages, size_t bytes);
 void makeZeroPage(uint8_t *page);
+void advanceTicks(const FPGAContext *c, int ticks);

@@ -138,7 +138,7 @@ int transplant_pending(const FPGAContext *c, uint32_t *pending_threads);
 int transplant_freePending(const FPGAContext *c, uint32_t pending_threads);
 int transplant_waitTillPending(const FPGAContext *c, uint32_t *pending_threads);
 int transplant_start(const FPGAContext *c, uint32_t thread_id);
-
+int transplant_stopCPU(const FPGAContext *c, uint32_t thread_id);
 
 // See cpu.h to match MMUAccessType
 typedef enum MemoryAccessType {
@@ -193,3 +193,7 @@ static inline void makeMissReply(int type, int thid, int asid, uint64_t va, uint
     miss_reply->MissReply.permission = type;
     miss_reply->MissReply.ppn = GET_PPN_FROM_PADDR(paddr);
 }
+
+#ifndef AWS_FPGA
+int writeSimCtrl(const FPGAContext *c, int type, int value);
+#endif

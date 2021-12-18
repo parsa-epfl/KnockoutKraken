@@ -23,3 +23,8 @@ void initState_ldst_all_sizes_pair(
   uint64_t mem_addr_st,
   uint64_t step_size
 );
+
+void initState_infinite_loop(
+  ArmflexArchState *state,
+  bool loop
+);

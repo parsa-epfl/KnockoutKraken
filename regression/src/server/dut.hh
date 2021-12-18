@@ -10,6 +10,24 @@
 
 #include "verilated.h"
 #include "verilated_fst_c.h"
+
+#define TICK(dut)                                                   \
+  if (dut.waitForTick(lock))                                        \
+    return;
+
+#define CHECK(dut, state, message)                                  \
+  if (!(state)) {                                                   \
+    printf("Assertion Failed (Line: %d): %s\n", __LINE__, message); \
+    dut.reportError("Failed Assertion");                            \
+    goto wait_for_join;                                             \
+  }
+
+#define BLOCK_SIZE     (512)
+#define WORD_SIZE      (32)
+#define WORDS_PER_BLOCK (BLOCK_SIZE/WORD_SIZE)
+#define BYTES_PER_BLOCK (BLOCK_SIZE/8)
+#define BYTE_TO_WORD(addr) (addr >> 2) // log2(32/8) = 2
+
 class TopDUT {
 public:
   TopDUT(size_t dram_size = 1024 * 1024 * 16);
@@ -84,7 +102,7 @@ public:
   std::mutex &getLock() {
     return dut_mutex;
   }
-
+  
   /**
    * Decouple a routine from the dut.
    * 
@@ -122,7 +140,6 @@ public:
 
 private:
   std::condition_variable subroutine_cv;
-  std::mutex subroutine_cv_m;
 
   std::condition_variable clock_cv;
   std::mutex dut_mutex;

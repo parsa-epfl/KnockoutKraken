@@ -45,7 +45,7 @@ class PipelineAxi(params: PipelineParams) extends MultiIOModule {
 
   private val uAxilToCSR = Module(new AXI4LiteCSR(params.axiDataW, csrAddr_range._2 - csrAddr_range._1))
 
-  private val transplantCtrl_regCount = 2
+  private val transplantCtrl_regCount = 3
   private val cfgBusCSR_archstate = new CSRBusSlave(0, 0x8000 >> 2)
   private val cfgBusCSR_thid2asid = new CSRBusSlave(0x8000 >> 2, params.thidN) // Address is 32b word addressed
   private val cfgBusCSR_transplant = new CSRBusSlave(0x9000 >> 2, transplantCtrl_regCount) // Address is 32b word addressed
@@ -54,7 +54,8 @@ class PipelineAxi(params: PipelineParams) extends MultiIOModule {
   private val uCSRthid2asid = Module(new CSR_thid2asid(params.thidN, params.asidW, thid2asidPortsN = 2))
   private val uCSR2ToTransplant = Module(new CSR(params.axiDataW, transplantCtrl_regCount))
 
-  private val uCSRmux = Module(new CSRBusMasterToNSlaves(params.axiDataW, Seq(cfgBusCSR_archstate, cfgBusCSR_thid2asid, cfgBusCSR_transplant), csrAddr_range))
+  private val uCSRmux = Module(new CSRBusMasterToNSlaves(params.axiDataW, Seq(
+                              cfgBusCSR_archstate, cfgBusCSR_thid2asid, cfgBusCSR_transplant), csrAddr_range))
   uCSRmux.masterBus <> uAxilToCSR.io.bus
   uCSRmux.slavesBus(0) <> uCSRToArchState.io.bus
   uCSRmux.slavesBus(1) <> uCSRthid2asid.bus
@@ -68,7 +69,10 @@ class PipelineAxi(params: PipelineParams) extends MultiIOModule {
 
   SetCSR(trans2host.asUInt, uCSR2ToTransplant.io.csr(0), params.axiDataW)
   val pendingHostTrans = ClearCSR(host2transClear.asUInt, uCSR2ToTransplant.io.csr(1), params.axiDataW)
+  val host2transStopCPU = ClearCSR(trans2host.asUInt, uCSR2ToTransplant.io.csr(2), params.axiDataW)
+
   pipeline.hostIO.host2trans.pending := pendingHostTrans
+  pipeline.hostIO.host2trans.stopCPU := host2transStopCPU
 
   // BRAM (Architecture State)
   pipeline.hostIO.port <> uCSRToArchState.io.port
@@ -161,6 +165,7 @@ class PipelineWithTransplant(params: PipelineParams) extends MultiIOModule {
   transplantU.host2trans <> hostIO.host2trans
   transplantU.trans2host <> hostIO.trans2host
   transplantU.hostBramPort <> hostIO.port
+  pipeline.transplantIO.stopCPU := transplantU.cpu2trans.stopCPU
 
   if(false) { // TODO Conditional assertions and printing
     when(archstate.pstate.commit.next.valid) {
