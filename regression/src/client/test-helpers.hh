@@ -4,14 +4,8 @@ extern "C" {
 #include "fpga_interface.h"
 }
 
-#define GET_PID(th) ((th + 1) << 4)
+#define GET_asid(th) ((th + 1) << 4)
 #include "catch.hpp"
-
-void makeEvictRequest(int pid, uint64_t va,
-                      QEMUPageEvictRequest *evict_request);
-void makeEvictReply(PageEvictNotification *notif, QEMUEvictReply *evict_reply);
-void makeMissReply(int type, int tid, int pid, uint64_t va, uint64_t paddr,
-                   QEMUMissReply *miss_reply);
 
 void requireStateIsIdentical(const ArmflexArchState &state1,
                              const ArmflexArchState &state2);

@@ -43,12 +43,12 @@ class PTTagPacket(params: PageTableParams) extends Bundle
   val vpn = UInt(params.vPageW.W)
   val asid = UInt(params.asidW.W)
 
-  def asVec: Vec[UInt] = VecInit(Seq(vpn(31, 0), vpn(params.vPageW-1, 32).pad(32), asid))
+  def asVec: Vec[UInt] = VecInit(Seq(asid.pad(32), vpn(31, 0), vpn(params.vPageW-1, 32).pad(32) ))
 
   def parseFromVec(f: Vec[UInt]): this.type = {
     val res = Wire(this.cloneType)
-    res.vpn := Cat(f(1), f(0))
-    res.asid := f(2)
+    res.asid := f(0)
+    res.vpn := Cat(f(2), f(1))
     res.asInstanceOf[this.type]
   }
 

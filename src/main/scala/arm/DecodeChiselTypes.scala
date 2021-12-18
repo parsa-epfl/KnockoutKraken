@@ -473,8 +473,8 @@ object DECODE_MATCHING_TABLES
       // Hint
       HINT_NOP00      -> List(I_HINT, OP_X, N, N, N, N, N),
       HINT_NOP01      -> List(I_HINT, OP_X, N, N, N, N, N),
-      HINT_NOP10      -> List(I_HINT, OP_X, N, N, N, N, N),
-      HINT_NOP11      -> List(I_HINT, OP_X, N, N, N, N, N)
+      //HINT_NOP10      -> List(I_HINT, OP_X, N, N, N, N, N),
+      //HINT_NOP11      -> List(I_HINT, OP_X, N, N, N, N, N)
    )
 }
 

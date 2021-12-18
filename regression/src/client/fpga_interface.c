@@ -18,7 +18,7 @@
  * @returns 0 if successful.
  *
  * @note associate with S_AXIL_TT
- * @note pairing a thread id with 0 pid means translanting back since no PID in a system will be zero.
+ * @note pairing a thread id with 0 asid means translanting back since no asid in a system will be zero.
  */
 int registerThreadWithProcess(const FPGAContext *c, uint32_t thread_id,
                               uint32_t process_id) {
