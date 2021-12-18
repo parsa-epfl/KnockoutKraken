@@ -70,3 +70,18 @@ class CSR2BRAM(val cfg: BRAMParams) extends Module{
   io.port.WE := Mux(io.bus.addr(0), mask << 4, mask)
   io.bus.dataIn := Mux(RegNext(io.bus.addr(0)), io.port.DO(63,32) , io.port.DO(31, 0))
 }
+
+class CSR2BRAM32(val cfg: BRAMParams) extends Module{
+  assert(cfg.NB_COL == 4)
+  val io = IO(new Bundle{
+    val bus = Flipped(new CSRBusBundle(32, cfg.RAM_DEPTH))
+    val port = Flipped(new BRAMPort()(cfg))
+  })
+
+  io.port.ADDR := io.bus.addr
+  io.port.EN := io.bus.read || io.bus.write
+  io.port.DI := io.bus.dataOut
+  val mask = Fill(cfg.NB_COL, io.bus.write.asUInt)
+  io.port.WE := mask
+  io.bus.dataIn := io.port.DO
+}
