@@ -23,8 +23,8 @@ import armflex.PipelineDrivers._
 import org.scalatest.exceptions.TestFailedException
 import armflex.util.SoftwareStructs._
 
-/*
 class PipelineTest(val dut: PipelineHardDriverModule, traceDrv: VerificationDriver) {
+/*
   private val init: Unit = {
     dut.initIO
     dut.clock.setTimeout(1000)
@@ -115,5 +115,5 @@ class FullPipelineTest extends FreeSpec with ChiselScalatestTester {
   //runExample("binary10000_1")
   //runExample("binary10000_2")
   //runExample("binary100_1") // Kernel
-}
  */
+}

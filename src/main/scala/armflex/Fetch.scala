@@ -111,7 +111,7 @@ class FetchUnit(
   metaDataTLB_w.pc := pcUnit.req.bits
   metaDataTLB_w.id := pcUnit.req.tag
   private val metaDataTLB_r = RegEnable(metaDataTLB_w, mem_io.tlb.req.fire)
-  cacheReqQ.io.enq.bits.paddr := mem_io.tlb.resp.bits.addr
+  cacheReqQ.io.enq.bits.paddr := mem_io.tlb.resp.bits.addr | metaDataTLB_w.pc(11,0) // PAGE_SIZE
   cacheReqQ.io.enq.bits.meta := metaDataTLB_r
 
 

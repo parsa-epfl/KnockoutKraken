@@ -107,8 +107,7 @@ class Pipeline(params: PipelineParams) extends MultiIOModule {
   // Issue ---------------------------
   // connect rfile read(address) interface
   when(issued_dinst.itype === I_DP3S) {
-    // TODO Triple register instruction
-    // archstate.issue.rd.port(0).addr := issued_dinst.imm(4, 0)
+    archstate.issue.rd.port(2).addr := issued_dinst.imm(4, 0)
   }
 
   // Execute ---------------------------
@@ -120,8 +119,8 @@ class Pipeline(params: PipelineParams) extends MultiIOModule {
   val state_reg = RegInit(PStateRegs())
   val rVal1 = WireInit(Mux(stateReadArrives, archstate.issue.rd.port(0).data, rVal1_reg))
   val rVal2 = WireInit(Mux(stateReadArrives, archstate.issue.rd.port(1).data, rVal2_reg))
-  val rVal3 = WireInit(Mux(stateReadArrives, archstate.issue.rd.port(2).data, rVal3_reg)) // TODO Triple source
-  val curr_state = WireInit(Mux(stateReadArrives, RegNext(archstate.issue.regs.curr), state_reg)) // TODO Triple source
+  val rVal3 = WireInit(Mux(stateReadArrives, archstate.issue.rd.port(2).data, rVal3_reg))
+  val curr_state = WireInit(Mux(stateReadArrives, RegNext(archstate.issue.regs.curr), state_reg))
   when(stateReadArrives) {
     // Read Register arrived
     rVal1_reg := archstate.issue.rd.port(0).data

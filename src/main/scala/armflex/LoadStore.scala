@@ -113,6 +113,11 @@ class LDSTUnit extends Module {
 
   val io = IO(new LDSTUnitIO)
 
+  // WZR, XZR, and SP
+  val rVal1 = WireInit(Mux(io.dinst.rs1 === 31.U, 0.U, io.rVal1))
+  val rVal2 = WireInit(Mux(io.dinst.rs2 === 31.U, 0.U, io.rVal2))
+  val rVal3 = WireInit(Mux(io.dinst.imm(4,0) === 31.U, 0.U, io.rVal3))
+
   // Decode All variants
   val size = WireInit(io.dinst.op(1, 0))
   val isLoad = WireInit(io.dinst.op(2))
@@ -129,10 +134,15 @@ class LDSTUnit extends Module {
   val option = io.dinst.shift_val.bits
   val shift = Mux(io.dinst.shift_val.valid, size, 0.U)
   val extendReg = Module(new ExtendReg)
-  extendReg.io.value := io.rVal2
+  extendReg.io.value := rVal2
   extendReg.io.option := option
   extendReg.io.shift := shift
 
+  private val isPair = WireInit(
+    io.dinst.itype === I_LSPairPr ||
+    io.dinst.itype === I_LSPair   ||
+    io.dinst.itype === I_LSPairPo)
+ 
   when(io.dinst.itype === I_LSUImm) {
     wback := false.B
     postindex := false.B
@@ -173,8 +183,9 @@ class LDSTUnit extends Module {
   //
   when(io.dinst.rs1 === 31.U) {
     // CheckSPAAligment(); Checked in MemoryArbiter - DataAligner
+    rVal1 := io.rVal1
   }
-  val base_address = WireInit(io.rVal1)
+  val base_address = WireInit(rVal1)
 
   //  if !postindex then
   //     address = address + offset
@@ -210,8 +221,8 @@ class LDSTUnit extends Module {
   // data = X[t]
   // Mem[address, datasize DIV 8, AccType_NORMAL] = data
 
-  val data_1 = WireInit(io.rVal2) // data_1 = Rt = rVal2
-  val data_2 = WireInit(io.rVal3) // data_2 = Rt2 = rVal3
+  val data_1 = WireInit(rVal2) // data_1 = Rt = rVal2
+  val data_2 = WireInit(rVal3) // data_2 = Rt2 = rVal3
 
   // Prepare MInst
   val minst = Wire(new MInst)
@@ -221,17 +232,21 @@ class LDSTUnit extends Module {
   minst.isLoad := isLoad
 
   minst.req(0).addr := ldst_address
-  minst.req(0).data := data_2
-  minst.req(0).reg := io.dinst.rd.bits
+  minst.req(0).data := data_1
+  minst.req(0).reg := io.dinst.rs2
   // For Pair LD/ST
   val dbytes = 1.U << size
-  minst.isPair :=
-    (io.dinst.itype === I_LSPairPr ||
-      io.dinst.itype === I_LSPair ||
-      io.dinst.itype === I_LSPairPo)
+  minst.isPair := isPair
   minst.req(1).addr := ldst_address + dbytes
   minst.req(1).data := data_1
   minst.req(1).reg := io.dinst.rs2
+
+  when(isPair) {
+    // Pair stores changes destination
+    minst.req(0).data := data_2
+    minst.req(0).reg := io.dinst.rd.bits
+  }
+
 
   // if wback then
   //   if wb_unknown then
@@ -363,7 +378,7 @@ class MemoryUnit(
   private def isPairPageMisaligned(minst: MInstTag[UInt]) = minst.isPair && // Is Pair
     minst.req(0).addr(12) =/= minst.req(1).addr(12) // Page is different
 
-  private def isBlockMisaligned(addr1: UInt, addr2: UInt) = addr1(log2Ceil(params.blockSize / 8)) =/= addr2(log2Ceil(params.blockSize / 8))
+  private def isBlockMisaligned(addr1: UInt, addr2: UInt) = params.getBlockAddrBits(addr1) =/= params.getBlockAddrBits(addr2)
 
   private val tlbPair_paddr1 = RegEnable(mem_io.tlb.resp.bits.addr, mem_io.tlb.resp.fire)
   private val tlbDropInst = WireInit(false.B) // Drop instruction on miss
@@ -385,14 +400,14 @@ class MemoryUnit(
 
   // Data
   mem_io.tlb.req.bits.addr := Mux(sTLB_state === sTLB_pair_req,
-                                  tlbReqQ.io.deq.bits.req(0).addr + (1.U << tlbReqQ.io.deq.bits.size),
+                                  tlbReqQ.io.deq.bits.req(1).addr,
                                   tlbReqQ.io.deq.bits.req(0).addr)
   mem_io.tlb.req.bits.thid := tlbReqQ.io.deq.bits.tag
   mem_io.tlb.req.bits.perm := Mux(tlbReqQ.io.deq.bits.isLoad, DATA_LOAD.U, DATA_STORE.U)
   mem_io.tlb.req.bits.asid := DontCare // Defined higher in the hierarchy
   cacheReq.inst := tlbMeta
-  cacheReq.paddr(0) := mem_io.tlb.resp.bits.addr
-  cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr
+  cacheReq.paddr(0) := mem_io.tlb.resp.bits.addr | tlbReqQ.io.deq.bits.req(0).addr(11,0) // PAGE_SIZE
+  cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr | tlbReqQ.io.deq.bits.req(1).addr(11,0)
   cacheReq.firstIsCompleted := false.B
   cacheReqQ.io.enq.bits := cacheReq
 
@@ -436,11 +451,11 @@ class MemoryUnit(
   // Resp TLB management -----
   cacheReq.blockMisaligned := isBlockMisaligned(cacheReq.paddr(0), cacheReq.paddr(1))
   when(mem_io.tlb.resp.fire && sTLB_state =/= sTLB_intermediateResp) {
-    cacheReq.paddr(0) := mem_io.tlb.resp.bits.addr
-    cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr + (1.U << tlbMeta.size)
+    cacheReq.paddr(0) := mem_io.tlb.resp.bits.addr                            | tlbReqQ.io.deq.bits.req(0).addr(11,0)
+    cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr + (1.U << tlbMeta.size)    | tlbReqQ.io.deq.bits.req(1).addr(11,0)
     when(isPairPageMisaligned(tlbMeta)) {
-      cacheReq.paddr(0) := tlbPair_paddr1
-      cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr
+      cacheReq.paddr(0) := tlbPair_paddr1            | tlbReqQ.io.deq.bits.req(0).addr(11,0)
+      cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr | tlbReqQ.io.deq.bits.req(1).addr(11,0)
       cacheReq.blockMisaligned := true.B
     }
 
@@ -477,15 +492,18 @@ class MemoryUnit(
 
   // Select, align and mask bytes in block
   private val selReqIdx = secondAccessPair.asUInt // Select second one in case it is the second access
-  cacheAdaptorReqW_en := maskByteEn << cacheAdaptorMInstInput.inst.req(selReqIdx).addr(log2Ceil(params.blockSize / 8), 0)
+  private val maskEn_shift = WireInit(params.getBlockAddrBits(cacheAdaptorMInstInput.inst.req(selReqIdx).addr))
   when(cacheAdaptorMInstInput.inst.isLoad) {
     cacheAdaptorReqW_en := 0.U
+  }.otherwise {
+    cacheAdaptorReqW_en := maskByteEn << maskEn_shift
   }
-  cacheAdaptorReqData := cacheAdaptorMInstInput.inst.req(selReqIdx).data << Cat(cacheAdaptorMInstInput.inst.req(selReqIdx).addr(log2Ceil(params.blockSize / 8), 0), 0.U(3.W))
+
+ cacheAdaptorReqData := cacheAdaptorMInstInput.inst.req(selReqIdx).data << Cat(params.getBlockAddrBits(cacheAdaptorMInstInput.inst.req(selReqIdx).addr), 0.U(3.W))
   when(singleAccessPair) {
     cacheAdaptorReqData :=
-      cacheAdaptorMInstInput.inst.req(1).data << Cat(cacheAdaptorMInstInput.inst.req(1).addr(log2Ceil(params.blockSize / 8), 0), 0.U(3.W)) |
-        cacheAdaptorMInstInput.inst.req(0).data << Cat(cacheAdaptorMInstInput.inst.req(0).addr(log2Ceil(params.blockSize / 8), 0), 0.U(3.W))
+      cacheAdaptorMInstInput.inst.req(1).data << Cat(params.getBlockAddrBits(cacheAdaptorMInstInput.inst.req(1).addr), 0.U(3.W)) |
+        cacheAdaptorMInstInput.inst.req(0).data << Cat(params.getBlockAddrBits(cacheAdaptorMInstInput.inst.req(0).addr), 0.U(3.W))
   }
 
   cacheAdaptor.pipe_io.req.port.bits.data := cacheAdaptorReqData
@@ -543,7 +561,7 @@ class MemoryUnit(
   // Manage responses from the cache, if pair not done, push it to be re-executed
   private val cachePipeResp = WireInit(cacheAdaptor.pipe_io.resp)
   private val respPairIdx = cachePipeResp.meta.firstIsCompleted.asUInt
-  private val alignedDataResp: UInt = WireInit(cachePipeResp.port.bits.data >> Cat(cachePipeResp.meta.inst.req(respPairIdx).addr(log2Ceil(params.blockSize / 8), 0), 0.U(3.W)))
+  private val alignedDataResp: UInt = WireInit(cachePipeResp.port.bits.data >> Cat(params.getBlockAddrBits(cachePipeResp.meta.inst.req(respPairIdx).addr), 0.U(3.W)))
   // If blockMisaligned, save initial load in req data
   // when(cachePipeResp.meta.inst.isLoad) { } // Not necessary, overwrite store data given already executed
   cacheAdaptor.pipe_io.resp.port.ready := true.B // Backpressure is managed by ensuring enough
@@ -669,13 +687,15 @@ class MemoryUnit(
       assert(cacheReqMisalignedQ.io.deq.valid || cacheReqQ.io.deq.valid, "Cache requests must come from one of two queues")
     }
     when(cacheAdaptor.pipe_io.resp.port.fire) {
-      when(cacheAdaptor.pipe_io.resp.meta.blockMisaligned && !cacheAdaptor.pipe_io.resp.meta.firstIsCompleted) {
-        assert(!doneInst.io.enq.fire, "On misaligned first pair access, instruction must not be pushed to completed insts")
-        assert(cacheReqMisalignedQ.io.enq.fire, "On misaligned first pair access, instruction must be pushed to rerun queue")
-        assert(cacheReqMisalignedQ.io.enq.bits.firstIsCompleted, "On misaligned first pair access, firstIsCompleted flag must be set")
-      }.elsewhen(cacheAdaptor.pipe_io.resp.meta.blockMisaligned && cacheAdaptor.pipe_io.resp.meta.firstIsCompleted) {
-        assert(!cacheReqMisalignedQ.io.enq.fire, "On misalgined second pair access, instruction must no be pushed to rerun queue")
-        assert(doneInst.io.enq.fire, "On misaligned second pair access, instruction must be pushed to completed insts")
+      when(cacheAdaptor.pipe_io.resp.meta.inst.isPair) {
+        when(cacheAdaptor.pipe_io.resp.meta.blockMisaligned && !cacheAdaptor.pipe_io.resp.meta.firstIsCompleted) {
+          assert(!doneInst.io.enq.fire, "On misaligned first pair access, instruction must not be pushed to completed insts")
+          assert(cacheReqMisalignedQ.io.enq.fire, "On misaligned first pair access, instruction must be pushed to rerun queue")
+          assert(cacheReqMisalignedQ.io.enq.bits.firstIsCompleted, "On misaligned first pair access, firstIsCompleted flag must be set")
+        }.elsewhen(cacheAdaptor.pipe_io.resp.meta.blockMisaligned && cacheAdaptor.pipe_io.resp.meta.firstIsCompleted) {
+          assert(!cacheReqMisalignedQ.io.enq.fire, "On misalgined second pair access, instruction must no be pushed to rerun queue")
+          assert(doneInst.io.enq.fire, "On misaligned second pair access, instruction must be pushed to completed insts")
+        }
       }.otherwise {
         assert(doneInst.io.enq.fire, "On normal access, instruction must be pushed to completed insts")
       }

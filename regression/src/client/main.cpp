@@ -16,7 +16,7 @@ uint8_t zero_page[PAGE_SIZE] = {0};
 TEST_CASE("multiple-pages-in-a-row") {
   FPGAContext ctx;
   REQUIRE(initFPGAContext(&ctx) == 0);
-  QEMUMissReply pf_reply;
+  MessageFPGA pf_reply;
   uint32_t asid = 10;
   uint64_t vaddr = 0x50000;
   uint64_t paddr = 0x20000;
@@ -55,7 +55,7 @@ TEST_CASE("MMU-push-and-evict-pte"){
   FPGAContext c;
   initFPGAContextAndPage(1, &c);
   int th = 1;
-  int pid = GET_PID(th);
+  int asid = GET_asid(th);
   uint64_t va = rand() << 10;
 
   uint64_t page_inst_paddr = c.base_address.page_base; // first page PA.
@@ -63,37 +63,35 @@ TEST_CASE("MMU-push-and-evict-pte"){
   // Fill the page buffer
   pushPageToFPGA(&c, page_inst_paddr, page);
 
-  QEMUMissReply miss_reply; 
-  makeMissReply(INST_FETCH, -1, pid, va, page_inst_paddr, &miss_reply);
+  MessageFPGA miss_reply; 
+  makeMissReply(INST_FETCH, -1, asid, va, page_inst_paddr, &miss_reply);
   sendMessageToFPGA(&c, &miss_reply, sizeof(miss_reply));
 
   usleep(1e5); // wait for the result to be synced. (Create 500 cycles interval from simulator side).
 
   // now, page is in the DRAM now.
   // Let's get it back.
-  QEMUPageEvictRequest evict_request;
-  makeEvictRequest(pid, va, &evict_request);
+  MessageFPGA evict_request;
+  makeEvictRequest(asid, va, &evict_request);
   sendMessageToFPGA(&c, &evict_request, sizeof(evict_request));
   //usleep(1e6); // wait for the eviction to be complete.
 
   // Let's query message. It should send an eviction message
-  uint32_t msg_buffer[16] = {0};
-  REQUIRE(queryMessageFromFPGA(&c, (uint8_t *)msg_buffer) == 0);
+  MessageFPGA msg;
+  REQUIRE(queryMessageFromFPGA(&c, (uint8_t *) &msg) == 0);
 
-  PageEvictNotification *evict_notify = (PageEvictNotification *) msg_buffer;
-  REQUIRE(evict_notify->type == sEvictNotify);
-  REQUIRE(evict_notify->pid == pid);
-  REQUIRE(evict_notify->vpn_hi == VPN_GET_HI(va));
-  REQUIRE(evict_notify->vpn_lo == VPN_GET_LO(va));
+  REQUIRE(msg.type == sEvictNotify);
+  REQUIRE(msg.asid == asid);
+  REQUIRE(msg.vpn_hi == VPN_GET_HI(va));
+  REQUIRE(msg.vpn_lo == VPN_GET_LO(va));
 
   // Then there is a done message
-  REQUIRE(queryMessageFromFPGA(&c, (uint8_t *)msg_buffer) == 0);
+  REQUIRE(queryMessageFromFPGA(&c, (uint8_t *) &msg) == 0);
 
-  evict_notify = (PageEvictNotification *) msg_buffer;
-  REQUIRE(evict_notify->type == sEvictDone);
-  REQUIRE(evict_notify->pid == pid);
-  REQUIRE(evict_notify->vpn_hi == VPN_GET_HI(va));
-  REQUIRE(evict_notify->vpn_lo == VPN_GET_LO(va));
+  REQUIRE(msg.type == sEvictDone);
+  REQUIRE(msg.asid == asid);
+  REQUIRE(msg.vpn_hi == VPN_GET_HI(va));
+  REQUIRE(msg.vpn_lo == VPN_GET_LO(va));
 
   releaseFPGAContext(&c);
 }
@@ -117,15 +115,15 @@ TEST_CASE("Push-page-and-read-back", "aws-only"){
   }
 
 
-  int pid = 0;
+  int asid = 0;
 
   INFO("Send page to FPGA");
   for(int i = 0; i < PAGE_SIZE; ++i){
     page[i] = rand();
   }
   pushPageToFPGA(&c, page_inst_paddr, page);
-  QEMUMissReply pf_reply;
-  makeMissReply(INST_FETCH, -1, pid, 0, page_inst_paddr, &pf_reply);
+  MessageFPGA pf_reply;
+  makeMissReply(INST_FETCH, -1, asid, 0, page_inst_paddr, &pf_reply);
   sendMessageToFPGA(&c, &pf_reply, sizeof(pf_reply));
 
   usleep(1e6);
@@ -149,25 +147,24 @@ TEST_CASE("basic-transplant-with-initial-page-fault"){
   initArchState(&state, rand());
 
   int th = 3;
-  uint32_t pid = GET_PID(th);
+  uint32_t asid = GET_asid(th);
 
   // initialization.
-  registerAndPushState(&c, th, pid, &state);
-  registerThreadWithProcess(&c, th, pid);
+  registerAndPushState(&c, th, asid, &state);
+  registerThreadWithProcess(&c, th, asid);
   // transplant_pushState(&c, th, (uint64_t *)&state, ARMFLEX_TOT_REGS);
   transplant_start(&c, th);
 
   // Let's query message. It should be a page fault.
-  uint32_t buffer[16] = {0};
-  REQUIRE(queryMessageFromFPGA(&c, (uint8_t *)buffer) == 0);
+  MessageFPGA msg;
+  REQUIRE(queryMessageFromFPGA(&c, (uint8_t *) &msg) == 0);
 
-  PageFaultNotification *page_fault = (PageFaultNotification *)buffer;
 
-  REQUIRE(page_fault->type == sPageFaultNotify);
-  REQUIRE(page_fault->permission == INST_FETCH);
-  REQUIRE(page_fault->pid == pid);
-  REQUIRE(page_fault->vpn_lo == VPN_GET_LO(state.pc));
-  REQUIRE(page_fault->vpn_hi == VPN_GET_HI(state.pc));
+  REQUIRE(msg.type == sPageFaultNotify);
+  REQUIRE(msg.asid == asid);
+  REQUIRE(msg.vpn_lo == VPN_GET_LO(state.pc));
+  REQUIRE(msg.vpn_hi == VPN_GET_HI(state.pc));
+  REQUIRE(msg.PageFaultNotif.permission == INST_FETCH);
 
   releaseFPGAContext(&c);
 }
@@ -182,17 +179,17 @@ TEST_CASE("transplant-transplants"){
 
   int ret = 0;
   const int th = 0;
-  const uint32_t pid = GET_PID(th);
+  const uint32_t asid = GET_asid(th);
 
   // ---- Push base page
   pushPageToFPGA(&c, page_inst_paddr, page);
-  QEMUMissReply miss_reply; 
-  makeMissReply(INST_FETCH, -1, pid, state.pc, page_inst_paddr, &miss_reply); // No thread is registered.
+  MessageFPGA miss_reply; 
+  makeMissReply(INST_FETCH, -1, asid, state.pc, page_inst_paddr, &miss_reply); // No thread is registered.
   sendMessageToFPGA(&c, &miss_reply, sizeof(miss_reply));
   usleep(1e6); // wait for the result to be synced. (Create 500 cycles interval from simulator side).
 
   // ---- Push thread state
-  registerAndPushState(&c, th, pid, &state);
+  registerAndPushState(&c, th, asid, &state);
 
   // ---- Assert that correct state is was pushed
   ArmflexArchState stateTransplant;
@@ -252,13 +249,13 @@ TEST_CASE("execute-instruction-with-context-in-dram"){
   initArchState(&state, pc);
 
   uint32_t thread_id = 3;
-  uint32_t pid = GET_PID(thread_id);
+  uint32_t asid = GET_asid(thread_id);
 
   // Push Instruction page and Data page
   INFO("Push Instruction Page");
   pushPageToFPGA(&c, page_inst_paddr, inst_page);
-  QEMUMissReply pf_reply;
-  makeMissReply(INST_FETCH, -1, pid, pc, page_inst_paddr, &pf_reply);
+  MessageFPGA pf_reply;
+  makeMissReply(INST_FETCH, -1, asid, pc, page_inst_paddr, &pf_reply);
   sendMessageToFPGA(&c, &pf_reply, sizeof(pf_reply));
 
   INFO("Push Data Page");
@@ -268,7 +265,7 @@ TEST_CASE("execute-instruction-with-context-in-dram"){
     memory_page[word] = 0xDEADBEEF;
   }
   pushPageToFPGA(&c, page_data_paddr, memory_page);
-  makeMissReply(DATA_STORE, -1, pid, mem_addr, page_data_paddr, &pf_reply);
+  makeMissReply(DATA_STORE, -1, asid, mem_addr, page_data_paddr, &pf_reply);
   sendMessageToFPGA(&c, &pf_reply, sizeof(pf_reply));
 
   INFO("Compare Instruction Page");
@@ -285,7 +282,7 @@ TEST_CASE("execute-instruction-with-context-in-dram"){
 
   // prepare for transplant.
   INFO("Transplant state to FPGA");
-  REQUIRE(registerAndPushState(&c, thread_id, pid, &state) == 0);
+  REQUIRE(registerAndPushState(&c, thread_id, asid, &state) == 0);
 
   // start execution
   INFO("Start execution");
@@ -314,35 +311,32 @@ TEST_CASE("execute-instruction-with-context-in-dram"){
 
   // fetch the page back.
   INFO("Send Page Eviction Request");
-  QEMUPageEvictRequest evict_request;
-  makeEvictRequest(pid, mem_addr, &evict_request);
+  MessageFPGA evict_request;
+  makeEvictRequest(asid, mem_addr, &evict_request);
   sendMessageToFPGA(&c, &evict_request, sizeof(evict_request));
  
   // Let's query message. It should send an eviction message
   INFO("Query Eviction Notification");
-  uint32_t buffer[16] = {0};
-  queryMessageFromFPGA(&c, (uint8_t *)buffer);
+  MessageFPGA msg;
+  queryMessageFromFPGA(&c, (uint8_t *) &msg);
 
-  PageEvictNotification *evict_notify = (PageEvictNotification *) buffer;
-  REQUIRE(evict_notify->type == sEvictNotify);
-  REQUIRE(evict_notify->pid == pid);
-  REQUIRE(evict_notify->vpn_hi == VPN_GET_LO(0));
-  REQUIRE(evict_notify->vpn_lo == VPN_GET_LO(0));
+  REQUIRE(msg.type == sEvictNotify);
+  REQUIRE(msg.asid == asid);
+  REQUIRE(msg.vpn_hi == VPN_GET_HI(0L));
+  REQUIRE(msg.vpn_lo == VPN_GET_LO(0L));
 
   // Let's query message. It should send an eviction completed message
   INFO("Query Eviction Notification Complete");
-  queryMessageFromFPGA(&c, (uint8_t *)buffer);
+  queryMessageFromFPGA(&c, (uint8_t *) &msg);
 
-  evict_notify = (PageEvictNotification *) buffer;
-  REQUIRE(evict_notify->type == sEvictDone);
-  REQUIRE(evict_notify->pid == pid);
-  REQUIRE(evict_notify->vpn_hi == VPN_GET_LO(0));
-  REQUIRE(evict_notify->vpn_lo == VPN_GET_LO(0));
-  REQUIRE(evict_notify->modified);
-  REQUIRE(evict_notify->ppn == GET_PPN_FROM_PADDR(page_data_paddr));
-  REQUIRE(evict_notify->permission == DATA_STORE);
+  REQUIRE(msg.type == sEvictDone);
+  REQUIRE(msg.asid == asid);
+  REQUIRE(msg.vpn_hi == VPN_GET_HI(0L));
+  REQUIRE(msg.vpn_lo == VPN_GET_LO(0L));
+  REQUIRE(msg.EvictNotif.modified);
+  REQUIRE(msg.EvictNotif.ppn == GET_PPN_FROM_PADDR(page_data_paddr));
+  REQUIRE(msg.EvictNotif.permission == DATA_STORE);
 
-  // fetch the page. It should in the page buffer.
   uint32_t data_buffer[PAGE_SIZE/4];
   INFO("Fetch page from FPGA");
   fetchPageFromFPGA(&c, page_data_paddr, &data_buffer);
@@ -377,8 +371,8 @@ TEST_CASE("execute-instruction") {
   // prepare for transplant.
   INFO("Transplant state to FPGA");
   uint32_t thread_id = 3;
-  uint32_t pid = GET_PID(thread_id);
-  REQUIRE(registerAndPushState(&c, thread_id, pid, &state) == 0);
+  uint32_t asid = GET_asid(thread_id);
+  REQUIRE(registerAndPushState(&c, thread_id, asid, &state) == 0);
 
   // start execution
   INFO("Start execution");
@@ -386,22 +380,21 @@ TEST_CASE("execute-instruction") {
 
   // First page fault here, it's instruction page.
   INFO("FPGA requires instruction page");
-  uint32_t buffer[16] = {0};
-  queryMessageFromFPGA(&c, (uint8_t *)buffer);
+  MessageFPGA msg;
+  queryMessageFromFPGA(&c, (uint8_t *) &msg);
 
   INFO("Check page fault request");
-  PageFaultNotification *page_fault = (PageFaultNotification *)buffer;
-  REQUIRE(page_fault->type == sPageFaultNotify);
-  REQUIRE(page_fault->permission == INST_FETCH);
-  REQUIRE(page_fault->pid == pid);
-  REQUIRE(page_fault->vpn_lo == VPN_GET_LO(state.pc));
-  REQUIRE(page_fault->vpn_hi == VPN_GET_HI(state.pc));
+  REQUIRE(msg.type == sPageFaultNotify);
+  REQUIRE(msg.asid == asid);
+  REQUIRE(msg.vpn_lo == VPN_GET_LO(state.pc));
+  REQUIRE(msg.vpn_hi == VPN_GET_HI(state.pc));
+  REQUIRE(msg.PageFaultNotif.permission == INST_FETCH);
 
   // Reply with the correct page.
   INFO("Send instruction page to FPGA");
   pushPageToFPGA(&c, page_inst_paddr, inst_page);
-  QEMUMissReply pf_reply;
-  makeMissReply(INST_FETCH, thread_id, pid, pc, page_inst_paddr, &pf_reply);
+  MessageFPGA pf_reply;
+  makeMissReply(INST_FETCH, thread_id, asid, pc, page_inst_paddr, &pf_reply);
   sendMessageToFPGA(&c, &pf_reply, sizeof(pf_reply));
 
   // Check if the page is there.
@@ -415,19 +408,19 @@ TEST_CASE("execute-instruction") {
 
   // Page fault again for data. 
   INFO("FPGA requires data page");
-  REQUIRE(queryMessageFromFPGA(&c, (uint8_t *)buffer) == 0);
+  REQUIRE(queryMessageFromFPGA(&c, (uint8_t *) &msg) == 0);
 
   INFO("Check page fault request");
-  REQUIRE(page_fault->type == sPageFaultNotify);
-  REQUIRE(page_fault->permission == DATA_STORE);
-  REQUIRE(page_fault->pid == pid);
-  REQUIRE(page_fault->vpn_lo == VPN_GET_LO(0l));
-  REQUIRE(page_fault->vpn_hi == VPN_GET_HI(0l));
+  REQUIRE(msg.type == sPageFaultNotify);
+  REQUIRE(msg.asid == asid);
+  REQUIRE(msg.vpn_lo == VPN_GET_LO(0L));
+  REQUIRE(msg.vpn_hi == VPN_GET_HI(0L));
+  REQUIRE(msg.PageFaultNotif.permission == DATA_STORE);
 
   // If so, reply with a empty page.
   INFO("Send data page to FPGA");
   pushPageToFPGA(&c, page_data_paddr, zero_page);
-  makeMissReply(DATA_STORE, thread_id, pid, 0, page_data_paddr, &pf_reply);
+  makeMissReply(DATA_STORE, thread_id, asid, 0, page_data_paddr, &pf_reply);
   sendMessageToFPGA(&c, &pf_reply, sizeof(pf_reply));
 
   // Wait for Transplant back
@@ -450,7 +443,7 @@ TEST_CASE("execute-instruction") {
   REQUIRE(state.pc == pc + 4 * 6);
 
   uint8_t data_buffer[4096];
-  synchronizePage(&c, pid, data_buffer, 0, page_data_paddr, true);
+  synchronizePage(&c, asid, data_buffer, 0, page_data_paddr, true);
   // CHECK its value
   INFO("Check final result");
   REQUIRE(data_buffer[0] == 10);

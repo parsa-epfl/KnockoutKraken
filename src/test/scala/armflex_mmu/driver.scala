@@ -219,9 +219,9 @@ object PageDemanderDriver {
     def sendPageFaultResponse(vpn: BigInt, thid: Int, asid: Int, perm: Int, ppn: Int) = {
       sendQEMUMessage(
         2, Seq(
+          asid,
           vpn & 0xFFFFFFFF,
           vpn >> 32,
-          asid,
           perm,
           thid,
           ppn
