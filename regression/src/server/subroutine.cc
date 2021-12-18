@@ -9,37 +9,20 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-#define TICK()                                                      \
-  if (dut.waitForTick(lock))                                        \
-    return;
-
-#define CHECK(state, message)                                       \
-  if (!(state)) {                                                   \
-    printf("Assertion Failed (Line: %d): %s\n", __LINE__, message); \
-    dut.reportError("Failed Assertion");                            \
-    goto wait_for_join;                                             \
-  }
-
-#define BLOCK_SIZE     (512)
-#define WORD_SIZE      (32)
-#define WORDS_PER_BLOCK (BLOCK_SIZE/WORD_SIZE)
-#define BYTES_PER_BLOCK (BLOCK_SIZE/8)
-#define BYTE_TO_WORD(addr) (addr >> 2) // log2(32/8) = 2
-
 void handleDRAMSubroute(TopDUT &dut) {
   std::unique_lock<std::mutex> lock(dut.getLock());
   while (true) {
     if (dut->M_AXI_ar_arvalid) {
       uint64_t addr_byte = dut->M_AXI_ar_araddr;
       // check address. It should be small enough.
-      CHECK(addr_byte < dut.dram_size, "AXI read address out of bound");
-      CHECK((addr_byte & 0x3F) == 0, "AXI read address is not aligned");
-      CHECK((dut->M_AXI_ar_arsize == 6), "AXI read burst count must be 64B");
+      CHECK(dut, addr_byte < dut.dram_size, "AXI read address out of bound");
+      CHECK(dut, (addr_byte & 0x3F) == 0, "AXI read address is not aligned");
+      CHECK(dut, (dut->M_AXI_ar_arsize == 6), "AXI read burst count must be 64B");
       uint32_t id = dut->M_AXI_ar_arid;
       uint32_t burst_count = dut->M_AXI_ar_arlen + 1;
       dut->M_AXI_ar_arready = 1;
 
-      TICK();
+      TICK(dut);
 
       dut->M_AXI_ar_arready = 0;
       dut->eval();
@@ -60,10 +43,10 @@ void handleDRAMSubroute(TopDUT &dut) {
 
         // wait for reading data accepted.
         while (!dut->M_AXI_r_rready) {
-          TICK();
+          TICK(dut);
         }
 
-        TICK();
+        TICK(dut);
         dut->M_AXI_r_rvalid = false;
         dut->eval();
       }
@@ -71,14 +54,14 @@ void handleDRAMSubroute(TopDUT &dut) {
 
     if (dut->M_AXI_aw_awvalid) {
       uint64_t addr_byte = dut->M_AXI_aw_awaddr;
-      CHECK(addr_byte < dut.dram_size, "AXI write address out of bound");
-      CHECK((addr_byte & 0x3F) == 0, "AXI write address is not aligned");
-      CHECK((dut->M_AXI_ar_arsize == 6), "AXI write burst count must be 64B");
+      CHECK(dut, addr_byte < dut.dram_size, "AXI write address out of bound");
+      CHECK(dut, (addr_byte & 0x3F) == 0, "AXI write address is not aligned");
+      CHECK(dut, (dut->M_AXI_ar_arsize == 6), "AXI write burst count must be 64B");
       uint32_t id = dut->M_AXI_aw_awid;
       uint32_t burst_count = dut->M_AXI_aw_awlen + 1;
       dut->M_AXI_aw_awready = 1;
       dut->eval();
-      TICK();
+      TICK(dut);
 
       dut->M_AXI_aw_awready = 0;
       dut->eval();
@@ -92,7 +75,7 @@ void handleDRAMSubroute(TopDUT &dut) {
 
         // wait for data to be valid.
         while (!dut->M_AXI_w_wvalid) {
-          TICK();
+          TICK(dut);
         }
 
         size_t addr_word = BYTE_TO_WORD(addr_byte) + curr_block * WORDS_PER_BLOCK;
@@ -101,7 +84,7 @@ void handleDRAMSubroute(TopDUT &dut) {
         }
         
 
-        TICK();
+        TICK(dut);
 
         dut->M_AXI_w_wready = false;
         dut->eval();
@@ -112,19 +95,19 @@ void handleDRAMSubroute(TopDUT &dut) {
       dut->M_AXI_b_bresp = 0;
       dut->eval();
       while (!dut->M_AXI_b_bready) {
-        TICK();
+        TICK(dut);
       }
-      TICK();
+      TICK(dut);
 
       dut->M_AXI_b_bvalid = false;
       dut->eval();
     }
 
-    TICK();
+    TICK(dut);
   }
 wait_for_join:
   while(1) {
-    TICK();
+    TICK(dut);
   }
 }
 
@@ -138,14 +121,28 @@ void AXILRoutine(TopDUT &dut, IPCServer &ipc) {
     while(!ipc.getRequestAXIL(&result)) {
       if(ipc.hasPendingError()) {
         dut.reportError("   ERROR:SOCKET:AXIL: Failed to get request.\n");
-        TICK();
+        TICK(dut);
         goto wait_for_join;
       }
-      TICK();
+      TICK(dut);
     }
-    // dut.attachCurrentRoutine(lock);
-    CHECK(result.byte_size == 4, "AXIL write size must be 4B."); // only one word.
-    // we have the read result now.
+
+    if (result.is_write == 0xDEED) {
+      // Sim magic command to advance cycles
+      for(int cycle = 0; cycle < result.w_data; cycle ++) {
+        TICK(dut);
+      }
+      uint32_t success = 0;
+      if (!ipc.reply(&success, 1)) {
+        dut.reportError("   ERROR:SOCKET:AXIL:WR:REPLY\n");
+        TICK(dut);
+        goto wait_for_join;
+      }
+      continue; // Get next message
+    }
+    assert(result.is_write != 0xDEED);
+
+    CHECK(dut, result.byte_size == 4, "AXIL write size must be 4B."); // only one word.
     if (result.is_write) {
       printf("SHELL:HOST:AXIL:WR[0x%lx]:BURST[%lu]:DATA[%x]\n", result.addr, result.byte_size, result.w_data);
       // it's a writing request, activate AXI writing request channel.
@@ -154,10 +151,10 @@ void AXILRoutine(TopDUT &dut, IPCServer &ipc) {
       dut->S_AXIL_aw_awvalid = true;
       dut->eval();
       while (!dut->S_AXIL_aw_awready) {
-        TICK();
+        TICK(dut);
       }
       // wait one cycle
-      TICK();
+      TICK(dut);
 
       dut->S_AXIL_aw_awvalid = false;
       dut->eval();
@@ -168,10 +165,10 @@ void AXILRoutine(TopDUT &dut, IPCServer &ipc) {
       dut->eval();
       // wait for ready signal
       while (!dut->S_AXIL_w_wready) {
-        TICK();
+        TICK(dut);
       }
       // trigger wb
-      TICK();
+      TICK(dut);
 
       dut->S_AXIL_w_wvalid = false;
       dut->S_AXIL_b_bready = true;
@@ -179,10 +176,10 @@ void AXILRoutine(TopDUT &dut, IPCServer &ipc) {
 
       // wait for the response of B
       while (!dut->S_AXIL_b_bvalid) {
-        TICK();
+        TICK(dut);
       }
 
-      TICK();
+      TICK(dut);
 
       dut->S_AXIL_b_bready = false;
       dut->eval();
@@ -192,7 +189,7 @@ void AXILRoutine(TopDUT &dut, IPCServer &ipc) {
       uint32_t success = 0;
       if (!ipc.reply(&success, 1)) {
         dut.reportError("   ERROR:SOCKET:AXIL:WR:REPLY\n");
-        TICK();
+        TICK(dut);
         goto wait_for_join;
       }
       // dut.attachCurrentRoutine(lock);
@@ -204,19 +201,19 @@ void AXILRoutine(TopDUT &dut, IPCServer &ipc) {
       dut->S_AXIL_ar_arvalid = true;
       dut->eval();
       while (!dut->S_AXIL_ar_arready) {
-        TICK();
+        TICK(dut);
       }
-      TICK();
+      TICK(dut);
 
       dut->S_AXIL_ar_arvalid = false;
       dut->S_AXIL_r_rready = true;
       dut->eval();
 
       while (!dut->S_AXIL_r_rvalid) {
-        TICK();
+        TICK(dut);
       }
       auto read_res = dut->S_AXIL_r_rdata;
-      TICK();
+      TICK(dut);
 
       dut->S_AXIL_r_rready = false;
       dut->eval();
@@ -226,7 +223,7 @@ void AXILRoutine(TopDUT &dut, IPCServer &ipc) {
       printf("SHELL:HOST:AXIL:RD[0x%lx]:BURST[%lu]:DATA[0x%x]\n", result.addr, result.byte_size, read_res);
       if (!ipc.reply(&read_res, 1)) {
         dut.reportError("   ERROR:SOCKET:AXIL:RD:REPLY\n");
-        TICK();
+        TICK(dut);
         goto wait_for_join;
       }
       // dut.attachCurrentRoutine(lock);
@@ -234,7 +231,7 @@ void AXILRoutine(TopDUT &dut, IPCServer &ipc) {
   }
 wait_for_join:
   while(1) {
-    TICK();
+    TICK(dut);
   }
 }
 
@@ -271,17 +268,17 @@ void AXIRoutine(TopDUT &dut, IPCServer &ipc) {
     while(!ipc.getRequestAXI(&result)) {
       if(ipc.hasPendingError()) {
         dut.reportError("   ERROR:SOCKET:AXI: Failed to get request.\n");
-        TICK();
+        TICK(dut);
         goto wait_for_join;
       }
-      TICK();
+      TICK(dut);
     }
-    CHECK((result.byte_size % 64) == 0, "AXI write operation must be a multiple of 64B"); // aligned with 64B.
+    CHECK(dut, (result.byte_size % 64) == 0, "AXI write operation must be a multiple of 64B"); // aligned with 64B.
     // we have the read result now.
     if (dut.isAXIDRAM(result.addr)) {
       // Bypass AXI port, interact directly with DRAM
       if(AXI_DRAM_access(dut, ipc, result) == -1) {
-        TICK();
+        TICK(dut);
         goto wait_for_join;
       }
     } else if (result.is_write) {
@@ -295,10 +292,10 @@ void AXIRoutine(TopDUT &dut, IPCServer &ipc) {
       dut->eval();
 
       while (!dut->S_AXI_aw_awready) {
-        TICK();
+        TICK(dut);
       }
       // wait one cycle
-      TICK();
+      TICK(dut);
 
       dut->S_AXI_aw_awvalid = false;
       dut->eval();
@@ -311,9 +308,9 @@ void AXIRoutine(TopDUT &dut, IPCServer &ipc) {
         dut->eval();
         // wait for ready signal
         while (!dut->S_AXI_w_wready) {
-          TICK();
+          TICK(dut);
         }
-        TICK();
+        TICK(dut);
       }
 
       dut->S_AXI_w_wvalid = false;
@@ -322,10 +319,10 @@ void AXIRoutine(TopDUT &dut, IPCServer &ipc) {
 
       // wait for the response of B
       while (!dut->S_AXI_b_bvalid) {
-        TICK();
+        TICK(dut);
       }
 
-      TICK();
+      TICK(dut);
 
       dut->S_AXI_b_bready = false;
       dut->eval();
@@ -335,7 +332,7 @@ void AXIRoutine(TopDUT &dut, IPCServer &ipc) {
       uint32_t success = 0;
       if (!ipc.reply(&success, 1)) {
         dut.reportError("   ERROR:SOCKET:AXI:WR:REPLY\n");
-        TICK();
+        TICK(dut);
         goto wait_for_join;
       }
       // dut.attachCurrentRoutine(lock);
@@ -350,9 +347,9 @@ void AXIRoutine(TopDUT &dut, IPCServer &ipc) {
       dut->S_AXI_ar_arvalid = true;
       dut->eval();
       while (dut->S_AXI_ar_arready) {
-        TICK();
+        TICK(dut);
       }
-      TICK();
+      TICK(dut);
 
       dut->S_AXI_ar_arvalid = false;
       dut->S_AXI_r_rready = true;
@@ -360,13 +357,13 @@ void AXIRoutine(TopDUT &dut, IPCServer &ipc) {
 
       for (size_t curr_block = 0; curr_block < result.byte_size / BYTES_PER_BLOCK; ++curr_block) {
         while (!dut->S_AXI_r_rvalid) {
-          TICK();
+          TICK(dut);
         }
         memcpy(&result.w_data[curr_block * WORDS_PER_BLOCK], dut->S_AXI_r_rdata, BYTES_PER_BLOCK);
         if (curr_block == result.byte_size / BYTES_PER_BLOCK - 1) {
-          CHECK(dut->S_AXI_r_rlast, "Last block (tlast) mismatch."); // this should be the last element.
+          CHECK(dut, dut->S_AXI_r_rlast, "Last block (tlast) mismatch."); // this should be the last element.
         }
-        TICK();
+        TICK(dut);
       }
 
       dut->S_AXI_r_rready = false;
@@ -376,7 +373,7 @@ void AXIRoutine(TopDUT &dut, IPCServer &ipc) {
       // dut.decoupleCurrentRoutine(lock);
       if (!ipc.reply(result.w_data, result.byte_size / 4)) {
         dut.reportError("   ERROR:SOCKET:AXI:RD:REPLY\n");
-        TICK();
+        TICK(dut);
         goto wait_for_join;
       }
       // dut.attachCurrentRoutine(lock);
@@ -384,6 +381,6 @@ void AXIRoutine(TopDUT &dut, IPCServer &ipc) {
   }
 wait_for_join:
   while(1) {
-    TICK()
+    TICK(dut)
   }
 }

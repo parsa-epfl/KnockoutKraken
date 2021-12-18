@@ -39,6 +39,7 @@ class Pipeline(params: PipelineParams) extends MultiIOModule {
   val mmu_io = IO(new PipeMMUIO)
   // Transplant case
   val transplantIO = IO(new Bundle {
+    val stopCPU = Input(UInt(params.thidN.W))
     val start = Input(ValidTag(params.thidT, DATA_T))
     val done = Output(ValidTag(params.thidT, INST_T))
   })
@@ -76,7 +77,7 @@ class Pipeline(params: PipelineParams) extends MultiIOModule {
   // Wake on TLB miss completed
   fetch.ctrl_i.memWake := mem_io.wake
   // Wake on instruction commit
-  fetch.ctrl_i.commit.valid := commitU.commit.commited.valid && !commitU.commit.transplant.valid
+  fetch.ctrl_i.commit.valid := commitU.commit.commited.valid && !commitU.commit.transplant.valid && !transplantIO.stopCPU(commitU.commit.commited.tag).asBool
   fetch.ctrl_i.commit.tag := commitU.commit.commited.tag
   fetch.ctrl_i.commit.bits.get := commitU.commit.archstate.regs.next.PC
 
@@ -231,7 +232,12 @@ class Pipeline(params: PipelineParams) extends MultiIOModule {
   // ------ Commit Stage ------
   // Commit State
   archstate.commit <> commitU.commit.archstate
-  transplantIO.done := commitU.commit.transplant
+  transplantIO.done := commitU.commit.transplant 
+  when(commitU.commit.transplant.tag === commitU.commit.commited.tag
+      && transplantIO.stopCPU(commitU.commit.commited.tag).asBool) {
+    transplantIO.done.valid := true.B
+    transplantIO.done.tag := commitU.commit.commited.tag
+  }
 
   // Flushing ----------------------------------------------------------------
   // No speculative state is kept in the pipeline in current version

@@ -151,6 +151,11 @@ int transplant_start(const FPGAContext *c, uint32_t thread_id) {
   return writeAXIL(c, axi_transplant_ctrl_base + 4, 1 << thread_id);
 }
 
+int transplant_stopCPU(const FPGAContext *c, uint32_t thread_id) {
+  const uint32_t axi_transplant_ctrl_base = c->base_address.axil_base + c->base_address.transplant_ctl;
+  return writeAXIL(c, axi_transplant_ctrl_base + 8, 1 << thread_id);
+}
+
 /**
  * Block till there's a message in the MMU pending.
  * @param message the buffer for the message.
@@ -264,3 +269,9 @@ int fetchPageFromFPGA(const struct FPGAContext *c, uint64_t paddr, void *buffer)
   }
   return readAXI(c, c->base_address.dram_base + paddr, buffer, PAGE_SIZE);
 }
+
+#ifndef AWS_FPGA
+int writeSimCtrl(const FPGAContext *c, int type, int value) {
+  return writeAXILMagic(c, type, value);
+}
+#endif
