@@ -67,7 +67,7 @@ class TraceDump(val params: TraceDumpParams) extends MultiIOModule {
   dram_write_port.req.bits.addr := curr_addr << log2Ceil(params.dataW/8).U // Address is byte addressed, not block
   dram_write_port.req.bits.burst := params.burstSize.U
 
-  trace_data.ready := buffer_state === b_Buffering && step =/= s_Idle
+  trace_data.ready := (buffer_state === b_Buffering && step =/= s_Idle) || step === s_Idle
   switch(buffer_state) {
     is(b_Buffering) {
       when(trace_data.fire) {

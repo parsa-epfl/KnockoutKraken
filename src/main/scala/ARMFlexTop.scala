@@ -77,7 +77,7 @@ class ARMFlexTop(
   assert(paramsPipeline.pAddrW == paramsMemoryHierarchy.pAddrW)
   assert(paramsPipeline.blockSize == paramsMemoryHierarchy.cacheBlockSize)
 
-  private val u_pipeline = Module(new PipelineAxi(paramsPipeline))
+  val u_pipeline = Module(new PipelineAxi(paramsPipeline))
   private val memory = Module(new MemorySystem(paramsMemoryHierarchy))
   u_pipeline.mmu_io <> memory.pipeline_io.mmu
   // TLB interconnect
@@ -103,6 +103,10 @@ class ARMFlexTop(
   val AXI_MEM = IO(memory.axiShell_io.cloneType)
   S_AXIL_TRANSPLANT <> u_pipeline.S_AXIL
   AXI_MEM <> memory.axiShell_io
+
+  // Instrumentation Interface
+  val instrument = IO(u_pipeline.instrument.cloneType)
+  instrument <> u_pipeline.instrument
 }
 
 class ARMFlexTopSimulator(
@@ -147,6 +151,9 @@ class ARMFlexTopSimulator(
   // Disable Read ports
   axiMulti_W.M_AXI.ar <> AXI4AR.stub(paramsMemoryHierarchy.dramAddrW)
   axiMulti_W.M_AXI.r <> AXI4R.stub(paramsMemoryHierarchy.cacheBlockSize)
+
+  // No Instrumentation enabled in this build, make sure it has no impact downstream
+  devteroFlexTop.instrument.commit.ready := true.B
 }
 
 object ARMFlexTopSimulatorVerilogEmitter extends App {

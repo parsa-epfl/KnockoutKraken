@@ -1,16 +1,9 @@
 #pragma once
 extern "C" {
-#include "fpga.h"
-#include "fpga_interface.h"
+#include "fpga_helpers.h"
 }
 
-#define GET_asid(th) ((th + 1) << 4)
 #include "catch.hpp"
-
-void requireStateIsIdentical(const ArmflexArchState &state1,
-                             const ArmflexArchState &state2);
-
-void initArchState(ArmflexArchState *state, uint64_t pc);
 
 /**
  * @brief Evict page from FPGA and move it back.
@@ -24,8 +17,6 @@ void initArchState(ArmflexArchState *state, uint64_t pc);
  */
 void synchronizePage(FPGAContext *ctx, int asid, uint8_t *page, uint64_t vaddr,
                      uint64_t paddr, bool expect_modified);
+void requireStateIsIdentical(const ArmflexArchState &state1,
+                             const ArmflexArchState &state2);
 
-// Page initialization
-void makeDeadbeefPage(uint8_t *pages, size_t bytes);
-void makeZeroPage(uint8_t *page);
-void advanceTicks(const FPGAContext *c, int ticks);

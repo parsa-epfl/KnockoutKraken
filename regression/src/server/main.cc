@@ -25,12 +25,15 @@ void signalHandler(int signum) {
 }
 
 int main(int argc, char **argv) {
-  Verilated::commandArgs(argc, argv);
+  bool hasTraceGenerated = true;
+  if(argc > 1) {
+    hasTraceGenerated = false;
+  }
+  //Verilated::commandArgs(argc, argv);
   Verilated::assertOn(false);
-  Verilated::traceEverOn(true);
+  Verilated::traceEverOn(hasTraceGenerated);
 
-
-  TopDUT dut;
+  TopDUT dut (hasTraceGenerated);
 
   signal(SIGINT, signalHandler);
 
