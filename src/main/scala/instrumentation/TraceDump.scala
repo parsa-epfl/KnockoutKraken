@@ -64,7 +64,7 @@ class TraceDump(val params: TraceDumpParams) extends MultiIOModule {
   dram_write_port.data.bits := bram.portB.DO
   dram_write_port.req.valid := step === s_Prepare
   dram_write_port.req.bits.w_en := Fill(dram_write_port.req.bits.w_en.getWidth, 1.U.asUInt())
-  dram_write_port.req.bits.addr := curr_addr
+  dram_write_port.req.bits.addr := curr_addr << log2Ceil(params.dataW/8).U // Address is byte addressed, not block
   dram_write_port.req.bits.burst := params.burstSize.U
 
   trace_data.ready := buffer_state === b_Buffering && step =/= s_Idle
@@ -142,7 +142,6 @@ class TraceDump(val params: TraceDumpParams) extends MultiIOModule {
           }
         }.otherwise{
           curr_block_out := curr_block_out + 1.U
-          step := s_Prepare
         }
       }
     }
