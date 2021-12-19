@@ -48,6 +48,10 @@ class CommitArchStateIO(thidN: Int) extends Bundle {
   val ready = Input(Bool())
 }
 
+class CommitInstrument(thidN: Int) extends Bundle {
+  val pc = DATA_T
+}
+
 class CommitUnit(thidN: Int) extends MultiIOModule {
   val enq = IO(Flipped(Decoupled(new CommitInst(thidN))))
   val commit = IO(new Bundle {
@@ -91,8 +95,9 @@ class CommitUnit(thidN: Int) extends MultiIOModule {
   commit.archstate.wr.tag := tag
 
   // WriteBack
+  val instrumentReady = Wire(Bool())
   val s_WB :: s_WB1 :: s_WB2 :: Nil = Enum(3)
-  val canWB = WireInit(commit.archstate.ready && commitQueue.io.deq.valid)
+  val canWB = WireInit(commit.archstate.ready && commitQueue.io.deq.valid && instrumentReady)
   val wbState = RegInit(s_WB)
   val wbState_next = WireInit(wbState)
   wbState := wbState_next
@@ -124,7 +129,8 @@ class CommitUnit(thidN: Int) extends MultiIOModule {
     }
   }
 
-  commitQueue.io.deq.ready := canWB && wbState_next === s_WB
+  val lastCommitCycle = WireInit(canWB && wbState_next === s_WB)
+  commitQueue.io.deq.ready := lastCommitCycle
   val finalCommit = WireInit(commitQueue.io.deq.fire)
   commit.commited.tag := tag
   commit.commited.valid := finalCommit
@@ -142,4 +148,12 @@ class CommitUnit(thidN: Int) extends MultiIOModule {
       }
     }
   }
+
+  // Instrumentation interface
+  val deq = IO(Decoupled(new CommitInstrument(thidN)))
+  instrumentReady := deq.ready
+  deq.valid := lastCommitCycle
+  deq.bits.pc := commit.archstate.regs.curr.PC
+
+  assert((commitQueue.io.deq.fire && deq.fire) || (!commitQueue.io.deq.fire && !deq.fire), "Both deq and commitQueue must dequeue at the same time")
 }

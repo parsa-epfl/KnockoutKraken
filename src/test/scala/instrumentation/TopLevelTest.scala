@@ -16,6 +16,7 @@ import firrtl.options.TargetDirAnnotation
 import java.nio.ByteBuffer
 
 import InstrumentationDrivers._
+import armflex.util.{DRAMPortParams}
 object InstrumentationDrivers {
   abstract class DriverBase[T <: MultiIOModule](target: T) {
     implicit val clock = target.clock
@@ -90,7 +91,7 @@ class TestInstrumentationExample extends FlatSpec with ChiselScalatestTester {
 
   it should "Test Pushing and Pulling a memory block" in {
     test(new TopLevelExample(new TopLevelExampleParams(
-      new DRAMExampleParams(12, 512),
+      new DRAMPortParams(12, 512),
       new CSRExampleParams(32),
       new ComputeExampleParams(12, 512)
     ))).withAnnotations(annos) {

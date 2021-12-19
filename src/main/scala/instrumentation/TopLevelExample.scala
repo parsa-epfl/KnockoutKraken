@@ -10,7 +10,7 @@ import armflex.util.ExtraUtils._
 import javax.script.Bindings
 
 class TopLevelExampleParams(
-  val dramParams: DRAMExampleParams,
+  val dramParams: DRAMPortParams,
   val csrParams: CSRExampleParams,
   val computeParams: ComputeExampleParams
 )
@@ -315,7 +315,7 @@ object ARMFlexTopVerilogEmitter extends App {
 
   c.emitVerilog(
     new TopLevelExample(new TopLevelExampleParams(
-      new DRAMExampleParams(),
+      new DRAMPortParams(),
       new CSRExampleParams(),
       new ComputeExampleParams()
     )), annotations = Seq(TargetDirAnnotation("test/example/")))
@@ -328,9 +328,10 @@ object ARMFlexTopVerilogEmitter extends App {
   */
 class TopLevelExampleDRAM(val params: TopLevelExampleParams) extends MultiIOModule {
   private val system = Module(new TopLevelExample(params))
-  private val dram = Module(new DRAMWrapper(params.dramParams))
-  system.dram_io.read <> dram.read
-  system.dram_io.write <> dram.write
+  private val dramWrite = Module(new DRAMWrapperWrite(params.dramParams))
+  private val dramRead = Module(new DRAMWrapperRead(params.dramParams))
+  system.dram_io.read <> dramRead.read
+  system.dram_io.write <> dramWrite.write
   private val axiMulti_R = Module(new AXIReadMultiplexer(params.dramParams.pAddrW, params.dramParams.pDataW, 1))
   private val axiMulti_W = Module(new AXIWriteMultiplexer(params.dramParams.pAddrW, params.dramParams.pDataW, 1))
 
@@ -340,8 +341,8 @@ class TopLevelExampleDRAM(val params: TopLevelExampleParams) extends MultiIOModu
   })
   SHELL_IO.S_AXIL <> system.S_AXIL
 
-  dram.SHELL_IO_AXI.M_DMA_R <> axiMulti_R.S_IF(0)
-  dram.SHELL_IO_AXI.M_DMA_W <> axiMulti_W.S_IF(0)
+  dramRead.M_AXI_R <> axiMulti_R.S_IF(0)
+  dramWrite.M_AXI_W <> axiMulti_W.S_IF(0)
   // Interconnect Read ports
   SHELL_IO.M_AXI.ar <> axiMulti_R.M_AXI.ar
   SHELL_IO.M_AXI.r <> axiMulti_R.M_AXI.r
@@ -356,30 +357,4 @@ class TopLevelExampleDRAM(val params: TopLevelExampleParams) extends MultiIOModu
    // Disable Read ports
   axiMulti_W.M_AXI.ar <> AXI4AR.stub(params.dramParams.pAddrW)
   axiMulti_W.M_AXI.r <> AXI4R.stub(params.dramParams.pDataW)
-}
-class DRAMExampleParams(
-  val pAddrW: Int = 12,
-  val pDataW: Int = 512
-)
-class DRAMWrapper(val params: DRAMExampleParams) extends MultiIOModule {
-  assert(params.pDataW == 512, "Assumes that we match AWS F1 DRAM width.")
-  val SHELL_IO_AXI = IO(new Bundle {
-    val M_DMA_R = new AXIReadMasterIF(params.pAddrW, params.pDataW)
-    val M_DMA_W = new AXIWriteMasterIF(params.pAddrW, params.pDataW)
-  })
-
-  // The read port allows for burst data writes
-  val read = IO(new ReadPort(params.pAddrW, params.pDataW))
-  SHELL_IO_AXI.M_DMA_R.req.bits.address := read.req.bits.addr
-  SHELL_IO_AXI.M_DMA_R.req.bits.length := read.req.bits.burst
-  SHELL_IO_AXI.M_DMA_R.req.handshake(read.req)
-  read.data <> SHELL_IO_AXI.M_DMA_R.data
-
-  // The write port allows for burst data writes
-  val write = IO(new WritePort(params.pAddrW, params.pDataW))
-
-  SHELL_IO_AXI.M_DMA_W.req.bits.address := write.req.bits.addr
-  SHELL_IO_AXI.M_DMA_W.req.bits.length := write.req.bits.burst
-  SHELL_IO_AXI.M_DMA_W.req.handshake(write.req)
-  SHELL_IO_AXI.M_DMA_W.data <> write.data
 }

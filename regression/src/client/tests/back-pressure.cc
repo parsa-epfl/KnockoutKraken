@@ -109,7 +109,7 @@ static int test_stress_memory(
         transplant_freePending(ctx, pending_threads);
         completed |= pending_threads;
       }
-      usleep(1e5);
+      advanceTicks(ctx, 1000);
       REQUIRE(iterations < 100);
     }
     INFO("Verify state and push back programs to start benchmark");
@@ -179,7 +179,7 @@ static int test_stress_memory(
       } else {
         REQUIRE(false); // Program should fit in single page
       }
-      usleep(1e4);
+      advanceTicks(ctx, 1000);
       iterations++;
       REQUIRE(iterations < (1000 * thidN * nDataPagesPerThread));
     }

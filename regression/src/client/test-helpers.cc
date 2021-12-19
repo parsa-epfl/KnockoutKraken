@@ -12,15 +12,6 @@ void requireStateIsIdentical(const ArmflexArchState &state1,
   }
 }
 
-void initArchState(ArmflexArchState *state, uint64_t pc) {
-  for (int i = 0; i < 32; ++i) {
-    state->xregs[i] = i;
-  }
-  state->nzcv = 0;
-  state->sp = 0;
-  state->pc = pc;
-}
-
 void synchronizePage(FPGAContext *ctx, int asid, uint8_t *page, uint64_t vaddr,
                      uint64_t paddr, bool expect_modified) {
   INFO("Synchronize page");
@@ -51,22 +42,4 @@ void synchronizePage(FPGAContext *ctx, int asid, uint8_t *page, uint64_t vaddr,
   REQUIRE(message.EvictDone.modified == expect_modified);
 
   fetchPageFromFPGA(ctx, paddr, page);
-}
-
-void makeDeadbeefPage(uint8_t *pages, size_t bytes) {
-  uint32_t *page_word = (uint32_t *)pages;
-  for (int word = 0; word < bytes / 4; word++) {
-    page_word[word] = 0xDEADBEEF;
-  }
-}
-
-void makeZeroPage(uint8_t *page) {
-  uint32_t *page_word = (uint32_t *)page;
-  for (int word = 0; word < PAGE_SIZE / 4; word++) {
-    page_word[word] = 0xFFFFFFFF;
-  }
-}
-
-void advanceTicks(const FPGAContext *c, int ticks) {
-  writeSimCtrl(c, cycleStep, ticks);
 }

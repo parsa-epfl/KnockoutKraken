@@ -247,6 +247,12 @@ class Pipeline(params: PipelineParams) extends MultiIOModule {
   decReg.io.flush.tag := DontCare
   issuer.io.flush.tag := DontCare
 
+  // Instrumentation Interface -----------------------------------------------
+  val instrument = IO(new Bundle {
+    val commit = commitU.deq.cloneType
+  })
+  instrument.commit <> commitU.deq
+
   // DEBUG Signals ------------------------------------------------------------
   val dbg = IO(new Bundle {
     val issue = Output(new Bundle {

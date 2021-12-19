@@ -47,7 +47,7 @@ class FetchUnitPC(thidN: Int) extends MultiIOModule {
     }
   }
 
-  if(true) { // TODO Conditional printing 
+  if(false) { // TODO Conditional printing 
     val location = "Pipeline:Fetch"
     when(ctrl.start.valid) {
       printf(p"${location}:Transplant Start:thid[${ctrl.start.tag}]:PC[0x${Hexadecimal(ctrl.start.bits.get)}]\n")
