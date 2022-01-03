@@ -26,6 +26,7 @@ class PipelineParams(
 
   val axiDataW = 32
 
+  def getBlockAddrUpperBits(addr: UInt) = addr(11, log2Ceil(blockSize / 8) - 1)
   def getBlockAddrBits(addr: UInt) = addr(log2Ceil(blockSize / 8) - 1, 0)
 
   def simLog(str: Printable): Unit = {
