@@ -28,7 +28,7 @@ int initFPGAContext(FPGAContext *c){
   c->base_address.tt = 0x8000;
   c->base_address.transplant_ctl = 0x9000;
   c->base_address.message_queue = 0x10000;
-  c->base_address.instrumentation_trace = 0x20000;
+  c->base_address.instrumentation_trace = 0x1F000;
 
   c->base_address.dram_base = 0;
   c->base_address.pt_base = 0;
