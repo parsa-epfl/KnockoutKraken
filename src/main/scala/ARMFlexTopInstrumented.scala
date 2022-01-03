@@ -12,6 +12,7 @@ import armflex.util.{ DRAMWrapperWrite, DRAMPortParams }
 import instrumentation.{ TraceDump, TraceDumpParams }
 import antmicro.Bus.AXI4Lite
 import armflex.util.PerfCounter
+import armflex.util.AXILInterconnectorNonOptimized
 
 class ARMFlexTopInstrumented(
   paramsPipeline: PipelineParams,
@@ -22,7 +23,8 @@ class ARMFlexTopInstrumented(
   private val devteroFlexTop = Module(new ARMFlexTop(paramsPipeline, paramsMemoryHierarchy))
   private val axiMulti_R = Module(new AXIReadMultiplexer(paramsMemoryHierarchy.dramAddrW, 512, 6))
   private val axiMulti_W = Module(new AXIWriteMultiplexer(paramsMemoryHierarchy.dramAddrW, 512, 6))
-  private val axilMulti = Module(new AXILInterconnector(Seq(0x00000, 0x10000, 0x20000), Seq(0x08000,0x10000, 0xA0000), 32, 32))
+  //private val axilMulti = Module(new AXILInterconnector(Seq(0x00000, 0x10000, 0x1F000), Seq(0x08000, 0x10000, 0x1F000), 32, 32))
+  private val axilMulti = Module(new AXILInterconnectorNonOptimized(Seq(0x00000, 0x10000, 0x1F000), 32, 32))
   val S_AXI = IO(Flipped(devteroFlexTop.AXI_MEM.AXI_MMU.S_AXI.cloneType))
   val S_AXIL = IO(Flipped(axilMulti.S_AXIL.cloneType))
   S_AXI <> devteroFlexTop.AXI_MEM.AXI_MMU.S_AXI
@@ -58,7 +60,7 @@ class ARMFlexTopInstrumented(
 
   // Instrumentation to store PC
   val traceWrapper = Module(new TraceWrapper(
-    paramsMemoryHierarchy.dramAddrW, axilMulti.S_AXIL.addrWidth, 0x20000))
+    paramsMemoryHierarchy.dramAddrW, axilMulti.S_AXIL.addrWidth, 0x1F000))
   traceWrapper.commit.bits <> devteroFlexTop.instrument.commit.bits.pc
   traceWrapper.commit.handshake(devteroFlexTop.instrument.commit)
   axilMulti.M_AXIL(2) <> traceWrapper.S_AXIL
@@ -119,8 +121,8 @@ object ARMFlexInstrumentedVerilogEmitter extends App {
   val fr = new FileWriter(new File("regression/rtl/ARMFlexTop.v"))
   fr.write(c.emitVerilog(
     new ARMFlexTopInstrumented(
-      new PipelineParams(thidN = 32, pAddrW =  24),
-      new MemoryHierarchyParams(thidN = 32, pAddrW = 24)
+      new PipelineParams(thidN = 8, pAddrW =  24),
+      new MemoryHierarchyParams(thidN = 8, pAddrW = 24)
       ), annotations = Seq(TargetDirAnnotation("regression/rtl/"))))
   fr.close()
 }

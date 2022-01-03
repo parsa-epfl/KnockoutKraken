@@ -2,7 +2,7 @@ import antmicro.Bus.{AXI4, AXI4AR, AXI4AW, AXI4B, AXI4R, AXI4W}
 import chisel3._
 import chisel3.util._
 import armflex._
-import armflex.util.AXILInterconnector
+import armflex.util._
 import armflex_cache._
 import armflex_mmu.{MMU, MemoryHierarchyParams}
 import armflex.util.ExtraUtils._
@@ -118,7 +118,8 @@ class ARMFlexTopSimulator(
   private val devteroFlexTop = Module(new ARMFlexTop(paramsPipeline, paramsMemoryHierarchy))
   private val axiMulti_R = Module(new AXIReadMultiplexer(paramsMemoryHierarchy.dramAddrW, 512, 6))
   private val axiMulti_W = Module(new AXIWriteMultiplexer(paramsMemoryHierarchy.dramAddrW, 512, 5))
-  private val axilMulti = Module(new AXILInterconnector(Seq(0x00000, 0x10000), Seq(0x08000,0x10000), 32, 32))
+  //private val axilMulti = Module(new AXILInterconnector(Seq(0x00000, 0x10000), Seq(0x08000,0x10000), 32, 32))
+  private val axilMulti = Module(new AXILInterconnectorNonOptimized(Seq(0x00000, 0x10000, 0x1F000), 32, 32))
   val S_AXI = IO(Flipped(devteroFlexTop.AXI_MEM.AXI_MMU.S_AXI.cloneType))
   val S_AXIL = IO(Flipped(axilMulti.S_AXIL.cloneType))
   S_AXI <> devteroFlexTop.AXI_MEM.AXI_MMU.S_AXI
