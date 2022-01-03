@@ -377,7 +377,7 @@ class MemoryUnit(
   private def isPairPageMisaligned(minst: MInstTag[UInt]) = minst.isPair && // Is Pair
     minst.req(0).addr(12) =/= minst.req(1).addr(12) // Page is different
 
-  private def isBlockMisaligned(addr1: UInt, addr2: UInt) = params.getBlockAddrBits(addr1) =/= params.getBlockAddrBits(addr2)
+  private def isBlockMisaligned(addr1: UInt, addr2: UInt) = params.getBlockAddrUpperBits(addr1) =/= params.getBlockAddrUpperBits(addr2)
 
   private val tlbPair_paddr1 = RegEnable(mem_io.tlb.resp.bits.addr, mem_io.tlb.resp.fire)
   private val tlbDropInst = WireInit(false.B) // Drop instruction on miss
@@ -398,6 +398,8 @@ class MemoryUnit(
   tlb2cache_credits.trans.dropped := tlbDropInst
 
   // Data
+  val tlb_resp_addr_pagebits_0 = WireInit(RegNext(tlbReqQ.io.deq.bits.req(0).addr(11,0)))
+  val tlb_resp_addr_pagebits_1 = WireInit(RegNext(tlbReqQ.io.deq.bits.req(1).addr(11,0)))
   mem_io.tlb.req.bits.addr := Mux(sTLB_state === sTLB_pair_req,
                                   tlbReqQ.io.deq.bits.req(1).addr,
                                   tlbReqQ.io.deq.bits.req(0).addr)
@@ -405,8 +407,8 @@ class MemoryUnit(
   mem_io.tlb.req.bits.perm := Mux(tlbReqQ.io.deq.bits.isLoad, DATA_LOAD.U, DATA_STORE.U)
   mem_io.tlb.req.bits.asid := DontCare // Defined higher in the hierarchy
   cacheReq.inst := tlbMeta
-  cacheReq.paddr(0) := mem_io.tlb.resp.bits.addr | tlbReqQ.io.deq.bits.req(0).addr(11,0) // PAGE_SIZE
-  cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr | tlbReqQ.io.deq.bits.req(1).addr(11,0)
+  cacheReq.paddr(0) := mem_io.tlb.resp.bits.addr | tlb_resp_addr_pagebits_0 // PAGE_SIZE
+  cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr | tlb_resp_addr_pagebits_1
   cacheReq.firstIsCompleted := false.B
   cacheReqQ.io.enq.bits := cacheReq
 
@@ -450,11 +452,11 @@ class MemoryUnit(
   // Resp TLB management -----
   cacheReq.blockMisaligned := isBlockMisaligned(cacheReq.paddr(0), cacheReq.paddr(1))
   when(mem_io.tlb.resp.fire && sTLB_state =/= sTLB_intermediateResp) {
-    cacheReq.paddr(0) := mem_io.tlb.resp.bits.addr                            | tlbReqQ.io.deq.bits.req(0).addr(11,0)
-    cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr + (1.U << tlbMeta.size)    | tlbReqQ.io.deq.bits.req(1).addr(11,0)
+    cacheReq.paddr(0) := mem_io.tlb.resp.bits.addr                            | tlb_resp_addr_pagebits_0
+    cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr + (1.U << tlbMeta.size)    | tlb_resp_addr_pagebits_1
     when(isPairPageMisaligned(tlbMeta)) {
-      cacheReq.paddr(0) := tlbPair_paddr1            | tlbReqQ.io.deq.bits.req(0).addr(11,0)
-      cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr | tlbReqQ.io.deq.bits.req(1).addr(11,0)
+      cacheReq.paddr(0) := tlbPair_paddr1            | tlb_resp_addr_pagebits_0
+      cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr | tlb_resp_addr_pagebits_1
       cacheReq.blockMisaligned := true.B
     }
 
@@ -498,10 +500,9 @@ class MemoryUnit(
     cacheAdaptorReqW_en := maskByteEn << maskEn_shift
   }
 
- cacheAdaptorReqData := cacheAdaptorMInstInput.inst.req(selReqIdx).data << Cat(params.getBlockAddrBits(cacheAdaptorMInstInput.inst.req(selReqIdx).addr), 0.U(3.W))
+  cacheAdaptorReqData := cacheAdaptorMInstInput.inst.req(selReqIdx).data << Cat(params.getBlockAddrBits(cacheAdaptorMInstInput.inst.req(selReqIdx).addr), 0.U(3.W))
   when(singleAccessPair) {
-    cacheAdaptorReqData :=
-      cacheAdaptorMInstInput.inst.req(1).data << Cat(params.getBlockAddrBits(cacheAdaptorMInstInput.inst.req(1).addr), 0.U(3.W)) |
+    cacheAdaptorReqData := cacheAdaptorMInstInput.inst.req(1).data << Cat(params.getBlockAddrBits(cacheAdaptorMInstInput.inst.req(1).addr), 0.U(3.W)) |
         cacheAdaptorMInstInput.inst.req(0).data << Cat(params.getBlockAddrBits(cacheAdaptorMInstInput.inst.req(0).addr), 0.U(3.W))
   }
 
