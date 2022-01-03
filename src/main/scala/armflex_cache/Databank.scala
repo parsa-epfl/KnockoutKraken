@@ -195,7 +195,7 @@ class DataBankManager(
     lru_addr_o := 0.U
 
   // fetch data from the bram
-  bank_ram_reply_q.ready := s1_frontend_request_r.valid // If transaction is valid, then we accept the result.
+  bank_ram_reply_q.ready := s1_frontend_request_r.fire() // If transaction is valid, then we accept the result.
 
   val match_bits = bank_ram_reply_q.bits.map({ x=>
     x.checkHit(s1_frontend_request_r.bits.addr, s1_frontend_request_r.bits.asid) && x.v
