@@ -145,9 +145,8 @@ class DataBankManager(
   // Ports to Bank RAM (Read port)
   val setType = Vec(params.associativity, new CacheEntry(params))
 
-  val bank_ram_request_addr_o = IO(Decoupled(UInt(params.setWidth.W)))
-  val bank_ram_reply_data_i = IO(Flipped(Decoupled(setType.cloneType)))
-  val bank_ram_reply_q = FlushQueue(bank_ram_reply_data_i, 1, pipe = true, flow = true)
+  val bank_ram_request_addr_o = IO(Output(UInt(params.setWidth().W)))
+  val bank_ram_reply_data_i = IO(Input(setType.cloneType))
 
   val bank_ram_write_request_o = IO(Decoupled(new BankWriteRequestPacket(params)))
 
@@ -178,16 +177,10 @@ class DataBankManager(
   s1_frontend_request_r.ready := pipeline_state_ready(1)
 
   // pass to the bram
-  if(params.setWidth > 1)
-    bank_ram_request_addr_o.bits := frontend_request_i.bits.addr(params.setWidth-1, 0)
+  if(params.setWidth() > 1)
+    bank_ram_request_addr_o := frontend_request_i.bits.addr(params.setWidth-1, 0)
   else
-    bank_ram_request_addr_o.bits := 0.U
-
-  if(params.implementedWithRegister)
-    bank_ram_request_addr_o.valid := frontend_request_i.valid
-  else
-    bank_ram_request_addr_o.valid := frontend_request_i.fire //! Always remember to check the handshake signal when eliminating one level pipeline stage!!!
-
+    bank_ram_request_addr_o := 0.U
   // pass to the LRU
   if(params.setWidth > 1)
     lru_addr_o := frontend_request_i.bits.addr(params.setWidth-1, 0)
@@ -195,9 +188,7 @@ class DataBankManager(
     lru_addr_o := 0.U
 
   // fetch data from the bram
-  bank_ram_reply_q.ready := s1_frontend_request_r.fire() // If transaction is valid, then we accept the result.
-
-  val match_bits = bank_ram_reply_q.bits.map({ x=>
+  val match_bits = bank_ram_reply_data_i.map({ x=>
     x.checkHit(s1_frontend_request_r.bits.addr, s1_frontend_request_r.bits.asid) && x.v
   }) // get all the comparison results
   assert(PopCount(match_bits) === 1.U || PopCount(match_bits) === 0.U, "It's impossible to hit multiple entries.")
@@ -234,7 +225,7 @@ class DataBankManager(
   val hit_entry = Mux(
     s2_writing_matched,
     s2_bank_writing_r.bits.toEntry(),
-    bank_ram_reply_q.bits(match_which)
+    bank_ram_reply_data_i(match_which)
   )
 
   val hit_v: Bool = Mux(
@@ -352,7 +343,7 @@ class DataBankManager(
   miss_request_o <> s2_miss_request_r
 
 
-  val replaced_entry = bank_ram_reply_q.bits(lru_which_i)
+  val replaced_entry = bank_ram_reply_data_i(lru_which_i)
   val eviction_wb_req = Wire(Decoupled(new WriteBackRequestPacket(params))) // write back due to the eviction.
 
   if(params.setWidth > 1)
@@ -396,7 +387,6 @@ class DataBankManager(
   writeback_request_o <> s2_writeback_request_r
   
   pipeline_state_ready(1) := true.B && //s2_miss_n.ready &&
-    bank_ram_reply_q.valid === s1_frontend_request_r.valid &&  // BRAM response arrives.
   s2_miss_request_n.ready && s2_writeback_request_n.ready // Both miss and writeback will be accepted.
-  pipeline_state_ready(0) := s1_frontend_request_n.ready && bank_ram_request_addr_o.ready
+  pipeline_state_ready(0) := s1_frontend_request_n.ready
 }
