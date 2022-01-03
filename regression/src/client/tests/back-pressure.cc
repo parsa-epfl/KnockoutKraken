@@ -203,6 +203,14 @@ static int test_stress_memory(
   return 0;
 }
 
+TEST_CASE("test-pressure-ldp-stp-single") {
+  FPGAContext ctx;
+  REQUIRE(initFPGAContext(&ctx) == 0);
+  test_stress_memory(&ctx, 1, 1, true);
+
+  releaseFPGAContext(&ctx);
+}
+
 TEST_CASE("test-pressure-ldp-stp-short") {
   FPGAContext ctx;
   REQUIRE(initFPGAContext(&ctx) == 0);
