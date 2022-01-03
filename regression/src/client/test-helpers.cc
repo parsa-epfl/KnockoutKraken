@@ -28,18 +28,22 @@ void synchronizePage(FPGAContext *ctx, int asid, uint8_t *page, uint64_t vaddr,
   REQUIRE(message.asid == asid);
   REQUIRE(message.vpn_hi == VPN_GET_HI(vaddr));
   REQUIRE(message.vpn_lo == VPN_GET_LO(vaddr));
+  REQUIRE(message.EvictNotif.ppn == GET_PPN_FROM_PADDR(paddr));
+
+  if(message.EvictNotif.modified) {
+    INFO("2. Query Eviction Notification Complete");
+    queryMessageFromFPGA(ctx, (uint8_t *)&message);
+
+    REQUIRE(message.type == sEvictDone);
+    REQUIRE(message.asid == asid);
+    REQUIRE(message.vpn_hi == VPN_GET_HI(vaddr));
+    REQUIRE(message.vpn_lo == VPN_GET_LO(vaddr));
+    REQUIRE(message.EvictDone.ppn == GET_PPN_FROM_PADDR(paddr));
+    REQUIRE(message.EvictDone.permission == DATA_STORE);
+    REQUIRE(message.EvictDone.modified == expect_modified);
+  }
 
   // Let's query message. It should send an eviction completed message
-  INFO("2. Query Eviction Notification Complete");
-  queryMessageFromFPGA(ctx, (uint8_t *)&message);
-
-  REQUIRE(message.type == sEvictDone);
-  REQUIRE(message.asid == asid);
-  REQUIRE(message.vpn_hi == VPN_GET_HI(vaddr));
-  REQUIRE(message.vpn_lo == VPN_GET_LO(vaddr));
-  REQUIRE(message.EvictDone.ppn == GET_PPN_FROM_PADDR(paddr));
-  REQUIRE(message.EvictDone.permission == DATA_STORE);
-  REQUIRE(message.EvictDone.modified == expect_modified);
-
+  INFO("3. Fetch physical page from FPGA")
   fetchPageFromFPGA(ctx, paddr, page);
 }
