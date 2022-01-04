@@ -15,5 +15,9 @@ void makeZeroPage(uint8_t *page) {
 }
 
 void advanceTicks(const FPGAContext *c, int ticks) {
+#ifndef AWS_FPGA
   writeSimCtrl(c, cycleStep, ticks);
+#else
+  return;
+#endif
 }

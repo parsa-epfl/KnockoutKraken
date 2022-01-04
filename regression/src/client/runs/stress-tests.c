@@ -15,7 +15,8 @@ int main(int argc, char **argv) {
     FPGAContext ctx;
     ArmflexArchState state;
     uint8_t page[PAGE_SIZE] = {0};
-    assert(initFPGAContext(&ctx) == 0);
+    int ret = initFPGAContext(&ctx);
+    printf("initFPGAContext retuned %i, should be 0\n", ret);
     int paddr = ctx.base_address.page_base;
 
     printf("Get program page\n");
