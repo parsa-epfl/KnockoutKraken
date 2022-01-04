@@ -145,7 +145,7 @@ class DataBankManager(
   // Ports to Bank RAM (Read port)
   val setType = Vec(params.associativity, new CacheEntry(params))
 
-  val bank_ram_request_addr_o = IO(Output(UInt(params.setWidth().W)))
+  val bank_ram_request_addr_o = IO(Valid(UInt(params.setWidth().W)))
   val bank_ram_reply_data_i = IO(Input(setType.cloneType))
 
   val bank_ram_write_request_o = IO(Decoupled(new BankWriteRequestPacket(params)))
@@ -178,9 +178,12 @@ class DataBankManager(
 
   // pass to the bram
   if(params.setWidth() > 1)
-    bank_ram_request_addr_o := frontend_request_i.bits.addr(params.setWidth-1, 0)
+    bank_ram_request_addr_o.bits := frontend_request_i.bits.addr(params.setWidth-1, 0)
   else
-    bank_ram_request_addr_o := 0.U
+    bank_ram_request_addr_o.bits := 0.U
+
+  bank_ram_request_addr_o.valid := s1_frontend_request_n.fire() // Reading BRAM happens when and only when request is accepted.
+
   // pass to the LRU
   if(params.setWidth > 1)
     lru_addr_o := frontend_request_i.bits.addr(params.setWidth-1, 0)
