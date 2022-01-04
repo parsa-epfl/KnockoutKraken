@@ -1,3 +1,5 @@
+#include <unistd.h>
+
 #include "fpga_helpers.h"
 
 void makeDeadbeefPage(uint8_t *pages, size_t bytes) {
@@ -18,6 +20,6 @@ void advanceTicks(const FPGAContext *c, int ticks) {
 #ifndef AWS_FPGA
   writeSimCtrl(c, cycleStep, ticks);
 #else
-  return;
+  usleep(ticks);
 #endif
 }
