@@ -11,8 +11,7 @@ class PerfCounter(val width: Int) extends Module {
   val cnt = RegInit(0.U(width.W))
   when(io.reset) {
     cnt := 0.U
-  }
-  when(io.incr) {
+  }.elsewhen(io.incr) {
     cnt := cnt + 1.U
   }
   io.count := cnt
