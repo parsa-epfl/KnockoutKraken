@@ -153,10 +153,10 @@ abstract class SerializableToRaw[T <: RawMessage](msg: T) extends Bundle
   def getMessageType: UInt
 
   def getRawMessage: T = {
-    val res = WireInit(msg.cloneType, 0.U.asTypeOf(msg))
+    val res = WireInit(0.U.asTypeOf(msg))
     val rawVec = this.asVec
     assert(rawVec.length < res.data.length)
-    res.message_type := WireInit(this.getMessageType)
+    res.message_type := this.getMessageType
     for(i <- 0 until rawVec.length)
       res.data(i) := rawVec(i)
 

@@ -10,7 +10,7 @@ lazy val root = (project in file("."))
     name := "armflex",
     libraryDependencies ++= Seq(
       "edu.berkeley.cs" %% "chisel3" % "3.5.0",
-      "edu.berkeley.cs" %% "chiseltest" % "0.5.0-RC2" % "test",
+      "edu.berkeley.cs" %% "chiseltest" % "0.5.0" % "test",
       "com.github.tototoshi" %% "scala-csv" % "1.3.10"
     ),
     scalacOptions ++= Seq(
