@@ -85,5 +85,4 @@ class CacheEntry(param: DatabankParams) extends Bundle {
     p"           data:0x${Hexadecimal(data)})\n"
   }
 
-  override def cloneType: this.type = new CacheEntry(param).asInstanceOf[this.type]
 }

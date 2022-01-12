@@ -128,9 +128,8 @@ implicit class BaseTLBDriver(target: DUTTLB){
 }
 
 
-import TestOptionBuilder._
-import chiseltest.internal.VerilatorBackendAnnotation
-import chiseltest.internal.WriteVcdAnnotation
+import chiseltest.simulator.VerilatorBackendAnnotation
+import chiseltest.simulator.WriteVcdAnnotation
 import firrtl.options.TargetDirAnnotation
 
 class TLBTester extends FreeSpec with ChiselScalatestTester {

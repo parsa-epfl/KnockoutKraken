@@ -3,7 +3,6 @@ package armflex.util
 import chisel3._
 import chiseltest._
 import chiseltest.internal._
-import chiseltest.experimental.TestOptionBuilder._
 
 import chisel3.util.DecoupledIO
 import chisel3.experimental.BundleLiterals._

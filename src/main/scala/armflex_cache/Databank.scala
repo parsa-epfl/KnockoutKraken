@@ -115,7 +115,6 @@ class MissRequestPacket(params: DatabankParams) extends Bundle{
 
   val not_sync_with_data_v = Bool()
 
-  override def cloneType: this.type = new MissRequestPacket(params).asInstanceOf[this.type]
 }
 
 /**
@@ -127,7 +126,6 @@ class WriteBackRequestPacket(params: DatabankParams) extends Bundle{
 
   val flush_v = Bool() // True if this eviction is caused by flush
 
-  override def cloneType: this.type = new WriteBackRequestPacket(params).asInstanceOf[this.type]
 }
 
 /**

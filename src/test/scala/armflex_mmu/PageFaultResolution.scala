@@ -8,9 +8,8 @@ import chisel3.experimental.BundleLiterals._
 import chiseltest._
 import chiseltest.experimental._
 
-import TestOptionBuilder._
-import chiseltest.internal.VerilatorBackendAnnotation
-import chiseltest.internal.WriteVcdAnnotation
+import chiseltest.simulator.VerilatorBackendAnnotation
+import chiseltest.simulator.WriteVcdAnnotation
 import firrtl.options.TargetDirAnnotation
 
 

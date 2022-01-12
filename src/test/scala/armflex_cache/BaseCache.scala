@@ -16,9 +16,9 @@ import chisel3.util.experimental.loadMemoryFromFile
 import chiseltest._
 import chiseltest.experimental._
 import org.scalatest._
-import chiseltest.internal.VerilatorBackendAnnotation
+import chiseltest.simulator.VerilatorBackendAnnotation
 import firrtl.options.TargetDirAnnotation
-import chiseltest.internal.WriteVcdAnnotation
+import chiseltest.simulator.WriteVcdAnnotation
 
 //import armflex.util.SimTools._
 
@@ -148,8 +148,6 @@ implicit class CacheDriver(target: DTUCache){
 }
 
 }
-
-import TestOptionBuilder._
 
 /**
  * How to test a read-only tester?

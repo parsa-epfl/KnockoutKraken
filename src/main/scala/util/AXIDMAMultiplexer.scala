@@ -28,7 +28,6 @@ class AXIReadMasterIF(addrW: Int, dataW: Int) extends Bundle {
   val data = Flipped(Decoupled(UInt(dataW.W)))
   val done = Input(Bool())
 
-  override def cloneType: this.type = new AXIReadMasterIF(addrW, dataW).asInstanceOf[this.type]
 }
 
 /**
@@ -89,7 +88,6 @@ class AXIWriteMasterIF(addrW: Int, dataW: Int) extends Bundle {
   val data = Decoupled(UInt(dataW.W))
   val done = Input(Bool())
 
-  override def cloneType: this.type = new AXIWriteMasterIF(addrW, dataW).asInstanceOf[this.type]
 }
 
 class AXIWriteMultiplexer(

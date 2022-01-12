@@ -18,7 +18,6 @@ class CommitInst(thidN: Int) extends Bundle {
   val exceptions = Valid(UInt(1.W))
   val undef = Output(Bool())
   val is32bit = Output(Bool())
-  override def cloneType: this.type = new CommitInst(thidN).asInstanceOf[this.type]
 }
 
 object CommitInst {

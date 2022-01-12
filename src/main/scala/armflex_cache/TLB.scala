@@ -40,7 +40,6 @@ class TLBPipelineReq(params: PageTableParams) extends Bundle {
     this.thid := o.thid
   }
 
-  override def cloneType: this.type = new TLBPipelineReq(params).asInstanceOf[this.type]
 }
 
 /**
@@ -62,7 +61,6 @@ class TLBPipelineResp(params: PageTableParams) extends Bundle {
     res
   }
 
-  override def cloneType: this.type = new TLBPipelineResp(params).asInstanceOf[this.type]
 }
 
 /**
@@ -78,7 +76,6 @@ class TLBMMURequestPacket(params: PageTableParams) extends Bundle {
   val perm = UInt(2.W)
   val thid = UInt(log2Ceil(params.thidN).W)
 
-  override def cloneType: this.type = new TLBMMURequestPacket(params).asInstanceOf[this.type]
 
   def toAccessRequestPacket: TLBPipelineReq = {
     val res = new TLBPipelineReq(params)
@@ -98,7 +95,6 @@ class TLBMMURespPacket(params: PageTableParams) extends Bundle {
   val data = new PTEntryPacket(params)
   val thid = UInt(log2Ceil(params.thidN).W)
 
-  override def cloneType: this.type = new TLBMMURespPacket(params).asInstanceOf[this.type]
 }
 
 class TLB2MMUIO(params: PageTableParams) extends Bundle {
@@ -108,7 +104,6 @@ class TLB2MMUIO(params: PageTableParams) extends Bundle {
   val writebackReq = Decoupled(new TLBEvictionMessage(params))
   val refillResp = Flipped(Decoupled(new TLBMMURespPacket(params)))
 
-  override def cloneType: this.type = new TLB2MMUIO(params).asInstanceOf[this.type]
 }
 
 class TLB2PipelineIO(params: PageTableParams) extends Bundle {

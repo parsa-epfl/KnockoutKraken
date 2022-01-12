@@ -26,8 +26,7 @@ class PageTableSetPacket(
   val valids = UInt(entryNumber.W)
   val lru_bits = UInt(entryNumber.W)
 
-  override def cloneType: this.type = new PageTableSetPacket(params, entryNumber).asInstanceOf[this.type]
-} 
+}
 
 class PageSetBufferWriteRequestPacket(
   params: PageTableParams,
@@ -37,7 +36,6 @@ class PageSetBufferWriteRequestPacket(
   val flush_v = Bool()
   val index = UInt(log2Ceil(entryNumber).W)
 
-  override def cloneType: this.type = new PageSetBufferWriteRequestPacket(params, entryNumber).asInstanceOf[this.type]
 }
 
 class PageSetBufferLookupReplyPacket(
@@ -48,7 +46,6 @@ class PageSetBufferLookupReplyPacket(
   val index = UInt(log2Ceil(entryNumber).W)
   val hit_v = Bool()
 
-  override def cloneType: this.type = new PageSetBufferLookupReplyPacket(params, entryNumber).asInstanceOf[this.type]
 }
 
 /**

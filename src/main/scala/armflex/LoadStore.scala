@@ -58,7 +58,6 @@ class MInstTag[T <: UInt](gen: T) extends MInst {
     this.exceptions := target.exceptions
     this.tag := DontCare
   }
-  override def cloneType: this.type = new MInstTag(gen).asInstanceOf[this.type]
 }
 
 class LDSTUnitIO extends Bundle {

@@ -71,7 +71,6 @@ object PipeCache {
   ) extends Bundle {
     val port = Flipped(Decoupled(new CacheRequest(pAddrW, blockW)))
     val meta = Input(gen)
-    override def cloneType: this.type = new PipeCacheRequest[MetaT](gen, pAddrW, blockW).asInstanceOf[this.type]
   }
 
   class PipeCacheResponse[MetaT <: Data](
@@ -80,7 +79,6 @@ object PipeCache {
   ) extends Bundle {
     val port = Decoupled(new CacheResponse(blockSize))
     val meta = Output(gen)
-    override def cloneType: this.type = new PipeCacheResponse[MetaT](gen, blockSize).asInstanceOf[this.type]
   }
 
   class PipeCacheInterfaceIO[MetaT <: Data](
@@ -90,7 +88,6 @@ object PipeCache {
   ) extends Bundle {
     val req = new PipeCacheRequest(genMeta.cloneType, pAddrW, blockSize)
     val resp = new PipeCacheResponse(genMeta.cloneType, blockSize)
-    override def cloneType: this.type = new PipeCacheInterfaceIO[MetaT](genMeta, pAddrW, blockSize).asInstanceOf[this.type]
   }
 
   /* For Cache (not TLB), this module handles miss delays by using a double Queueing system

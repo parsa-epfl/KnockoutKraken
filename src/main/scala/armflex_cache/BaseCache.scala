@@ -121,7 +121,6 @@ class MergedBackendRequestPacket(params: DatabankParams) extends Bundle{
   val flush_v = Bool() // this request is caused by flush
   val data = UInt(params.blockSize.W)
 
-  override def cloneType: this.type = new MergedBackendRequestPacket(params).asInstanceOf[this.type]
 }
 
 class BackendRequestMerger(params: DatabankParams) extends MultiIOModule{

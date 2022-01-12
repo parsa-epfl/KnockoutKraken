@@ -6,7 +6,6 @@ import chisel3.experimental._
 import org.scalatest.FreeSpec
 import chiseltest._
 import chiseltest.internal._
-import chiseltest.experimental.TestOptionBuilder._
 
 import firrtl.options.TargetDirAnnotation
 

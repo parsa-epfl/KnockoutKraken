@@ -52,7 +52,6 @@ class BankWriteRequestPacket(
   val which = UInt(params.wayWidth().W)
   val data = new CacheEntry(params)
 
-  override def cloneType: this.type = new BankWriteRequestPacket(params).asInstanceOf[this.type]
 }
 
 class BRAMPortAdapter(

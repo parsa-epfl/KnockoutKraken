@@ -67,7 +67,6 @@ object RFileIO {
       }
     )
     val tag = Input(UInt(log2Ceil(thidN).W))
-    override def cloneType: this.type = new RDPort(thidN).asInstanceOf[this.type]
   }
 
   class WRPort(thidN: Int) extends Bundle {
@@ -75,7 +74,6 @@ object RFileIO {
     val data = Input(DATA_T)
     val en = Input(Bool())
     val tag = Input(UInt(log2Ceil(thidN).W))
-    override def cloneType: this.type = new WRPort(thidN).asInstanceOf[this.type]
   }
 
   def wr2BRAM(port: BRAMPort, wr: WRPort) {

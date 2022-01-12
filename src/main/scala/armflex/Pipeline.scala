@@ -27,7 +27,6 @@ class IssueArchStateIO(thidN: Int) extends Bundle {
 class PipeArchStateIO(thidN: Int) extends Bundle {
   val issue = new IssueArchStateIO(thidN)
   val commit = new CommitArchStateIO(thidN)
-  override def cloneType: this.type = new PipeArchStateIO(thidN).asInstanceOf[this.type]
 }
 
 /** Processor
