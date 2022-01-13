@@ -5,9 +5,9 @@ import chisel3.util._
 import chisel3.experimental.{requireIsChiselType, DataMirror, Direction}
 
 class ValidTag[T <: Data](genTag: UInt, genData: Option[T]) extends Bundle {
-  val valid = Output(Bool())
-  val bits = if(genData.isDefined) Some(Output(genData.get)) else None
-  val tag = Output(genTag).cloneType
+  val valid = Bool()
+  val bits = if(genData.isDefined) Some(genData.get.cloneType) else None
+  val tag = genTag.cloneType
 }
 
 class Tagged[T <: Data](genTag: UInt, genData: T) extends Bundle {
