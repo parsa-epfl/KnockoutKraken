@@ -10,7 +10,7 @@ import armflex_cache.{TLBMMURequestPacket, PageTableParams}
  * This module converts a TLB backend request (evict or just flush) to a message.
  * The message will be sent to the core so that correct operations will be carried.
  * 
- * @params params the parameter of the TLB
+ * @param param the parameter of the TLB
  * 
  * @note Flush result will be ignored here because another module has already read the data.
  * @note To support multiple TLBs, please add an arbiter.
@@ -18,7 +18,7 @@ import armflex_cache.{TLBMMURequestPacket, PageTableParams}
  */
 class TLBMessageConverter(
   param: MemoryHierarchyParams
-) extends MultiIOModule {
+) extends Module {
   val tlb_backend_request_i = IO(Flipped(Decoupled(new TLBMMURequestPacket(param.getPageTableParams))))
 
   val miss_request = Wire(Decoupled(new TLBMissRequestMessage(param.getPageTableParams)))

@@ -33,7 +33,7 @@ class DInst extends Bundle
 
     // Data
     val itype = decoder.head
-    rd.bits := MuxLookup(itype,  DontCare, Array(
+    rd.bits := MuxLookup(itype,  DontCare, Seq(
       I_PCRel -> inst( 4, 0),
       I_BitF  -> inst( 4, 0),
       I_DP1S  -> inst( 4, 0),
@@ -56,7 +56,7 @@ class DInst extends Bundle
       I_LSUImm  -> inst( 4, 0)
     ))
 
-    rs1 := MuxLookup(itype, DontCare, Array(
+    rs1 := MuxLookup(itype, DontCare, Seq(
       I_BReg  -> inst( 9, 5),
       I_BitF  -> inst( 9, 5),
       I_DP1S  -> inst( 9, 5),
@@ -81,7 +81,7 @@ class DInst extends Bundle
     ))
 
     // rs2 = inst(4,0) => Rs2 = Rt
-    rs2 := MuxLookup(itype, DontCare, Array(
+    rs2 := MuxLookup(itype, DontCare, Seq(
       I_LogSR -> inst(20,16),
       I_ASSR  -> inst(20,16),
       I_ASER  -> inst(20,16),
@@ -100,7 +100,7 @@ class DInst extends Bundle
       I_LSUImm-> inst( 4, 0)
     ))
 
-    imm := MuxLookup(itype, DontCare, Array(
+    imm := MuxLookup(itype, DontCare, Seq(
       I_BitF  -> inst(22,10), // N(22), immr(21:16), imms(15:10)
       I_LogI  -> inst(22,10), // N(22), immr(21:16), imms(15:10)
       I_MovI  -> inst(22, 5), // hw(22,21), imm16(20:5)
@@ -124,14 +124,14 @@ class DInst extends Bundle
       I_LSUImm-> inst(21,10)
     ))
 
-    shift_val.bits := MuxLookup(itype, DontCare, Array(
+    shift_val.bits := MuxLookup(itype, DontCare, Seq(
       I_LogSR -> inst(15,10),
       I_ASSR  -> inst(15,10),
       I_ASER  -> inst(15,10), // NOTE: 15,13 = ExtendType, 12,10 = amount
       I_ASImm -> Mux(inst(22), 12.U, 0.U),
       I_BitF  -> inst(21,16) ))
 
-    shift_type := MuxLookup(itype, DontCare, Array(
+    shift_type := MuxLookup(itype, DontCare, Seq(
       I_DP2S  -> inst(11,10),
       I_LogSR -> inst(23,22),
       I_ASSR  -> inst(23,22),
@@ -139,14 +139,14 @@ class DInst extends Bundle
       I_ASImm -> LSL,
       I_BitF  -> ROR))
 
-    cond.bits := MuxLookup(itype,  DontCare, Array(
+    cond.bits := MuxLookup(itype,  DontCare, Seq(
       I_CSel  -> inst(15,12),
       I_CCImm -> inst(15,12),
       I_CCReg -> inst(15,12),
       I_BCImm -> inst( 3, 0)
     ))
 
-    nzcv.bits := MuxLookup(itype, DontCare, Array (
+    nzcv.bits := MuxLookup(itype, DontCare, Seq(
       I_CCImm -> inst( 3, 0),
       I_CCReg -> inst( 3, 0)
     ))
@@ -205,7 +205,7 @@ object DInst {
   }
 }
 
-class DecodeUnit extends MultiIOModule
+class DecodeUnit extends Module
 {
   val inst = IO(Input(INST_T))
   val dinst = IO(Output(new DInst))

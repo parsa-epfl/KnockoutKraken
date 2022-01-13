@@ -60,7 +60,7 @@ class VerificationDriver(val filename: String) {
   }
 
   def hasNext = it.hasNext
-  def next = it.next
+  def next = it.next()
 }
 
 object TraceAssemblyGenerator extends App {
@@ -68,7 +68,7 @@ object TraceAssemblyGenerator extends App {
   val traceDrv = new VerificationDriver(filename)
   val file = new BufferedOutputStream(new FileOutputStream("/dev/shm/insts"))
   println("Start")
-  Stream
+  LazyList
     .continually(traceDrv.next._1.inst)
     .takeWhile(_ => traceDrv.hasNext)
     .foreach(bigint => file.write(ByteBuffer.allocate(4).putInt(bigint.toInt).array().reverse))
@@ -81,7 +81,7 @@ object CheckInsts extends App {
   val traceDrv = new VerificationDriver(filename)
   val file = new PrintWriter(new BufferedWriter(new FileWriter("/dev/shm/hex", true)), true)
   println("Start")
-  Stream
+  LazyList
     .continually(traceDrv.next._1)
     .takeWhile(_ => traceDrv.hasNext)
     .foreach(trace => println(trace.state.pc.toString(16) + ":" + trace.inst.toString(16)))

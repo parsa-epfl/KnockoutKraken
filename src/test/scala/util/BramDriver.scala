@@ -81,8 +81,8 @@ object BRAMPortDriver {
       }
       clock.step()
       target.EN.poke(false.B)
-      val uint32 = target.DO.peek
-      return uint32.litValue()
+      val uint32 = target.DO.peek()
+      return uint32.litValue
     }
   }
 }

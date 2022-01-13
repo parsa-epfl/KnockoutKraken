@@ -6,7 +6,7 @@ import antmicro.Bus.AXI4Lite
 
 import antmicro.Bus._
 
-class AXIControlledMessageQueue extends MultiIOModule {
+class AXIControlledMessageQueue extends Module {
   val fifo_i = IO(Flipped(Decoupled(UInt(512.W))))
   val fifo_o = IO(Decoupled(UInt(512.W)))
 

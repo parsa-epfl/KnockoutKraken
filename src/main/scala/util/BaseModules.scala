@@ -6,15 +6,13 @@ import chisel3.experimental.{requireIsChiselType, DataMirror, Direction}
 
 class ValidTag[T <: Data](genTag: UInt, genData: Option[T]) extends Bundle {
   val valid = Bool()
-  val bits = genData
+  val bits = if(genData.isDefined) Some(genData.get.cloneType) else None
   val tag = genTag.cloneType
-  override def cloneType: this.type = ValidTag(genTag, genData).asInstanceOf[this.type]
 }
 
 class Tagged[T <: Data](genTag: UInt, genData: T) extends Bundle {
   val tag = genTag.cloneType
   val data = genData.cloneType
-  override def cloneType: this.type = new Tagged(genTag, genData).asInstanceOf[this.type]
 }
 
 object Tagged {
@@ -36,7 +34,6 @@ object ValidTag {
 
 class DecoupledTag[T1 <: UInt, T2 <: Data](genTag: T1, genData: T2) extends DecoupledIO[T2](genData) {
   val tag = Output(genTag.cloneType)
-  override def cloneType: this.type = DecoupledTag(genTag, genData).asInstanceOf[this.type]
 }
 
 object DecoupledTag {
@@ -167,8 +164,8 @@ class FlushQueue[T <: Data](
   val ptr_match = enq_ptr.value === deq_ptr.value
   val empty = ptr_match && !maybe_full
   val full = ptr_match && maybe_full
-  val do_enq = WireDefault(io.enq.fire())
-  val do_deq = WireDefault(io.deq.fire())
+  val do_enq = WireDefault(io.enq.fire)
+  val do_deq = WireDefault(io.deq.fire)
 
   when(do_enq) {
     ram(enq_ptr.value) := io.enq.bits

@@ -6,13 +6,13 @@ import chisel3.util._
 
 object QEMUMessagesType {
   val encodingW = 3
-  val sPageFaultNotify = 4.U(encodingW.W)
-  val sEvictNotify = 5.U(encodingW.W)
-  val sEvictDone = 6.U(encodingW.W)
+  val sPageFaultNotify = 4
+  val sEvictNotify = 5
+  val sEvictDone = 6
 
-  val sPageEvict = 7.U(encodingW.W)
-  val sMissReply = 2.U(encodingW.W)
-  val sEvictReply = 3.U(encodingW.W)
+  val sPageEvict = 7
+  val sMissReply = 2
+  val sEvictReply = 3
 }
 
 trait VectorSerializable {
@@ -53,7 +53,6 @@ class PTTagPacket(params: PageTableParams) extends Bundle
   }
 
   override def toPrintable: Printable = p"PTTagPacket(asid[${Hexadecimal(asid)}]:vpn[${Hexadecimal(vpn)}]\n"
-  override def cloneType: this.type = new PTTagPacket(params).asInstanceOf[this.type]
 }
 
 class PTEntryPacket(params: PageTableParams) extends Bundle
@@ -78,7 +77,6 @@ class PTEntryPacket(params: PageTableParams) extends Bundle
     res.asInstanceOf[this.type]
   }
 
-  override def cloneType: this.type = new PTEntryPacket(params).asInstanceOf[this.type]
 }
 
 class PageTableItem(params: PageTableParams) extends Bundle
@@ -95,7 +93,6 @@ class PageTableItem(params: PageTableParams) extends Bundle
     res.asInstanceOf[this.type]
   }
 
-  override def cloneType: this.type = new PageTableItem(params).asInstanceOf[this.type]
 }
 
 
@@ -104,14 +101,12 @@ class TLBMissRequestMessage(params: PageTableParams) extends Bundle {
   val perm = UInt(params.permW.W)
   val thid = UInt(log2Ceil(params.thidN).W)
 
-  override def cloneType: this.type = new TLBMissRequestMessage(params).asInstanceOf[this.type]
 }
 
 class TLBEvictionMessage(param: PageTableParams) extends Bundle {
   val tag = new PTTagPacket(param)
   val entry = new PTEntryPacket(param)
 
-  override def cloneType: this.type = new TLBEvictionMessage(param).asInstanceOf[this.type]
 }
 
 trait RawMessage extends Bundle
@@ -155,13 +150,13 @@ class TxMessage extends RawMessage
 abstract class SerializableToRaw[T <: RawMessage](msg: T) extends Bundle
   with VectorSerializable {
 
-  def getMessageType: UInt
+  def getMessageType: Int
 
   def getRawMessage: T = {
-    val res = WireInit(msg.cloneType, 0.U.asTypeOf(msg))
+    val res = WireInit(0.U.asTypeOf(msg.cloneType))
     val rawVec = this.asVec
     assert(rawVec.length < res.data.length)
-    res.message_type := this.getMessageType
+    res.message_type := this.getMessageType.U
     for(i <- 0 until rawVec.length)
       res.data(i) := rawVec(i)
 
@@ -180,9 +175,8 @@ class QEMUPageEvictRequest(params: PageTableParams) extends SerializableToRaw(ne
     res.asInstanceOf[this.type]
   }
 
-  def getMessageType: UInt = QEMUMessagesType.sPageEvict
+  def getMessageType: Int = QEMUMessagesType.sPageEvict
 
-  override def cloneType: this.type = new QEMUPageEvictRequest(params).asInstanceOf[this.type]
 }
 
 
@@ -205,9 +199,8 @@ class QEMUMissReply(params: PageTableParams) extends SerializableToRaw(new RxMes
     res.asInstanceOf[this.type]
   }
 
-  def getMessageType: UInt = QEMUMessagesType.sMissReply
+  def getMessageType: Int = QEMUMessagesType.sMissReply
 
-  override def cloneType: this.type = new QEMUMissReply(params).asInstanceOf[this.type]
 }
 
 class QEMUEvictReply(params: PageTableParams) extends SerializableToRaw(new RxMessage) {
@@ -224,9 +217,8 @@ class QEMUEvictReply(params: PageTableParams) extends SerializableToRaw(new RxMe
     res.asInstanceOf[this.type]
   }
 
-  def getMessageType: UInt = QEMUMessagesType.sEvictReply
+  def getMessageType: Int = QEMUMessagesType.sEvictReply
 
-  override def cloneType: this.type = new QEMUEvictReply(params).asInstanceOf[this.type]
 }
 
 
@@ -245,12 +237,11 @@ class PageFaultNotification(params: PageTableParams) extends SerializableToRaw(n
     res.asInstanceOf[this.type]
   }
 
-  def getMessageType: UInt = QEMUMessagesType.sPageFaultNotify
+  def getMessageType: Int = QEMUMessagesType.sPageFaultNotify
 
-  override def cloneType: this.type = new PageFaultNotification(params).asInstanceOf[this.type]
 }
 
-class PageEvictNotification(message_type: UInt, params: PageTableParams) extends SerializableToRaw(new TxMessage) {
+class PageEvictNotification(message_type: Int, params: PageTableParams) extends SerializableToRaw(new TxMessage) {
   val item = new PageTableItem(params)
 
   def asVec: Vec[UInt] = item.asVec
@@ -261,7 +252,6 @@ class PageEvictNotification(message_type: UInt, params: PageTableParams) extends
     res.asInstanceOf[this.type]
   }
 
-  def getMessageType: UInt = message_type
+  def getMessageType: Int = message_type
 
-  override def cloneType: this.type = new PageEvictNotification(message_type, params).asInstanceOf[this.type]
 }

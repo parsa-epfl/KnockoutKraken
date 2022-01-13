@@ -3,14 +3,13 @@ package armflex_cache
 import chisel3._
 import chisel3.experimental._
 
-import org.scalatest.FreeSpec
+import org.scalatest.freespec.AnyFreeSpec
 import chiseltest._
 import chiseltest.internal._
-import chiseltest.experimental.TestOptionBuilder._
 
 import firrtl.options.TargetDirAnnotation
 
-class TestPseudoTreeLRU extends FreeSpec with ChiselScalatestTester{
+class TestPseudoTreeLRU extends AnyFreeSpec with ChiselScalatestTester{
   // Plan: Just print the iteration value and see the maximum period.
   "Trace Correction" in {
     val wayNumber = 16
@@ -23,7 +22,7 @@ class TestPseudoTreeLRU extends FreeSpec with ChiselScalatestTester{
       dut.index_i.valid.poke(true.B)
       // start to check its value
       for(i <- 0 until 4*cacheParam.associativity){
-        if(verbose) println("cycle %d: %d".format(i, dut.lru_o.peek().litValue())) // 0 -> 2 -> 1 -> 3
+        if(verbose) println("cycle %d: %d".format(i, dut.lru_o.peek().litValue)) // 0 -> 2 -> 1 -> 3
         dut.index_i.bits.poke(dut.lru_o.peek())
         dut.clock.step(1)
       }

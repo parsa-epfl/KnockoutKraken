@@ -18,7 +18,6 @@ class CommitInst(thidN: Int) extends Bundle {
   val exceptions = Valid(UInt(1.W))
   val undef = Output(Bool())
   val is32bit = Output(Bool())
-  override def cloneType: this.type = new CommitInst(thidN).asInstanceOf[this.type]
 }
 
 object CommitInst {
@@ -48,7 +47,7 @@ class CommitArchStateIO(thidN: Int) extends Bundle {
   val ready = Input(Bool())
 }
 
-class CommitUnit(thidN: Int) extends MultiIOModule {
+class CommitUnit(thidN: Int) extends Module {
   val enq = IO(Flipped(Decoupled(new CommitInst(thidN))))
   val commit = IO(new Bundle {
     val archstate = new CommitArchStateIO(thidN)

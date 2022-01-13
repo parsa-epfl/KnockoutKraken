@@ -8,7 +8,7 @@ class CSR_thid2asid(
   thidN: Int = 4,
   asidW: Int = 15,
   thid2asidPortsN: Int = 1
-) extends MultiIOModule {
+) extends Module {
   val bus = IO(Flipped(new CSRBusBundle(32, thidN)))
 
   private val table = RegInit(Vec(thidN, Valid(UInt(asidW.W))), 0.U.asTypeOf(Vec(thidN, Valid(UInt(asidW.W)))))

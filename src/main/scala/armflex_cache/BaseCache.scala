@@ -121,10 +121,9 @@ class MergedBackendRequestPacket(params: DatabankParams) extends Bundle{
   val flush_v = Bool() // this request is caused by flush
   val data = UInt(params.blockSize.W)
 
-  override def cloneType: this.type = new MergedBackendRequestPacket(params).asInstanceOf[this.type]
 }
 
-class BackendRequestMerger(params: DatabankParams) extends MultiIOModule{
+class BackendRequestMerger(params: DatabankParams) extends Module{
   val read_request_i = IO(Flipped(Decoupled(new MissRequestPacket(params))))
   val write_request_i = IO(Flipped(Decoupled(new WriteBackRequestPacket(params))))
 
@@ -160,7 +159,7 @@ class BackendRequestMerger(params: DatabankParams) extends MultiIOModule{
 
 class RefillQueue (
   param: CacheParams,
-) extends MultiIOModule {
+) extends Module {
   val missRequest_i = IO(Flipped(Decoupled(new MissRequestPacket(param.databankParameter)))) // Input of the miss request
   val dramRefillData_i = IO(Flipped(Decoupled(UInt(param.blockSize.W)))) // the reply from the DRAM about cache miss
   val refillRequest_o = IO(Decoupled(new CacheRefillRequest(param)))
@@ -203,7 +202,7 @@ class BaseCache(
   val params: CacheParams,
   lruCore: () => LRUCore,
   updateFunction: (DataBankFrontendRequestPacket, CacheEntry) => CacheEntry // (req: DataBankFrontendRequestPacket, entryToUpdate: CacheEntry) => result
-) extends MultiIOModule{
+) extends Module {
   val pipeline_io = IO(Flipped(new PipeCache.PipeCacheIO(params.pAddrWidth, params.blockSize)))
   val mmu_i = IO(new CacheMMUIO(params))
   val axiMem_io = IO(new CacheAxiMemoryIO(params.databankParameter))
@@ -216,7 +215,7 @@ class BaseCache(
   private val u_backendMerger = Module(new BackendRequestMerger(params.databankParameter))
 
   // Manage ports for DataBank -----
-  private val u_3wayArbiter = Module(new Arbiter(u_dataBankManager.frontend_request_i.bits.cloneType(), 3))
+  private val u_3wayArbiter = Module(new Arbiter(u_dataBankManager.frontend_request_i.bits.cloneType, 3))
   private val arbFlushPort = u_3wayArbiter.io.in(0)
   private val arbRefillPort = u_3wayArbiter.io.in(1)
   private val arbPipelinePort = u_3wayArbiter.io.in(2)

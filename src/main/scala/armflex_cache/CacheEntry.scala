@@ -7,7 +7,7 @@ import chisel3.util._
  * Data bank entry for a simple cache.
  */ 
 class CacheEntry(param: DatabankParams) extends Bundle {
-  val tag = UInt(param.tagWidth().W)
+  val tag = UInt(param.tagWidth.W)
   val data = UInt(param.blockSize.W)
   val v = Bool() // valid bit
   val d = Bool() // dirty bit.
@@ -18,7 +18,7 @@ class CacheEntry(param: DatabankParams) extends Bundle {
   */ 
   def refill(address: UInt, asid: UInt, data: UInt, valid: Bool = true.B): Unit  = {
     this.v := valid
-    this.tag := getTagFromAddress(address, param.tagWidth())
+    this.tag := getTagFromAddress(address, param.tagWidth)
     this.d := false.B 
     this.data := data
   }
@@ -49,7 +49,7 @@ class CacheEntry(param: DatabankParams) extends Bundle {
    * Check whether this entry matches the given address and asid
    * @return true if match.
    */ 
-  def checkHit(address: UInt, asid: UInt): Bool = this.tag === getTagFromAddress(address, param.tagWidth()) 
+  def checkHit(address: UInt, asid: UInt): Bool = this.tag === getTagFromAddress(address, param.tagWidth) 
 
   /**
    * @return the data out from the entry.
@@ -85,5 +85,4 @@ class CacheEntry(param: DatabankParams) extends Bundle {
     p"           data:0x${Hexadecimal(data)})\n"
   }
 
-  override def cloneType: this.type = new CacheEntry(param).asInstanceOf[this.type]
 }

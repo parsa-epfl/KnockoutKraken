@@ -3,7 +3,6 @@ package armflex.util
 import chisel3._
 import chiseltest._
 import chiseltest.internal._
-import chiseltest.experimental.TestOptionBuilder._
 
 import chisel3.util.DecoupledIO
 import chisel3.experimental.BundleLiterals._
@@ -51,15 +50,15 @@ object MemHelperDrivers {
     def getWriteBurst(): Seq[BigInt] = {
       target.req.ready.poke(true.B)
       target.req.waitForValid()
-      val addr = target.req.bits.addr.peek.litValue
-      val burstS = target.req.bits.burst.peek.litValue
+      val addr = target.req.bits.addr.peek().litValue
+      val burstS = target.req.bits.burst.peek().litValue
       clock.step()
       target.req.ready.poke(false.B)
 
       target.data.ready.poke(true.B)
       target.data.waitForValid()
       val dataWrite = for(block <- 0 until burstS.toInt) yield {
-        val block = target.data.bits.peek.litValue
+        val block = target.data.bits.peek().litValue
         target.data.valid.expect(true.B)
         clock.step(1)
         block
@@ -92,8 +91,8 @@ object MemHelperDrivers {
     def pushWriteBurst(data: Seq[BigInt]): Unit = {
       target.req.ready.poke(true.B)
       target.req.waitForValid()
-      val addr = target.req.bits.addr.peek.litValue
-      val burstS = target.req.bits.burst.peek.litValue
+      val addr = target.req.bits.addr.peek().litValue
+      val burstS = target.req.bits.burst.peek().litValue
       clock.step()
       target.req.ready.poke(false.B)
 

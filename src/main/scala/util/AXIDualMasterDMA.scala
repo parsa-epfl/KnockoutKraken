@@ -15,7 +15,7 @@ import antmicro.Frontend._
 class AXIDualMasterDMA(
   srcAddrW: Int,
   destAddrW: Int
-) extends MultiIOModule {
+) extends Module {
   class request_t extends Bundle {
     val src_addr = UInt(srcAddrW.W)
     val dst_addr = UInt(destAddrW.W)
@@ -46,7 +46,7 @@ class AXIDualMasterDMA(
   val first_ready_r = RegInit(false.B)
   val ready_r = RegInit(true.B)
 
-  when(move_request_i.fire()){
+  when(move_request_i.fire){
     first_ready_r := false.B
     ready_r := false.B
   }.elsewhen(u_src_to_stream.io.xfer.done){

@@ -12,13 +12,13 @@ package armflex_cache
 
 import chisel3._
 import chisel3.util._
-import chisel3.util.experimental.loadMemoryFromFile
+import chisel3.util.experimental.loadMemoryFromFileInline
 import chiseltest._
 import chiseltest.experimental._
-import org.scalatest._
-import chiseltest.internal.VerilatorBackendAnnotation
+import org.scalatest.freespec.AnyFreeSpec
+import chiseltest.simulator.VerilatorBackendAnnotation
 import firrtl.options.TargetDirAnnotation
-import chiseltest.internal.WriteVcdAnnotation
+import chiseltest.simulator.WriteVcdAnnotation
 
 //import armflex.util.SimTools._
 
@@ -30,11 +30,11 @@ object CacheTestUtility{
 class BackendMemorySimulator(
   param: CacheParams,
   srcFile: String = ""
-) extends MultiIOModule{
+) extends Module {
   val mem = SyncReadMem(1 << (param.pAddrWidth), UInt(param.blockSize.W))
   val request_i = IO(Flipped(Decoupled(new MergedBackendRequestPacket(param.databankParameter))))
   val reply_o = IO(Decoupled(UInt(param.blockSize.W)))
-  if(srcFile.nonEmpty) loadMemoryFromFile(mem, srcFile)
+  if(srcFile.nonEmpty) loadMemoryFromFileInline(mem, srcFile)
 
   request_i.ready := true.B
 
@@ -49,7 +49,7 @@ class BackendMemorySimulator(
   reply_o.bits := port
 }
 
-class DelayChain(param: CacheParams, n: Int) extends MultiIOModule{
+class DelayChain(param: CacheParams, n: Int) extends Module {
   val cacheRequest_i = IO(Flipped(Decoupled(new MergedBackendRequestPacket(param.databankParameter))))
   val cacheReply_o = IO(Decoupled(UInt(param.blockSize.W)))
 
@@ -72,7 +72,7 @@ class DelayChain(param: CacheParams, n: Int) extends MultiIOModule{
 class DTUCache(
   parent: () => BaseCache,
   initialFile: String = ""
-) extends MultiIOModule{
+) extends Module {
   val u_cache = Module(parent())
   //? why delay chain? To simulate the latency of DRAM access.
   val u_delayChain = Module(new DelayChain(u_cache.params, 4))
@@ -127,7 +127,7 @@ implicit class CacheDriver(target: DTUCache){
   def waitForArrive(data: BigInt) = {
     do{
       target.tick()
-    } while(!target.frontendReply_o.valid.peek.litToBoolean)
+    } while(!target.frontendReply_o.valid.peek().litToBoolean)
     target.frontendReply_o.bits.miss2hit.expect(true.B)
     target.frontendReply_o.bits.data.expect(data.U)
   }
@@ -141,15 +141,13 @@ implicit class CacheDriver(target: DTUCache){
     }
   }
 
-  def tick(step: Int = 1){
+  def tick(step: Int = 1): Unit = {
     //logWithCycle("Tick.")
     target.clock.step(step)
   }
 }
 
 }
-
-import TestOptionBuilder._
 
 /**
  * How to test a read-only tester?
@@ -160,7 +158,7 @@ import TestOptionBuilder._
  * 
  */ 
 
-class CacheTester extends FreeSpec with ChiselScalatestTester {
+class CacheTester extends AnyFreeSpec with ChiselScalatestTester {
   val param = CacheParams(
     12, 64, 2, 32, 32
   )
@@ -361,7 +359,7 @@ class CacheTester extends FreeSpec with ChiselScalatestTester {
   }
 }
 
-class CacheLRUTester extends FreeSpec with ChiselScalatestTester {
+class CacheLRUTester extends AnyFreeSpec with ChiselScalatestTester {
   val param = CacheParams(
     12, 64, 2, 32, 32
   )

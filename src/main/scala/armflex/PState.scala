@@ -67,7 +67,6 @@ object RFileIO {
       }
     )
     val tag = Input(UInt(log2Ceil(thidN).W))
-    override def cloneType: this.type = new RDPort(thidN).asInstanceOf[this.type]
   }
 
   class WRPort(thidN: Int) extends Bundle {
@@ -75,10 +74,9 @@ object RFileIO {
     val data = Input(DATA_T)
     val en = Input(Bool())
     val tag = Input(UInt(log2Ceil(thidN).W))
-    override def cloneType: this.type = new WRPort(thidN).asInstanceOf[this.type]
   }
 
-  def wr2BRAM(port: BRAMPort, wr: WRPort) {
+  def wr2BRAM(port: BRAMPort, wr: WRPort) = {
     port.ADDR := Cat(wr.tag, wr.addr)
     port.DI := wr.data
     port.EN := wr.en.asUInt
@@ -86,7 +84,7 @@ object RFileIO {
   }
 
   // Offset might be different depending on the BRAM
-  def wr2BRAM(port: BRAMPort, wr: WRPort, pad: Int) {
+  def wr2BRAM(port: BRAMPort, wr: WRPort, pad: Int) = {
     port.ADDR := Cat(wr.tag, 0.U(pad.W), wr.addr)
     port.DI := wr.data
     port.EN := wr.en.asUInt
@@ -102,7 +100,7 @@ object RFileIO {
   }
 }
 
-class RFileBRAM[T <: UInt](thidN: Int) extends MultiIOModule {
+class RFileBRAM[T <: UInt](thidN: Int) extends Module {
   val rd = IO(new RFileIO.RDPort(thidN))
   val wr = IO(new RFileIO.WRPort(thidN))
 
@@ -136,7 +134,7 @@ class PStateRegsIO(val thidN: Int) extends Bundle {
   }
 }
 
-class ArchState(thidN: Int, withDbg: Boolean) extends MultiIOModule {
+class ArchState(thidN: Int, withDbg: Boolean) extends Module {
   val rfile_rd = IO(new RFileIO.RDPort(thidN))
   val rfile_wr = IO(new RFileIO.WRPort(thidN))
   val pstate = IO(new PStateRegsIO(thidN))

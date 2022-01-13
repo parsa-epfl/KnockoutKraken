@@ -7,15 +7,14 @@ import chisel3.experimental.BundleLiterals._
 import chiseltest._
 import chiseltest.experimental._
 
-import TestOptionBuilder._
-import chiseltest.internal.VerilatorBackendAnnotation
-import chiseltest.internal.WriteVcdAnnotation
+import chiseltest.simulator.VerilatorBackendAnnotation
+import chiseltest.simulator.WriteVcdAnnotation
 import firrtl.options.TargetDirAnnotation
 
 
-import org.scalatest.FreeSpec
+import org.scalatest.freespec.AnyFreeSpec
 
-class TLBWritebackTester extends FreeSpec with ChiselScalatestTester {
+class TLBWritebackTester extends AnyFreeSpec with ChiselScalatestTester {
   import PageDemanderDriver._
   "Normal" in {
     val anno = Seq(TargetDirAnnotation("test/demander/tlbwriteback/normal"), VerilatorBackendAnnotation, WriteVcdAnnotation)

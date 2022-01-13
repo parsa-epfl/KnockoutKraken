@@ -6,7 +6,6 @@ import chisel3.util._
 
 import chiseltest._
 import chiseltest.internal._
-import chiseltest.experimental.TestOptionBuilder._
 import chisel3.util.DecoupledIO
 import chisel3.experimental.BundleLiterals._
 
@@ -70,10 +69,10 @@ object TestDriversExtra {
       val pstate = self.regs
       val rfile = self.rfile
 
-      val xregs = for (reg <- 0 until 32) yield rfile(reg).peek.litValue
-      val pc = pstate.PC.peek.litValue
+      val xregs = for (reg <- 0 until 32) yield rfile(reg).peek().litValue
+      val pc = pstate.PC.peek().litValue
       val sp = 0 //pstate.SP.peek.litValue
-      val nzcv = pstate.NZCV.peek.litValue.toInt
+      val nzcv = pstate.NZCV.peek().litValue.toInt
       new PState(xregs.toList: List[BigInt], pc: BigInt, sp: BigInt, nzcv: Int)
     }
     def compareAssert(target: FullStateBundle): Unit = {
@@ -112,11 +111,11 @@ object TestDriversExtra {
     }
     def peek(): CommitTrace = {
       val state = self.state.peek()
-      val inst = self.inst.peek.litValue
-      val inst_block = self.inst_block.peek.litValue
-      val mem_addr = List(self.memReq(0).addr.peek.litValue, self.memReq(1).addr.peek.litValue)
-      val mem_data = List(self.memReq(0).data.peek.litValue, self.memReq(1).data.peek.litValue)
-      val mem_block = List(self.memReq(0).block.peek.litValue, self.memReq(0).block.peek.litValue) 
+      val inst = self.inst.peek().litValue
+      val inst_block = self.inst_block.peek().litValue
+      val mem_addr = List(self.memReq(0).addr.peek().litValue, self.memReq(1).addr.peek().litValue)
+      val mem_data = List(self.memReq(0).data.peek().litValue, self.memReq(1).data.peek().litValue)
+      val mem_block = List(self.memReq(0).block.peek().litValue, self.memReq(0).block.peek().litValue) 
       new CommitTrace(state, inst, inst_block, mem_addr, mem_data, mem_block)
     }
   }
@@ -155,7 +154,7 @@ class CommitTraceBundle(val blockSize: Int) extends Bundle {
 }
 
 import antmicro.CSR.ClearReg
-class PipelineHardDriverModule(params: PipelineParams) extends MultiIOModule {
+class PipelineHardDriverModule(params: PipelineParams) extends Module {
   val pipeline = Module(new PipelineWithTransplant(params))
   val hostIO = IO(new Bundle {
     val port = pipeline.hostIO.port.cloneType

@@ -19,7 +19,7 @@ class MemorySystemPipelineIO(params: MemoryHierarchyParams) extends Bundle {
   val mmu = Flipped(new PipeMMUIO)
 }
 
-class MemorySystem(params: MemoryHierarchyParams) extends MultiIOModule {
+class MemorySystem(params: MemoryHierarchyParams) extends Module {
 
   private val mmu = Module(new MMU(params))
   private val itlb = Module(new TLB(params.getPageTableParams, () => new PseudoTreeLRUCore(params.tlbWayNumber)))
@@ -69,7 +69,7 @@ object MemorySystemVerilogEmitter extends App {
 class ARMFlexTop(
   paramsPipeline: PipelineParams,
   paramsMemoryHierarchy: MemoryHierarchyParams
-) extends MultiIOModule {
+) extends Module {
   // Assert that both systems have same parameters
   assert(paramsPipeline.thidN == paramsMemoryHierarchy.thidN)
   assert(paramsPipeline.asidW == paramsMemoryHierarchy.asidW)
@@ -108,7 +108,7 @@ class ARMFlexTop(
 class ARMFlexTopSimulator(
   paramsPipeline: PipelineParams,
   paramsMemoryHierarchy: MemoryHierarchyParams
-) extends MultiIOModule {
+) extends Module {
   import armflex.util.AXIReadMultiplexer
   import armflex.util.AXIWriteMultiplexer
   private val devteroFlexTop = Module(new ARMFlexTop(paramsPipeline, paramsMemoryHierarchy))
@@ -179,7 +179,7 @@ object ARMFlexTopVerilogEmitter extends App {
  * It can also be used to check for Chisel RTL generation faults.
  * @params params
  */
-class PipelineAxiHacked(params: PipelineParams) extends MultiIOModule {
+class PipelineAxiHacked(params: PipelineParams) extends Module {
   import antmicro.CSR._
   val axidataW = 32
   val regCount = 2

@@ -6,7 +6,6 @@ import chisel3.experimental._
 import org.scalatest._
 import chiseltest._
 import chiseltest.internal._
-import chiseltest.experimental.TestOptionBuilder._
 
 import chisel3.stage.{ChiselGeneratorAnnotation, ChiselStage}
 import firrtl.{EmitAllModulesAnnotation}

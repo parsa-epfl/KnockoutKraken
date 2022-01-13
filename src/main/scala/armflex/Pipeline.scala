@@ -27,12 +27,11 @@ class IssueArchStateIO(thidN: Int) extends Bundle {
 class PipeArchStateIO(thidN: Int) extends Bundle {
   val issue = new IssueArchStateIO(thidN)
   val commit = new CommitArchStateIO(thidN)
-  override def cloneType: this.type = new PipeArchStateIO(thidN).asInstanceOf[this.type]
 }
 
 /** Processor
   */
-class Pipeline(params: PipelineParams) extends MultiIOModule {
+class Pipeline(params: PipelineParams) extends Module {
   // --------- IO -----------
   // Memory Hierarchy
   val mem_io = IO(new PipelineMemoryIO(params.pAddrW, params.thidW, params.asidW, params.blockSize))

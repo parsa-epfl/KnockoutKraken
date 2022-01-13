@@ -11,7 +11,7 @@ class AXILInterconnector(
   addrMask: Seq[BigInt],
   addrW: Int = 32,
   dataW: Int = 32
-) extends MultiIOModule {
+) extends Module {
   assert(addrMask.length == addrSegment.length)
   val S_AXIL = IO(Flipped(new AXI4Lite(addrW, dataW)))
   val M_AXIL = IO(Vec(addrMask.length, new AXI4Lite(addrW, dataW)))
@@ -72,7 +72,7 @@ class AXILInterconnector(
 
   val response_which_enq = Wire(Decoupled(UInt(log2Ceil(addrSegment.length).W)))
   response_which_enq.bits := write_which_queue.bits
-  response_which_enq.valid := write_which_queue.fire()
+  response_which_enq.valid := write_which_queue.fire
 
   val response_which_queue = Queue(response_which_enq, 2)
 
@@ -91,7 +91,7 @@ class AXIInterconnector(
   addrMask: Seq[BigInt],
   addrWidth: Int = 64,
   dataW: Int = 512
-) extends MultiIOModule {
+) extends Module {
   assert(addrMask.length == addrSegment.length)
   val S_AXI = IO(Flipped(new AXI4(addrWidth, dataW)))
   val M_AXI = IO(Vec(addrMask.length, new AXI4(addrWidth, dataW)))
@@ -171,7 +171,7 @@ class AXIInterconnector(
 
   val response_which_enq = Wire(Decoupled(UInt(log2Ceil(addrSegment.length).W)))
   response_which_enq.bits := write_which_queue.bits
-  response_which_enq.valid := write_which_queue.fire()
+  response_which_enq.valid := write_which_queue.fire
 
   val response_which_queue = Queue(response_which_enq, addrMask.length)
 
