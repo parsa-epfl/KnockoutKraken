@@ -26,7 +26,7 @@ class LogicALU extends Module {
   })
 
   // Already negated on instantiator
-  val res = MuxLookup(io.opcode, 0.U, Array(
+  val res = MuxLookup(io.opcode, 0.U, Seq(
                 OP_AND -> (io.a  &  io.b),
                 OP_BIC -> (io.a  &  io.b),
                 OP_ORR -> (io.a  |  io.b),
@@ -191,7 +191,7 @@ class Move extends Module {
   val pos = Cat(io.hw, 0.U(4.W))
   val result = WireInit(DATA_X)
 
-  result := MuxLookup(io.op, 0.U, Array(
+  result := MuxLookup(io.op, 0.U, Seq(
                         OP_MOVN -> 0.U,
                         OP_MOVZ -> 0.U,
                         OP_MOVK -> io.rd
@@ -223,7 +223,7 @@ class ShiftALU extends Module {
     val is32bit = Input(Bool())
   })
 
-  val res = MuxLookup(io.opcode, io.word, Array(
+  val res = MuxLookup(io.opcode, io.word, Seq(
     LSL -> (io.word << io.amount),
     LSR -> (io.word >> io.amount),
     ASR -> (io.word.asSInt() >> io.amount).asUInt,
@@ -232,7 +232,7 @@ class ShiftALU extends Module {
 
   val word32 = io.word(31,0)
   val amount32 = io.amount(4,0)
-  val res32 = MuxLookup(io.opcode, word32, Array(
+  val res32 = MuxLookup(io.opcode, word32, Seq(
     LSL -> (word32 << amount32),
     LSR -> (word32 >> amount32),
     ASR -> (word32.asSInt() >> amount32).asUInt,
@@ -340,7 +340,7 @@ class DataProcessing extends Module
     }
   }
 
-  rev := MuxLookup(io.op, operand, Array(
+  rev := MuxLookup(io.op, operand, Seq(
     OP_REV16 -> Catify(operand, 64, 4),
     OP_REV32 -> Catify(operand, 64, 2),
     OP_REV   -> Catify(operand, 64, 1)
@@ -357,7 +357,7 @@ class DataProcessing extends Module
     //  operand(0,0), operand(0,0), operand(0,0), operand(0,0))
   ))
 
-  res := MuxLookup(io.op, io.a, Array(
+  res := MuxLookup(io.op, io.a, Seq(
     OP_CLS -> countLeadingBits,
     OP_CLZ -> countLeadingBits,
     OP_REV -> rev,
@@ -371,7 +371,7 @@ class DataProcessing extends Module
     countLeadingBits :=
     ALU.CountLeadingZeroBits(Mux(io.op === OP_CLS,
       ALU.CountifyLeadingSignBits(operand(31,0), 32), operand(31,0)), 32)
-    rev := MuxLookup(io.op, operand, Array(
+    rev := MuxLookup(io.op, operand, Seq(
       OP_REV16 -> Catify(operand, 32, 2),
       OP_REV32 -> Catify(operand, 32, 1)))
   }
@@ -415,7 +415,7 @@ class ExecuteUnit extends Module
   val rVal3 = WireInit(Mux(io.dinst.imm(4,0) === 31.U, 0.U, io.rVal3))
   // R[31] can be SP or Zero depending on instructions
   when(io.dinst.rs1 === 31.U) {
-    rVal1 := MuxLookup(io.dinst.itype, 0.U, Array(
+    rVal1 := MuxLookup(io.dinst.itype, 0.U, Seq(
       I_ASImm -> io.rVal1,
       I_ASER -> io.rVal1
     ))
@@ -431,7 +431,7 @@ class ExecuteUnit extends Module
   // Shift
   val shiftALU = Module(new ShiftALU())
   shiftALU.io.word :=
-    MuxLookup(io.dinst.itype, rVal2, Array(
+    MuxLookup(io.dinst.itype, rVal2, Seq(
                 I_ASSR  -> rVal2,
                 I_ASER  -> extendReg.io.res,
                 I_PCRel -> io.dinst.imm, // LSL 12
@@ -446,7 +446,7 @@ class ExecuteUnit extends Module
               ))
   // when !shift_val.valid => PASSTHROUGH
   shiftALU.io.amount := Mux(io.dinst.shift_val.valid,
-    MuxLookup(io.dinst.itype, io.dinst.shift_val.bits, Array(
+    MuxLookup(io.dinst.itype, io.dinst.shift_val.bits, Seq(
       I_DP2S -> io.rVal2(5,0),
       I_ASER -> io.dinst.shift_val.bits(2,0)
     )), 0.U)
@@ -486,7 +486,7 @@ class ExecuteUnit extends Module
   move.io.imm := io.dinst.imm(20-5,5-5)
   move.io.rd := rVal2
 
-  val aluVal1 = WireInit(MuxLookup(io.dinst.itype, rVal1, Array(
+  val aluVal1 = WireInit(MuxLookup(io.dinst.itype, rVal1, Seq(
                             I_ASSR  -> rVal1,
                             I_ASER  -> rVal1,
                             I_ASImm -> rVal1,
@@ -496,7 +496,7 @@ class ExecuteUnit extends Module
                             I_LogI  -> rVal1,
                             I_LogSR -> rVal1,
                           )))
-  val aluVal2 = WireInit(MuxLookup(io.dinst.itype, shiftALU.io.res, Array(
+  val aluVal2 = WireInit(MuxLookup(io.dinst.itype, shiftALU.io.res, Seq(
                             I_ASSR  -> shiftALU.io.res,
                             I_ASER  -> shiftALU.io.res,
                             I_ASImm -> shiftALU.io.res,
@@ -506,7 +506,7 @@ class ExecuteUnit extends Module
                             I_LogSR -> shiftALU.io.res,
                             I_LogI  -> decodeBitMask.io.wmask,
                           )))
-  val aluOp = WireInit(MuxLookup(io.dinst.itype, io.dinst.op, Array(
+  val aluOp = WireInit(MuxLookup(io.dinst.itype, io.dinst.op, Seq(
                           I_LogSR -> io.dinst.op,
                           I_LogI  -> io.dinst.op,
                         )))
@@ -554,7 +554,7 @@ class ExecuteUnit extends Module
   // Build executed instruction
   val einst = Wire(new EInst)
   val res = Wire(DATA_T)
-  res := MuxLookup(io.dinst.itype, logicALU.io.res, Array(
+  res := MuxLookup(io.dinst.itype, logicALU.io.res, Seq(
     I_BitF  -> bitfield.io.res,
     I_LogSR -> logicALU.io.res,
     I_LogI  -> logicALU.io.res,
@@ -572,7 +572,7 @@ class ExecuteUnit extends Module
   when(io.dinst.itype === I_LogSR || io.dinst.itype === I_LogI) {
     einst.rd.valid := io.dinst.rd.bits =/= 31.U
   }
-  einst.nzcv.bits := MuxLookup(io.dinst.itype, addWithCarry.io.nzcv, Array(
+  einst.nzcv.bits := MuxLookup(io.dinst.itype, addWithCarry.io.nzcv, Seq(
                            I_LogSR -> logicALU.io.nzcv,
                            I_LogI  -> logicALU.io.nzcv,
                            I_CCImm -> Mux(condHolds.io.res, addWithCarry.io.nzcv, io.dinst.nzcv.bits),
@@ -581,7 +581,7 @@ class ExecuteUnit extends Module
   einst.nzcv.valid := io.dinst.nzcv.valid
 
   io.einst.bits := einst
-  io.einst.valid := MuxLookup(io.dinst.itype, false.B, Array(
+  io.einst.valid := MuxLookup(io.dinst.itype, false.B, Seq(
     I_LogSR -> true.B,
     I_LogI  -> true.B,
     I_BitF  -> true.B,

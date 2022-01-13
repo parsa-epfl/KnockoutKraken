@@ -10,7 +10,7 @@ import armflex_cache.PageTableParams
 
 class QEMUPageEvictHandler(
   params: MemoryHierarchyParams
-) extends MultiIOModule {
+) extends Module {
   val evict_request_i = IO(Flipped(Decoupled(new QEMUPageEvictRequest(params.getPageTableParams))))
 
   val sIdle :: sLoadSet :: sGetEntry :: sDeletePageReq :: sDeletePage :: sFlushEntry :: sUpdatePT :: Nil = Enum(7)
@@ -31,7 +31,7 @@ class QEMUPageEvictHandler(
   // sIdle
   evict_request_i.ready := state_r === sIdle
   val request_r = Reg(new QEMUPageEvictRequest(params.getPageTableParams))
-  when(evict_request_i.fire()){
+  when(evict_request_i.fire){
     request_r := evict_request_i.bits
   }
 
@@ -105,7 +105,7 @@ class QEMUPageEvictHandler(
   }
 }
 
-object QEMUPageEvictHandlerrVerilogEmitter extends App {
+object QEMUPageEvictHandlerVerilogEmitter extends App {
   val c = new stage.ChiselStage
   println(c.emitVerilog(new QEMUPageEvictHandler(new MemoryHierarchyParams())))
 }

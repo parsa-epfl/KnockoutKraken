@@ -36,7 +36,7 @@ object TransplantIO extends Bundle {
     val clear = Output(ValidTag(thidN))
   }
 }
-class TransplantUnit(thidN: Int) extends MultiIOModule {
+class TransplantUnit(thidN: Int) extends Module {
   val hostBRAMParams =
     new BRAMParams(NB_COL = DATA_SZ / 8, COL_WIDTH = 8, NB_ELE = thidN * (1 << log2Ceil(ARCH_MAX_OFFST)))
   val cpu2trans = IO(new TransplantIO.CPU2Trans(thidN))

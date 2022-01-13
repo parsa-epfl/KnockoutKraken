@@ -2,14 +2,13 @@ package armflex.util
 
 import chisel3._
 
-import org.scalatest._
+import org.scalatest.flatspec.AnyFlatSpec
 import chiseltest._
 import chiseltest.internal._
-import chiseltest.experimental.TestOptionBuilder._
 
 import firrtl.options.TargetDirAnnotation
 
-class TestMultAddBlackbox extends FlatSpec with ChiselScalatestTester {
+class TestMultAddBlackbox extends AnyFlatSpec with ChiselScalatestTester {
 
   val annos = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/PseudoMultAdd"), WriteVcdAnnotation)
 

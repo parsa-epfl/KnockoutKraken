@@ -9,7 +9,7 @@ import chisel3.util._
 
 class QEMUMissReplyHandler(
   params: MemoryHierarchyParams
-) extends MultiIOModule {
+) extends Module {
   val qemu_miss_reply_i = IO(Flipped(Decoupled(new QEMUMissReply(params.getPageTableParams))))
 
   val sIdle ::  sLoadSet :: sCheckHit :: sGetEvict :: sDeletePageReq :: sDeletePage :: sReplace ::  sMoveback :: sReplyToTLB :: Nil = Enum(9)
@@ -38,7 +38,7 @@ class QEMUMissReplyHandler(
   // sIdle
   qemu_miss_reply_i.ready := state_r === sIdle
   val request_r = Reg(new QEMUMissReply(params.getPageTableParams))
-  when(qemu_miss_reply_i.fire()){
+  when(qemu_miss_reply_i.fire){
     request_r := qemu_miss_reply_i.bits
   }
 

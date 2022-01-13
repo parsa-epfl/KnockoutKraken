@@ -41,7 +41,7 @@ class BranchUnit extends Module
   val imm19S2 = WireInit(immS2(2+18,0).asSInt.pad(64))
   val imm21S0 = WireInit(io.dinst.imm(20,0).asSInt.pad(64))
   val imm21S12 = WireInit(Cat(io.dinst.imm(20,0), 0.U(12.W)).asSInt.pad(64))
-  val immSExt = MuxLookup(io.dinst.itype, imm21S0, Array(
+  val immSExt = MuxLookup(io.dinst.itype, imm21S0, Seq(
                         I_BImm  -> imm26S2,
                         I_BCImm -> imm19S2,
                         I_CBImm -> imm19S2,
@@ -65,12 +65,12 @@ class BranchUnit extends Module
 
   io.binst.bits := binst
   io.binst.valid :=
-    MuxLookup(io.dinst.itype, false.B, Array(
+    MuxLookup(io.dinst.itype, false.B, Seq(
       I_BImm -> true.B,
       I_BReg -> true.B,
       I_BCImm -> io.cond,
       I_TBImm -> (io.rVal2(bit_pos) === io.dinst.op),
-      I_CBImm -> MuxLookup(io.dinst.op, false.B, Array(
+      I_CBImm -> MuxLookup(io.dinst.op, false.B, Seq(
         OP_CBZ  -> Mux(io.dinst.is32bit, io.rVal2(31,0) === 0.U, io.rVal2 === 0.U),
         OP_CBNZ -> Mux(io.dinst.is32bit, io.rVal2(31,0) =/= 0.U, io.rVal2 =/= 0.U)
       ))

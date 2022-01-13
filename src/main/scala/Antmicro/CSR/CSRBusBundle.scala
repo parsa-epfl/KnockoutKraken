@@ -37,7 +37,7 @@ class CSRBusBundle(val dataWidth: Int, val regCount: Int) extends Bundle {
 // Below here it does not belong to Antmicro
 case class CSRBusSlave(val addrStart: Int, val regCount: Int)
 
-class CSRBusMasterToNSlaves(val dataWidth: Int, val slaves: Seq[CSRBusSlave], val addrRange: (Int, Int)) extends MultiIOModule {
+class CSRBusMasterToNSlaves(val dataWidth: Int, val slaves: Seq[CSRBusSlave], val addrRange: (Int, Int)) extends Module {
   val slavesBus = IO(MixedVec(slaves.map(slave => new CSRBusBundle(dataWidth, slave.regCount))))
   val masterBus = IO(Flipped(new CSRBusBundle(dataWidth, addrRange._2 - addrRange._1)))
   private val dataIn = WireInit(masterBus.dataOut.cloneType, 0xDEAD2BAD.S.asUInt)

@@ -15,7 +15,7 @@ class TopLevelExampleParams(
   val computeParams: ComputeExampleParams
 )
 
-class TopLevelExample(val params: TopLevelExampleParams) extends MultiIOModule {
+class TopLevelExample(val params: TopLevelExampleParams) extends Module {
   private val csr = Module(new CSRExample(params.csrParams, params.computeParams))
   private val compute = Module(new ComputeExample(params.computeParams, csr.bramParams))
   compute.bramPort <> csr.bramPort
@@ -65,7 +65,7 @@ class CSRExampleParams(
   def getAddrCSR(addr: Int) =  addr >> log2Ceil(axilDataW/8)
 }
 
-class CSRExample(val params: CSRExampleParams, val computeParams: ComputeExampleParams) extends MultiIOModule {
+class CSRExample(val params: CSRExampleParams, val computeParams: ComputeExampleParams) extends Module {
   val bramParams = new BRAMParams(
     NB_COL = 4, COL_WIDTH = 8, NB_ELE = params.bramWords, 
     INIT_FILE = "", false, false, true, false)
@@ -160,7 +160,7 @@ class ComputeExampleCTRL(val addrW: Int) extends Bundle {
   val start =  Flipped(Decoupled(cType))
   val done = Decoupled()
 }
-class ComputeExample(val params: ComputeExampleParams, val toPack: BRAMParams) extends MultiIOModule {
+class ComputeExample(val params: ComputeExampleParams, val toPack: BRAMParams) extends Module {
   private val bramBufferData = new BRAMParams(
     NB_COL = params.dataW/8, COL_WIDTH = 8, NB_ELE = 1024, 
     INIT_FILE = "", false, false, true, false)
@@ -326,7 +326,7 @@ object ARMFlexTopVerilogEmitter extends App {
   * This class wraps up the module and gives access to the DRAM ports.
   * Not necessary for testing.
   */
-class TopLevelExampleDRAM(val params: TopLevelExampleParams) extends MultiIOModule {
+class TopLevelExampleDRAM(val params: TopLevelExampleParams) extends Module {
   private val system = Module(new TopLevelExample(params))
   private val dram = Module(new DRAMWrapper(params.dramParams))
   system.dram_io.read <> dram.read
@@ -361,7 +361,7 @@ class DRAMExampleParams(
   val pAddrW: Int = 12,
   val pDataW: Int = 512
 )
-class DRAMWrapper(val params: DRAMExampleParams) extends MultiIOModule {
+class DRAMWrapper(val params: DRAMExampleParams) extends Module {
   assert(params.pDataW == 512, "Assumes that we match AWS F1 DRAM width.")
   val SHELL_IO_AXI = IO(new Bundle {
     val M_DMA_R = new AXIReadMasterIF(params.pAddrW, params.pDataW)

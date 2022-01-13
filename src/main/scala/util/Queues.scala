@@ -11,7 +11,7 @@ class DoubleLatencyQueueCtrlIO extends Bundle {
 }
 
 // TODO: Short path should allocate less entries, close to the latency of a hit request
-class DoubleLatencyQueue[T <: Data](gen: T, maxElements: Int) extends MultiIOModule {
+class DoubleLatencyQueue[T <: Data](gen: T, maxElements: Int) extends Module {
 
   // IO
   val ctrl_i = IO(Input(new DoubleLatencyQueueCtrlIO))
@@ -86,7 +86,7 @@ class DoubleLatencyQueue[T <: Data](gen: T, maxElements: Int) extends MultiIOMod
  * @params size Max number of elements in receiver Queue
  *
  */
-class CreditQueueController(size: Int) extends MultiIOModule {
+class CreditQueueController(size: Int) extends Module {
   val trans = IO(new Bundle {
     val in = Input(Bool())
     val dropped = Input(Bool())

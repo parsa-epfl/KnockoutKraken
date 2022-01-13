@@ -28,7 +28,7 @@ class PipelineParams(
 
   def getBlockAddrBits(addr: UInt) = addr(log2Ceil(blockSize / 8) - 1, 0)
 
-  def simLog(str: Printable) {
+  def simLog(str: Printable): Unit = {
     if (simVerbose) {
       printf(str)
     }
@@ -37,7 +37,7 @@ class PipelineParams(
 
 import antmicro.Bus.AXI4Lite
 
-class PipelineAxi(params: PipelineParams) extends MultiIOModule {
+class PipelineAxi(params: PipelineParams) extends Module {
   private val axiAddr_range = (0, 0xA000)
   private val csrAddr_range = (axiAddr_range._1 >> 2, axiAddr_range._2 >> 2)
 
@@ -101,7 +101,7 @@ class PipelineAxi(params: PipelineParams) extends MultiIOModule {
   }
 }
 
-class PipelineWithTransplant(params: PipelineParams) extends MultiIOModule {
+class PipelineWithTransplant(params: PipelineParams) extends Module {
 
   // Pipeline
   val pipeline = Module(new Pipeline(params))

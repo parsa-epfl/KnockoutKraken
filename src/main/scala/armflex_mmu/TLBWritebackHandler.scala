@@ -8,7 +8,7 @@ import armflex.util._
 class TLBWritebackHandler(
   params: MemoryHierarchyParams,
   tlbNumber: Int = 2
-) extends MultiIOModule {
+) extends Module {
   import armflex.{PTEntryPacket, PTTagPacket, TLBEvictionMessage}
 
   // the eviction request of the TLB

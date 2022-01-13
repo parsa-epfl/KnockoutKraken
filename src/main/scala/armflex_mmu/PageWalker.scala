@@ -15,7 +15,7 @@ import armflex.util._
 class PageWalker(
   params: MemoryHierarchyParams,
   tlbNumber: Int = 2
-) extends MultiIOModule {
+) extends Module {
   import armflex.TLBMissRequestMessage
 
   // IO of TLB miss.
@@ -66,7 +66,7 @@ class PageWalker(
   }
 
   val request_r = Reg(new request_packet_t)
-  when(u_miss_arb.io.out.fire()){
+  when(u_miss_arb.io.out.fire){
     request_r.perm := u_miss_arb.io.out.bits.perm
     request_r.asid := u_miss_arb.io.out.bits.tag.asid
     request_r.vpn := u_miss_arb.io.out.bits.tag.vpn
@@ -126,7 +126,7 @@ class PageWalker(
       state_r := sReply
     }
     is(sReply){
-      val vectorOfFireBool = VecInit(tlb_backend_reply_o.map(_.fire()) :+ page_fault_req_o.fire())
+      val vectorOfFireBool = VecInit(tlb_backend_reply_o.map(_.fire) :+ page_fault_req_o.fire)
       when(vectorOfFireBool.asUInt.orR()) {
         state_r := sIdle
       }

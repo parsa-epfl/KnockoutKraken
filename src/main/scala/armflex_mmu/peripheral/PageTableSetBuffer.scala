@@ -26,8 +26,7 @@ class PageTableSetPacket(
   val valids = UInt(entryNumber.W)
   val lru_bits = UInt(entryNumber.W)
 
-  override def cloneType: this.type = new PageTableSetPacket(params, entryNumber).asInstanceOf[this.type]
-} 
+}
 
 class PageSetBufferWriteRequestPacket(
   params: PageTableParams,
@@ -37,7 +36,6 @@ class PageSetBufferWriteRequestPacket(
   val flush_v = Bool()
   val index = UInt(log2Ceil(entryNumber).W)
 
-  override def cloneType: this.type = new PageSetBufferWriteRequestPacket(params, entryNumber).asInstanceOf[this.type]
 }
 
 class PageSetBufferLookupReplyPacket(
@@ -48,7 +46,6 @@ class PageSetBufferLookupReplyPacket(
   val index = UInt(log2Ceil(entryNumber).W)
   val hit_v = Bool()
 
-  override def cloneType: this.type = new PageSetBufferLookupReplyPacket(params, entryNumber).asInstanceOf[this.type]
 }
 
 /**
@@ -59,7 +56,7 @@ class PageSetBufferLookupReplyPacket(
 class PageTableSetBuffer(
   params: PageTableParams,
   t: PageTableSetPacket,
-) extends MultiIOModule {
+) extends Module {
   val dma_data_i = IO(Flipped(Decoupled(UInt(512.W))))
   val entryNumber = t.entryNumber
   val requestPacketNumber = (entryNumber / 16) * 3
@@ -78,7 +75,7 @@ class PageTableSetBuffer(
   val dma_data_o = IO(Decoupled(UInt(512.W)))
 
   // update of dma_cnt_r
-  when(dma_data_i.fire() || dma_data_o.fire()){
+  when(dma_data_i.fire || dma_data_o.fire){
     dma_cnt_r := Mux(
       dma_cnt_r === (requestPacketNumber - 1).U,
       0.U,
@@ -150,14 +147,14 @@ class PageTableSetBuffer(
   lookup_reply_o.item.tag := lookup_request_i
   lookup_reply_o.index := hit_index
 
-  when(write_request_i.fire() && !dma_data_i.fire()){
+  when(write_request_i.fire && !dma_data_i.fire){
     buffer_r := updated_pt_set.asTypeOf(buffer_r.cloneType)
-  }.elsewhen(dma_data_i.fire()){
+  }.elsewhen(dma_data_i.fire){
     buffer_r := updated_buffer
   }
 
   write_request_i.ready := state_r === sIdle
-  dma_data_i.ready := state_r === sMoveIn || (state_r === sIdle && !write_request_i.fire())
+  dma_data_i.ready := state_r === sMoveIn || (state_r === sIdle && !write_request_i.fire)
 
   switch(state_r){
     is(sIdle){

@@ -4,7 +4,7 @@ import armflex.util.{AXIReadMasterIF, AXIWriteMasterIF}
 import chisel3._
 import chisel3.util._
 
-class Cache2AXIAdaptor(params: DatabankParams, queueSize: Int) extends MultiIOModule {
+class Cache2AXIAdaptor(params: DatabankParams, queueSize: Int) extends Module {
   assert(params.blockSize == 512, "Only 512bit AXI transactions is supported.")
   //assert(params.pAddressWidth == 36, "Only 36bit memory addres is supported.")
 

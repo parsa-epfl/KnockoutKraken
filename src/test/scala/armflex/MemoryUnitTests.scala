@@ -6,7 +6,6 @@ import chisel3.util.experimental.loadMemoryFromFile
 import chiseltest._
 import chiseltest.experimental._
 import org.scalatest._
-import chiseltest.internal.{VerilatorBackendAnnotation, WriteVcdAnnotation}
 import firrtl.options.TargetDirAnnotation
 
 object MemoryUnitDrivers {
@@ -39,5 +38,7 @@ object MemoryUnitDrivers {
   }
 }
 
-class MemoryUnitTests extends FreeSpec with ChiselScalatestTester {
+import org.scalatest.freespec.AnyFreeSpec
+
+class MemoryUnitTests extends AnyFreeSpec with ChiselScalatestTester {
 }

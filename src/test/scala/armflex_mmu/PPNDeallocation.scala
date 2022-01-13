@@ -6,15 +6,14 @@ import chisel3._
 import chiseltest._
 import chiseltest.experimental._
 
-import TestOptionBuilder._
-import chiseltest.internal.VerilatorBackendAnnotation
-import chiseltest.internal.WriteVcdAnnotation
+import chiseltest.simulator.VerilatorBackendAnnotation
+import chiseltest.simulator.WriteVcdAnnotation
 import firrtl.options.TargetDirAnnotation
 
 
-import org.scalatest.FreeSpec
+import org.scalatest.freespec.AnyFreeSpec
 
-class PPNDeallocationTester extends FreeSpec with ChiselScalatestTester {
+class PPNDeallocationTester extends AnyFreeSpec with ChiselScalatestTester {
   "Normal case" in {
     import PageDemanderDriver._
     val anno = Seq(TargetDirAnnotation("test/demander/ppn_deallocation/normal"), VerilatorBackendAnnotation, WriteVcdAnnotation)
