@@ -47,7 +47,7 @@ class CommitArchStateIO(thidN: Int) extends Bundle {
   val ready = Input(Bool())
 }
 
-class CommitUnit(thidN: Int) extends MultiIOModule {
+class CommitUnit(thidN: Int) extends Module {
   val enq = IO(Flipped(Decoupled(new CommitInst(thidN))))
   val commit = IO(new Bundle {
     val archstate = new CommitArchStateIO(thidN)

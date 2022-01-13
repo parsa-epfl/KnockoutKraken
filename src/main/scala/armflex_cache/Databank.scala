@@ -25,15 +25,15 @@ case class DatabankParams(
   assert (isPow2(associativity))
   assert (isPow2(thidN))
 
-  def tagWidth(): Int = {
+  def tagWidth: Int = {
     addrW - log2Ceil(setNumber)
   }
 
-  def wayWidth(): Int = {
+  def wayWidth: Int = {
     log2Ceil(associativity)
   }
 
-  def setWidth(): Int = {
+  def setWidth: Int = {
     log2Ceil(setNumber)
   }
 
@@ -72,7 +72,6 @@ class DataBankFrontendRequestPacket(
     log2Ceil(params.thidN)
     )
 
-  override def cloneType(): this.type = new DataBankFrontendRequestPacket(addrW, asidW, blockSize, thidW).asInstanceOf[this.type]
 }
 
 class DataBankFrontendReplyPacket(
@@ -138,7 +137,7 @@ class WriteBackRequestPacket(params: DatabankParams) extends Bundle{
 class DataBankManager(
   params: DatabankParams,
   updateFunction: (DataBankFrontendRequestPacket, CacheEntry) => CacheEntry // (req: DataBankFrontendRequestPacket, entryToUpdate: CacheEntry) => result
-) extends MultiIOModule {
+) extends Module {
   // Ports to frontend
   val frontend_request_i = IO(Flipped(Decoupled(new DataBankFrontendRequestPacket(params))))
   val frontend_reply_o = IO(Valid(new DataBankFrontendReplyPacket(params)))
@@ -146,7 +145,7 @@ class DataBankManager(
   // Ports to Bank RAM (Read port)
   val setType = Vec(params.associativity, new CacheEntry(params))
 
-  val bank_ram_request_addr_o = IO(Decoupled(UInt(params.setWidth().W)))
+  val bank_ram_request_addr_o = IO(Decoupled(UInt(params.setWidth.W)))
   val bank_ram_reply_data_i = IO(Flipped(Decoupled(setType.cloneType)))
   val bank_ram_reply_q = FlushQueue(bank_ram_reply_data_i, 1, pipe = true, flow = true)
 
@@ -157,9 +156,9 @@ class DataBankManager(
   val writeback_request_o = IO(Decoupled(new WriteBackRequestPacket(params)))
 
   // Port to LRU
-  val lru_addr_o = IO(Output(UInt(params.setWidth().W)))
-  val lru_index_o = IO(ValidIO(UInt(params.wayWidth().W)))
-  val lru_which_i = IO(Input(UInt(params.wayWidth().W)))
+  val lru_addr_o = IO(Output(UInt(params.setWidth.W)))
+  val lru_index_o = IO(ValidIO(UInt(params.wayWidth.W)))
+  val lru_which_i = IO(Input(UInt(params.wayWidth.W)))
 
   val pipeline_state_ready = Wire(Vec(2, Bool())) // this variables keeps all the back-pressure caused by the pipeline stall
 
@@ -172,14 +171,14 @@ class DataBankManager(
   if(params.implementedWithRegister)
     s1_frontend_request_n.valid := frontend_request_i.valid // why valid instead of fire()? There will be a combinational loop of frontend_request.
   else
-    s1_frontend_request_n.valid := frontend_request_i.fire()
+    s1_frontend_request_n.valid := frontend_request_i.fire
 
   val s1_frontend_request_r = (if(params.implementedWithRegister) FlushQueue(s1_frontend_request_n, 0, true)
   else FlushQueue(s1_frontend_request_n, 1, true))
   s1_frontend_request_r.ready := pipeline_state_ready(1)
 
   // pass to the bram
-  if(params.setWidth() > 1)
+  if(params.setWidth > 1)
     bank_ram_request_addr_o.bits := frontend_request_i.bits.addr(params.setWidth-1, 0)
   else
     bank_ram_request_addr_o.bits := 0.U
@@ -187,10 +186,10 @@ class DataBankManager(
   if(params.implementedWithRegister)
     bank_ram_request_addr_o.valid := frontend_request_i.valid
   else
-    bank_ram_request_addr_o.valid := frontend_request_i.fire() //! Always remember to check the handshake signal when eliminating one level pipeline stage!!!
+    bank_ram_request_addr_o.valid := frontend_request_i.fire //! Always remember to check the handshake signal when eliminating one level pipeline stage!!!
 
   // pass to the LRU
-  if(params.setWidth() > 1)
+  if(params.setWidth > 1)
     lru_addr_o := frontend_request_i.bits.addr(params.setWidth-1, 0)
   else
     lru_addr_o := 0.U
@@ -257,14 +256,14 @@ class DataBankManager(
   lru_index_o.valid := s1_frontend_request_r.valid && (hit_v || full_writing_v) && !s1_frontend_request_r.bits.flush_v
 
   val frontend_write_to_bank = Wire(Decoupled(new BankWriteRequestPacket(params))) // normal writing (writing & flushing)
-  if(params.setWidth() > 1)
-    frontend_write_to_bank.bits.addr := s1_frontend_request_r.bits.addr(params.setWidth()-1, 0)
+  if(params.setWidth > 1)
+    frontend_write_to_bank.bits.addr := s1_frontend_request_r.bits.addr(params.setWidth-1, 0)
   else
     frontend_write_to_bank.bits.addr := 0.U
 
   val full_writing_request = Wire(Decoupled(new BankWriteRequestPacket(params))) // A full writing, sel means a complete override to the block, so no original data needed. (refill should follow this path)
-  if(params.setWidth() > 1)
-    full_writing_request.bits.addr := s1_frontend_request_r.bits.addr(params.setWidth()-1, 0)
+  if(params.setWidth > 1)
+    full_writing_request.bits.addr := s1_frontend_request_r.bits.addr(params.setWidth-1, 0)
   else
     full_writing_request.bits.addr := 0.U
 
@@ -294,7 +293,7 @@ class DataBankManager(
     updateFunction(s1_frontend_request_r.bits, refillNewEntry)
   )
 
-  frontend_reply_o.valid := s1_frontend_request_r.fire() // Also return if miss
+  frontend_reply_o.valid := s1_frontend_request_r.fire // Also return if miss
   frontend_reply_o.bits.rData := hit_entry.read()
   frontend_reply_o.bits.wData := Mux(
     full_writing_v,
@@ -345,7 +344,7 @@ class DataBankManager(
   s2_miss_request_n.bits.perm := s1_frontend_request_r.bits.perm
   s2_miss_request_n.bits.wMask := s1_frontend_request_r.bits.wMask
   s2_miss_request_n.bits.wData := s1_frontend_request_r.bits.wData
-  s2_miss_request_n.valid := !hit_v && s1_frontend_request_r.fire() &&
+  s2_miss_request_n.valid := !hit_v && s1_frontend_request_r.fire &&
     !full_writing_v &&  // full writing is not a miss
     !s1_frontend_request_r.bits.flush_v // flush is not a miss
 
@@ -356,7 +355,7 @@ class DataBankManager(
   val replaced_entry = bank_ram_reply_q.bits(lru_which_i)
   val eviction_wb_req = Wire(Decoupled(new WriteBackRequestPacket(params))) // write back due to the eviction.
 
-  if(params.setWidth() > 1)
+  if(params.setWidth > 1)
     eviction_wb_req.bits.addr := replaced_entry.address(s1_frontend_request_r.bits.addr(params.setWidth-1, 0))
   else
     eviction_wb_req.bits.addr := replaced_entry.tag
@@ -367,7 +366,7 @@ class DataBankManager(
     replaced_entry.d && // evicted entry is dirty
     !hit_v && // miss occurs
     s1_frontend_request_r.bits.refill_v && // a refilling request.
-    s1_frontend_request_r.fire()
+    s1_frontend_request_r.fire
 
 
   val flush_wb_req = Wire(Decoupled(new WriteBackRequestPacket(params))) // write back due to the flushing
@@ -377,7 +376,7 @@ class DataBankManager(
   flush_wb_req.valid :=
     hit_entry.d && // flushed is dirty
     hit_v && s1_frontend_request_r.bits.flush_v && // flush confirmed.
-    s1_frontend_request_r.fire()
+    s1_frontend_request_r.fire
 
   assert(!(flush_wb_req.valid && eviction_wb_req.valid),
     "It's impossible to write back due to eviction and miss at the same time!"

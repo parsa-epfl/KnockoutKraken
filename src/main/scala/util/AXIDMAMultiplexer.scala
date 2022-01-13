@@ -37,14 +37,14 @@ class AXIReadMultiplexer(
   addrW: Int = 64,
   dataW: Int = 512,
   wayNumber: Int = 1
-) extends MultiIOModule {
+) extends Module {
   val S_IF = IO(Vec(wayNumber, Flipped(new AXIReadMasterIF(addrW, dataW))))
 
   //val req_i = IO(Vec(wayNumber,Flipped(Decoupled(new AXIDMARequestPacket(addrW)))))
   val u_arb = Module(new RRArbiter(new AXIDMARequestPacket(addrW), wayNumber))
   for(i <- 0 until wayNumber) u_arb.io.in(i) <> S_IF(i).req
   val selected_req = u_arb.io.out
-  val index_r = RegEnable(u_arb.io.chosen, 0.U, selected_req.fire())
+  val index_r = RegEnable(u_arb.io.chosen, 0.U, selected_req.fire)
   val index_vr = RegInit(false.B)
 
   val u_axi_reader = Module(new AXI4Reader(addrW, dataW))
@@ -68,7 +68,7 @@ class AXIReadMultiplexer(
 
   when(u_axi_reader.io.xfer.done){
     index_vr := false.B
-  }.elsewhen(selected_req.fire()){
+  }.elsewhen(selected_req.fire){
     index_vr := true.B
   }
 
@@ -94,14 +94,14 @@ class AXIWriteMultiplexer(
   addrW: Int = 64,
   dataW: Int = 512,
   wayNumber: Int = 1
-) extends MultiIOModule {
+) extends Module {
   val S_IF = IO(Vec(wayNumber, Flipped(new AXIWriteMasterIF(addrW, dataW))))
   //val req_i = IO(Vec(wayNumber,Flipped(Decoupled(new AXIDMARequestPacket(addrW)))))
   val u_arb = Module(new RRArbiter(new AXIDMARequestPacket(addrW), wayNumber))
   for(i <- 0 until wayNumber) u_arb.io.in(i) <> S_IF(i).req
 
   val selected_req = u_arb.io.out
-  val index_r = RegEnable(u_arb.io.chosen, 0.U, selected_req.fire())
+  val index_r = RegEnable(u_arb.io.chosen, 0.U, selected_req.fire)
   val index_vr = RegInit(false.B)
 
   val u_axi_writer = Module(new AXI4Writer(addrW, dataW))
@@ -125,7 +125,7 @@ class AXIWriteMultiplexer(
 
   when(u_axi_writer.io.xfer.done){
     index_vr := false.B
-  }.elsewhen(selected_req.fire()){
+  }.elsewhen(selected_req.fire){
     index_vr := true.B
   }
 }

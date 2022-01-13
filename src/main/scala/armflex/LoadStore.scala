@@ -84,7 +84,7 @@ class ExtendReg extends Module {
     MuxLookup(
       size,
       value.asSInt,
-      Array(
+      Seq(
         0.U -> value(7, 0).asSInt.pad(64),
         1.U -> value(15, 0).asSInt.pad(64),
         2.U -> value(31, 0).asSInt.pad(64),
@@ -96,7 +96,7 @@ class ExtendReg extends Module {
     MuxLookup(
       size,
       value,
-      Array(
+      Seq(
         0.U -> value(7, 0).pad(64),
         1.U -> value(15, 0).pad(64),
         2.U -> value(31, 0).pad(64),
@@ -263,14 +263,14 @@ class LDSTUnit extends Module {
 
   // Check for Exceptions
   // NOTE: Read Manual section B2.5 for alignment support -> Possible performance improvements
-  val isAlignedMem_0 = WireInit(MuxLookup(minst.size, false.B, Array(
+  val isAlignedMem_0 = WireInit(MuxLookup(minst.size, false.B, Seq(
     SIZEB -> true.B,
     SIZEH -> (minst.req(0).addr(0) === 0.U),
     SIZE32 -> (minst.req(0).addr(1, 0) === 0.U),
     SIZE64 -> (minst.req(0).addr(2, 0) === 0.U)
     )))
 
-  val isAlignedMem_1 = WireInit(MuxLookup(minst.size, false.B, Array(
+  val isAlignedMem_1 = WireInit(MuxLookup(minst.size, false.B, Seq(
     SIZEB -> true.B,
     SIZEH -> (minst.req(1).addr(0) === 0.U),
     SIZE32 -> (minst.req(1).addr(1, 0) === 0.U),
@@ -283,7 +283,7 @@ class LDSTUnit extends Module {
 
   // Output
   io.minst.bits := minst
-  io.minst.valid := MuxLookup(io.dinst.itype, false.B, Array(
+  io.minst.valid := MuxLookup(io.dinst.itype, false.B, Seq(
     I_LSPairPr -> true.B,
     I_LSPair -> true.B,
     I_LSPairPo -> true.B,
@@ -334,7 +334,7 @@ class MemoryUnit(
   cacheReqQ_entries: Int = 3,
   cacheReqQMisalignement_entries: Int = 3,
   doneInsts_entries: Int = 4
-) extends MultiIOModule {
+) extends Module {
   val pipe = IO(new Bundle {
     val req = Flipped(Decoupled(new MInstTag(params.thidT)))
     val resp = Decoupled(new CommitInst(params.thidN))
@@ -480,7 +480,7 @@ class MemoryUnit(
 
   // Align store data with byte and address for block
   private val maskSize = WireInit(cacheAdaptorMInstInput.inst.size +& singleAccessPair.asUInt)
-  private val maskByteEn: UInt = MuxLookup(maskSize, 1.U, Array(
+  private val maskByteEn: UInt = MuxLookup(maskSize, 1.U, Seq(
     // Mask for size = 2**(bytes in maskSize+1) - 1
     SIZEB -> ((1 << 1) - 1).U, // 0b1
     SIZEH -> ((1 << 2) - 1).U, // 0b11
@@ -598,13 +598,13 @@ class MemoryUnit(
   }
 
   def signExtendData(bits: UInt, size: UInt, sign: Bool): UInt = {
-    val bitsSExt: SInt = MuxLookup(size, bits.asSInt, Array(
+    val bitsSExt: SInt = MuxLookup(size, bits.asSInt, Seq(
       SIZEB -> bits(7, 0).asSInt.pad(DATA_SZ),
       SIZEH -> bits(15, 0).asSInt.pad(DATA_SZ),
       SIZE32 -> bits(31, 0).asSInt.pad(DATA_SZ),
       SIZE64 -> bits.asSInt
       ))
-    val bitsUExt: UInt = MuxLookup(size, bits, Array(
+    val bitsUExt: UInt = MuxLookup(size, bits, Seq(
       SIZEB -> bits(7, 0).pad(DATA_SZ),
       SIZEH -> bits(15, 0).pad(DATA_SZ),
       SIZE32 -> bits(31, 0).pad(DATA_SZ),

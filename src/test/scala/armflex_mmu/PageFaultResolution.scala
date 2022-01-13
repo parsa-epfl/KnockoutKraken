@@ -13,9 +13,9 @@ import chiseltest.simulator.WriteVcdAnnotation
 import firrtl.options.TargetDirAnnotation
 
 
-import org.scalatest.FreeSpec
+import org.scalatest.freespec.AnyFreeSpec
 
-class PageFaultResolutionTester extends FreeSpec with ChiselScalatestTester {
+class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
   "No synonym" in {
     import PageDemanderDriver._
     val anno = Seq(TargetDirAnnotation("test/demander/pagefault_resolution/no_synonym"), VerilatorBackendAnnotation, WriteVcdAnnotation)

@@ -14,10 +14,10 @@ import chisel3.util._
 class LRU[T <: LRUCore](
   params: DatabankParams,
   lruCore: () => T
-) extends MultiIOModule{
-  val addr_i = IO(Input(UInt(params.setWidth().W)))
-  val index_i = IO(Flipped(ValidIO(UInt(params.wayWidth().W))))
-  val lru_o = IO(Output(UInt(params.wayWidth().W)))
+) extends Module {
+  val addr_i = IO(Input(UInt(params.setWidth.W)))
+  val index_i = IO(Flipped(ValidIO(UInt(params.wayWidth.W))))
+  val lru_o = IO(Output(UInt(params.wayWidth.W)))
   // add an extra stage to store the addr. They will be used for the LRU bits writing back.
   val addr_s1_r = if(params.implementedWithRegister) addr_i else RegNext(addr_i)
 
@@ -26,7 +26,7 @@ class LRU[T <: LRUCore](
 
   implicit val bramParams = new BRAMParams(
     1,
-    core.encodingWidth(),
+    core.encodingWidth,
     params.setNumber
     )
 
@@ -54,7 +54,7 @@ class LRU[T <: LRUCore](
  *  @params wayNumber how many ways this LRU could handle.
  */ 
 sealed abstract class LRUCore(wayNumber: Int) extends Module{
-  def encodingWidth(): Int  // how many bits are needed to store the encoding bits.
+  def encodingWidth: Int  // how many bits are needed to store the encoding bits.
   val wayWidth = log2Ceil(wayNumber)
   final val io = IO(new Bundle{
     // the request
@@ -75,7 +75,7 @@ sealed abstract class LRUCore(wayNumber: Int) extends Module{
  */ 
 class PseudoTreeLRUCore(wayNumber: Int) extends LRUCore(wayNumber){
   //assert(isPow2(wayNumber))
-  override def encodingWidth(): Int = wayNumber - 1
+  override def encodingWidth: Int = wayNumber - 1
   // lru_o, encoding_o
   def getLRU(startIndex: Int, wayNumber: Int): UInt = {
     val startBit = io.encoding_i(startIndex)
@@ -113,7 +113,7 @@ class PseudoTreeLRUCore(wayNumber: Int) extends LRUCore(wayNumber){
  *  Real LRU updating logic implemented by matrix. 
  */ 
 class MatrixLRUCore(wayNumber: Int) extends LRUCore(wayNumber){
-  override def encodingWidth(): Int = wayNumber * (wayNumber - 1)
+  override def encodingWidth: Int = wayNumber * (wayNumber - 1)
   // 1. recover the matrix structure.
   val matrix = WireInit(VecInit(Seq.fill(wayNumber)(VecInit(Seq.fill(wayNumber)(false.B)))))
   var encodingCnt = 0
@@ -152,7 +152,7 @@ class MatrixLRUCore(wayNumber: Int) extends LRUCore(wayNumber){
   }))
   io.lru_o := PriorityEncoder(allZeroRow)
 
-  val flattenedMatrix = WireInit(VecInit(Seq.fill(encodingWidth())(false.B)))
+  val flattenedMatrix = WireInit(VecInit(Seq.fill(encodingWidth)(false.B)))
   encodingCnt = 0
   
   for(i <- 0 until wayNumber){

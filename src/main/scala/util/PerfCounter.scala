@@ -2,7 +2,7 @@ package armflex.util
 
 import chisel3._
 
-class PerfCounter extends MultiIOModule {
+class PerfCounter extends Module {
   val io = IO(new Bundle {
     val incr  = Input(Bool())
     val count = Output(UInt(32.W))

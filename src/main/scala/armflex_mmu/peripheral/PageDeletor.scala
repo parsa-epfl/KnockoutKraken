@@ -24,7 +24,7 @@ import chisel3.util._
  */ 
 class PageDeletor(
   params: MemoryHierarchyParams
-) extends MultiIOModule {
+) extends Module {
   val sIdle :: sReqLSU :: sFlushTLBReq :: sFlushTLBReply :: sNotify :: sFlushPage :: sPipe :: sWait :: sSend :: sNotifyLSU ::  Nil = Enum(10)
   val state_r = RegInit(sIdle)
 
@@ -54,7 +54,7 @@ class PageDeletor(
   val tlb_frontend_reply_i = IO(Flipped(Valid(new TLBPipelineResp(params.getPageTableParams))))
 
   // update the modified bit
-  when(page_delete_req_i.fire()){
+  when(page_delete_req_i.fire){
     item_r := page_delete_req_i.bits
   }.elsewhen(state_r === sFlushTLBReply && tlb_frontend_reply_i.valid && tlb_frontend_reply_i.bits.hit){
     item_r.entry.modified := tlb_frontend_reply_i.bits.entry.modified
@@ -77,8 +77,8 @@ class PageDeletor(
   // Counter to monitor the flush process
   val flush_cnt_r = RegInit(0.U(6.W))
   val flush_which = Mux(item_r.entry.perm =/= 2.U, true.B, false.B) // true: D Cache, false: I Cache
-  val flush_fired = Mux(flush_which, dcache_flush_request_o.fire(), icache_flush_request_o.fire())
-  when(page_delete_req_i.fire()){
+  val flush_fired = Mux(flush_which, dcache_flush_request_o.fire, icache_flush_request_o.fire)
+  when(page_delete_req_i.fire){
     flush_cnt_r := 0.U
   }.elsewhen(state_r === sFlushPage){
     flush_cnt_r := Mux(
@@ -130,13 +130,13 @@ class PageDeletor(
   // Update logic of the state machine
   val flushPermissionRequestFire = Mux(
     item_r.entry.perm === 2.U,
-    lsu_handshake_o.inst.flushPermReq.fire(),
-    lsu_handshake_o.data.flushPermReq.fire()
+    lsu_handshake_o.inst.flushPermReq.fire,
+    lsu_handshake_o.data.flushPermReq.fire
   )
   val flushCompleteRequestFire = Mux(
     item_r.entry.perm === 2.U,
-    lsu_handshake_o.inst.flushCompled.fire(),
-    lsu_handshake_o.data.flushCompled.fire()
+    lsu_handshake_o.inst.flushCompled.fire,
+    lsu_handshake_o.data.flushCompled.fire
   )
 
   switch(state_r){
@@ -196,7 +196,7 @@ class PageDeletor(
   
   val done_o = IO(Output(Bool()))
   done_o := state_r === sWait && queue_empty && !item_r.entry.modified ||
-    state_r === sSend && done_message_o.fire()
+    state_r === sSend && done_message_o.fire
 }
 
 object PageDeletorVerilogEmitter extends App {

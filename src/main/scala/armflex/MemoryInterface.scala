@@ -99,7 +99,7 @@ object PipeCache {
     val maxInstsInFlight: Int,
     val pAddrW: Int,
     val blockSize: Int
-  ) extends MultiIOModule {
+  ) extends Module {
     val pipe_io = IO(new PipeCacheInterfaceIO(genMeta, pAddrW, blockSize))
     val cache_io = IO(new PipeCacheIO(pAddrW, blockSize))
     val pending = IO(Output(UInt(log2Ceil(maxInstsInFlight).W)))
@@ -139,7 +139,7 @@ object PipeCache {
   /**
    * This module ensures that all pending cache requests are completed before allowing for flushing
    */
-  class CacheFlushingController extends MultiIOModule {
+  class CacheFlushingController extends Module {
     val mmu_io = IO(new PipeMMUPortIO)
     val ctrl = IO(new Bundle {
       val hasPendingWork = Input(Bool())

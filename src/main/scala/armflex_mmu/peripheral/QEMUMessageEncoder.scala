@@ -9,7 +9,7 @@ import armflex_mmu.MemoryHierarchyParams
 class QEMUMessageEncoder(
   param: MemoryHierarchyParams,
   fifoDepth: Int = 2
-) extends MultiIOModule {
+) extends Module {
   val evict_notify_req_i = IO(Flipped(Decoupled(new PageEvictNotification(
     QEMUMessagesType.sEvictNotify,
     param.getPageTableParams
@@ -29,7 +29,7 @@ class QEMUMessageEncoder(
     evict_notify_req_i,
     page_fault_req_i
   ).map({ mess =>
-    val res = Wire(Decoupled(mess.bits.getRawMessage.cloneType))
+    val res = Wire(Decoupled(new TxMessage))
     res.bits := mess.bits.getRawMessage
     res.valid := mess.valid
     mess.ready := res.ready

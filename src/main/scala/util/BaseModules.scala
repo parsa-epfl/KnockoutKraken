@@ -164,8 +164,8 @@ class FlushQueue[T <: Data](
   val ptr_match = enq_ptr.value === deq_ptr.value
   val empty = ptr_match && !maybe_full
   val full = ptr_match && maybe_full
-  val do_enq = WireDefault(io.enq.fire())
-  val do_deq = WireDefault(io.deq.fire())
+  val do_enq = WireDefault(io.enq.fire)
+  val do_deq = WireDefault(io.deq.fire)
 
   when(do_enq) {
     ram(enq_ptr.value) := io.enq.bits

@@ -38,5 +38,7 @@ object MemoryUnitDrivers {
   }
 }
 
-class MemoryUnitTests extends FreeSpec with ChiselScalatestTester {
+import org.scalatest.freespec.AnyFreeSpec
+
+class MemoryUnitTests extends AnyFreeSpec with ChiselScalatestTester {
 }

@@ -8,7 +8,7 @@ import armflex.util._
 import armflex.util.ExtraUtils._
 import armflex.PipeTLB._
 
-class FetchUnitPC(thidN: Int) extends MultiIOModule {
+class FetchUnitPC(thidN: Int) extends Module {
   val ctrl = IO(new Bundle {
     val start = Input(ValidTag(UInt(log2Ceil(thidN).W), DATA_T))
     val commit = Input(ValidTag(UInt(log2Ceil(thidN).W), DATA_T))
@@ -69,7 +69,7 @@ class FetchUnit(
   params: PipelineParams,
   cacheReqQ_entries: Int = 3,
   instQueue_entries: Int = 8
-) extends MultiIOModule {
+) extends Module {
 
   // Generate PC
   private val pcUnit = Module(new FetchUnitPC(params.thidN))

@@ -16,7 +16,7 @@ import scala.collection.mutable
 //import treadle.executable.DataType
 //import scala.xml.dtd.impl.Base
 
-class BRAMorRegister(implementedWithRegister: Boolean = true)(implicit cfg: BRAMParams) extends MultiIOModule{
+class BRAMorRegister(implementedWithRegister: Boolean = true)(implicit cfg: BRAMParams) extends Module {
   val portA = IO(new BRAMPort)
   val portB = IO(new BRAMPort)
 
@@ -48,18 +48,18 @@ class BRAMorRegister(implementedWithRegister: Boolean = true)(implicit cfg: BRAM
 class BankWriteRequestPacket(
   params: DatabankParams
 ) extends Bundle{
-  val addr = UInt(params.setWidth().W)
-  val which = UInt(params.wayWidth().W)
+  val addr = UInt(params.setWidth.W)
+  val which = UInt(params.wayWidth.W)
   val data = new CacheEntry(params)
 
 }
 
 class BRAMPortAdapter(
   params: DatabankParams,
-) extends MultiIOModule{
+) extends Module {
   val set_t = Vec(params.associativity, new CacheEntry(params))
 
-  val frontend_read_request_i = IO(Flipped(Decoupled(UInt(params.setWidth().W))))
+  val frontend_read_request_i = IO(Flipped(Decoupled(UInt(params.setWidth.W))))
   val frontend_read_reply_data_o = IO(Decoupled(set_t.cloneType))
 
   implicit val bramParams = new BRAMParams(

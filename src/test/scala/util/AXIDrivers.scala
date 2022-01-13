@@ -29,16 +29,16 @@ object AXIDrivers {
       // Send address
       target.ar.arvalid.poke(true.B)
       target.ar.araddr.poke(addr)
-      while(!target.ar.arready.peek.litToBoolean){
+      while(!target.ar.arready.peek().litToBoolean){
         clock.step(1)
       } 
       clock.step(1)
       target.ar.arvalid.poke(false.B)
 
       target.r.rready.poke(true.B)
-      var resp = target.r.rdata.peek
-      while(!target.r.rvalid.peek.litToBoolean) {
-        resp = target.r.rdata.peek
+      var resp = target.r.rdata.peek()
+      while(!target.r.rvalid.peek().litToBoolean) {
+        resp = target.r.rdata.peek()
         clock.step(1)
       } 
       clock.step(1)
@@ -50,7 +50,7 @@ object AXIDrivers {
       // Send address
       target.aw.awvalid.poke(true.B)
       target.aw.awaddr.poke(addr)
-      while(!target.aw.awready.peek.litToBoolean){
+      while(!target.aw.awready.peek().litToBoolean){
         clock.step(1)
       } 
       clock.step(1)
@@ -59,7 +59,7 @@ object AXIDrivers {
       // Send write
       target.w.wvalid.poke(true.B)
       target.w.wdata.poke(data)
-      while(!target.w.wready.peek.litToBoolean){
+      while(!target.w.wready.peek().litToBoolean){
         clock.step(1)
       } 
       clock.step(1)
@@ -67,7 +67,7 @@ object AXIDrivers {
 
       // WriteResp
       target.b.bready.poke(true.B)
-      while(!target.b.bvalid.peek.litToBoolean) {
+      while(!target.b.bvalid.peek().litToBoolean) {
         clock.step(1)
       } 
       clock.step(1)

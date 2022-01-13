@@ -12,9 +12,9 @@ import chiseltest.simulator.WriteVcdAnnotation
 import firrtl.options.TargetDirAnnotation
 
 
-import org.scalatest.FreeSpec
+import org.scalatest.freespec.AnyFreeSpec
 
-class PageWalkTester extends FreeSpec with ChiselScalatestTester {
+class PageWalkTester extends AnyFreeSpec with ChiselScalatestTester {
   import PageDemanderDriver._
   "Normal" in {
     val anno = Seq(TargetDirAnnotation("test/demander/pagewalk/normal"), VerilatorBackendAnnotation, WriteVcdAnnotation)

@@ -5,12 +5,12 @@ import chisel3._
 import chisel3.util._
 import chiseltest._
 import chiseltest.experimental._
-import org.scalatest.FreeSpec
+import org.scalatest.freespec.AnyFreeSpec
 import chisel3.util.experimental.loadMemoryFromFile
 
-object TLBTestUtility{
+object TLBTestUtility {
 
-class DelayChain[T <: Data](in: T, level: Integer) extends MultiIOModule {
+class DelayChain[T <: Data](in: T, level: Integer) extends Module {
   val i = IO(Flipped(Decoupled(in.cloneType)))
   val o = IO(Decoupled(in.cloneType))
   val connections = Wire(Vec(level + 1, Decoupled(in.cloneType)))
@@ -24,7 +24,7 @@ class DelayChain[T <: Data](in: T, level: Integer) extends MultiIOModule {
 class DUTTLB(
   parent: () => TLB,
   initialMem: String = ""
-) extends MultiIOModule {
+) extends Module {
   val u_tlb = Module(parent())
 
   val delay_chain_miss_req = Module(new DelayChain(u_tlb.mmu_io.missReq.bits.cloneType, 4))
@@ -106,7 +106,7 @@ implicit class BaseTLBDriver(target: DUTTLB){
   def waitForArrive(expectAsid: UInt) = {
     do{
       target.tick()
-    } while(!target.packetArrive_o.valid.peek.litToBoolean)
+    } while(!target.packetArrive_o.valid.peek().litToBoolean)
     target.packetArrive_o.bits.expect(expectAsid)
     target.tick()
   }
@@ -119,7 +119,7 @@ implicit class BaseTLBDriver(target: DUTTLB){
       target.frontendReply_o.bits.entry.ppn.expect(ppn)
   }
 
-  def tick(step: Int = 1){
+  def tick(step: Int = 1) = {
     //import armflex.util.SimTools._
     //logWithCycle("Tick.")
     target.clock.step(step)
@@ -132,7 +132,7 @@ import chiseltest.simulator.VerilatorBackendAnnotation
 import chiseltest.simulator.WriteVcdAnnotation
 import firrtl.options.TargetDirAnnotation
 
-class TLBTester extends FreeSpec with ChiselScalatestTester {
+class TLBTester extends AnyFreeSpec with ChiselScalatestTester {
   val param = new PageTableParams(
     12, 8, 4, 2, 4, 1, 32, 32
   )

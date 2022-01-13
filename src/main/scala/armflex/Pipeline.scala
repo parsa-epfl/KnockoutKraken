@@ -31,7 +31,7 @@ class PipeArchStateIO(thidN: Int) extends Bundle {
 
 /** Processor
   */
-class Pipeline(params: PipelineParams) extends MultiIOModule {
+class Pipeline(params: PipelineParams) extends Module {
   // --------- IO -----------
   // Memory Hierarchy
   val mem_io = IO(new PipelineMemoryIO(params.pAddrW, params.thidW, params.asidW, params.blockSize))

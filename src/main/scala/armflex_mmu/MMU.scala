@@ -102,7 +102,7 @@ class MMU2ShellIO(params: MemoryHierarchyParams) extends Bundle {
 class MMU(
   params: MemoryHierarchyParams,
   messageFIFODepth: Int = 2
-) extends MultiIOModule {
+) extends Module {
 
   // ---- Modules -----
   // FIXME: Add a module to interact with multiple TLBs.

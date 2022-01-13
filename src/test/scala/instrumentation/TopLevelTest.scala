@@ -8,20 +8,20 @@ import chisel3.util.Cat
 import armflex.util.AXIDrivers.AXI4LiteDriver
 import armflex.util.MemHelperDrivers._
 import armflex.util.SoftwareStructs._
-import org.scalatest.FlatSpec
+import org.scalatest.flatspec.AnyFlatSpec
 import firrtl.options.TargetDirAnnotation
 
 import java.nio.ByteBuffer
 
 import InstrumentationDrivers._
 object InstrumentationDrivers {
-  abstract class DriverBase[T <: MultiIOModule](target: T) {
+  abstract class DriverBase[T <: Module](target: T) {
     implicit val clock = target.clock
   }
   implicit class TopLevelExampleDriver(target: TopLevelExample) 
     extends DriverBase(target) {
       private val csrParams = target.params.csrParams
-      def init() {
+      def init() = {
         target.S_AXIL.init()
         target.dram_io.read.init()
         target.dram_io.write.init()
@@ -80,7 +80,9 @@ object InstrumentationDrivers {
   }
 }
 
-class TestInstrumentationExample extends FlatSpec with ChiselScalatestTester {
+
+
+class TestInstrumentationExample extends AnyFlatSpec with ChiselScalatestTester {
   val annos = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/instrumentation"), WriteVcdAnnotation)
 
 

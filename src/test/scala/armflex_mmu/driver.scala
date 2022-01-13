@@ -14,7 +14,7 @@ object PageDemanderTestHelper {
    * This helper will convert a pageset packet to three 512bits raw data.
    *
    */
-  class PageSetConverter(params: PageTableParams) extends MultiIOModule {
+  class PageSetConverter(params: PageTableParams) extends Module {
     import peripheral.PageTableSetPacket
     val pageset_packet_i = IO(Input(new PageTableSetPacket(params)))
     val raw_o = IO(Output(Vec(3, UInt(512.W))))
@@ -38,7 +38,7 @@ object PageDemanderTestHelper {
  */
 class MMUDUT(
   val params: MemoryHierarchyParams
-) extends MultiIOModule {
+) extends Module {
   val u_page_demander = Module(new MMU(params, 2))
   // AXI Bus for thread table
   // val S_AXIL_TT = IO(Flipped(u_page_demander.S_AXIL_TT.cloneType))
@@ -177,7 +177,7 @@ object PageDemanderDriver {
     def waitForSignalToBe(port: Bool, value: Boolean = true): Int = {
       println(s"wait ${port.pathName} to be $value.")
       var interval = 0
-      while(port.peek.litToBoolean != value){
+      while(port.peek().litToBoolean != value){
         target.tk()
         interval += 1
       }
@@ -241,7 +241,7 @@ object PageDemanderDriver {
           tk()
         }
         target.S_AXIL.r.rvalid.expect(true.B)
-        val result = target.S_AXIL.r.rdata.peek.litValue()
+        val result = target.S_AXIL.r.rdata.peek().litValue
         if(result != 0){
           message_available = true
         }
@@ -303,7 +303,7 @@ object PageDemanderDriver {
       }
       timescope {
         for(i <- 0 until 3){
-          master_bus.r.rdata.poke(target.pageset_converter_raw_o(i).peek)
+          master_bus.r.rdata.poke(target.pageset_converter_raw_o(i).peek())
           master_bus.r.rid.poke(0.U)
           master_bus.r.rlast.poke((i == 2).B)
           master_bus.r.rresp.poke(0.U)

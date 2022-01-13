@@ -229,7 +229,7 @@ class BRAMPort(implicit val params: BRAMParams) extends Bundle {
   }
 }
 
-class BRAM(implicit val params: BRAMParams) extends MultiIOModule {
+class BRAM(implicit val params: BRAMParams) extends Module {
   val portA = IO(new BRAMPort)
   val portB = IO(new BRAMPort)
   private val bramTDP = Module(new BRAMTDP)
