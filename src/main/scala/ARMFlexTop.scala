@@ -164,12 +164,17 @@ object ARMFlexTopSimulatorVerilogEmitter extends App {
 object ARMFlexTopVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
   import java.io._
-  val fr = new FileWriter(new File("regression/rtl/ARMFlexTop.v"))
-  fr.write(c.emitVerilog(
+  val v = c.emitVerilog(
     new ARMFlexTopSimulator(
       new PipelineParams(thidN = 32, pAddrW =  34),
       new MemoryHierarchyParams(thidN = 32, pAddrW = 34)
-    ), annotations = Seq(TargetDirAnnotation("regression/rtl/"))))
+    ), annotations = Seq(TargetDirAnnotation("fpga/")))
+  
+  // renaming AXI wires
+  val processed_v = v.replaceAll("""([MS]_AXI[A-Z_]*_)(aw|w|b|r|ar)_""", "$1")
+
+  val fr = new FileWriter(new File("fpga/ARMFlexTop.v"))
+  fr.write(processed_v)
   fr.close()
 }
 
@@ -177,7 +182,8 @@ object ARMFlexTopVerilogEmitter extends App {
  * This module is wraps all Pipeline ports with a AxiLite register, it is not meant to be functionally correct but
  * actually just to get synthesis/area numbers without getting optimized.
  * It can also be used to check for Chisel RTL generation faults.
- * @params params
+ * 
+ * @param params
  */
 class PipelineAxiHacked(params: PipelineParams) extends Module {
   import antmicro.CSR._
