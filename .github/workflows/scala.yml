@@ -35,9 +35,9 @@ jobs:
       run: sudo apt update && sudo apt install verilator -y && verilator --version
     - name: Generate Verilog
       run: sbt "runMain ARMFlexTopSimulatorVerilogEmitter"
-    - name: Run CMake
-      run: cd regression && mkdir build && cd build && cmake .. -G "Unix Makefiles"
-    - name: Run Make
-      run: make -j
+    - name: Build Simulator
+      working-directory: ./regression
+      run: mkdir build && cd build && cmake .. -G "Unix Makefiles" && make -j
     - name: Run every unit test
-      run: cd .. && ./runAll.sh
+      working-directory: ./regression
+      run: ./runAll.sh
