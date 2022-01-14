@@ -24,6 +24,7 @@ jobs:
       run: sbt test
   cpp_unit_test:
     runs-on: ubuntu-20.04
+    needs: scala_unit_test
     steps:
     - uses: actions/checkout@v2
     - name: Set up JDK 1.8
