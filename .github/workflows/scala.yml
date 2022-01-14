@@ -19,7 +19,7 @@ jobs:
       with:
         java-version: 1.8
     - name: Setup Verilator
-      run: sudo apt install verilator && verilator --version
+      run: apt update && apt install verilator -y && verilator --version
     - name: Run tests
       run: sbt test
   cpp_unit_test:
@@ -32,11 +32,11 @@ jobs:
       with:
         java-version: 1.8
     - name: Setup Verilator
-      run: sudo apt install verilator && verilator --version
+      run: apt update && apt install verilator -y && verilator --version
     - name: Generate Verilog
       run: sbt "runMain ARMFlexTopSimulatorVerilogEmitter"
     - name: Run CMake
-      run: cd regression && mkdir build && cd build && cmake ..
+      run: cd regression && mkdir build && cd build && cmake .. -G "Unix Makefiles"
     - name: Run Make
       run: make -j
     - name: Run every unit test
