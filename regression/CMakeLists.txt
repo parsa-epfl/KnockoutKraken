@@ -5,7 +5,7 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
 set(AWS_FPGA_LIBRARY_PATH /home/centos/DevteroFlex/aws-fpga/sdk/userspace)
-#unset(AWS_FPGA_LIBRARY_PATH) # Comment if simulator
+unset(AWS_FPGA_LIBRARY_PATH) # Comment if simulator
 
 add_executable(
   KnockoutTestGenerator
@@ -48,7 +48,8 @@ else()
   target_sources(KnockoutTestGenerator PRIVATE src/client/fpga_rtl.c)
   add_executable(KnockoutSimulator src/server/main.cc src/server/dut.cc src/server/subroutine.cc src/server/ipc.cc)
   #set(VERILATOR_ARGS +define+STOP_COND=1'h0)
-  verilate(KnockoutSimulator SOURCES rtl/ARMFlexTop.v rtl/BRAMTDP.v TOP_MODULE ARMFlexTopInstrumented TRACE_FST VERILATOR_ARGS)
+  #verilate(KnockoutSimulator SOURCES rtl/ARMFlexTop.v rtl/BRAMTDP.v TOP_MODULE ARMFlexTopInstrumented TRACE_FST VERILATOR_ARGS)
+  verilate(KnockoutSimulator SOURCES rtl/ARMFlexTop.v rtl/BRAMTDP.v TOP_MODULE ARMFlexTopSimulator TRACE_FST VERILATOR_ARGS)
   target_link_libraries(KnockoutSimulator PRIVATE Threads::Threads)
   target_sources(StressTest PRIVATE src/client/fpga_rtl.c src/client/ipc.c)
 endif()
