@@ -37,7 +37,7 @@ class DRAMPortParams(
   val pAddrW: Int = 12,
   val pDataW: Int = 512
 )
-class DRAMWrapperWrite(val params: DRAMPortParams) extends MultiIOModule {
+class DRAMWrapperWrite(val params: DRAMPortParams) extends Module {
   assert(params.pDataW == 512, "Assumes that we match AWS F1 DRAM width.")
   val M_AXI_W = IO(new AXIWriteMasterIF(params.pAddrW, params.pDataW))
   // The write port allows for burst data writes
@@ -49,7 +49,7 @@ class DRAMWrapperWrite(val params: DRAMPortParams) extends MultiIOModule {
   M_AXI_W.data <> write.data
 }
 
-class DRAMWrapperRead(val params: DRAMPortParams) extends MultiIOModule {
+class DRAMWrapperRead(val params: DRAMPortParams) extends Module {
   assert(params.pDataW == 512, "Assumes that we match AWS F1 DRAM width.")
   val M_AXI_R = IO(new AXIReadMasterIF(params.pAddrW, params.pDataW))
 

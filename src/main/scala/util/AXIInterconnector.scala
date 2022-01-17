@@ -200,7 +200,7 @@ class AXILInterconnectorNonOptimized(
   addrSegments: Seq[BigInt],
   addrW: Int = 32,
   dataW: Int = 32
-) extends MultiIOModule {
+) extends Module {
   val S_AXIL = IO(Flipped(new AXI4Lite(addrW, dataW)))
   val M_AXIL = IO(Vec(addrSegments.length, new AXI4Lite(addrW, dataW)))
 

@@ -3,7 +3,6 @@ package instrumentation
 import chisel3._
 import chiseltest._
 import chiseltest.internal._
-import chiseltest.experimental.TestOptionBuilder._
 import chisel3.util.Cat
 import armflex.util.AXIDrivers.AXI4LiteDriver
 import armflex.util.MemHelperDrivers._
@@ -17,12 +16,12 @@ import instrumentation.TraceDumpDrivers.TraceDumpTestSimple
 
 import scala.collection.compat.immutable.ArraySeq
 object TraceDumpDrivers {
-  abstract class DriverBase[T <: MultiIOModule](target: T) {
+  abstract class DriverBase[T <: Module](target: T) {
     implicit val clock = target.clock
   }
 
   implicit class TraceDumpDriver(target: TraceDump) extends DriverBase(target) {
-    def init() {
+    def init() = {
       target.trace_data.setSourceClock(clock)
       target.init_addr.setSourceClock(clock)
       target.dram_write_port.init()
@@ -53,7 +52,7 @@ object TraceDumpDrivers {
   }
 
   class TraceDumpTestSimple(dut: TraceDump){
-    def run() {
+    def run() = {
       dut.init()
       val pcs1: Seq[Long] = ArraySeq(6, 5, 6, 14, 1, 5, 3, 2)
       val pcs2: Seq[Long] = ArraySeq(1, 11, 9, 3, 17, 13, 2, 7)
@@ -73,7 +72,7 @@ object TraceDumpDrivers {
       dut.startMemWrite(init_addr + 1, pcs2)
     }
 
-    def runMultiBurst() {
+    def runMultiBurst() = {
       dut.init()
       val pcs1: Seq[Long] = ArraySeq(6, 5, 6, 14, 1, 5, 3, 2)
       val pcs2: Seq[Long] = ArraySeq(1, 11, 9, 3, 17, 13, 2, 7)
@@ -100,7 +99,7 @@ object TraceDumpDrivers {
       dut.startMemWrite(init_addr + 2, pcs1)
     }
 
-    def runStressTest() {
+    def runStressTest() = {
       dut.init()
       val init_addr: Long = 0x0
       dut.init_addr.enqueue(init_addr.U)
@@ -113,7 +112,9 @@ object TraceDumpDrivers {
   }
 }
 
-class TestTraceDump extends FlatSpec with ChiselScalatestTester {
+import org.scalatest.flatspec.AnyFlatSpec;
+
+class TestTraceDump extends AnyFlatSpec with ChiselScalatestTester {
   val annos = Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/instrumentation"), WriteVcdAnnotation)
 
 

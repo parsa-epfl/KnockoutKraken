@@ -59,7 +59,7 @@ class BRAMPortAdapter(
 ) extends Module {
   val set_t = Vec(params.associativity, new CacheEntry(params))
 
-  val frontend_read_request_i = IO(Flipped(Valid(UInt(params.setWidth().W))))
+  val frontend_read_request_i = IO(Flipped(Valid(UInt(params.setWidth.W))))
   val frontend_read_reply_data_o = IO(Output(set_t.cloneType))
 
   implicit val bramParams = new BRAMParams(
