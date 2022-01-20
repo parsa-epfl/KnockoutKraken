@@ -346,6 +346,7 @@ class MemoryUnit(
     val inst = new MInstTag(params.thidT)
     // For Pair LoadStores, to execute second address, while keeping first access information
     val blockMisaligned = Output(Bool())
+    val exception = Output(Bool())
     val firstIsCompleted = Output(Bool())
     val paddr = Output(Vec(2, mem_io.cache.req.bits.addr.cloneType))
   }
@@ -434,10 +435,13 @@ class MemoryUnit(
       // If not hit, or violation on first address, ditch instruction
       when(mem_io.tlb.resp.fire) {
         sTLB_state := sTLB_pair_req
-        when(!mem_io.tlb.resp.bits.hit || mem_io.tlb.resp.bits.violation) {
+        when(!mem_io.tlb.resp.bits.hit) {
           // Ditch request, Memory Hierarchy will manage miss
           tlbReqQ.io.deq.ready := true.B
           tlbDropInst := true.B
+          sTLB_state := sTLB_req
+        }.elsewhen(mem_io.tlb.resp.bits.violation) {
+          tlbReqQ.io.deq.ready := true.B
           sTLB_state := sTLB_req
         }
       }
@@ -451,6 +455,7 @@ class MemoryUnit(
 
   // Resp TLB management -----
   cacheReq.blockMisaligned := isBlockMisaligned(cacheReq.paddr(0), cacheReq.paddr(1))
+  cacheReq.exception := mem_io.tlb.resp.bits.violation
   when(mem_io.tlb.resp.fire && sTLB_state =/= sTLB_intermediateResp) {
     cacheReq.paddr(0) := mem_io.tlb.resp.bits.addr                            | tlb_resp_addr_pagebits_0
     cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr + (1.U << tlbMeta.size)    | tlb_resp_addr_pagebits_1
@@ -460,7 +465,7 @@ class MemoryUnit(
       cacheReq.blockMisaligned := true.B
     }
 
-    when(!mem_io.tlb.resp.bits.hit || mem_io.tlb.resp.bits.violation) {
+    when(!mem_io.tlb.resp.bits.hit) {
       cacheReqQ.io.enq.valid := false.B // Ditch instruction on miss/violation
       tlbDropInst := true.B
     }
@@ -546,11 +551,15 @@ class MemoryUnit(
   cache2doneInst_credits.trans.out := doneInst.io.deq.fire
 
   // Manage requests to the cache, if pair pending, it has priority for execution
+  private val bypassCacheByException = WireInit(false.B) 
   when(cacheAdaptor.pipe_io.req.port.ready) {
     when(cacheReqMisalignedQ.io.deq.valid && cache2doneInst_credits.ready) {
       cacheReqMisalignedQ.io.deq.handshake(cacheAdaptor.pipe_io.req.port)
     }.otherwise {
-      when(cacheReqQ.io.deq.bits.blockMisaligned) {
+      when(cacheReqQ.io.deq.bits.exception) {
+        cacheReqQ.io.deq.ready := false.B // Handshake with commitU below
+        bypassCacheByException := true.B
+      }.elsewhen(cacheReqQ.io.deq.bits.blockMisaligned) {
         cacheReqQ.io.deq.handshake(cacheAdaptor.pipe_io.req.port, cache2cacheMisaligned_credits.ready)
       }.otherwise {
         cacheReqQ.io.deq.handshake(cacheAdaptor.pipe_io.req.port, cache2doneInst_credits.ready)
@@ -562,21 +571,24 @@ class MemoryUnit(
   private val cachePipeResp = WireInit(cacheAdaptor.pipe_io.resp)
   private val respPairIdx = cachePipeResp.meta.firstIsCompleted.asUInt
   private val alignedDataResp: UInt = WireInit(cachePipeResp.port.bits.data >> Cat(params.getBlockAddrBits(cachePipeResp.meta.inst.req(respPairIdx).addr), 0.U(3.W)))
+  private val receiveFromBypass = WireInit(false.B)
   // If blockMisaligned, save initial load in req data
   // when(cachePipeResp.meta.inst.isLoad) { } // Not necessary, overwrite store data given already executed
-  cacheAdaptor.pipe_io.resp.port.ready := true.B // Backpressure is managed by ensuring enough
+  cacheAdaptor.pipe_io.resp.port.ready := true.B // Backpressure is managed by ensuring enough credits
   cacheReqMisalignedQ.io.enq.bits := cachePipeResp.meta
   cacheReqMisalignedQ.io.enq.bits.inst.req(0).data := alignedDataResp
-  when(cachePipeResp.meta.inst.isPair) {
-    when(cachePipeResp.meta.blockMisaligned
-           && !cachePipeResp.meta.firstIsCompleted) {
+  when(cacheAdaptor.pipe_io.resp.port.valid) {
+    when(cachePipeResp.meta.inst.isPair
+      && cachePipeResp.meta.blockMisaligned
+      && !cachePipeResp.meta.firstIsCompleted) {
       cacheReqMisalignedQ.io.enq.bits.firstIsCompleted := true.B
       cacheReqMisalignedQ.io.enq.valid := cacheAdaptor.pipe_io.resp.port.valid
     }.otherwise {
       doneInst.io.enq.valid := cacheAdaptor.pipe_io.resp.port.valid
     }
-  }.otherwise {
-    doneInst.io.enq.valid := cacheAdaptor.pipe_io.resp.port.valid
+  }.elsewhen(bypassCacheByException) {
+      doneInst.io.enq.handshake(cacheReqQ.io.deq)
+      receiveFromBypass := true.B
   }
 
   // Pack final response
@@ -616,17 +628,23 @@ class MemoryUnit(
   }
 
   doneInst.io.enq.bits := 0.U.asTypeOf(doneInst.gen) // Init all false
-  doneInst.io.enq.bits.rd(0).valid := metaInfo.rd.valid
-  doneInst.io.enq.bits.rd(1).valid := metaInfo.isLoad
-  doneInst.io.enq.bits.rd(2).valid := metaInfo.isLoad && metaInfo.isPair
-  doneInst.io.enq.bits.res(0) := metaInfo.rd_res
-  doneInst.io.enq.bits.res(1) := signExtendData(memData(0), metaInfo.size, metaInfo.isSigned)
-  doneInst.io.enq.bits.res(2) := signExtendData(memData(1), metaInfo.size, metaInfo.isSigned)
-  doneInst.io.enq.bits.rd(0).bits := metaInfo.rd.bits
-  doneInst.io.enq.bits.rd(1).bits := metaInfo.req(0).reg
-  doneInst.io.enq.bits.rd(2).bits := metaInfo.req(1).reg
-  doneInst.io.enq.bits.is32bit := metaInfo.is32bit
-  doneInst.io.enq.bits.tag := metaInfo.tag
+  when(receiveFromBypass) {
+    doneInst.io.enq.bits.exceptions.valid := true.B
+    doneInst.io.enq.bits.exceptions.bits := 1.U
+    doneInst.io.enq.bits.tag := cacheReqQ.io.deq.bits.inst.tag
+  }.otherwise {
+    doneInst.io.enq.bits.rd(0).valid := metaInfo.rd.valid
+    doneInst.io.enq.bits.rd(1).valid := metaInfo.isLoad
+    doneInst.io.enq.bits.rd(2).valid := metaInfo.isLoad && metaInfo.isPair
+    doneInst.io.enq.bits.res(0) := metaInfo.rd_res
+    doneInst.io.enq.bits.res(1) := signExtendData(memData(0), metaInfo.size, metaInfo.isSigned)
+    doneInst.io.enq.bits.res(2) := signExtendData(memData(1), metaInfo.size, metaInfo.isSigned)
+    doneInst.io.enq.bits.rd(0).bits := metaInfo.rd.bits
+    doneInst.io.enq.bits.rd(1).bits := metaInfo.req(0).reg
+    doneInst.io.enq.bits.rd(2).bits := metaInfo.req(1).reg
+    doneInst.io.enq.bits.is32bit := metaInfo.is32bit
+    doneInst.io.enq.bits.tag := metaInfo.tag
+  }
 
   pipe.resp <> doneInst.io.deq
 
@@ -698,6 +716,11 @@ class MemoryUnit(
         }
       }.otherwise {
         assert(doneInst.io.enq.fire, "On normal access, instruction must be pushed to completed insts")
+      }
+    }
+    when(bypassCacheByException) {
+      when(cacheReqQ.io.deq.fire) {
+        assert(doneInst.io.enq.fire, "If exception, bypass directly to commit instruction")
       }
     }
 
