@@ -18,8 +18,10 @@ object PipeTLB {
   }
 
   class PipeTLBResp(
+    val thidW: Int,
     val pAddrW: Int
   ) extends Bundle {
+    val thid = UInt(thidW.W)
     val addr = UInt(pAddrW.W)
     val hit = Bool()
     val miss = Bool()
@@ -33,7 +35,7 @@ object PipeTLB {
     val asidW: Int
   ) extends Bundle {
     val req = Decoupled(new PipeTLBReq(vAddrW, thidW, asidW))
-    val resp = Flipped(Decoupled(new PipeTLBResp(pAddrW)))
+    val resp = Flipped(Decoupled(new PipeTLBResp(thidW, pAddrW)))
   }
 }
 

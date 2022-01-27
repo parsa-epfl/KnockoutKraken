@@ -53,7 +53,8 @@ class TLBPipelineResp(params: PageTableParams) extends Bundle {
   val thid = UInt(log2Ceil(params.thidN).W)
 
   def toPipeTLBResponse: PipeTLB.PipeTLBResp = {
-    val res = Wire(new PipeTLB.PipeTLBResp(params.pPageW + params.pageW))
+    val res = Wire(new PipeTLB.PipeTLBResp(params.thidN, params.pPageW + params.pageW))
+    res.thid := thid
     res.addr := entry.ppn << params.pageW
     res.hit := hit
     res.miss := !hit

@@ -20,7 +20,7 @@ object TransplantIO extends Bundle {
   class CPU2Trans(val thidN: Int) extends Bundle {
     val rfile_wr = new RFileIO.WRPort(thidN)
     val pregs = Input(new PStateRegs)
-    val done = Input(ValidTag(thidN))
+    val doneCPU = Input(ValidTag(thidN))
     val stopCPU = Output(UInt(thidN.W))
   }
   class Mem2Trans(val thidN: Int) extends Bundle {
@@ -30,9 +30,11 @@ object TransplantIO extends Bundle {
   class Host2Trans(val thidN: Int) extends Bundle {
     val pending = Input(UInt(thidN.W))
     val stopCPU = Input(UInt(thidN.W))
+    val forceTransplant = Input(UInt(thidN.W))
   }
   class Trans2Host(val thidN: Int, val bramCfg: BRAMParams) extends Bundle {
-    val done = Output(ValidTag(thidN))
+    val doneCPU = Output(ValidTag(thidN))
+    val doneTrans = Output(ValidTag(thidN))
     val clear = Output(ValidTag(thidN))
   }
 }
@@ -81,10 +83,10 @@ class TransplantUnit(thidN: Int) extends Module {
 
   cpu2transInstFault := Mux(mem2trans.instFault.valid, 1.U << mem2trans.instFault.tag, 0.U)
   cpu2transDataFault := Mux(mem2trans.dataFault.valid, 1.U << mem2trans.dataFault.tag, 0.U)
-  cpu2transCpuTrans  := Mux(cpu2trans.done.valid, 1.U << cpu2trans.done.tag, 0.U)
-  cpu2transPending := (cpu2transPending & ~cpu2transClearBit) | cpu2transInsert
+  cpu2transCpuTrans  := Mux(cpu2trans.doneCPU.valid, 1.U << cpu2trans.doneCPU.tag, 0.U)
+  cpu2transPending := (cpu2transPending & ~cpu2transClearBit) | cpu2transInsert | host2trans.forceTransplant
 
-  trans2host.done.valid := false.B
+  trans2host.doneTrans.valid := false.B
   trans2host.clear.valid := false.B
   trans2cpu.start := false.B
   switch(state) {
@@ -120,7 +122,7 @@ class TransplantUnit(thidN: Int) extends Module {
       }
       when(stateRegType === r_DONE) {
         when(stateDir === s_CPU2BRAM) {
-          trans2host.done.valid := true.B
+          trans2host.doneTrans.valid := true.B
         }.elsewhen(stateDir === s_BRAM2CPU) {
           trans2cpu.start := true.B
         }
@@ -129,7 +131,7 @@ class TransplantUnit(thidN: Int) extends Module {
     }
   }
 
-  trans2host.done.tag := thread
+  trans2host.doneTrans.tag := thread
   trans2host.clear.tag := thread_next
   trans2cpu.thread := thread
   trans2cpu.pregs := cpu2trans.pregs
@@ -165,6 +167,7 @@ class TransplantUnit(thidN: Int) extends Module {
   trans2cpu.rfile_wr.data := hostTransPort.DO
   trans2cpu.rfile_wr.tag := RegNext(thread)
   cpu2trans.stopCPU := host2trans.stopCPU
+  trans2host.doneCPU := cpu2trans.doneCPU
 
   RFileIO.wr2BRAM(stateBufferWrPort, cpu2trans.rfile_wr, (currReg.getWidth - REG_SZ))
   when(state === s_TRANS && stateDir === s_BRAM2CPU) {

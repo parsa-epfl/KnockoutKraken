@@ -134,12 +134,19 @@ int transplantBack(const struct FPGAContext *c, uint32_t thread_id, struct Armfl
 // Helper functions
 int transplant_getState(const FPGAContext *c, uint32_t thread_id, uint64_t *state, size_t regCount);
 int transplant_pushState(const FPGAContext *c, uint32_t thread_id, uint64_t *state, size_t regCount);
+
+#define TRANS_REG_OFFST_PENDING          (0x4 * 0)
+#define TRANS_REG_OFFST_FREE_PENDING     (0x4 * 0)
+#define TRANS_REG_OFFST_START            (0x4 * 1)
+#define TRANS_REG_OFFST_STOP_CPU         (0x4 * 2)
+#define TRANS_REG_OFFST_FORCE_TRANSPLANT (0x4 * 3)
+
 int transplant_pending(const FPGAContext *c, uint32_t *pending_threads);
 int transplant_freePending(const FPGAContext *c, uint32_t pending_threads);
 int transplant_waitTillPending(const FPGAContext *c, uint32_t *pending_threads);
 int transplant_start(const FPGAContext *c, uint32_t thread_id);
 int transplant_stopCPU(const FPGAContext *c, uint32_t thread_id);
-
+int transplant_forceTransplant(const FPGAContext *c, uint32_t thread_id);
 
 // See cpu.h to match MMUAccessType
 typedef enum MemoryAccessType {

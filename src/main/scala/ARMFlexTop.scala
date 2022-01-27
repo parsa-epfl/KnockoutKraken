@@ -208,7 +208,7 @@ class PipelineAxiHacked(params: PipelineParams) extends Module {
   val transplant_ram = IO(pipeline.hostIO.port.cloneType)
   transplant_ram <> pipeline.hostIO.port
 
-  val trans2host = WireInit(Mux(pipeline.hostIO.trans2host.done.valid, 1.U << pipeline.hostIO.trans2host.done.tag, 0.U))
+  val trans2host = WireInit(Mux(pipeline.hostIO.trans2host.doneTrans.valid, 1.U << pipeline.hostIO.trans2host.doneTrans.tag, 0.U))
   val host2transClear = WireInit(Mux(pipeline.hostIO.trans2host.clear.valid, 1.U << pipeline.hostIO.trans2host.clear.tag, 0.U))
 
   SetCSR(trans2host.asUInt, csr.io.csr(0), axidataW)

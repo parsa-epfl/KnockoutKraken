@@ -62,3 +62,43 @@ TEST_CASE("host-cmd-stop-cpu") {
     releaseFPGAContext(&ctx);
 }
  
+TEST_CASE("host-cmd-force-transplant") {
+    FPGAContext ctx;
+    ArmflexArchState state;
+    uint8_t page[PAGE_SIZE] = {0};
+    REQUIRE(initFPGAContext(&ctx) == 0);
+    initArchState(&state, 0xABCDABCD0000);
+    initState_infinite_loop(&state, true);
+    int paddr = ctx.base_address.page_base;
+
+    FILE *f = fopen("../src/client/tests/asm/executables/infinite-loop.bin", "rb");
+    REQUIRE(f != nullptr);
+    REQUIRE(fread(page, 1, 4096, f) != 0);
+    fclose(f);
+
+    INFO("Push state");
+    registerAndPushState(&ctx, 0, asid, &state);
+
+    INFO("Advance");
+    advanceTicks(&ctx, 100);
+
+    INFO("Check transplants");
+    uint32_t pending_threads;
+    transplant_pending(&ctx, &pending_threads);
+    assert(!pending_threads);
+ 
+    INFO("Advance");
+    advanceTicks(&ctx, 100);
+
+    INFO("Stop CPU");
+    transplant_forceTransplant(&ctx, 0);
+
+    INFO("Advance");
+    advanceTicks(&ctx, 100);
+ 
+    INFO("Check now execution stopped");
+    transplant_pending(&ctx, &pending_threads);
+    assert(pending_threads);
+ 
+    releaseFPGAContext(&ctx);
+}

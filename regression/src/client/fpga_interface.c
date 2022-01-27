@@ -138,23 +138,29 @@ int transplant_waitTillPending(const FPGAContext *c, uint32_t *pending_threads) 
 int transplant_pending(const FPGAContext *c, uint32_t *pending_threads) {
   const uint32_t axi_transplant_ctrl_base = c->base_address.axil_base + c->base_address.transplant_ctl;
   *pending_threads = 0;
-  return readAXIL(c, axi_transplant_ctrl_base, pending_threads);
+  return readAXIL(c, axi_transplant_ctrl_base + TRANS_REG_OFFST_PENDING, pending_threads);
 }
 
 int transplant_freePending(const FPGAContext *c, uint32_t pending_threads) {
   const uint32_t axi_transplant_ctrl_base = c->base_address.axil_base + c->base_address.transplant_ctl;
-  return writeAXIL(c, axi_transplant_ctrl_base, pending_threads);
+  return writeAXIL(c, axi_transplant_ctrl_base + TRANS_REG_OFFST_FREE_PENDING, pending_threads);
 }
 
 int transplant_start(const FPGAContext *c, uint32_t thread_id) {
   const uint32_t axi_transplant_ctrl_base = c->base_address.axil_base + c->base_address.transplant_ctl;
-  return writeAXIL(c, axi_transplant_ctrl_base + 4, 1 << thread_id);
+  return writeAXIL(c, axi_transplant_ctrl_base + TRANS_REG_OFFST_START, 1 << thread_id);
 }
 
 int transplant_stopCPU(const FPGAContext *c, uint32_t thread_id) {
   const uint32_t axi_transplant_ctrl_base = c->base_address.axil_base + c->base_address.transplant_ctl;
-  return writeAXIL(c, axi_transplant_ctrl_base + 8, 1 << thread_id);
+  return writeAXIL(c, axi_transplant_ctrl_base + TRANS_REG_OFFST_STOP_CPU, 1 << thread_id);
 }
+
+int transplant_forceTransplant(const FPGAContext *c, uint32_t thread_id) {
+  const uint32_t axi_transplant_ctrl_base = c->base_address.axil_base + c->base_address.transplant_ctl;
+  return writeAXIL(c, axi_transplant_ctrl_base + TRANS_REG_OFFST_FORCE_TRANSPLANT, 1 << thread_id);
+}
+
 
 /**
  * Block till there's a message in the MMU pending.
