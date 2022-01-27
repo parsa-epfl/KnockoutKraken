@@ -7,6 +7,7 @@ import chisel3.util._
 import arm.PROCESSOR_TYPES._
 import armflex.util._
 import antmicro.CSR._
+import chisel3.aop.Select
 
 class PipelineParams(
   val asidW:    Int = 15,
@@ -46,7 +47,7 @@ class PipelineAxi(params: PipelineParams) extends Module {
 
   private val uAxilToCSR = Module(new AXI4LiteCSR(params.axiDataW, csrAddr_range._2 - csrAddr_range._1))
 
-  private val transplantCtrl_regCount = 3
+  private val transplantCtrl_regCount = 4
   private val cfgBusCSR_archstate = new CSRBusSlave(0, 0x8000 >> 2)
   private val cfgBusCSR_thid2asid = new CSRBusSlave(0x8000 >> 2, params.thidN) // Address is 32b word addressed
   private val cfgBusCSR_transplant = new CSRBusSlave(0x9000 >> 2, transplantCtrl_regCount) // Address is 32b word addressed
@@ -65,15 +66,18 @@ class PipelineAxi(params: PipelineParams) extends Module {
   val S_AXIL = IO(Flipped(uAxilToCSR.io.ctl.cloneType))
   S_AXIL <> uAxilToCSR.io.ctl
 
-  val trans2host = WireInit(Mux(pipeline.hostIO.trans2host.done.valid, 1.U << pipeline.hostIO.trans2host.done.tag, 0.U))
+  val doneCPU = WireInit(Mux(pipeline.hostIO.trans2host.doneCPU.valid, 1.U << pipeline.hostIO.trans2host.doneCPU.tag, 0.U))
+  val doneTrans = WireInit(Mux(pipeline.hostIO.trans2host.doneTrans.valid, 1.U << pipeline.hostIO.trans2host.doneTrans.tag, 0.U))
   val host2transClear = WireInit(Mux(pipeline.hostIO.trans2host.clear.valid, 1.U << pipeline.hostIO.trans2host.clear.tag, 0.U))
 
-  SetCSR(trans2host.asUInt, uCSR2ToTransplant.io.csr(0), params.axiDataW)
+  SetCSR(doneTrans.asUInt, uCSR2ToTransplant.io.csr(0), params.axiDataW)
   val pendingHostTrans = ClearCSR(host2transClear.asUInt, uCSR2ToTransplant.io.csr(1), params.axiDataW)
-  val host2transStopCPU = ClearCSR(trans2host.asUInt, uCSR2ToTransplant.io.csr(2), params.axiDataW)
+  val host2transStopCPU = ClearCSR(doneCPU.asUInt, uCSR2ToTransplant.io.csr(2), params.axiDataW)
+  val host2transForceTransplant = ClearCSR((-1).S(params.axiDataW).asUInt, uCSR2ToTransplant.io.csr(3), params.axiDataW)
 
   pipeline.hostIO.host2trans.pending := pendingHostTrans
   pipeline.hostIO.host2trans.stopCPU := host2transStopCPU
+  pipeline.hostIO.host2trans.forceTransplant := host2transForceTransplant
 
   // BRAM (Architecture State)
   pipeline.hostIO.port <> uCSRToArchState.io.port
@@ -152,7 +156,7 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   archstate.pstate.transplant.thread := transplantU.trans2cpu.thread
   pipeline.archstate.commit.ready := !transplantU.trans2cpu.updatingPState
   transplantU.cpu2trans.rfile_wr <> pipeline.archstate.commit.wr
-  transplantU.cpu2trans.done := pipeline.transplantIO.done
+  transplantU.cpu2trans.doneCPU := pipeline.transplantIO.done
   when(transplantU.trans2cpu.updatingPState) {
     archstate.rfile_wr <> transplantU.trans2cpu.rfile_wr
     archstate.pstate.commit.next.valid := true.B
