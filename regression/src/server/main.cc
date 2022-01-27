@@ -59,6 +59,7 @@ int main(int argc, char **argv) {
   using namespace std::placeholders;
 
   dut.registerSubroutine(handleDRAMSubroute);
+  dut.registerSubroutine(DebugRoutine);
   dut.registerSubroutine(std::bind(AXILRoutine, _1, std::ref(axil)));
   dut.registerSubroutine(std::bind(AXIRoutine, _1, std::ref(axi)));
 

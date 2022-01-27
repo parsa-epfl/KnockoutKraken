@@ -9,22 +9,48 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+ArmflexArchState stateBuffer[4096];
+
+void DebugRoutine(TopDUT &dut) {
+  std::unique_lock<std::mutex> lock(dut.getLock());
+  ArmflexArchState state;
+  while (true) {
+    uint32_t thid = dut.getCommited();
+    if(thid != -1) {
+      // Buffer message or do something with the commited intruction
+      dut.getArchState(thid, &state);
+      printf("Commited: 0x%016lx\n", state.pc);
+    }
+    thid = dut.getTransplant();
+    if (thid != -1) {
+      dut.getArchState(thid, &state);
+      printf("Transplant: 0x%016lx\n", state.pc);
+    }
+    TICK(dut);
+  }
+
+wait_for_join:
+  while(1) {
+    TICK(dut);
+  }
+}
+
 void handleDRAMSubroute(TopDUT &dut) {
   std::unique_lock<std::mutex> lock(dut.getLock());
   while (true) {
-    if (dut->M_AXI_ar_arvalid) {
-      uint64_t addr_byte = dut->M_AXI_ar_araddr;
+    if (dut->M_AXI_arvalid) {
+      uint64_t addr_byte = dut->M_AXI_araddr;
       // check address. It should be small enough.
       CHECK(dut, addr_byte < dut.dram_size, "AXI read address out of bound");
       CHECK(dut, (addr_byte & 0x3F) == 0, "AXI read address is not aligned");
-      CHECK(dut, (dut->M_AXI_ar_arsize == 6), "AXI read burst count must be 64B");
-      uint32_t id = dut->M_AXI_ar_arid;
-      uint32_t burst_count = dut->M_AXI_ar_arlen + 1;
-      dut->M_AXI_ar_arready = 1;
+      CHECK(dut, (dut->M_AXI_arsize == 6), "AXI read burst count must be 64B");
+      uint32_t id = dut->M_AXI_arid;
+      uint32_t burst_count = dut->M_AXI_arlen + 1;
+      dut->M_AXI_arready = 1;
 
       TICK(dut);
 
-      dut->M_AXI_ar_arready = 0;
+      dut->M_AXI_arready = 0;
       dut->eval();
 
       printf("SHELL:FPGA:AXI DRAM:RD[0x%lx]:BURST[%i]\n", addr_byte, burst_count);
@@ -32,74 +58,74 @@ void handleDRAMSubroute(TopDUT &dut) {
       for (int curr_block = 0; curr_block < burst_count; ++curr_block) {
         size_t addr_word = BYTE_TO_WORD(addr_byte) + curr_block * WORDS_PER_BLOCK;
 
-        dut->M_AXI_r_rid = id;
-        dut->M_AXI_r_rresp = 0;
+        dut->M_AXI_rid = id;
+        dut->M_AXI_rresp = 0;
         for (size_t sub_word = 0; sub_word < WORDS_PER_BLOCK; ++sub_word) {
-          dut->M_AXI_r_rdata[sub_word] = dut.dram[addr_word + sub_word];
+          dut->M_AXI_rdata[sub_word] = dut.dram[addr_word + sub_word];
         }
-        dut->M_AXI_r_rlast = curr_block == burst_count - 1 ? 1 : 0;
-        dut->M_AXI_r_rvalid = true;
+        dut->M_AXI_rlast = curr_block == burst_count - 1 ? 1 : 0;
+        dut->M_AXI_rvalid = true;
         dut->eval();
 
         // wait for reading data accepted.
-        while (!dut->M_AXI_r_rready) {
+        while (!dut->M_AXI_rready) {
           TICK(dut);
         }
 
         TICK(dut);
-        dut->M_AXI_r_rvalid = false;
+        dut->M_AXI_rvalid = false;
         dut->eval();
       }
     }
 
-    if (dut->M_AXI_aw_awvalid) {
-      uint64_t addr_byte = dut->M_AXI_aw_awaddr;
+    if (dut->M_AXI_awvalid) {
+      uint64_t addr_byte = dut->M_AXI_awaddr;
       CHECK(dut, addr_byte < dut.dram_size, "AXI write address out of bound");
       CHECK(dut, (addr_byte & 0x3F) == 0, "AXI write address is not aligned");
-      CHECK(dut, (dut->M_AXI_ar_arsize == 6), "AXI write burst count must be 64B");
-      uint32_t id = dut->M_AXI_aw_awid;
-      uint32_t burst_count = dut->M_AXI_aw_awlen + 1;
-      dut->M_AXI_aw_awready = 1;
+      CHECK(dut, (dut->M_AXI_arsize == 6), "AXI write burst count must be 64B");
+      uint32_t id = dut->M_AXI_awid;
+      uint32_t burst_count = dut->M_AXI_awlen + 1;
+      dut->M_AXI_awready = 1;
       dut->eval();
       TICK(dut);
 
-      dut->M_AXI_aw_awready = 0;
+      dut->M_AXI_awready = 0;
       dut->eval();
       printf("SHELL:FPGA:AXI DRAM:WR[0x%lx]:BURST[%u]\n", addr_byte, burst_count);
       printf("           WORD ADDR[0x%lx]\n", BYTE_TO_WORD(addr_byte));
       for (int curr_block = 0; curr_block < burst_count; ++curr_block) {
 
         // setup the write to be ready.
-        dut->M_AXI_w_wready = true;
+        dut->M_AXI_wready = true;
         dut->eval();
 
         // wait for data to be valid.
-        while (!dut->M_AXI_w_wvalid) {
+        while (!dut->M_AXI_wvalid) {
           TICK(dut);
         }
 
         size_t addr_word = BYTE_TO_WORD(addr_byte) + curr_block * WORDS_PER_BLOCK;
         for (size_t sub_word = 0; sub_word < WORDS_PER_BLOCK; ++sub_word) {
-          dut.dram[addr_word + sub_word] = dut->M_AXI_w_wdata[sub_word];
+          dut.dram[addr_word + sub_word] = dut->M_AXI_wdata[sub_word];
         }
         
 
         TICK(dut);
 
-        dut->M_AXI_w_wready = false;
+        dut->M_AXI_wready = false;
         dut->eval();
       }
 
-      dut->M_AXI_b_bvalid = true;
-      dut->M_AXI_b_bid = id;
-      dut->M_AXI_b_bresp = 0;
+      dut->M_AXI_bvalid = true;
+      dut->M_AXI_bid = id;
+      dut->M_AXI_bresp = 0;
       dut->eval();
-      while (!dut->M_AXI_b_bready) {
+      while (!dut->M_AXI_bready) {
         TICK(dut);
       }
       TICK(dut);
 
-      dut->M_AXI_b_bvalid = false;
+      dut->M_AXI_bvalid = false;
       dut->eval();
     }
 
@@ -146,42 +172,42 @@ void AXILRoutine(TopDUT &dut, IPCServer &ipc) {
     if (result.is_write) {
       printf("SHELL:HOST:AXIL:WR[0x%lx]:BURST[%lu]:DATA[%x]\n", result.addr, result.byte_size, result.w_data);
       // it's a writing request, activate AXI writing request channel.
-      dut->S_AXIL_aw_awaddr = result.addr;
-      dut->S_AXIL_aw_awprot = 0;
-      dut->S_AXIL_aw_awvalid = true;
+      dut->S_AXIL_awaddr = result.addr;
+      dut->S_AXIL_awprot = 0;
+      dut->S_AXIL_awvalid = true;
       dut->eval();
-      while (!dut->S_AXIL_aw_awready) {
+      while (!dut->S_AXIL_awready) {
         TICK(dut);
       }
       // wait one cycle
       TICK(dut);
 
-      dut->S_AXIL_aw_awvalid = false;
+      dut->S_AXIL_awvalid = false;
       dut->eval();
       // pushing data.
-      dut->S_AXIL_w_wdata = result.w_data;
-      dut->S_AXIL_w_wstrb = 0xF;
-      dut->S_AXIL_w_wvalid = true;
+      dut->S_AXIL_wdata = result.w_data;
+      dut->S_AXIL_wstrb = 0xF;
+      dut->S_AXIL_wvalid = true;
       dut->eval();
       // wait for ready signal
-      while (!dut->S_AXIL_w_wready) {
+      while (!dut->S_AXIL_wready) {
         TICK(dut);
       }
       // trigger wb
       TICK(dut);
 
-      dut->S_AXIL_w_wvalid = false;
-      dut->S_AXIL_b_bready = true;
+      dut->S_AXIL_wvalid = false;
+      dut->S_AXIL_bready = true;
       dut->eval();
 
       // wait for the response of B
-      while (!dut->S_AXIL_b_bvalid) {
+      while (!dut->S_AXIL_bvalid) {
         TICK(dut);
       }
 
       TICK(dut);
 
-      dut->S_AXIL_b_bready = false;
+      dut->S_AXIL_bready = false;
       dut->eval();
 
       // ack
@@ -196,26 +222,26 @@ void AXILRoutine(TopDUT &dut, IPCServer &ipc) {
 
     } else {
      // read operation
-      dut->S_AXIL_ar_araddr = result.addr;
-      dut->S_AXIL_ar_arprot = 0;
-      dut->S_AXIL_ar_arvalid = true;
+      dut->S_AXIL_araddr = result.addr;
+      dut->S_AXIL_arprot = 0;
+      dut->S_AXIL_arvalid = true;
       dut->eval();
-      while (!dut->S_AXIL_ar_arready) {
+      while (!dut->S_AXIL_arready) {
         TICK(dut);
       }
       TICK(dut);
 
-      dut->S_AXIL_ar_arvalid = false;
-      dut->S_AXIL_r_rready = true;
+      dut->S_AXIL_arvalid = false;
+      dut->S_AXIL_rready = true;
       dut->eval();
 
-      while (!dut->S_AXIL_r_rvalid) {
+      while (!dut->S_AXIL_rvalid) {
         TICK(dut);
       }
-      auto read_res = dut->S_AXIL_r_rdata;
+      auto read_res = dut->S_AXIL_rdata;
       TICK(dut);
 
-      dut->S_AXIL_r_rready = false;
+      dut->S_AXIL_rready = false;
       dut->eval();
 
       // read result
@@ -284,47 +310,47 @@ void AXIRoutine(TopDUT &dut, IPCServer &ipc) {
     } else if (result.is_write) {
       // it's a writing request, activate AXI writing request channel.
       printf("SHELL:HOST:AXI FPGA:WR[0x%lx]:BURST[%lu]\n", result.addr, result.byte_size);
-      dut->S_AXI_aw_awaddr = result.addr - dut.axi_base_addr; // get rid of base address.
-      dut->S_AXI_aw_awsize = 6; // 64Byte
-      dut->S_AXI_aw_awburst = 1;
-      dut->S_AXI_aw_awlen = (result.byte_size / BYTES_PER_BLOCK) - 1;
-      dut->S_AXI_aw_awvalid = true;
+      dut->S_AXI_awaddr = result.addr - dut.axi_base_addr; // get rid of base address.
+      dut->S_AXI_awsize = 6; // 64Byte
+      dut->S_AXI_awburst = 1;
+      dut->S_AXI_awlen = (result.byte_size / BYTES_PER_BLOCK) - 1;
+      dut->S_AXI_awvalid = true;
       dut->eval();
 
-      while (!dut->S_AXI_aw_awready) {
+      while (!dut->S_AXI_awready) {
         TICK(dut);
       }
       // wait one cycle
       TICK(dut);
 
-      dut->S_AXI_aw_awvalid = false;
+      dut->S_AXI_awvalid = false;
       dut->eval();
       // pushing data.
       for (size_t curr_block = 0; curr_block < result.byte_size / BYTES_PER_BLOCK; ++curr_block) {
-        memcpy(dut->S_AXI_w_wdata, &result.w_data[curr_block * WORDS_PER_BLOCK], BYTES_PER_BLOCK);
-        dut->S_AXI_w_wlast = (curr_block == result.byte_size / BYTES_PER_BLOCK - 1);
-        dut->S_AXI_w_wstrb = 0xFFFFFFFFFFFFFFFF;
-        dut->S_AXI_w_wvalid = true;
+        memcpy(dut->S_AXI_wdata, &result.w_data[curr_block * WORDS_PER_BLOCK], BYTES_PER_BLOCK);
+        dut->S_AXI_wlast = (curr_block == result.byte_size / BYTES_PER_BLOCK - 1);
+        dut->S_AXI_wstrb = 0xFFFFFFFFFFFFFFFF;
+        dut->S_AXI_wvalid = true;
         dut->eval();
         // wait for ready signal
-        while (!dut->S_AXI_w_wready) {
+        while (!dut->S_AXI_wready) {
           TICK(dut);
         }
         TICK(dut);
       }
 
-      dut->S_AXI_w_wvalid = false;
-      dut->S_AXI_b_bready = true;
+      dut->S_AXI_wvalid = false;
+      dut->S_AXI_bready = true;
       dut->eval();
 
       // wait for the response of B
-      while (!dut->S_AXI_b_bvalid) {
+      while (!dut->S_AXI_bvalid) {
         TICK(dut);
       }
 
       TICK(dut);
 
-      dut->S_AXI_b_bready = false;
+      dut->S_AXI_bready = false;
       dut->eval();
 
       // ack
@@ -340,33 +366,33 @@ void AXIRoutine(TopDUT &dut, IPCServer &ipc) {
     } else {
       printf("SHELL:HOST:AXI FPGA:RD[0x%lx]:BURST[%lu]\n", result.addr, result.byte_size);
       // read operation
-      dut->S_AXI_ar_araddr = result.addr - dut.axi_base_addr;
-      dut->S_AXI_ar_arlen = (result.byte_size / BYTES_PER_BLOCK) - 1;
-      dut->S_AXI_ar_arburst = 1;
-      dut->S_AXI_ar_arsize = 6;
-      dut->S_AXI_ar_arvalid = true;
+      dut->S_AXI_araddr = result.addr - dut.axi_base_addr;
+      dut->S_AXI_arlen = (result.byte_size / BYTES_PER_BLOCK) - 1;
+      dut->S_AXI_arburst = 1;
+      dut->S_AXI_arsize = 6;
+      dut->S_AXI_arvalid = true;
       dut->eval();
-      while (dut->S_AXI_ar_arready) {
+      while (dut->S_AXI_arready) {
         TICK(dut);
       }
       TICK(dut);
 
-      dut->S_AXI_ar_arvalid = false;
-      dut->S_AXI_r_rready = true;
+      dut->S_AXI_arvalid = false;
+      dut->S_AXI_rready = true;
       dut->eval();
 
       for (size_t curr_block = 0; curr_block < result.byte_size / BYTES_PER_BLOCK; ++curr_block) {
-        while (!dut->S_AXI_r_rvalid) {
+        while (!dut->S_AXI_rvalid) {
           TICK(dut);
         }
-        memcpy(&result.w_data[curr_block * WORDS_PER_BLOCK], dut->S_AXI_r_rdata, BYTES_PER_BLOCK);
+        memcpy(&result.w_data[curr_block * WORDS_PER_BLOCK], dut->S_AXI_rdata, BYTES_PER_BLOCK);
         if (curr_block == result.byte_size / BYTES_PER_BLOCK - 1) {
-          CHECK(dut, dut->S_AXI_r_rlast, "Last block (tlast) mismatch."); // this should be the last element.
+          CHECK(dut, dut->S_AXI_rlast, "Last block (tlast) mismatch."); // this should be the last element.
         }
         TICK(dut);
       }
 
-      dut->S_AXI_r_rready = false;
+      dut->S_AXI_rready = false;
       dut->eval();
 
       // read result

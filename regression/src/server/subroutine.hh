@@ -11,6 +11,15 @@ class IPCServer;
  */
 
 /**
+ * Subroute to get the commited instruction information from debug ports.
+ * 
+ * @param dut the DUT
+ * 
+ * @note this will open and listen to a specific unix domain socket.
+ */
+void DebugRoutine(TopDUT &dut);
+
+/**
  * Subroute for accessing DRAM. 
  * 
  * @param dut the DUT

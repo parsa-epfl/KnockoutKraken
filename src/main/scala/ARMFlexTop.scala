@@ -7,6 +7,7 @@ import armflex_cache._
 import armflex_mmu.{MMU, MemoryHierarchyParams}
 import armflex.util.ExtraUtils._
 import firrtl.options.TargetDirAnnotation
+import scala.collection.DebugUtils
 
 class MemorySystemPipelinePortIO(params: MemoryHierarchyParams) extends Bundle {
   val cache = Flipped(new PipeCache.PipeCacheIO(params.getCacheParams.pAddrWidth, params.getCacheParams.blockSize))
@@ -107,6 +108,9 @@ class ARMFlexTop(
   // Instrumentation Interface
   val instrument = IO(u_pipeline.instrument.cloneType)
   instrument <> u_pipeline.instrument
+
+  val dbg = IO(u_pipeline.dbg.cloneType)
+  dbg <> u_pipeline.dbg
 }
 
 class ARMFlexTopSimulator(
@@ -115,7 +119,7 @@ class ARMFlexTopSimulator(
 ) extends Module {
   import armflex.util.AXIReadMultiplexer
   import armflex.util.AXIWriteMultiplexer
-  private val devteroFlexTop = Module(new ARMFlexTop(paramsPipeline, paramsMemoryHierarchy))
+  val devteroFlexTop = Module(new ARMFlexTop(paramsPipeline, paramsMemoryHierarchy))
   private val axiMulti_R = Module(new AXIReadMultiplexer(paramsMemoryHierarchy.dramAddrW, 512, 6))
   private val axiMulti_W = Module(new AXIWriteMultiplexer(paramsMemoryHierarchy.dramAddrW, 512, 5))
   //private val axilMulti = Module(new AXILInterconnector(Seq(0x00000, 0x10000), Seq(0x08000,0x10000), 32, 32))
@@ -155,6 +159,8 @@ class ARMFlexTopSimulator(
 
   // No Instrumentation enabled in this build, make sure it has no impact downstream
   devteroFlexTop.instrument.commit.ready := true.B
+  val dbg = IO(devteroFlexTop.dbg.cloneType)
+  dbg <> devteroFlexTop.dbg
 }
 
 object ARMFlexTopSimulatorVerilogEmitter extends App {
@@ -168,6 +174,19 @@ object ARMFlexTopSimulatorVerilogEmitter extends App {
       ), annotations = Seq(TargetDirAnnotation("regression/rtl/"))))
   fr.close()
 }
+
+object ARMFlexTopDebugVerilogEmitter extends App {
+  val c = new chisel3.stage.ChiselStage
+  import java.io._
+  val fr = new FileWriter(new File("regression/rtl/ARMFlexTop.v"))
+  fr.write(c.emitVerilog(
+    new ARMFlexTopSimulator(
+      new PipelineParams(thidN = 32, pAddrW =  24, DebugSignals = true),
+      new MemoryHierarchyParams(thidN = 32, pAddrW = 24)
+      ), annotations = Seq(TargetDirAnnotation("regression/rtl/"))))
+  fr.close()
+}
+
 
 object ARMFlexTopVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage

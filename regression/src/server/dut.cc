@@ -1,5 +1,6 @@
 #include "dut.hh"
 #include "verilated.h"
+#include "../client/fpga_interface.h"
 #include <mutex>
 #include <thread>
 
@@ -7,7 +8,7 @@ double TopDUT::time = 0;
 
 TopDUT::TopDUT(bool withTrace) {
   size_t dram_size = 1024 * 1024 * 16;
-  dut = new VARMFlexTop();
+  dut = new Vdevteroflex_top();
   dram = new uint32_t[dram_size / 4];
   tfp = new VerilatedFstC;
   if(withTrace) {
@@ -140,4 +141,28 @@ void TopDUT::attachCurrentRoutine(std::unique_lock<std::mutex> &lock) {
 void TopDUT::closeSimulation(void) {
   puts("Closing simulation.\n");
   tfp->close();
+}
+
+int TopDUT::getCommited(void) {
+  if(dut->dbg_bits_commit_valid) {
+    return dut->dbg_bits_commit_tag;
+  } else {
+    return -1;
+  }
+}
+
+int TopDUT::getTransplant(void) {
+  if(dut->dbg_bits_transplant_valid) {
+    return dut->dbg_bits_transplant_tag;
+  } else {
+    return -1;
+  }
+}
+
+void TopDUT::getArchState(uint32_t thid, ArmflexArchState* state) {
+  state->pc = dut->dbg_bits_stateVec_regs_PC[thid];
+  state->nzcv = dut->dbg_bits_stateVec_regs_NZCV[thid];
+  for(int reg = 0; reg < 32; reg++) {
+      state->xregs[reg] = dut->dbg_bits_stateVec_rfile[thid*32 + reg];
+  }
 }
