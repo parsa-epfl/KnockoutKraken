@@ -9,28 +9,23 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-ArmflexArchState stateBuffer[4096];
-
 void DebugRoutine(TopDUT &dut) {
   std::unique_lock<std::mutex> lock(dut.getLock());
   ArmflexArchState state;
+  FILE* logfile = fopen("devteroflex_emulation_log.proto", "wb");
   while (true) {
     uint32_t thid = dut.getCommited();
     if(thid != -1) {
       // Buffer message or do something with the commited intruction
       dut.getArchState(thid, &state);
-      printf("Commited: 0x%016lx\n", state.pc);
+      fwrite(&state, sizeof(state), 1, logfile);
     }
     thid = dut.getTransplant();
     if (thid != -1) {
       dut.getArchState(thid, &state);
-      printf("Transplant: 0x%016lx\n", state.pc);
+      fwrite(&state, sizeof(state), 1, logfile);
+      fflush(logfile);
     }
-    TICK(dut);
-  }
-
-wait_for_join:
-  while(1) {
     TICK(dut);
   }
 }

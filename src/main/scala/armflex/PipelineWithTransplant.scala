@@ -198,6 +198,7 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
     val issuingMem = Output(Bool())
     val issuingTransplant = Output(Bool())
     val commit = ValidTag(params.thidN)
+    val commitIsTransplant = Output(Bool())
     val transplant = Output(ValidTag(params.thidN))
     val stateVec = archstate.dbg.vecState.get.cloneType
   }
@@ -219,6 +220,7 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
 
     dbg.bits.get.commit.tag := RegNext(pipeline.archstate.commit.sel.tag)
     dbg.bits.get.commit.valid := RegNext(pipeline.archstate.commit.sel.valid)
+    dbg.bits.get.commitIsTransplant := RegNext(pipeline.transplantIO.done.valid)
     dbg.bits.get.transplant.valid := transplantU.trans2cpu.start
     dbg.bits.get.transplant.tag := transplantU.trans2cpu.thread
   }

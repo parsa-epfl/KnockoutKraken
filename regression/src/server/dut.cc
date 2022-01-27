@@ -144,7 +144,7 @@ void TopDUT::closeSimulation(void) {
 }
 
 int TopDUT::getCommited(void) {
-  if(dut->dbg_bits_commit_valid) {
+  if(dut->dbg_bits_commit_valid && !dut->dbg_bits_commitIsTransplant) {
     return dut->dbg_bits_commit_tag;
   } else {
     return -1;
