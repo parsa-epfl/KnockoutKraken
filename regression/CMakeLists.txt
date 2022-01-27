@@ -7,7 +7,7 @@ find_package(Threads REQUIRED)
 set(AWS_FPGA_LIBRARY_PATH /home/centos/DevteroFlex/aws-fpga/sdk/userspace)
 unset(AWS_FPGA_LIBRARY_PATH) # Comment if simulator
 
-set(SIMULATOR_TOP_MODULE ARMFlexTopSimulator) # set to ARMFlexTopInstrumented for instumented code.
+set(SIMULATOR_TOP_MODULE DevteroFlexTopLevel) # set to ARMFlexTopInstrumented for instumented code.
 
 add_executable(
   KnockoutTestGenerator
