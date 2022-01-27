@@ -19,8 +19,8 @@ module cl_devteroflex_top
 // remove it from the end of the file
 
 `include "unused_flr_template.inc"
-//`include "unused_ddr_a_b_d_template.inc"
-`include "unused_ddr_c_template.inc"
+`include "unused_ddr_a_b_d_template.inc"
+//`include "unused_ddr_c_template.inc"
 `include "unused_pcim_template.inc"
 `include "unused_dma_pcis_template.inc"
 `include "unused_cl_sda_template.inc"
@@ -64,12 +64,14 @@ axi_bus_t sh_cl_dma_pcis_bus();
 axi_bus_t sh_cl_dma_pcis_q();
 
 axi_bus_t cl_axi_mstr_bus();
+axi_bus_t cl_s_axi_bus();
 
 axi_bus_t cl_sh_pcim_bus();
 axi_bus_t cl_sh_ddr_bus();
 
 axi_bus_t sda_cl_bus();
 axi_bus_t sh_ocl_bus();
+axi_bus_t sh_bar1_bus();
 
 cfg_bus_t pcim_tst_cfg_bus();
 cfg_bus_t ddra_tst_cfg_bus();
@@ -90,6 +92,8 @@ logic clk;
 logic pre_sync_rst_n;
 (* dont_touch = "true" *) logic sync_rst_n;
 logic sh_cl_flr_assert_q;
+
+logic rst_devteroflex_n_sync;
 
 logic [3:0] all_ddr_scrb_done;
 logic [3:0] all_ddr_is_ready;
@@ -141,6 +145,22 @@ always_ff @(negedge sync_rst_n or posedge clk)
       cl_sh_flr_done <= sh_cl_flr_assert_q && !cl_sh_flr_done;
    end
 
+//-------------------------------------------------
+// Reset Synchronization Inner
+//-------------------------------------------------
+logic pre_sync_rst_n_devteroflex;
+always_ff @(negedge rst_main_n or posedge clk)
+   if (!rst_main_n)
+   begin
+      pre_sync_rst_n_devteroflex  <= 0;
+      rst_devteroflex_n_sync <= 0;
+   end
+   else
+   begin
+      pre_sync_rst_n_devteroflex  <= 1;
+      rst_devteroflex_n_sync <= pre_sync_rst_n_devteroflex;
+   end
+
 ///////////////////////////////////////////////////////////////////////
 ///////////////// Scrubber enable and status //////////////////////////
 ///////////////////////////////////////////////////////////////////////
@@ -161,7 +181,6 @@ always_ff @(posedge clk or negedge sync_rst_n)
 
 assign ddra_scrb_bus.enable = sh_cl_ctl0_q[0];
 assign ddrb_scrb_bus.enable = sh_cl_ctl0_q[1];
-assign ddrd_scrb_bus.enable = sh_cl_ctl0_q[2];
 assign ddrc_scrb_bus.enable = sh_cl_ctl0_q[3];
 
 
@@ -276,19 +295,18 @@ cl_dma_pcis_slv #(.SCRB_BURST_LEN_MINUS1(DDR_SCRB_BURST_LEN_MINUS1),
     .ddra_tst_cfg_bus(ddra_tst_cfg_bus),
     .ddrb_tst_cfg_bus(ddrb_tst_cfg_bus),
     .ddrc_tst_cfg_bus(ddrc_tst_cfg_bus),
-    .ddrd_tst_cfg_bus(ddrd_tst_cfg_bus),
 
     .ddra_scrb_bus(ddra_scrb_bus),
     .ddrb_scrb_bus(ddrb_scrb_bus),
     .ddrc_scrb_bus(ddrc_scrb_bus),
-    .ddrd_scrb_bus(ddrd_scrb_bus),
 
     .sh_cl_dma_pcis_bus(sh_cl_dma_pcis_bus),
     .cl_axi_mstr_bus(cl_axi_mstr_bus),
 
     .lcl_cl_sh_ddra(lcl_cl_sh_ddra),
     .lcl_cl_sh_ddrb(lcl_cl_sh_ddrb),
-    .lcl_cl_sh_ddrd(lcl_cl_sh_ddrd),
+    //.lcl_cl_sh_ddrd(lcl_cl_sh_ddrd),
+    .cl_s_axi_bus(cl_s_axi_bus),
 
     .sh_cl_dma_pcis_q(sh_cl_dma_pcis_q),
 
@@ -311,8 +329,104 @@ cl_dma_pcis_slv #(.SCRB_BURST_LEN_MINUS1(DDR_SCRB_BURST_LEN_MINUS1),
 
 // DevteroFlex logic
    DevteroFlexTopLevel DEVTEROFLEX_TOP (
-      .M_AXI(cl_axi_mstr_bus)
-      .S_AXI(cl_)
+      .clock(clk)
+      .reset(!rst_devteroflex_n_sync),
+
+      .M_AXI_awid    (cl_axi_mstr_bus.awid   ),
+      .M_AXI_awaddr  (cl_axi_mstr_bus.awaddr ),
+      .M_AXI_awlen   (cl_axi_mstr_bus.awlen  ),
+      .M_AXI_awsize  (cl_axi_mstr_bus.awsize ),
+      .M_AXI_awburst (cl_axi_mstr_bus.awburst),
+      .M_AXI_awlock  (cl_axi_mstr_bus.awlock ),
+      .M_AXI_awcache (cl_axi_mstr_bus.awcache),
+      .M_AXI_awprot  (cl_axi_mstr_bus.awprot ),
+      .M_AXI_awqos   (cl_axi_mstr_bus.awqos  ),
+      .M_AXI_awvalid (cl_axi_mstr_bus.awvalid),
+      .M_AXI_awready (cl_axi_mstr_bus.awready),
+      .M_AXI_wdata   (cl_axi_mstr_bus.wdata  ),
+      .M_AXI_wstrb   (cl_axi_mstr_bus.wstrb  ),
+      .M_AXI_wlast   (cl_axi_mstr_bus.wlast  ),
+      .M_AXI_wvalid  (cl_axi_mstr_bus.wvalid ),
+      .M_AXI_wready  (cl_axi_mstr_bus.wready ),
+      .M_AXI_bid     (cl_axi_mstr_bus.bid    ),
+      .M_AXI_bresp   (cl_axi_mstr_bus.bresp  ),
+      .M_AXI_bvalid  (cl_axi_mstr_bus.bvalid ),
+      .M_AXI_bready  (cl_axi_mstr_bus.bready ),
+      .M_AXI_arid    (cl_axi_mstr_bus.arid   ),
+      .M_AXI_araddr  (cl_axi_mstr_bus.araddr ),
+      .M_AXI_arlen   (cl_axi_mstr_bus.arlen  ),
+      .M_AXI_arsize  (cl_axi_mstr_bus.arsize ),
+      .M_AXI_arburst (cl_axi_mstr_bus.arburst),
+      .M_AXI_arlock  (cl_axi_mstr_bus.arlock ),
+      .M_AXI_arcache (cl_axi_mstr_bus.arcache),
+      .M_AXI_arprot  (cl_axi_mstr_bus.arprot ),
+      .M_AXI_arqos   (cl_axi_mstr_bus.arqos  ),
+      .M_AXI_arvalid (cl_axi_mstr_bus.arvalid),
+      .M_AXI_arready (cl_axi_mstr_bus.arready),
+      .M_AXI_rid     (cl_axi_mstr_bus.rid    ),
+      .M_AXI_rdata   (cl_axi_mstr_bus.rdata  ),
+      .M_AXI_rresp   (cl_axi_mstr_bus.rresp  ),
+      .M_AXI_rlast   (cl_axi_mstr_bus.rlast  ),
+      .M_AXI_rvalid  (cl_axi_mstr_bus.rvalid ),
+      .M_AXI_rready  (cl_axi_mstr_bus.rready ),
+
+      .S_AXI_awid    (cl_s_axi_bus.awid   ), 
+      .S_AXI_awaddr  (cl_s_axi_bus.awaddr ), 
+      .S_AXI_awlen   (cl_s_axi_bus.awlen  ), 
+      .S_AXI_awsize  (cl_s_axi_bus.awsize ), 
+      .S_AXI_awburst (cl_s_axi_bus.awburst), 
+      .S_AXI_awlock  (cl_s_axi_bus.awlock ), 
+      .S_AXI_awcache (cl_s_axi_bus.awcache), 
+      .S_AXI_awprot  (cl_s_axi_bus.awprot ), 
+      .S_AXI_awqos   (cl_s_axi_bus.awqos  ), 
+      .S_AXI_awvalid (cl_s_axi_bus.awvalid), 
+      .S_AXI_awready (cl_s_axi_bus.awready), 
+      .S_AXI_wdata   (cl_s_axi_bus.wdata  ), 
+      .S_AXI_wstrb   (cl_s_axi_bus.wstrb  ), 
+      .S_AXI_wlast   (cl_s_axi_bus.wlast  ), 
+      .S_AXI_wvalid  (cl_s_axi_bus.wvalid ), 
+      .S_AXI_wready  (cl_s_axi_bus.wready ), 
+      .S_AXI_bid     (cl_s_axi_bus.bid    ), 
+      .S_AXI_bresp   (cl_s_axi_bus.bresp  ), 
+      .S_AXI_bvalid  (cl_s_axi_bus.bvalid ), 
+      .S_AXI_bready  (cl_s_axi_bus.bready ), 
+      .S_AXI_arid    (cl_s_axi_bus.arid   ), 
+      .S_AXI_araddr  (cl_s_axi_bus.araddr ), 
+      .S_AXI_arlen   (cl_s_axi_bus.arlen  ), 
+      .S_AXI_arsize  (cl_s_axi_bus.arsize ), 
+      .S_AXI_arburst (cl_s_axi_bus.arburst), 
+      .S_AXI_arlock  (cl_s_axi_bus.arlock ), 
+      .S_AXI_arcache (cl_s_axi_bus.arcache), 
+      .S_AXI_arprot  (cl_s_axi_bus.arprot ), 
+      .S_AXI_arqos   (cl_s_axi_bus.arqos  ), 
+      .S_AXI_arvalid (cl_s_axi_bus.arvalid), 
+      .S_AXI_arready (cl_s_axi_bus.arready), 
+      .S_AXI_rid     (cl_s_axi_bus.rid    ), 
+      .S_AXI_rdata   (cl_s_axi_bus.rdata  ), 
+      .S_AXI_rresp   (cl_s_axi_bus.rresp  ), 
+      .S_AXI_rlast   (cl_s_axi_bus.rlast  ), 
+      .S_AXI_rvalid  (cl_s_axi_bus.rvalid ), 
+      .S_AXI_rready  (cl_s_axi_bus.rready ), 
+
+      .S_AXIL_awaddr  (cl_s_axil_bus.awaddr ),
+      .S_AXIL_awprot  (cl_s_axil_bus.awprot ),
+      .S_AXIL_awvalid (cl_s_axil_bus.awvalid),
+      .S_AXIL_awready (cl_s_axil_bus.awready),
+      .S_AXIL_wdata   (cl_s_axil_bus.wdata  ),
+      .S_AXIL_wstrb   (cl_s_axil_bus.wstrb  ),
+      .S_AXIL_wvalid  (cl_s_axil_bus.wvalid ),
+      .S_AXIL_wready  (cl_s_axil_bus.wready ),
+      .S_AXIL_bresp   (cl_s_axil_bus.bresp  ),
+      .S_AXIL_bvalid  (cl_s_axil_bus.bvalid ),
+      .S_AXIL_bready  (cl_s_axil_bus.bready ),
+      .S_AXIL_araddr  (cl_s_axil_bus.araddr ),
+      .S_AXIL_arprot  (cl_s_axil_bus.arprot ),
+      .S_AXIL_arvalid (cl_s_axil_bus.arvalid),
+      .S_AXIL_arready (cl_s_axil_bus.arready),
+      .S_AXIL_rdata   (cl_s_axil_bus.rdata  ),
+      .S_AXIL_rresp   (cl_s_axil_bus.rresp  ),
+      .S_AXIL_rvalid  (cl_s_axil_bus.rvalid ),
+      .S_AXIL_rready  (cl_s_axil_bus.rready ),
    );
 
 
@@ -368,6 +482,28 @@ cl_pcim_mstr CL_PCIM_MSTR (
 
      .cl_sh_pcim_bus     (cl_sh_pcim_bus)
 );
+
+///////////////////////////////////////////////////////////////////////
+///////////////// BAR1 SLAVE module ////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+
+assign sh_bar1_bus.awvalid = sh_bar1_awvalid;
+assign sh_bar1_bus.awaddr[31:0] = sh_bar1_awaddr;
+assign bar1_sh_awready = sh_bar1_bus.awready;
+assign sh_bar1_bus.wvalid = sh_bar1_wvalid;
+assign sh_bar1_bus.wdata[31:0] = sh_bar1_wdata;
+assign sh_bar1_bus.wstrb[3:0] = sh_bar1_wstrb;
+assign bar1_sh_wready = sh_bar1_bus.wready;
+assign bar1_sh_bvalid = sh_bar1_bus.bvalid;
+assign bar1_sh_bresp = sh_bar1_bus.bresp;
+assign sh_bar1_bus.bready = sh_bar1_bready;
+assign sh_bar1_bus.arvalid = sh_bar1_arvalid;
+assign sh_bar1_bus.araddr[31:0] = sh_bar1_araddr;
+assign bar1_sh_arready = sh_bar1_bus.arready;
+assign bar1_sh_rvalid = sh_bar1_bus.rvalid;
+assign bar1_sh_rresp = sh_bar1_bus.rresp;
+assign bar1_sh_rdata = sh_bar1_bus.rdata[31:0];
+assign sh_bar1_bus.rready = sh_bar1_rready;
 
 ///////////////////////////////////////////////////////////////////////
 ///////////////// OCL SLAVE module ////////////////////////////////////
