@@ -277,12 +277,14 @@ class DecodeBitMasks extends Module
   // Further, <length of run - 1> all-ones is a reserved pattern.
   //
   // In all cases the rotation is by immr % e (and immr is 6 bits).
+  def replicate(bits:UInt, target:Int, source:Int):UInt = Fill(target/source, bits(source - 1, 0))
 
   val OnesTable = VecInit.tabulate(DATA_SZ + 1) { i => BigInt("0"*(DATA_SZ-i) ++ "1"*i, 2).U }
 
   val welem = Wire(DATA_T)
-  val wmask = Wire(DATA_T)
+  val welemROR = Wire(DATA_T)
   val telem = Wire(DATA_T)
+  val wmask = Wire(DATA_T)
   val tmask = Wire(DATA_T)
 
   val toBeEncoded = WireInit(UInt(7.W), Cat(io.immn, ~io.imms))
@@ -298,16 +300,21 @@ class DecodeBitMasks extends Module
   val onesD = WireInit(d +& 1.U)
 
   welem := OnesTable(onesS)
-  wmask := ALU.rotateRight(VecInit(welem.asBools), r).asUInt // ROR(welem, R) and truncate esize
+  welemROR := ALU.rotateRight(VecInit(welem.asBools), r).asUInt // ROR(welem, R) and truncate esize
+  val wmaskSeq = for(length <- 0 until 7) yield replicate(welemROR, 64, 1 << length)
+  val wmaskVec = VecInit(wmaskSeq)
+  wmask := wmaskVec(len)
 
   telem := OnesTable(onesD)
-  tmask := telem
+  val tmaskSeq = for(length <- 0 until 7) yield replicate(telem, 64, 1 << length)
+  val tmaskVec = VecInit(tmaskSeq)
+  tmask := tmaskVec(len)
 
   io.wmask := wmask
   io.tmask := tmask
 
   when(io.is32bit) {
-    wmask := ALU.rotateRight(VecInit(welem(31,0).asBools), r(4,0)).asUInt.pad(64)
+    welemROR := ALU.rotateRight(VecInit(welem(31,0).asBools), r(4,0)).asUInt.pad(64)
   }
 }
 
