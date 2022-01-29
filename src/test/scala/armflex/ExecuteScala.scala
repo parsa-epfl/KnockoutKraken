@@ -9,6 +9,8 @@ import chiseltest.internal._
 
 import firrtl.options.TargetDirAnnotation
 
+import arm.DEC_LITS._
+
 class DecodeBitMasksUnitTest extends AnyFreeSpec with ChiselScalatestTester {
   // Plan: Just print the iteration value and see the maximum period.
   def decodeBitMasksPokeExpect(
@@ -26,11 +28,13 @@ class DecodeBitMasksUnitTest extends AnyFreeSpec with ChiselScalatestTester {
     dut.io.wmask.expect(wmask.U)
     dut.io.tmask.expect(tmask.U)
   }
+
   val anno = Seq(
     VerilatorBackendAnnotation,
     TargetDirAnnotation("test/execute/DecodeBitMask"),
     WriteVcdAnnotation
   )
+
   "b200c3e8:orr     x8, xzr, #0x101010101010101" in {
     test(new DecodeBitMasks).withAnnotations(anno) { dut =>
       decodeBitMasksPokeExpect(dut, BigInt("b200c3e8", 16))
@@ -40,6 +44,45 @@ class DecodeBitMasksUnitTest extends AnyFreeSpec with ChiselScalatestTester {
   "92402c04:and     x4, x0,  #0xfff" in {
     test(new DecodeBitMasks).withAnnotations(anno) { dut =>
       decodeBitMasksPokeExpect(dut, BigInt("92402c04", 16))
+    }
+  }
+}
+
+class DataProcessingUnitTest extends AnyFreeSpec with ChiselScalatestTester {
+  // Plan: Just print the iteration value and see the maximum period.
+  def dataProcessingPokeExpect(
+    dut: DataProcessing,
+    inst: BigInt,
+    reg: BigInt
+  ): Unit = {
+    val is32bit = ((inst >> 31) & 0x1) == 0
+    val opcode = (inst >> 10) & 0x3f
+    dut.io.a.poke(reg.U)
+    dut.io.is32bit.poke(is32bit.B)
+    dut.io.op.poke(opcode.U)
+    dut.clock.step(1)
+    val res = opcode.toInt match {
+      case OP_REV   => ExecuteModels.ReverseBytes(reg, 1)
+      case OP_REV32 => ExecuteModels.ReverseBytes(reg, 2)
+      case OP_REV16 => ExecuteModels.ReverseBytes(reg, 4)
+    }
+    dut.io.res.expect(res.U)
+  }
+
+  val anno = Seq(
+    VerilatorBackendAnnotation,
+    TargetDirAnnotation("test/execute/DataProcessing"),
+    WriteVcdAnnotation
+  )
+
+  "dac00c84:rev     x4, x4" in {
+    test(new DataProcessing).withAnnotations(anno) { dut =>
+      dataProcessingPokeExpect(
+        dut,
+        BigInt("dac00c84", 16),
+        BigInt("80808080" +
+               "00000000", 16)
+      )
     }
   }
 }
@@ -93,5 +136,16 @@ object ExecuteModels {
     val wmask = Replicate(welem >> R.toInt, 64, esize)
     val tmask = Replicate(telem, 64, esize)
     return (wmask, tmask);
+  }
+
+  def ReverseBytes(bits: BigInt, containers: Int): BigInt = {
+    if(containers == 1) {
+      val bytes = bits.toByteArray.drop(1)
+      assert(bytes.size == 8)
+      return BigInt(bytes.reverse)
+    } else {
+      // TODO
+      return BigInt("deadbeef", 16)
+    }
   }
 }
