@@ -322,7 +322,6 @@ class DataProcessing extends Module
 {
   val io = IO(new Bundle {
     val a = Input(DATA_T)
-    val b = Input(DATA_T)
     val op = Input(OP_T)
     val is32bit = Input(Bool())
     val res = Output(DATA_T)
@@ -343,7 +342,8 @@ class DataProcessing extends Module
       Cat(Catify(bits(size-1, size/2), size/2, containers/2),
           Catify(bits(size/2-1, 0),    size/2, containers/2))
     } else {
-      Cat(for(idx <- size/8-1 to 0 by -1) yield (ALU.getByte(bits, idx)))
+      val lower = WireInit(Cat(for(idx <- size/8-1 to 0 by -1) yield (ALU.getByte(bits, (size/8-1) - idx))))
+      lower
     }
   }
 
@@ -351,17 +351,6 @@ class DataProcessing extends Module
     OP_REV16 -> Catify(operand, 64, 4),
     OP_REV32 -> Catify(operand, 64, 2),
     OP_REV   -> Catify(operand, 64, 1)
-    //OP_REV16 -> Cat(
-    //  Cat(operand(0,0), operand(0,0)),
-    //  Cat(operand(0,0), operand(0,0)),
-    //  Cat(operand(0,0), operand(0,0)),
-    //  Cat(operand(0,0), operand(0,0))),
-    //OP_REV32 -> Cat(
-    //  Cat(operand(0,0), operand(0,0), operand(0,0), operand(0,0)),
-    //  Cat(operand(0,0), operand(0,0), operand(0,0), operand(0,0))),
-    //OP_REV   -> Cat(
-    //  operand(0,0), operand(0,0), operand(0,0), operand(0,0),
-    //  operand(0,0), operand(0,0), operand(0,0), operand(0,0))
   ))
 
   res := MuxLookup(io.op, io.a, Seq(
@@ -528,17 +517,16 @@ class ExecuteUnit extends Module
   // Data-Processing
   val dataProcessing = Module(new DataProcessing)
   dataProcessing.io.a := rVal1
-  dataProcessing.io.b := rVal2
   dataProcessing.io.op := io.dinst.op
   dataProcessing.io.is32bit := io.dinst.is32bit
 
   // Data-Processing 3
-  // val dataProc3S = Module(new DataProc3S)
-  // dataProc3S.io.op := io.dinst.op
-  // dataProc3S.io.rVal1 := rVal1
-  // dataProc3S.io.rVal2 := rVal2
-  // dataProc3S.io.rVal3 := rVal3
-  // dataProc3S.io.is32bit := io.dinst.is32bit
+  val dataProc3S = Module(new DataProc3S)
+  dataProc3S.io.op := io.dinst.op
+  dataProc3S.io.rVal1 := rVal1
+  dataProc3S.io.rVal2 := rVal2
+  dataProc3S.io.rVal3 := rVal3
+  dataProc3S.io.is32bit := io.dinst.is32bit
 
   val addWithCarry = Module(new AddWithCarry)
   // I_ASSR || I_ASImm
@@ -567,7 +555,7 @@ class ExecuteUnit extends Module
     I_LogI  -> logicALU.io.res,
     I_DP1S  -> dataProcessing.io.res,
     I_DP2S  -> shiftALU.io.res,
-//    I_DP3S  -> dataProc3S.io.res,
+    I_DP3S  -> dataProc3S.io.res,
     I_ASSR  -> addWithCarry.io.res,
     I_ASER  -> addWithCarry.io.res,
     I_ASImm -> addWithCarry.io.res,
