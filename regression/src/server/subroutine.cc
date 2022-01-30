@@ -14,7 +14,7 @@ void DebugRoutine(TopDUT &dut) {
   ArmflexArchState state;
   FILE* logfile = fopen("devteroflex_emulation_log.proto", "wb");
   while (true) {
-    uint32_t thid = dut.getCommited();
+    uint32_t thid = dut.isInstructionBeingCommitted();
     if(thid != -1) {
       // Buffer message or do something with the commited intruction
       dut.getArchState(thid, &state);

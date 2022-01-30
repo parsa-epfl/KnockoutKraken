@@ -46,8 +46,8 @@ public:
    * Get commit state.
    */
   void getArchState(uint32_t thid, ArmflexArchState* state);
-  int getCommited(void);
-  int getTransplant(void);
+  int isInstructionBeingCommitted();
+  int getTransplant();
 
  
   /**
@@ -140,7 +140,7 @@ public:
     return (addr < dram_size);
   }
 
-  void closeSimulation(void);
+  void closeSimulation();
 
 public:
   uint32_t *dram;

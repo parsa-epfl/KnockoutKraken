@@ -138,12 +138,12 @@ void TopDUT::attachCurrentRoutine(std::unique_lock<std::mutex> &lock) {
 }
 
 
-void TopDUT::closeSimulation(void) {
+void TopDUT::closeSimulation() {
   puts("Closing simulation.\n");
   tfp->close();
 }
 
-int TopDUT::getCommited(void) {
+int TopDUT::isInstructionBeingCommitted() {
   if(dut->dbg_bits_commit_valid && !dut->dbg_bits_commitIsTransplant) {
     return dut->dbg_bits_commit_tag;
   } else {
