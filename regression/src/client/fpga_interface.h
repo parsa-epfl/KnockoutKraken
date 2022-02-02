@@ -141,6 +141,7 @@ int transplant_pushState(const FPGAContext *c, uint32_t thread_id, uint64_t *sta
 #define TRANS_REG_OFFST_STOP_CPU         (0x4 * 2)
 #define TRANS_REG_OFFST_FORCE_TRANSPLANT (0x4 * 3)
 
+int transplant_singlestep(const FPGAContext *c, uint32_t thid, uint32_t asid, ArmflexArchState *state);
 int transplant_pending(const FPGAContext *c, uint32_t *pending_threads);
 int transplant_freePending(const FPGAContext *c, uint32_t pending_threads);
 int transplant_waitTillPending(const FPGAContext *c, uint32_t *pending_threads);

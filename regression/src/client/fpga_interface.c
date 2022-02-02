@@ -78,6 +78,14 @@ int queryThreadState(const struct FPGAContext *c, uint32_t *pending_threads) {
   return transplant_pending(c, pending_threads);
 }
 
+int transplant_singlestep(const FPGAContext *c, uint32_t thid, uint32_t asid, ArmflexArchState *state) {
+  int res = 0;
+  res |= registerAndPushState(c, thid, asid, state);
+  res |= transplant_stopCPU(c, thid);
+  res |= transplant_start(c, thid);
+  return res;
+}
+
 int transplant_getState(const FPGAContext *c, uint32_t thread_id,
                         uint64_t *state, size_t regCount) {
   const uint32_t axi_transplant_base = c->base_address.axil_base + c->base_address.transplant_data;

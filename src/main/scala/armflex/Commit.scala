@@ -78,7 +78,7 @@ class CommitUnit(thidN: Int) extends Module {
   val branch_taken = WireInit(commitQueue.io.deq.bits.br_taken.valid)
 
   // Transplant
-  commit.transplant.tag := commitQueue.io.deq.bits.tag
+  commit.transplant.tag := tag
   commit.transplant.valid := false.B
   commit.transplant.bits.get := commitQueue.io.deq.bits.inst
 

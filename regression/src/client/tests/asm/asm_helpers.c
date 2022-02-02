@@ -59,3 +59,12 @@ void initState_infinite_loop(
     state->xregs[0] = 1;
   }
 };
+
+void initState_simple_inst(
+  ArmflexArchState *state,
+  uint64_t reg1,
+  uint64_t reg2
+) {
+  state->xregs[0] = reg1;
+  state->xregs[1] = reg2;
+};
