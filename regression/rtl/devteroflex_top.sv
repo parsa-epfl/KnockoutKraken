@@ -212,8 +212,10 @@ module DevteroFlexTopLevel (
         .M_AXI_r_rresp      (M_AXI_rresp  ),
         .M_AXI_r_rlast      (M_AXI_rlast  ),
         .M_AXI_r_rvalid     (M_AXI_rvalid ),
-        .M_AXI_r_rready     (M_AXI_rready ),
-`ifdef DEBUG
+`ifndef DEBUG
+        .M_AXI_r_rready     (M_AXI_rready )
+`else
+    .M_AXI_r_rready     (M_AXI_rready ),
     .dbg_bits_fetch_valid              (dbg_bits_fetch_valid       ),
     .dbg_bits_fetch_tag                (dbg_bits_fetch_tag),
     .dbg_bits_issue_valid              (dbg_bits_issue_valid),

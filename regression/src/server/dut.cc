@@ -149,6 +149,7 @@ void TopDUT::closeSimulation() {
   fclose(f);
 }
 
+#ifdef DEBUG
 int TopDUT::isInstructionBeingCommitted() {
   if(dut->dbg_bits_commit_valid && !dut->dbg_bits_commitIsTransplant) {
     return dut->dbg_bits_commit_tag;
@@ -172,3 +173,4 @@ void TopDUT::getArchState(uint32_t thid, ArmflexArchState* state) {
       state->xregs[reg] = uint64_t(dut->dbg_bits_stateVec_rfile[(thid*32 + reg) * 2]) | uint64_t(dut->dbg_bits_stateVec_rfile[(thid*32 + reg) * 2 + 1]) << 32;
   }
 }
+#endif

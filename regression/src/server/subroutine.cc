@@ -9,6 +9,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#ifdef DEBUG
 void DebugRoutine(TopDUT &dut) {
   std::unique_lock<std::mutex> lock(dut.getLock());
   ArmflexArchState state;
@@ -29,6 +30,7 @@ void DebugRoutine(TopDUT &dut) {
     TICK(dut);
   }
 }
+#endif
 
 void handleDRAMSubroute(TopDUT &dut) {
   std::unique_lock<std::mutex> lock(dut.getLock());

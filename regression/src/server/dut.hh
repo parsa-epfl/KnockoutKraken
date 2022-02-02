@@ -42,12 +42,14 @@ public:
     return dut;
   }
 
+#ifdef DEBUG
   /**
    * Get commit state.
    */
   void getArchState(uint32_t thid, ArmflexArchState* state);
   int isInstructionBeingCommitted();
   int getTransplant();
+#endif
 
  
   /**
