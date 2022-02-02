@@ -28,3 +28,9 @@ void initState_infinite_loop(
   ArmflexArchState *state,
   bool loop
 );
+
+void initState_simple_inst(
+  ArmflexArchState *state,
+  uint64_t reg1,
+  uint64_t reg2
+);
