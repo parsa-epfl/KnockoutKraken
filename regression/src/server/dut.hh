@@ -45,7 +45,7 @@ public:
   /**
    * Get commit state.
    */
-  void getArchState(uint32_t thid, ArmflexArchState* state);
+  void getArchState(uint32_t thid, DevteroflexArchState* state);
   int isInstructionBeingCommitted();
   int getTransplant();
 #endif

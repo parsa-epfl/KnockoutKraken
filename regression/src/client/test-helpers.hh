@@ -17,6 +17,6 @@ extern "C" {
  */
 void synchronizePage(FPGAContext *ctx, int asid, uint8_t *page, uint64_t vaddr,
                      uint64_t paddr, bool expect_modified);
-void requireStateIsIdentical(const ArmflexArchState &state1,
-                             const ArmflexArchState &state2);
+void requireStateIsIdentical(const DevteroflexArchState &state1,
+                             const DevteroflexArchState &state2);
 

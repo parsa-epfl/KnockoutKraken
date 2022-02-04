@@ -11,7 +11,7 @@ int thid = 0;
 
 TEST_CASE("host-cmd-stop-cpu") {
     FPGAContext ctx;
-    ArmflexArchState state;
+    DevteroflexArchState state;
     uint8_t page[PAGE_SIZE] = {0};
     REQUIRE(initFPGAContext(&ctx) == 0);
     initArchState(&state, 0xABCDABCD0000);
@@ -64,7 +64,7 @@ TEST_CASE("host-cmd-stop-cpu") {
  
 TEST_CASE("host-cmd-force-transplant") {
     FPGAContext ctx;
-    ArmflexArchState state;
+    DevteroflexArchState state;
     uint8_t page[PAGE_SIZE] = {0};
     REQUIRE(initFPGAContext(&ctx) == 0);
     initArchState(&state, 0xABCDABCD0000);
@@ -105,7 +105,7 @@ TEST_CASE("host-cmd-force-transplant") {
 
 TEST_CASE("host-cmd-singlestep") {
     FPGAContext ctx;
-    ArmflexArchState state;
+    DevteroflexArchState state;
     uint8_t page[PAGE_SIZE] = {0};
     REQUIRE(initFPGAContext(&ctx) == 0);
     initArchState(&state, 0xABCDABCD0000);
@@ -164,7 +164,7 @@ TEST_CASE("host-cmd-singlestep") {
 
 TEST_CASE("check-flag-undef") {
     FPGAContext ctx;
-    ArmflexArchState state;
+    DevteroflexArchState state;
     uint8_t page[PAGE_SIZE] = {0};
     REQUIRE(initFPGAContext(&ctx) == 0);
     initArchState(&state, 0xABCDABCD0000);
@@ -207,7 +207,7 @@ TEST_CASE("check-flag-undef") {
 
 TEST_CASE("check-flag-transplant") {
     FPGAContext ctx;
-    ArmflexArchState state;
+    DevteroflexArchState state;
     uint8_t page[PAGE_SIZE] = {0};
     REQUIRE(initFPGAContext(&ctx) == 0);
     initArchState(&state, 0x0);

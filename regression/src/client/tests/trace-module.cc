@@ -8,7 +8,7 @@ extern "C" {
 
 TEST_CASE("trace-pcs-then-stop-single") {
     FPGAContext ctx;
-    ArmflexArchState state;
+    DevteroflexArchState state;
     uint8_t page[PAGE_SIZE] = {0};
     REQUIRE(initFPGAContext(&ctx) == 0);
     initArchState(&state, 0);

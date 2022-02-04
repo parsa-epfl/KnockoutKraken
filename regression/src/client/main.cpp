@@ -34,7 +34,7 @@ static void initFPGAContextAndPage(int num_threads, FPGAContext *c) {
 
 TEST_CASE("transplant-in"){
   FPGAContext c;
-  ArmflexArchState state;
+  DevteroflexArchState state;
   initFPGAContextAndPage(1, &c);
   initArchState(&state, rand());
 
@@ -44,7 +44,7 @@ TEST_CASE("transplant-in"){
   REQUIRE(transplant_pushState(&c, th, (uint64_t *) &state) == 0);
 
   // ---- Assert that correct state is was pushed
-  ArmflexArchState stateTransplant;
+  DevteroflexArchState stateTransplant;
   REQUIRE(transplant_getState(&c, th, (uint64_t *) &stateTransplant) == 0);
   requireStateIsIdentical(state, stateTransplant);
 
@@ -142,7 +142,7 @@ TEST_CASE("Push-page-and-read-back", "aws-only"){
 
 TEST_CASE("basic-transplant-with-initial-page-fault"){
   FPGAContext c;
-  ArmflexArchState state;
+  DevteroflexArchState state;
   initFPGAContextAndPage(1, &c);
   initArchState(&state, rand());
 
@@ -172,7 +172,7 @@ TEST_CASE("transplant-transplants"){
   FPGAContext c;
   initFPGAContextAndPage(1, &c);
 
-  ArmflexArchState state;
+  DevteroflexArchState state;
   uint64_t page_inst_paddr = c.base_address.page_base; // first page PA.
   initArchState(&state, rand());
 
@@ -191,7 +191,7 @@ TEST_CASE("transplant-transplants"){
   registerAndPushState(&c, th, asid, &state);
 
   // ---- Assert that correct state is was pushed
-  ArmflexArchState stateTransplant;
+  DevteroflexArchState stateTransplant;
   transplant_getState(&c, th, (uint64_t *) &stateTransplant);
   requireStateIsIdentical(state, stateTransplant);
 
@@ -240,7 +240,7 @@ TEST_CASE("execute-instruction-with-context-in-dram"){
   FPGAContext c;
   initFPGAContextAndPage(1, &c);
 
-  ArmflexArchState state;
+  DevteroflexArchState state;
   uint64_t page_paddr = c.base_address.page_base; // first page PA.
   uint64_t page_inst_paddr = page_paddr;
   uint64_t page_data_paddr = page_paddr+PAGE_SIZE;
@@ -363,7 +363,7 @@ TEST_CASE("execute-instruction") {
   initFPGAContextAndPage(1, &c);
   uint64_t page_inst_paddr = c.base_address.page_base; // first page PA.
   uint64_t page_data_paddr = page_inst_paddr+PAGE_SIZE;
-  ArmflexArchState state;
+  DevteroflexArchState state;
   uint64_t pc = 0x40000000;
   initArchState(&state, pc);
 
