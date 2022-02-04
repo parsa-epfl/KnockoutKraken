@@ -13,7 +13,27 @@ cd build
 
 # 2. Generate test list
 
-allTests=("multiple-pages-in-a-row" "transplant-in" "MMU-push-and-evict-pte" "basic-transplant-with-initial-page-fault" "transplant-transplants" "execute-instruction-with-context-in-dram" "execute-instruction")
+allTests=(
+  "multiple-pages-in-a-row" 
+  "transplant-in" 
+  "MMU-push-and-evict-pte" 
+  "basic-transplant-with-initial-page-fault" 
+  "transplant-transplants" 
+  "execute-instruction-with-context-in-dram" 
+  "execute-instruction" 
+  "host-cmd-stop-cpu"
+  "host-cmd-force-transplant"
+  "host-cmd-singlestep"
+  "check-flag-undef"
+  "check-flag-transplant"
+  "test-ldst-pair-all-sizes"
+  "test-pressure-mmu-same-address"
+
+  )
+
+tbd=(
+  "out-of-page-bound-pair-load"
+)
 
 # 3. Run each
 

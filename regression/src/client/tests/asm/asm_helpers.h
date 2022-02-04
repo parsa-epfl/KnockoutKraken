@@ -34,3 +34,6 @@ void initState_simple_inst(
   uint64_t reg1,
   uint64_t reg2
 );
+
+void initState_exception_br(ArmflexArchState *state);
+void initState_exception_svc(ArmflexArchState *state);

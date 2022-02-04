@@ -41,11 +41,11 @@ TEST_CASE("transplant-in"){
   int ret = 0;
   const int th = 0;
 
-  REQUIRE(transplant_pushState(&c, th, (uint64_t *) &state, ARMFLEX_TOT_REGS) == 0);
+  REQUIRE(transplant_pushState(&c, th, (uint64_t *) &state) == 0);
 
   // ---- Assert that correct state is was pushed
   ArmflexArchState stateTransplant;
-  REQUIRE(transplant_getState(&c, th, (uint64_t *) &stateTransplant, ARMFLEX_TOT_REGS) == 0);
+  REQUIRE(transplant_getState(&c, th, (uint64_t *) &stateTransplant) == 0);
   requireStateIsIdentical(state, stateTransplant);
 
   releaseFPGAContext(&c);
@@ -152,7 +152,6 @@ TEST_CASE("basic-transplant-with-initial-page-fault"){
   // initialization.
   registerAndPushState(&c, th, asid, &state);
   registerThreadWithProcess(&c, th, asid);
-  // transplant_pushState(&c, th, (uint64_t *)&state, ARMFLEX_TOT_REGS);
   transplant_start(&c, th);
 
   // Let's query message. It should be a page fault.
@@ -193,7 +192,7 @@ TEST_CASE("transplant-transplants"){
 
   // ---- Assert that correct state is was pushed
   ArmflexArchState stateTransplant;
-  transplant_getState(&c, th, (uint64_t *) &stateTransplant, ARMFLEX_TOT_REGS);
+  transplant_getState(&c, th, (uint64_t *) &stateTransplant);
   requireStateIsIdentical(state, stateTransplant);
 
   // ---- Start execution

@@ -13,9 +13,9 @@ void initArchState(
   for (int i = 0; i < 32; ++i) {
     state->xregs[i] = i;
   }
-  state->nzcv = 0;
   state->sp = 0;
   state->pc = pc;
+  state->flags = 0;
 }
 
 void initState_pressure_ldp_stp(
@@ -67,4 +67,13 @@ void initState_simple_inst(
 ) {
   state->xregs[0] = reg1;
   state->xregs[1] = reg2;
+};
+
+void initState_exception_br(ArmflexArchState *state) {
+  state->pc = 0x0;
+  state->xregs[0] = 0x2; // triger exception because of branch address
+};
+
+void initState_exception_svc(ArmflexArchState *state) {
+  state->pc = 0x4;
 };
