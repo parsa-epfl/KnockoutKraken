@@ -34,7 +34,7 @@ static int test_stress_memory(
 ) {
   INFO("- Init state")
   REQUIRE(thidN <= 32);
-  ArmflexArchState fetchedState;
+  DevteroflexArchState fetchedState;
   uint32_t threadsMask = ((uint64_t) 1 <<  thidN) - 1;
   uint8_t page[PAGE_SIZE] = {0};
   uint8_t deadbeefedPage[PAGE_SIZE] = {0};
@@ -44,7 +44,7 @@ static int test_stress_memory(
            page_data_st_paddr = page_data_ld_paddr + thidN*nDataPagesPerThread*PAGE_SIZE;
 
 
-  ArmflexArchState state[32];
+  DevteroflexArchState state[32];
   uint8_t *pages = (uint8_t *) malloc(thidN*nDataPagesPerThread*PAGE_SIZE);
   uint32_t asid[32] = {0};
   uint64_t curr_ld_page_paddr[32] = {0};

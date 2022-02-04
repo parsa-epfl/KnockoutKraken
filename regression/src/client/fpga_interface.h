@@ -129,12 +129,12 @@ typedef struct MessageFPGA
 #define FLAGS_GET_IS_EXCEPTION(flags)   (flags & (1 << 4))
 #define FLAGS_GET_IS_UNDEF(flags)       (flags & (1 << 5))
 
-typedef struct ArmflexArchState {
+typedef struct DevteroflexArchState {
 	uint64_t xregs[32];
 	uint64_t pc;
 	uint64_t sp;
 	uint64_t flags;
-} ArmflexArchState;
+} DevteroflexArchState;
 
 int registerThreadWithProcess(const struct FPGAContext *c, uint32_t thread_id, uint32_t process_id);
 int checkRxMessageQueue(const struct FPGAContext *c, uint32_t *result);
@@ -145,9 +145,9 @@ int sendMessageToFPGA(const struct FPGAContext *c,  void *raw_message, size_t me
 int pushPageToFPGA(const struct FPGAContext *c, uint64_t paddr, void *page);
 int fetchPageFromFPGA(const struct FPGAContext *c, uint64_t paddr, void *buffer);
  
-int registerAndPushState(const struct FPGAContext *c, uint32_t thread_id, uint32_t process_id, ArmflexArchState *state);
+int registerAndPushState(const struct FPGAContext *c, uint32_t thread_id, uint32_t process_id, DevteroflexArchState *state);
 int queryThreadState(const struct FPGAContext *c, uint32_t *pending_threads);
-int transplantBack(const struct FPGAContext *c, uint32_t thread_id, ArmflexArchState *state);
+int transplantBack(const struct FPGAContext *c, uint32_t thread_id, DevteroflexArchState *state);
 
 // Helper functions
 int transplant_getState(const FPGAContext *c, uint32_t thread_id, uint64_t *state);
@@ -159,7 +159,7 @@ int transplant_pushState(const FPGAContext *c, uint32_t thread_id, uint64_t *sta
 #define TRANS_REG_OFFST_STOP_CPU         (0x4 * 2)
 #define TRANS_REG_OFFST_FORCE_TRANSPLANT (0x4 * 3)
 
-int transplant_singlestep(const FPGAContext *c, uint32_t thid, uint32_t asid, ArmflexArchState *state);
+int transplant_singlestep(const FPGAContext *c, uint32_t thid, uint32_t asid, DevteroflexArchState *state);
 int transplant_pending(const FPGAContext *c, uint32_t *pending_threads);
 int transplant_freePending(const FPGAContext *c, uint32_t pending_threads);
 int transplant_waitTillPending(const FPGAContext *c, uint32_t *pending_threads);

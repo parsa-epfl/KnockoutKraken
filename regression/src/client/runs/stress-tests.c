@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     int threads = atoi(argv[1]);
     printf("Starting with %i threads\n", threads);
     FPGAContext ctx;
-    ArmflexArchState state;
+    DevteroflexArchState state;
     uint8_t page[PAGE_SIZE] = {0};
     int ret = initFPGAContext(&ctx);
     printf("initFPGAContext retuned %i, should be 0\n", ret);

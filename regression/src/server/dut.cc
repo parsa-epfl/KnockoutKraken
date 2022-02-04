@@ -166,7 +166,7 @@ int TopDUT::getTransplant(void) {
   }
 }
 
-void TopDUT::getArchState(uint32_t thid, ArmflexArchState* state) {
+void TopDUT::getArchState(uint32_t thid, DevteroflexArchState* state) {
   state->pc = uint64_t(dut->dbg_bits_stateVec_regs_PC[thid*2]) | uint64_t(dut->dbg_bits_stateVec_regs_PC[thid*2 + 1]) << 32;
   state->flags = uint64_t(dut->dbg_bits_stateVec_regs_flags[thid / 8] >> ((thid % 8) * 4)) & 0xF;
   for(int reg = 0; reg < 32; reg++) {

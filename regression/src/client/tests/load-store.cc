@@ -28,7 +28,7 @@ static void init_mem_slot_pair(uint8_t *bytes, uint64_t lsb, uint64_t msb,
   }
 }
 
-static void check_ldst_all_sizes_pair_load(ArmflexArchState *state,
+static void check_ldst_all_sizes_pair_load(DevteroflexArchState *state,
                                            uint64_t exp1, uint64_t exp2) {
   INFO("Check pair load values")
   REQUIRE(state->xregs[0] == exp1);
@@ -52,7 +52,7 @@ static void check_ldst_all_sizes_pair_store(uint8_t *page, uint64_t addr,
 }
 
 static void step_ldst_all_sizes_pair_load(FPGAContext *ctx,
-                                          ArmflexArchState *state,
+                                          DevteroflexArchState *state,
                                           uint32_t thid, uint32_t asid,
                                           uint64_t exp1, uint64_t exp2) {
   uint32_t pending_threads;
@@ -71,7 +71,7 @@ static int test_ldst_all_sizes_pair(FPGAContext *ctx) {
   INFO("- Init state")
   const int thid = 3;
   const int asid = (thid + 1) << 4;
-  ArmflexArchState state;
+  DevteroflexArchState state;
   uint8_t page[PAGE_SIZE] = {0};
   uint8_t bytes[32] = {0};
   uint64_t page_inst_paddr = 0x10000, page_data_ld_paddr = 0x20000,
@@ -185,7 +185,7 @@ TEST_CASE("out-of-page-bound-pair-load") {
   const int asid = (thid + 1) << 4;
   uint8_t page[PAGE_SIZE] = {0};
 
-  ArmflexArchState state;
+  DevteroflexArchState state;
   state.pc = 0x1000;
   uint64_t inst_pa = ctx.base_address.page_base;
   uint64_t load_vas[] = {0x2FFC, 0x3000};

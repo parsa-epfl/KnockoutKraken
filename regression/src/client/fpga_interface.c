@@ -37,7 +37,7 @@ int registerThreadWithProcess(const FPGAContext *c, uint32_t thread_id,
  * 
  * @note this function will not start the transplant but only bind.
  */
-int registerAndPushState(const struct FPGAContext *c, uint32_t thread_id, uint32_t process_id, ArmflexArchState *state) {
+int registerAndPushState(const struct FPGAContext *c, uint32_t thread_id, uint32_t process_id, DevteroflexArchState *state) {
   // 1. register thread id.
   int res = registerThreadWithProcess(c, thread_id, process_id);
   if(res != 0) return res;
@@ -57,7 +57,7 @@ int registerAndPushState(const struct FPGAContext *c, uint32_t thread_id, uint32
  * @note Please make sure that target thread must be ready to be transplanted back. Unknown case will be happened if thread is still working.
  * FIXME: Add mechanism to stop the execution of that thread on FPGA
  */
-int transplantBack(const struct FPGAContext *c, uint32_t thread_id, ArmflexArchState *state) {
+int transplantBack(const struct FPGAContext *c, uint32_t thread_id, DevteroflexArchState *state) {
   // 1. unregister thread id.
   int res = registerThreadWithProcess(c, thread_id, 0);
   if(res != 0) return res;
@@ -78,7 +78,7 @@ int queryThreadState(const struct FPGAContext *c, uint32_t *pending_threads) {
   return transplant_pending(c, pending_threads);
 }
 
-int transplant_singlestep(const FPGAContext *c, uint32_t thid, uint32_t asid, ArmflexArchState *state) {
+int transplant_singlestep(const FPGAContext *c, uint32_t thid, uint32_t asid, DevteroflexArchState *state) {
   int res = 0;
   res |= registerAndPushState(c, thid, asid, state);
   res |= transplant_stopCPU(c, thid);

@@ -12,7 +12,7 @@
 #ifdef DEBUG
 void DebugRoutine(TopDUT &dut) {
   std::unique_lock<std::mutex> lock(dut.getLock());
-  ArmflexArchState state;
+  DevteroflexArchState state;
   FILE* logfile = fopen("devteroflex_emulation_log.proto", "wb");
   while (true) {
     uint32_t thid = dut.isInstructionBeingCommitted();

@@ -2,7 +2,7 @@
 #include "fpga_interface.h"
 
 #define GET_asid(th) ((th + 1) << 4)
-void initArchState(ArmflexArchState *state, uint64_t pc);
+void initArchState(DevteroflexArchState *state, uint64_t pc);
 
 
 // Page initialization

@@ -2,8 +2,8 @@
 #include "fpga.h"
 #include "fpga_interface.h"
 
-void requireStateIsIdentical(const ArmflexArchState &state1,
-                             const ArmflexArchState &state2) {
+void requireStateIsIdentical(const DevteroflexArchState &state1,
+                             const DevteroflexArchState &state2) {
   REQUIRE(state1.pc == state2.pc);
   REQUIRE(state1.sp == state2.sp);
   REQUIRE(FLAGS_GET_NZCV(state1.flags) == FLAGS_GET_NZCV(state2.flags));

@@ -21,7 +21,7 @@ static int run_thread_test(FPGAContext *ctx, int threads) {
 
     pushPageToFPGA(ctx, paddr, page);
 
-    ArmflexArchState state;
+    DevteroflexArchState state;
     INFO("Prepare states");
     for (uint32_t thid = 0; thid < threads; thid++) {
         initArchState(&state, thid << 12);
