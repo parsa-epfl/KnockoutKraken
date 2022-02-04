@@ -177,6 +177,7 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   transplantU.trans2host <> hostIO.trans2host
   transplantU.hostBramPort <> hostIO.port
   pipeline.transplantIO.stopCPU := transplantU.cpu2trans.stopCPU
+  archstate.pstateIO.forceTransplant := hostIO.host2trans.forceTransplant
 
   // Instrumentation interface
   val instrument = IO(pipeline.instrument.cloneType)
