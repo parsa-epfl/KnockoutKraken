@@ -2,7 +2,7 @@ package armflex
 
 import chisel3._
 
-import chisel3.util.{Cat, Decoupled, Valid, Fill, Counter}
+import chisel3.util.{Cat, Decoupled, Valid, Fill, Counter, OHToUInt}
 import arm.PROCESSOR_TYPES._
 import chisel3.util.log2Ceil
 
@@ -115,6 +115,7 @@ class PStateIO(val thidN: Int) extends Bundle {
     val thread = Input(UInt(log2Ceil(thidN).W))
     val pstate = Output(new PStateRegs)
   }
+  val forceTransplant = Input(UInt(thidN.W))
   val issue = new Bundle {
     val thread = Input(UInt(log2Ceil(thidN).W))
     val pstate = Output(new PStateRegs)
@@ -142,6 +143,9 @@ class ArchState(thidN: Int, withDbg: Boolean) extends Module {
   pstateIO.transplant.pstate := pstateMem_rd3
   when(pstateIO.commit.fire) {
     pstateMem(pstateIO.commit.tag) := pstateIO.commit.pstate.next
+  }
+  when(pstateIO.forceTransplant =/= 0.U) {
+    pstateMem(OHToUInt(pstateIO.forceTransplant)).flags.isException := true.B
   }
 
   pstateIO.commit.ready := DontCare // See PipelineWithTransplant
