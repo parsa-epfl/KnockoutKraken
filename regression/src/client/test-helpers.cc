@@ -5,8 +5,8 @@
 void requireStateIsIdentical(const ArmflexArchState &state1,
                              const ArmflexArchState &state2) {
   REQUIRE(state1.pc == state2.pc);
-  REQUIRE(GET_NZCV(state1.nzcv) == GET_NZCV(state2.nzcv));
   REQUIRE(state1.sp == state2.sp);
+  REQUIRE(FLAGS_GET_NZCV(state1.flags) == FLAGS_GET_NZCV(state2.flags));
   for (int i = 0; i < 32; ++i) {
     REQUIRE(state1.xregs[i] == state2.xregs[i]);
   }

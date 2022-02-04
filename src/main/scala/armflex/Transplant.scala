@@ -14,12 +14,12 @@ object TransplantIO extends Bundle {
     val thread = Output(UInt(log2Ceil(thidN).W))
     val updatingPState = Output(Bool())
     val rfile_wr = Flipped(new RFileIO.WRPort(thidN))
-    val pregs = Output(new PStateRegs)
+    val pstate = Output(new PStateRegs)
     val start = Output(Bool())
   }
   class CPU2Trans(val thidN: Int) extends Bundle {
     val rfile_wr = new RFileIO.WRPort(thidN)
-    val pregs = Input(new PStateRegs)
+    val pstate = Input(new PStateRegs)
     val doneCPU = Input(ValidTag(thidN))
     val stopCPU = Output(UInt(thidN.W))
   }
@@ -116,7 +116,7 @@ class TransplantUnit(thidN: Int) extends Module {
       }.elsewhen(currReg === (ARCH_SP_OFFST - 1).U) {
         stateRegType := r_SP
       }.elsewhen(currReg === (ARCH_PSTATE_OFFST - 1).U) {
-        stateRegType := r_NZCV
+        stateRegType := r_FLAGS
       }.elsewhen(currReg === (ARCH_MAX_OFFST - 1).U) {
         stateRegType := r_DONE
       }
@@ -134,7 +134,7 @@ class TransplantUnit(thidN: Int) extends Module {
   trans2host.doneTrans.tag := thread
   trans2host.clear.tag := thread_next
   trans2cpu.thread := thread
-  trans2cpu.pregs := cpu2trans.pregs
+  trans2cpu.pstate := cpu2trans.pstate
   trans2cpu.updatingPState := state === s_TRANS && stateDir === s_BRAM2CPU
 
   stateBufferRdPort.DI := 0.U
@@ -150,15 +150,15 @@ class TransplantUnit(thidN: Int) extends Module {
   when(stateRegType === r_XREGS) {
     hostTransPort.DI := stateBufferRdPort.DO
   }.elsewhen(stateRegTypeCurr === r_PC) {
-    hostTransPort.DI := cpu2trans.pregs.PC
-    trans2cpu.pregs.PC := hostTransPort.DO
+    hostTransPort.DI := cpu2trans.pstate.PC
+    trans2cpu.pstate.PC := hostTransPort.DO
   }.elsewhen(stateRegTypeCurr === r_SP) {
     // TODO SP is not used yet
-    //hostTransPort.DI := cpu2trans.pregs.SP // 
-    //trans2cpu.pregs.SP := hostTransPort.DO //
-  }.elsewhen(stateRegTypeCurr === r_NZCV) {
-    hostTransPort.DI := PStateGet_NZCV(cpu2trans.pregs.NZCV)
-    trans2cpu.pregs.NZCV := PStateGet_NZCV(hostTransPort.DO)
+    //hostTransPort.DI := cpu2trans.pstate.SP // 
+    //trans2cpu.pstate.SP := hostTransPort.DO //
+  }.elsewhen(stateRegTypeCurr === r_FLAGS) {
+    hostTransPort.DI := cpu2trans.pstate.flags.asUInt
+    trans2cpu.pstate.flags := hostTransPort.DO.asTypeOf(trans2cpu.pstate.flags.cloneType)
   }
 
   // RFile response comes 1 cycle delay
@@ -180,8 +180,7 @@ class TransplantUnit(thidN: Int) extends Module {
 // In parsa-epfl/qemu/fa-qflex
 // Read fa-qflex-helper.c to get indexes of values
 object Trans2State {
-  val r_DONE :: r_XREGS :: r_PC :: r_SP :: r_NZCV :: Nil = Enum(5)
-  def PStateGet_NZCV(word: UInt): UInt = word(3, 0)
+  val r_DONE :: r_XREGS :: r_PC :: r_SP :: r_FLAGS :: Nil = Enum(5)
   val ARCH_XREGS_OFFST = 0
   val ARCH_PC_OFFST = 32
   val ARCH_SP_OFFST = 33

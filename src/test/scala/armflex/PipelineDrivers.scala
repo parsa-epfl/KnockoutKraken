@@ -61,28 +61,30 @@ object TestDriversExtra {
       for (reg <- 0 until 32) {
         self.rfile(reg).poke(state.xregs(reg).U)
       }
-      self.regs.PC.poke(state.pc.U)
-      //self.regs.SP.poke(state.sp.U)
-      self.regs.NZCV.poke(state.nzcv.U)
+      self.pc.poke(state.pc.U)
+      //self.SP.poke(state.sp.U)
+      self.flags.poke(state.nzcv.U)
     }
+
     def peek(): PState = {
-      val pstate = self.regs
+      val pstate = self
       val rfile = self.rfile
 
       val xregs = for (reg <- 0 until 32) yield rfile(reg).peek().litValue
-      val pc = pstate.PC.peek().litValue
+      val pc = pstate.pc.peek().litValue
       val sp = 0 //pstate.SP.peek.litValue
-      val nzcv = pstate.NZCV.peek().litValue.toInt
+      val nzcv = pstate.flags.peek().litValue.toInt
       new PState(xregs.toList: List[BigInt], pc: BigInt, sp: BigInt, nzcv: Int)
     }
+
     def compareAssert(target: FullStateBundle): Unit = {
       val success = WireInit(true.B)
-      when(self.regs.PC =/= target.regs.PC) {
-        printf(p"PC:${Hexadecimal(self.regs.PC)}=/=${Hexadecimal(target.regs.PC)}\n")
+      when(self.pc =/= target.pc) {
+        printf(p"pc:${Hexadecimal(self.pc)}=/=${Hexadecimal(target.pc)}\n")
         success := false.B
       }
-      when(self.regs.NZCV =/= target.regs.NZCV) {
-        printf(p"NZCV${Hexadecimal(self.regs.NZCV)}=/=${Hexadecimal(target.regs.NZCV)}\n")
+      when(self.flags =/= target.flags) {
+        printf(p"NZCV${Hexadecimal(self.flags)}=/=${Hexadecimal(target.flags)}\n")
         success := false.B
       }
       for (reg <- 0 until 32) {
@@ -239,21 +241,21 @@ class PipelineHardDriverModule(params: PipelineParams) extends Module {
   val commitTransplant = ShiftRegister(pipeline.dbg.bits.get.commitTransplant, 1)
 
   when(issue.io.deq.fire) {
-    params.simLog(p"Issuing:0x${Hexadecimal(pipeline.dbg.bits.get.issue.bits.get.regs.PC)}\n")
+    params.simLog(p"Issuing:0x${Hexadecimal(pipeline.dbg.bits.get.issue.bits.get.pc)}\n")
     issue.io.deq.bits.state.compareAssert(pipeline.dbg.bits.get.issue.bits.get)
     params.simLog("  Success Issue\n")
   }
   val commitCnt = RegInit(0.U(32.W))
   when(commit.io.deq.fire) {
     params.simLog(
-      p"Commit :0x${Hexadecimal(pipeline.dbg.bits.get.commit.bits.get.regs.PC)}:${Hexadecimal(pipeline.dbg.bits.get.commit.bits.get.regs.PC)}\n"
+      p"Commit :0x${Hexadecimal(pipeline.dbg.bits.get.commit.bits.get.pc)}:${Hexadecimal(pipeline.dbg.bits.get.commit.bits.get.pc)}\n"
     )
     when(!commitTransplant.valid) {
       commit.io.deq.bits.state.compareAssert(pipeline.dbg.bits.get.commit.bits.get)
       params.simLog("  Success Commit\n")
       if(!params.simVerbose) {
         commitCnt := commitCnt + 1.U
-        printf(p"Commit Success:${Hexadecimal(pipeline.dbg.bits.get.commit.bits.get.regs.PC)}${commitCnt}\n")
+        printf(p"Commit Success:${Hexadecimal(pipeline.dbg.bits.get.commit.bits.get.pc)}${commitCnt}\n")
       }
     }.otherwise {
       printf(" Detected Transplant!\n")

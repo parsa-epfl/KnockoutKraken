@@ -78,7 +78,7 @@ class Pipeline(params: PipelineParams) extends Module {
   // Wake on instruction commit
   fetch.ctrl_i.commit.valid := commitU.commit.commited.valid && !commitU.commit.transplant.valid && !transplantIO.stopCPU(commitU.commit.commited.tag).asBool
   fetch.ctrl_i.commit.tag := commitU.commit.commited.tag
-  fetch.ctrl_i.commit.bits.get := commitU.commit.archstate.regs.next.PC
+  fetch.ctrl_i.commit.bits.get := commitU.commit.archstate.pstate.next.PC
 
   // --- Fetch PC from Mem ---
   fetch.mem_io <> mem_io.inst
@@ -134,7 +134,7 @@ class Pipeline(params: PipelineParams) extends Module {
   executer.io.rVal1 := rVal1
   executer.io.rVal2 := rVal2
   executer.io.rVal3 := rVal3
-  executer.io.nzcv := curr_state.NZCV
+  executer.io.nzcv := curr_state.flags.NZCV
 
   // connect BranchUnit interface
   brancher.io.dinst := issued_dinst
@@ -284,7 +284,3 @@ class Pipeline(params: PipelineParams) extends Module {
   }
 }
 
-class FullStateBundle extends Bundle {
-  val rfile = Vec(REG_N, DATA_T)
-  val regs = new PStateRegs
-}

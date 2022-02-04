@@ -38,8 +38,9 @@ object CommitInst {
 }
 
 class CommitArchStateIO(thidN: Int) extends Bundle {
-  val sel = Output(ValidTag(thidN))
-  val regs = new Bundle {
+  val tag = Output(UInt(log2Ceil(thidN).W))
+  val fire = Output(Bool())
+  val pstate = new Bundle {
     val curr = Input(new PStateRegs)
     val next = Output(new PStateRegs)
   }
@@ -83,15 +84,18 @@ class CommitUnit(thidN: Int) extends Module {
   commit.transplant.bits.get := commitQueue.io.deq.bits.inst
 
   // connect RFile's write interface
-  commit.archstate.sel.tag := tag
-  commit.archstate.sel.valid := commitQueue.io.deq.fire
+  commit.archstate.tag := tag
+  commit.archstate.fire := commitQueue.io.deq.fire
 
   // Default don't modify State
-  commit.archstate.regs.next := commit.archstate.regs.curr
+  commit.archstate.pstate.next := commit.archstate.pstate.curr
   commit.archstate.wr.en := false.B
   commit.archstate.wr.addr := commitQueue.io.deq.bits.rd(0).bits
   commit.archstate.wr.data := commitQueue.io.deq.bits.res(0)
   commit.archstate.wr.tag := tag
+
+  commit.archstate.pstate.next.flags.isException := exception
+  commit.archstate.pstate.next.flags.isUndef := undef
 
   // WriteBack
   val instrumentReady = Wire(Bool())
@@ -138,12 +142,12 @@ class CommitUnit(thidN: Int) extends Module {
       commit.transplant.valid := true.B
     }.otherwise {
       when(branch_taken) {
-        commit.archstate.regs.next.PC := commitQueue.io.deq.bits.br_taken.bits
+        commit.archstate.pstate.next.PC := commitQueue.io.deq.bits.br_taken.bits
       }.otherwise {
-        commit.archstate.regs.next.PC := commit.archstate.regs.curr.PC + 4.U
+        commit.archstate.pstate.next.PC := commit.archstate.pstate.curr.PC + 4.U
       }
       when(commitQueue.io.deq.bits.nzcv.valid) {
-        commit.archstate.regs.next.NZCV := commitQueue.io.deq.bits.nzcv.bits
+        commit.archstate.pstate.next.flags.NZCV := commitQueue.io.deq.bits.nzcv.bits
       }
     }
   }
@@ -152,7 +156,7 @@ class CommitUnit(thidN: Int) extends Module {
   val deq = IO(Decoupled(new CommitInstrument(thidN)))
   instrumentReady := deq.ready
   deq.valid := lastCommitCycle
-  deq.bits.pc := commit.archstate.regs.curr.PC
+  deq.bits.pc := commit.archstate.pstate.curr.PC
 
   assert((commitQueue.io.deq.fire && deq.fire) || (!commitQueue.io.deq.fire && !deq.fire), "Both deq and commitQueue must dequeue at the same time")
 }

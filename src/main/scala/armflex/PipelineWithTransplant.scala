@@ -128,15 +128,12 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   // -------- Pipeline ---------
   // Get state from Issue
   pipeline.archstate.issue.ready := true.B
-  pipeline.archstate.issue.sel.tag <> archstate.pstate.issue.thread
-  pipeline.archstate.issue.regs.curr <> archstate.pstate.issue.pregs
+  pipeline.archstate.issue.sel.tag <> archstate.pstateIO.issue.thread
+  pipeline.archstate.issue.regs.curr <> archstate.pstateIO.issue.pstate
   pipeline.archstate.issue.rd <> archstate.rfile_rd
 
   // Writeback state from commit
-  archstate.pstate.commit.curr <> pipeline.archstate.commit.regs.curr
-  archstate.pstate.commit.next.valid := pipeline.archstate.commit.sel.valid
-  archstate.pstate.commit.next.tag := pipeline.archstate.commit.sel.tag
-  archstate.pstate.commit.next.bits.get := pipeline.archstate.commit.regs.next
+  archstate.pstateIO.commit <> pipeline.archstate.commit
   archstate.rfile_wr <> pipeline.archstate.commit.wr
 
   // -------- Stats ------
@@ -156,23 +153,23 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   transplantU.mem2trans.dataFault := 0.U.asTypeOf(transplantU.mem2trans.dataFault) // pipeline.mem_io.dataFault
 
   // Update State - Highjack commit ports from pipeline
-  archstate.pstate.transplant.thread := transplantU.trans2cpu.thread
+  archstate.pstateIO.transplant.thread := transplantU.trans2cpu.thread
   pipeline.archstate.commit.ready := !transplantU.trans2cpu.updatingPState
   transplantU.cpu2trans.rfile_wr <> pipeline.archstate.commit.wr
   transplantU.cpu2trans.doneCPU := pipeline.transplantIO.done
   when(transplantU.trans2cpu.updatingPState) {
     archstate.rfile_wr <> transplantU.trans2cpu.rfile_wr
-    archstate.pstate.commit.next.valid := true.B
-    archstate.pstate.commit.next.tag := transplantU.trans2cpu.thread
-    archstate.pstate.commit.next.bits.get := transplantU.trans2cpu.pregs
-    transplantU.cpu2trans.pregs := archstate.pstate.commit.curr
+    archstate.pstateIO.commit.fire := true.B
+    archstate.pstateIO.commit.tag := transplantU.trans2cpu.thread
+    archstate.pstateIO.commit.pstate.next := transplantU.trans2cpu.pstate
+    transplantU.cpu2trans.pstate := archstate.pstateIO.commit.pstate.curr
   }.otherwise {
     // Read State for Host
-    transplantU.cpu2trans.pregs := archstate.pstate.transplant.pregs
+    transplantU.cpu2trans.pstate := archstate.pstateIO.transplant.pstate
   }
   pipeline.transplantIO.start.valid := transplantU.trans2cpu.start
   pipeline.transplantIO.start.tag := transplantU.trans2cpu.thread
-  pipeline.transplantIO.start.bits.get := transplantU.trans2cpu.pregs.PC
+  pipeline.transplantIO.start.bits.get := transplantU.trans2cpu.pstate.PC
   // Transplant from Host
   transplantU.host2trans <> hostIO.host2trans
   transplantU.trans2host <> hostIO.trans2host
@@ -184,11 +181,11 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   instrument <> pipeline.instrument
 
   if(false) { // TODO Conditional assertions and printing
-    when(archstate.pstate.commit.next.valid) {
-      printf(p"Pipeline:Commit:THID[${archstate.pstate.commit.next.tag}]:PC[0x${Hexadecimal(pipeline.archstate.commit.regs.next.PC)}]->PC[0x${Hexadecimal(pipeline.archstate.commit.regs.next.PC)}]\n")
+    when(archstate.pstateIO.commit.fire) {
+      printf(p"Pipeline:Commit:THID[${archstate.pstateIO.commit.tag}]:PC[0x${Hexadecimal(pipeline.archstate.commit.pstate.next.PC)}]->PC[0x${Hexadecimal(pipeline.archstate.commit.pstate.next.PC)}]\n")
     }
     when(pipeline.transplantIO.done.valid) {
-      printf(p"Pipeline:Transplant:THID[${archstate.pstate.commit.next.tag}]:PC[0x${Hexadecimal(archstate.pstate.commit.curr.PC)}]->Transplant\n")
+      printf(p"Pipeline:Transplant:THID[${archstate.pstateIO.commit.tag}]:PC[0x${Hexadecimal(archstate.pstateIO.commit.pstate.curr.PC)}]->Transplant\n")
     }
   }
 
@@ -218,8 +215,8 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
     dbg.bits.get.issuingTransplant := pipeline.dbg.issue.transplant
     dbg.bits.get.issue.valid := pipeline.dbg.issue.valid
 
-    dbg.bits.get.commit.tag := RegNext(pipeline.archstate.commit.sel.tag)
-    dbg.bits.get.commit.valid := RegNext(pipeline.archstate.commit.sel.valid)
+    dbg.bits.get.commit.tag := RegNext(pipeline.archstate.commit.tag)
+    dbg.bits.get.commit.valid := RegNext(pipeline.archstate.commit.fire)
     dbg.bits.get.commitIsTransplant := RegNext(pipeline.transplantIO.done.valid)
     dbg.bits.get.transplant.valid := transplantU.trans2cpu.start
     dbg.bits.get.transplant.tag := transplantU.trans2cpu.thread

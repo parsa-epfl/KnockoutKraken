@@ -37,12 +37,12 @@ int registerThreadWithProcess(const FPGAContext *c, uint32_t thread_id,
  * 
  * @note this function will not start the transplant but only bind.
  */
-int registerAndPushState(const struct FPGAContext *c, uint32_t thread_id, uint32_t process_id, const struct ArmflexArchState *state) {
+int registerAndPushState(const struct FPGAContext *c, uint32_t thread_id, uint32_t process_id, ArmflexArchState *state) {
   // 1. register thread id.
   int res = registerThreadWithProcess(c, thread_id, process_id);
   if(res != 0) return res;
   // 2. push the state.
-  res = transplant_pushState(c, thread_id, (uint64_t *)state, ARMFLEX_TOT_REGS);
+  res = transplant_pushState(c, thread_id, (uint64_t *)state);
   return res;
 }
 
@@ -57,12 +57,12 @@ int registerAndPushState(const struct FPGAContext *c, uint32_t thread_id, uint32
  * @note Please make sure that target thread must be ready to be transplanted back. Unknown case will be happened if thread is still working.
  * FIXME: Add mechanism to stop the execution of that thread on FPGA
  */
-int transplantBack(const struct FPGAContext *c, uint32_t thread_id, struct ArmflexArchState *state) {
+int transplantBack(const struct FPGAContext *c, uint32_t thread_id, ArmflexArchState *state) {
   // 1. unregister thread id.
   int res = registerThreadWithProcess(c, thread_id, 0);
   if(res != 0) return res;
   // 2. Read staste.
-  res = transplant_getState(c, thread_id, (uint64_t *)state, ARMFLEX_TOT_REGS);
+  res = transplant_getState(c, thread_id, (uint64_t *)state);
   return res;
 }
 
@@ -86,14 +86,13 @@ int transplant_singlestep(const FPGAContext *c, uint32_t thid, uint32_t asid, Ar
   return res;
 }
 
-int transplant_getState(const FPGAContext *c, uint32_t thread_id,
-                        uint64_t *state, size_t regCount) {
+int transplant_getState(const FPGAContext *c, uint32_t thread_id, uint64_t *state) {
   const uint32_t axi_transplant_base = c->base_address.axil_base + c->base_address.transplant_data;
   int ret = 0;
   uint32_t reg_val1;
   uint32_t reg_val2;
   size_t base_offset = axi_transplant_base + (thread_id << 7) * 4;
-  for (int reg = 0; reg < regCount; reg++) {
+  for (int reg = 0; reg < ARCH_PSTATE_TOT_REGS; reg++) {
     ret = readAXIL(c, base_offset + (2 * reg) * 4, &reg_val1);
     if (ret)
       return ret;
@@ -106,14 +105,13 @@ int transplant_getState(const FPGAContext *c, uint32_t thread_id,
 }
 
 // TODO: Strongly suggest that functions are named in camel style.
-int transplant_pushState(const FPGAContext *c, uint32_t thread_id,
-                         uint64_t *state, size_t regCount) {
+int transplant_pushState(const FPGAContext *c, uint32_t thread_id, uint64_t *state) {
   const uint32_t axi_transplant_base = c->base_address.axil_base + c->base_address.transplant_data;
   int ret = 0;
   uint32_t reg_val1;
   uint32_t reg_val2;
   size_t base_offset = axi_transplant_base + (thread_id << 7) * 4;
-  for (int reg = 0; reg < regCount; reg++) {
+  for (int reg = 0; reg < ARCH_PSTATE_TOT_REGS; reg++) {
     reg_val1 = (uint64_t)state[reg];
     reg_val2 = ((uint64_t)state[reg] >> 32);
     ret = writeAXIL(c, base_offset + (2 * reg) * 4, reg_val1);
