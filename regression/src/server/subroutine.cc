@@ -50,8 +50,8 @@ void handleDRAMSubroute(TopDUT &dut) {
       dut->M_AXI_arready = 0;
       dut->eval();
 
-      printf("SHELL:FPGA:AXI DRAM:RD[0x%lx]:BURST[%i]\n", addr_byte, burst_count);
-      printf("           WORD ADDR[0x%lx]\n", BYTE_TO_WORD(addr_byte));
+      //printf("SHELL:FPGA:AXI DRAM:RD[0x%lx]:BURST[%i]\n", addr_byte, burst_count);
+      //printf("           WORD ADDR[0x%lx]\n", BYTE_TO_WORD(addr_byte));
       for (int curr_block = 0; curr_block < burst_count; ++curr_block) {
         size_t addr_word = BYTE_TO_WORD(addr_byte) + curr_block * WORDS_PER_BLOCK;
 
@@ -88,8 +88,8 @@ void handleDRAMSubroute(TopDUT &dut) {
 
       dut->M_AXI_awready = 0;
       dut->eval();
-      printf("SHELL:FPGA:AXI DRAM:WR[0x%lx]:BURST[%u]\n", addr_byte, burst_count);
-      printf("           WORD ADDR[0x%lx]\n", BYTE_TO_WORD(addr_byte));
+      //printf("SHELL:FPGA:AXI DRAM:WR[0x%lx]:BURST[%u]\n", addr_byte, burst_count);
+      //printf("           WORD ADDR[0x%lx]\n", BYTE_TO_WORD(addr_byte));
       for (int curr_block = 0; curr_block < burst_count; ++curr_block) {
 
         // setup the write to be ready.
@@ -167,7 +167,7 @@ void AXILRoutine(TopDUT &dut, IPCServer &ipc) {
 
     CHECK(dut, result.byte_size == 4, "AXIL write size must be 4B."); // only one word.
     if (result.is_write) {
-      printf("SHELL:HOST:AXIL:WR[0x%lx]:BURST[%lu]:DATA[%x]\n", result.addr, result.byte_size, result.w_data);
+      //printf("SHELL:HOST:AXIL:WR[0x%lx]:BURST[%lu]:DATA[%x]\n", result.addr, result.byte_size, result.w_data);
       // it's a writing request, activate AXI writing request channel.
       dut->S_AXIL_awaddr = result.addr;
       dut->S_AXIL_awprot = 0;
@@ -243,7 +243,7 @@ void AXILRoutine(TopDUT &dut, IPCServer &ipc) {
 
       // read result
       // dut.decoupleCurrentRoutine(lock);
-      printf("SHELL:HOST:AXIL:RD[0x%lx]:BURST[%lu]:DATA[0x%x]\n", result.addr, result.byte_size, read_res);
+      //printf("SHELL:HOST:AXIL:RD[0x%lx]:BURST[%lu]:DATA[0x%x]\n", result.addr, result.byte_size, read_res);
       if (!ipc.reply(&read_res, 1)) {
         dut.reportError("   ERROR:SOCKET:AXIL:RD:REPLY\n");
         TICK(dut);
@@ -263,8 +263,8 @@ static int AXI_DRAM_access(TopDUT &dut, IPCServer &ipc, MemoryRequest req) {
   uint64_t addr_byte = req.addr & dut.dram_addr_mask; // DRAM is addressed in 32bit
   uint64_t addr_word = BYTE_TO_WORD(addr_byte);
   if (req.is_write) {
-    printf("SHELL:HOST:AXI DRAM:WR[0x%lx]:BURST[%lu]\n", addr_byte, req.byte_size);
-    printf("           WORD ADDR[0x%lx]\n", addr_word);
+    //printf("SHELL:HOST:AXI DRAM:WR[0x%lx]:BURST[%lu]\n", addr_byte, req.byte_size);
+    //printf("           WORD ADDR[0x%lx]\n", addr_word);
     memcpy(&dut.dram[addr_word], &req.w_data[0], req.byte_size);
     uint32_t data = 0;
     if (!ipc.reply(&data, 1)) {
@@ -272,8 +272,8 @@ static int AXI_DRAM_access(TopDUT &dut, IPCServer &ipc, MemoryRequest req) {
       return -1;
     }
   } else {
-    printf("SHELL:HOST:AXI DRAM:RD[0x%lx]:BURST[%lu]\n", addr_byte, req.byte_size);
-    printf("           WORD ADDR[0x%lx]\n", addr_word);
+    //printf("SHELL:HOST:AXI DRAM:RD[0x%lx]:BURST[%lu]\n", addr_byte, req.byte_size);
+    //printf("           WORD ADDR[0x%lx]\n", addr_word);
     memcpy(&req.w_data[0], &dut.dram[addr_word], req.byte_size);
     if (!ipc.reply(req.w_data, req.byte_size / 4)) {
       dut.reportError("   ERROR:SOCKET:AXI:DRAM RD:REPLY\n");
@@ -306,7 +306,7 @@ void AXIRoutine(TopDUT &dut, IPCServer &ipc) {
       }
     } else if (result.is_write) {
       // it's a writing request, activate AXI writing request channel.
-      printf("SHELL:HOST:AXI FPGA:WR[0x%lx]:BURST[%lu]\n", result.addr, result.byte_size);
+      //printf("SHELL:HOST:AXI FPGA:WR[0x%lx]:BURST[%lu]\n", result.addr, result.byte_size);
       dut->S_AXI_awaddr = result.addr - dut.axi_base_addr; // get rid of base address.
       dut->S_AXI_awsize = 6; // 64Byte
       dut->S_AXI_awburst = 1;
@@ -361,7 +361,7 @@ void AXIRoutine(TopDUT &dut, IPCServer &ipc) {
       // dut.attachCurrentRoutine(lock);
 
     } else {
-      printf("SHELL:HOST:AXI FPGA:RD[0x%lx]:BURST[%lu]\n", result.addr, result.byte_size);
+      //printf("SHELL:HOST:AXI FPGA:RD[0x%lx]:BURST[%lu]\n", result.addr, result.byte_size);
       // read operation
       dut->S_AXI_araddr = result.addr - dut.axi_base_addr;
       dut->S_AXI_arlen = (result.byte_size / BYTES_PER_BLOCK) - 1;
