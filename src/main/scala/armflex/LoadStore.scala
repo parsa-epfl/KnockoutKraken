@@ -115,7 +115,7 @@ class LDSTUnit extends Module {
   // WZR, XZR, and SP
   val rVal1 = WireInit(Mux(io.dinst.rs1 === 31.U, 0.U, io.rVal1))
   val rVal2 = WireInit(Mux(io.dinst.rs2 === 31.U, 0.U, io.rVal2))
-  val rVal3 = WireInit(Mux(io.dinst.imm(4,0) === 31.U, 0.U, io.rVal3))
+  val rVal3 = WireInit(Mux(io.dinst.rd.bits === 31.U, 0.U, io.rVal3))
 
   // Decode All variants
   val size = WireInit(io.dinst.op(1, 0))
@@ -231,21 +231,15 @@ class LDSTUnit extends Module {
   minst.isLoad := isLoad
 
   minst.req(0).addr := ldst_address
-  minst.req(0).data := data_1
-  minst.req(0).reg := io.dinst.rs2
+  minst.req(0).data := data_2
+  minst.req(0).reg := io.dinst.rd.bits
+
   // For Pair LD/ST
   val dbytes = 1.U << size
   minst.isPair := isPair
   minst.req(1).addr := ldst_address + dbytes
   minst.req(1).data := data_1
   minst.req(1).reg := io.dinst.rs2
-
-  when(isPair) {
-    // Pair stores changes destination
-    minst.req(0).data := data_2
-    minst.req(0).reg := io.dinst.rd.bits
-  }
-
 
   // if wback then
   //   if wb_unknown then
