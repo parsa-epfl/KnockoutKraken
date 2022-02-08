@@ -26,7 +26,7 @@ object BRAMPortDriver {
       }
       target.wr(state.pc, baseOffset + ARCH_PC_OFFST)
       target.wr(state.sp, baseOffset + ARCH_SP_OFFST)
-      target.wr(state.nzcv, baseOffset + ARCH_PSTATE_OFFST)
+      target.wr(state.nzcv, baseOffset + ARCH_FLAGS_OFFST)
     }
 
     def wr(bits:BigInt, offst: BigInt) = {
@@ -65,7 +65,7 @@ object BRAMPortDriver {
       }
       val pc = target.rd(baseOffset + ARCH_PC_OFFST)
       val sp = target.rd(baseOffset + ARCH_SP_OFFST)
-      val nzcv = target.rd(baseOffset + ARCH_PSTATE_OFFST)
+      val nzcv = target.rd(baseOffset + ARCH_FLAGS_OFFST)
 
       val pstate = new PState(xregs.toList: List[BigInt], pc: BigInt, sp: BigInt, nzcv.toInt: Int)
       pstate
