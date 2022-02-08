@@ -27,12 +27,12 @@ allTests=(
   "check-flag-undef"
   "check-flag-transplant"
   "test-ldst-pair-all-sizes"
-  "test-pressure-mmu-same-address"
-
+  "ldr-wback-addr"
   )
 
 tbd=(
   "out-of-page-bound-pair-load"
+  "test-pressure-mmu-same-address"
 )
 
 # 3. Run each
