@@ -28,14 +28,17 @@ import armflex.util._
  */
 
 class PStateFlags extends Bundle {
+  val isICountDepleted = Bool()
   val isUndef = Bool()
   val isException = Bool()
   val NZCV = NZCV_T
 }
 
 class PStateRegs extends Bundle {
-  val PC = DATA_T
+  val icountBudget = UInt(32.W)
+  val icount = UInt(32.W)
   val flags = new PStateFlags
+  val PC = DATA_T
 }
 
 object PStateRegs {
@@ -45,6 +48,9 @@ object PStateRegs {
     wire.flags.NZCV := NZCV_X
     wire.flags.isException := false.B
     wire.flags.isUndef := false.B
+    wire.flags.isICountDepleted := false.B
+    wire.icount := 0.U
+    wire.icountBudget := 0.U
     wire
   }
   def getNZCV(bits: UInt): UInt = bits(3, 0)
@@ -144,13 +150,25 @@ class ArchState(thidN: Int, withDbg: Boolean) extends Module {
     pstateMem(pstateIO.commit.tag) := pstateIO.commit.pstate.next
   }
 
-  pstateIO.commit.ready := DontCare // See PipelineWithTransplant
-  private val icountMem = Seq.fill(thidN)(Counter(32))
-  for (thid <- 0 until icountMem.size) {
-    when(pstateIO.commit.fire && pstateIO.commit.tag === thid.U) {
-      icountMem(thid).inc()
+  // icount management
+  when(pstateIO.commit.isCommitUnit
+        && pstateIO.commit.fire 
+        && !pstateIO.commit.pstate.next.flags.isException 
+        && !pstateIO.commit.pstate.next.flags.isUndef) {
+    pstateMem(pstateIO.commit.tag).icount := pstateMem(pstateIO.commit.tag).icount + 1.U
+    when(pstateIO.commit.last) {
+      pstateMem(pstateIO.commit.tag).flags.isICountDepleted := true.B
     }
   }
+
+  when(pstateMem(pstateIO.commit.tag).icountBudget === 0.U) {
+    pstateIO.commit.last := false.B // Just execute normally, no icount
+  }.otherwise {
+    pstateIO.commit.last := (pstateMem(pstateIO.commit.tag).icount + 1.U) === pstateMem(pstateIO.commit.tag).icountBudget // See PipelineWithTransplant
+    
+  }
+
+  pstateIO.commit.ready := true.B // This signal get's multiplexed higher in the hierarchy
 
   val dbg = IO(new Bundle {
     val vecState = if(withDbg) Some(Output(Vec(thidN, new FullStateBundle))) else None

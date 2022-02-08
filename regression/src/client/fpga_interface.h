@@ -119,21 +119,30 @@ typedef struct MessageFPGA
 #define ARCH_PSTATE_PC_OFFST     (32)
 #define ARCH_PSTATE_SP_OFFST     (33)
 #define ARCH_PSTATE_FLAGS_OFFST  (34)
-#define ARCH_PSTATE_TOT_REGS     (35)
+#define ARCH_PSTATE_ICOUNT_OFFST (35)
+#define ARCH_PSTATE_TOT_REGS     (36)
 #define ARCH_PSTATE_NF_MASK      (3)    // 64bit 3
 #define ARCH_PSTATE_ZF_MASK      (2)    // 64bit 2
 #define ARCH_PSTATE_CF_MASK      (1)    // 64bit 1
 #define ARCH_PSTATE_VF_MASK      (0)    // 64bit 0
 
-#define FLAGS_GET_NZCV(flags)           (flags & 0xF)
-#define FLAGS_GET_IS_EXCEPTION(flags)   (flags & (1 << 4))
-#define FLAGS_GET_IS_UNDEF(flags)       (flags & (1 << 5))
+#define FLAGS_GET_NZCV(flags)               (flags & 0xF)
+#define FLAGS_GET_IS_EXCEPTION(flags)       (flags & (1 << 4))
+#define FLAGS_GET_IS_UNDEF(flags)           (flags & (1 << 5))
+#define FLAGS_GET_IS_ICOUNT_DEPLETED(flags) (flags & (1 << 6))
 
 typedef struct DevteroflexArchState {
 	uint64_t xregs[32];
 	uint64_t pc;
 	uint64_t sp;
 	uint64_t flags;
+    union {
+        uint64_t icountRegs;
+        struct {
+            uint32_t icount;
+            uint32_t icountBudget;
+        };
+    };
 } DevteroflexArchState;
 
 int registerThreadWithProcess(const struct FPGAContext *c, uint32_t thread_id, uint32_t process_id);
