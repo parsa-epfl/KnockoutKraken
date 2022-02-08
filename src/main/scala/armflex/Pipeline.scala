@@ -76,7 +76,11 @@ class Pipeline(params: PipelineParams) extends Module {
   // Wake on TLB miss completed
   fetch.ctrl_i.memWake := mem_io.wake
   // Wake on instruction commit
-  fetch.ctrl_i.commit.valid := commitU.commit.commited.valid && !commitU.commit.transplant.valid && !transplantIO.stopCPU(commitU.commit.commited.tag).asBool
+  fetch.ctrl_i.commit.valid := 
+    commitU.commit.commited.valid && 
+    !commitU.commit.transplant.valid && 
+    !transplantIO.stopCPU(commitU.commit.commited.tag).asBool && 
+    !commitU.commit.archstate.last
   fetch.ctrl_i.commit.tag := commitU.commit.commited.tag
   fetch.ctrl_i.commit.bits.get := commitU.commit.archstate.pstate.next.PC
 
@@ -234,7 +238,7 @@ class Pipeline(params: PipelineParams) extends Module {
   when(transplantIO.stopCPU(commitU.commit.commited.tag).asBool) {
     transplantIO.done.valid := commitU.commit.commited.valid
   }.otherwise {
-    transplantIO.done.valid := commitU.commit.transplant.valid
+    transplantIO.done.valid := commitU.commit.transplant.valid || (commitU.commit.archstate.fire && commitU.commit.archstate.last)
   }
 
   // Flushing ----------------------------------------------------------------

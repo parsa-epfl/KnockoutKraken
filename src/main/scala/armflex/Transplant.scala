@@ -115,8 +115,10 @@ class TransplantUnit(thidN: Int) extends Module {
         stateRegType := r_PC
       }.elsewhen(currReg === (ARCH_SP_OFFST - 1).U) {
         stateRegType := r_SP
-      }.elsewhen(currReg === (ARCH_PSTATE_OFFST - 1).U) {
+      }.elsewhen(currReg === (ARCH_FLAGS_OFFST - 1).U) {
         stateRegType := r_FLAGS
+      }.elsewhen(currReg === (ARCH_ICOUNT_OFFST - 1).U) {
+        stateRegType := r_ICOUNT
       }.elsewhen(currReg === (ARCH_MAX_OFFST - 1).U) {
         stateRegType := r_DONE
       }
@@ -154,11 +156,15 @@ class TransplantUnit(thidN: Int) extends Module {
     trans2cpu.pstate.PC := hostTransPort.DO
   }.elsewhen(stateRegTypeCurr === r_SP) {
     // TODO SP is not used yet
-    //hostTransPort.DI := cpu2trans.pstate.SP // 
-    //trans2cpu.pstate.SP := hostTransPort.DO //
+    //hostTransPort.DI := cpu2trans.pstate.SP 
+    //trans2cpu.pstate.SP := hostTransPort.DO
   }.elsewhen(stateRegTypeCurr === r_FLAGS) {
     hostTransPort.DI := cpu2trans.pstate.flags.asUInt
     trans2cpu.pstate.flags := hostTransPort.DO.asTypeOf(trans2cpu.pstate.flags.cloneType)
+  }.elsewhen(stateRegTypeCurr === r_ICOUNT) {
+    hostTransPort.DI := Cat(cpu2trans.pstate.icountBudget, cpu2trans.pstate.icount)
+    trans2cpu.pstate.icount := hostTransPort.DO(31, 0)
+    trans2cpu.pstate.icountBudget := hostTransPort.DO(63,32)
   }
 
   // RFile response comes 1 cycle delay
@@ -180,10 +186,11 @@ class TransplantUnit(thidN: Int) extends Module {
 // In parsa-epfl/qemu/fa-qflex
 // Read fa-qflex-helper.c to get indexes of values
 object Trans2State {
-  val r_DONE :: r_XREGS :: r_PC :: r_SP :: r_FLAGS :: Nil = Enum(5)
+  val r_DONE :: r_XREGS :: r_PC :: r_SP :: r_FLAGS :: r_ICOUNT :: Nil = Enum(6)
   val ARCH_XREGS_OFFST = 0
   val ARCH_PC_OFFST = 32
   val ARCH_SP_OFFST = 33
-  val ARCH_PSTATE_OFFST = 34
-  val ARCH_MAX_OFFST = ARCH_PSTATE_OFFST + 1
+  val ARCH_FLAGS_OFFST = 34
+  val ARCH_ICOUNT_OFFST = 35
+  val ARCH_MAX_OFFST = ARCH_ICOUNT_OFFST + 1
 }

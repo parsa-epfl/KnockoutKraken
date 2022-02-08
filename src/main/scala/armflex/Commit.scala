@@ -46,6 +46,9 @@ class CommitArchStateIO(thidN: Int) extends Bundle {
   }
   val wr = Flipped(new RFileIO.WRPort(thidN))
   val ready = Input(Bool())
+  val last = Input(Bool())
+  val isTransplantUnit = Output(Bool())
+  val isCommitUnit = Output(Bool())
 }
 
 class CommitInstrument(thidN: Int) extends Bundle {
@@ -96,6 +99,8 @@ class CommitUnit(thidN: Int) extends Module {
 
   commit.archstate.pstate.next.flags.isException := exception
   commit.archstate.pstate.next.flags.isUndef := undef
+  commit.archstate.isTransplantUnit := false.B
+  commit.archstate.isCommitUnit := true.B
 
   // WriteBack
   val instrumentReady = Wire(Bool())

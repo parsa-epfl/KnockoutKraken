@@ -39,7 +39,7 @@ tbd=(
 
 for t in ${allTests[@]}; do
   # 3.1 start the server
-  ./KnockoutSimulator &
+  ./KnockoutSimulator noTrace &
   sleep 1
   # 3.2 start the client
   ./KnockoutTestGenerator $t

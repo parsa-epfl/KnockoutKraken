@@ -154,7 +154,7 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
 
   // Update State - Highjack commit ports from pipeline
   archstate.pstateIO.transplant.thread := transplantU.trans2cpu.thread
-  pipeline.archstate.commit.ready := !transplantU.trans2cpu.updatingPState
+  pipeline.archstate.commit.ready := archstate.pstateIO.commit.ready && !transplantU.trans2cpu.updatingPState
   transplantU.cpu2trans.rfile_wr <> pipeline.archstate.commit.wr
   transplantU.cpu2trans.doneCPU := pipeline.transplantIO.done
   when(transplantU.trans2cpu.updatingPState) {
@@ -162,6 +162,8 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
     archstate.pstateIO.commit.fire := true.B
     archstate.pstateIO.commit.tag := transplantU.trans2cpu.thread
     archstate.pstateIO.commit.pstate.next := transplantU.trans2cpu.pstate
+    archstate.pstateIO.commit.isTransplantUnit := true.B
+    archstate.pstateIO.commit.isCommitUnit := false.B
     transplantU.cpu2trans.pstate := archstate.pstateIO.commit.pstate.curr
   }.otherwise {
     // Read State for Host

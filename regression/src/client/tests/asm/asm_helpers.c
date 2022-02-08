@@ -16,6 +16,7 @@ void initArchState(
   state->sp = 0;
   state->pc = pc;
   state->flags = 0;
+  state->icountRegs = 0;
 }
 
 void initState_pressure_ldp_stp(
