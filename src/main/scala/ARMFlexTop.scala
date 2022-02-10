@@ -57,6 +57,8 @@ class MemorySystem(params: MemoryHierarchyParams) extends Module {
   axiShell_io.M_AXI_DMA_dcacheR <> dcacheAdaptor.M_DMA_R
   axiShell_io.M_AXI_DMA_icacheW <> icacheAdaptor.M_DMA_W
   axiShell_io.M_AXI_DMA_dcacheW <> dcacheAdaptor.M_DMA_W
+
+  // TODO: Add assertion of the cache range (cache should not touch the page table), and MMU should only touch the table address.
 }
 
 object MemorySystemVerilogEmitter extends App {
