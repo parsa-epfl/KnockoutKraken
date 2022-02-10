@@ -63,10 +63,8 @@ case class MemoryHierarchyParams(
    *
    * @note sync this function with PageDemanderDriver.vpn2ptSetPA
    */
-  def vpn2ptSetPA(asid: UInt, vpn: UInt) = {
-
-
-    def entryNumberInLog2 = pAddrW - log2Ceil(pageSize)
+  def vpn2ptSetPA(asid: UInt, vpn: UInt, PTEsPerLine: Int) = {
+    def lineNumberInLog2 = pAddrW - log2Ceil(pageSize) - log2Ceil(PTEsPerLine)
     //val reducedAsid: Iterator[Seq[Bool]] = asid.asBools.sliding(asid.getWidth/4, asid.getWidth/4)
     //val resAsidReduced = reducedAsid.map { case boolSeq: Seq[Bool] => 
     //    val vecBool: Vec[Bool] = VecInit(boolSeq)
@@ -75,7 +73,7 @@ case class MemoryHierarchyParams(
     //}
     //resAsidReduced.reduce(Cat(_,_))
     val pageset_number = Cat(vpn(vpn.getWidth-1, 6), asid)
-    Cat(pageset_number(entryNumberInLog2-1, 0) * 3.U(2.W), 0.U(6.W)) // Zero pad 6
+    Cat(pageset_number(lineNumberInLog2-1, 0) * 3.U(2.W), 0.U(6.W)) // Zero pad 6
   }
 }
 
