@@ -307,14 +307,6 @@ class BaseCache(
 //      }
 //    }
   }
-
-  // there should be no access to the Page Table Region.
-  when(u_dataBankManager.frontend_request_i.fire){
-    assert(
-      (u_dataBankManager.frontend_request_i.bits.addr << log2Ceil(params.blockSize / 8)) >= (1 << (params.pAddrWidth - 8)).U,
-      "It's forbidden for the cache to access the page table region."
-    )
-  }
 }
 
 object BaseCache {
