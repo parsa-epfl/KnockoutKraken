@@ -13,7 +13,7 @@ struct MemoryRequest {
   uint64_t addr;
   size_t byte_size;
   uint32_t is_write;
-  uint32_t w_data[1024]; // 4k at most
+  uint32_t w_data[1024]; // 4k at most // TODO: optimize the
 };
 
 struct MemoryRequestAXIL {

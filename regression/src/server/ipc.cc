@@ -78,7 +78,8 @@ bool IPCServer::getRequestAXIL(MemoryRequestAXIL *msg){
     if (read_number == -1) {
       switch(errno) {
         case EAGAIN:
-          return false;
+          if (curr_byte == 0) return false;
+          break;
         default:
           perror("ERROR:SOCKET:AXIL recv return error not handled.\n");
           error = true;
@@ -114,7 +115,8 @@ bool IPCServer::getRequestAXI(MemoryRequest *msg){
     if (read_number == -1) {
       switch(errno) {
         case EAGAIN:
-          return false;
+          if (curr_byte == 0) return false;
+          break;
         default:
           perror("ERROR:SOCKET:AXI recv return error not handled?\n");
           error = true;

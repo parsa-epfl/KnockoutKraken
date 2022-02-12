@@ -48,11 +48,14 @@ if(AWS_FPGA_LIBRARY_PATH)
 else()
   find_package(verilator REQUIRED)
   set(VERILATOR_ARGS +define+DEBUG=1'h1) #+define+STOP_COND=1'h0)
-  target_compile_definitions(KnockoutTestGenerator PUBLIC DEBUG)
+  #target_compile_definitions(KnockoutTestGenerator PUBLIC DEBUG)
   target_sources(KnockoutTestGenerator PRIVATE src/client/fpga_rtl.c)
+  target_sources(StressTest PRIVATE src/client/fpga_rtl.c src/client/ipc.c)
+
   add_executable(KnockoutSimulator src/server/main.cc src/server/dut.cc src/server/subroutine.cc src/server/ipc.cc)
   verilate(KnockoutSimulator SOURCES rtl/devteroflex_top.sv rtl/ARMFlexTop.v rtl/BRAMTDP.v rtl/MultAdd_3input.v TOP_MODULE ${SIMULATOR_TOP_MODULE} TRACE_FST VERILATOR_ARGS)
   target_link_libraries(KnockoutSimulator PRIVATE Threads::Threads)
-  target_sources(StressTest PRIVATE src/client/fpga_rtl.c src/client/ipc.c)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++20")
+  
 endif()
 
