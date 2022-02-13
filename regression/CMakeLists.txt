@@ -54,8 +54,6 @@ else()
 
   add_executable(KnockoutSimulator src/server/main.cc src/server/dut.cc src/server/subroutine.cc src/server/ipc.cc)
   verilate(KnockoutSimulator SOURCES rtl/devteroflex_top.sv rtl/ARMFlexTop.v rtl/BRAMTDP.v rtl/MultAdd_3input.v TOP_MODULE ${SIMULATOR_TOP_MODULE} TRACE_FST VERILATOR_ARGS)
-  target_link_libraries(KnockoutSimulator PRIVATE Threads::Threads)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++20")
-  
+  target_link_libraries(KnockoutSimulator PRIVATE Threads::Threads)  
 endif()
 
