@@ -180,7 +180,7 @@ class PageTableSetBuffer(
 
   if(true) { // TODO Conditional asserts
     val multiple_hit = (PopCount(hit_vector) === 1.U || PopCount(hit_vector) === 0.U)
-    when(!multiple_hit) {
+    when(!multiple_hit && state_r === sIdle) {
       printf(p"Multiple set hits detected:v[${Hexadecimal(pt_set_r.valids)}]:${pt_set_r.tags}\n")
       assert(multiple_hit, "There should be only one hit at most!!!")
     }
