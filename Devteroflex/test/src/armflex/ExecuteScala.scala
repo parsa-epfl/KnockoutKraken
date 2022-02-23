@@ -62,6 +62,7 @@ class DataProcessingUnitTest extends AnyFreeSpec with ChiselScalatestTester {
     dut.io.op.poke(opcode.U)
     dut.clock.step(1)
     val res = opcode.toInt match {
+      case OP_RBIT  => ExecuteModels.ReverseBit(reg, is32bit)
       case OP_REV   => ExecuteModels.ReverseBytes(reg, 1)
       case OP_REV32 => ExecuteModels.ReverseBytes(reg, 2)
       case OP_REV16 => ExecuteModels.ReverseBytes(reg, 4)
@@ -85,6 +86,15 @@ class DataProcessingUnitTest extends AnyFreeSpec with ChiselScalatestTester {
       )
     }
   }
+  "dac00063:rbit    x3,x3" in {
+    test(new DataProcessing).withAnnotations(anno) { dut =>
+      dataProcessingPokeExpect(
+        dut,
+        BigInt("dac00063", 16),
+        BigInt("1000000000000", 16)
+      )
+    }
+  }
 }
 
 object ExecuteModels {
@@ -98,6 +108,14 @@ object ExecuteModels {
       highestBit = highestBit + 1
     }
     return highestBit
+  }
+
+  def ReverseBit(bits: BigInt, is32bit: Boolean): BigInt = {
+    if(is32bit) {
+      BigInt(bits.toString(2).reverse.padTo(32, '0'), 2)
+    } else {                         
+      BigInt(bits.toString(2).reverse.padTo(64, '0'), 2)
+    }
   }
 
   def Replicate(bits: BigInt, maxM: Int, maxN: Int): BigInt = {
