@@ -1,7 +1,3 @@
-#include <stdio.h>
-#include <assert.h>
-#include <strings.h> 
-
 #define STR(x)  #x
 #define XSTR(s) STR(s)
 #define magic_inst(val) __asm__ __volatile__ ( "hint " XSTR(val) " \n\t"  )
@@ -14,23 +10,23 @@
 #define DEVTEROFLEX_FLOW_STOP  (91)
 #define DO_DEVTEROFLEX_OP(op) magic_inst(DEVTEROFLEX_OP); magic_inst(op)
 
+#include <stdio.h>
+#include <assert.h>
+
 int main(){
-  FILE *f = fopen(__FILE__, "r");
+	FILE *f = fopen(__FILE__, "r");
 
-  DO_DEVTEROFLEX_OP(DEVTEROFLEX_FLOW_START);
+	DO_DEVTEROFLEX_OP(DEVTEROFLEX_FLOW_START);
 
-  char big_buffer[2048];
+	char x = getc(f);
 
-  bzero(big_buffer, 2048);
+	DO_DEVTEROFLEX_OP(DEVTEROFLEX_FLOW_STOP);
 
-  assert(fread(big_buffer, 1, 2048, f) > 0);
+	assert(x == '#' && "Expect to get the char #.");
 
-  DO_DEVTEROFLEX_OP(DEVTEROFLEX_FLOW_STOP);
+	puts("Success!");
 
-  puts("The content: ");
-  puts(big_buffer);
-
-  fclose(f);
-  return 0;
-
+	fclose(f);
+	return 0;
 }
+
