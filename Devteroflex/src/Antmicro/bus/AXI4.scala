@@ -37,6 +37,8 @@ class AXI4AW(val addrWidth : Int) extends Bundle{
   val awqos = Output(UInt(AXI4.qosWidth.W))
   val awvalid = Output(Bool())
   val awready = Input(Bool())
+
+  def fire = this.awready && this.awvalid
 }
 
 object AXI4AW {
@@ -82,6 +84,8 @@ class AXI4W(val dataWidth : Int) extends Bundle{
   val wlast = Output(Bool())
   val wvalid = Output(Bool())
   val wready = Input(Bool())
+
+  def fire = this.wready && this.wvalid
 }
 
 object AXI4W{
@@ -114,6 +118,8 @@ class AXI4B extends Bundle{
   val bresp = Input(UInt(AXI4.respWidth.W))
   val bvalid = Input(Bool())
   val bready = Output(Bool())
+
+  def fire = this.bready && this.bvalid
 }
 
 object AXI4B{
@@ -150,6 +156,8 @@ class AXI4AR(val addrWidth : Int) extends Bundle{
   val arqos = Output(UInt(AXI4.qosWidth.W))
   val arvalid = Output(Bool())
   val arready = Input(Bool())
+
+  def fire = this.arready && this.arvalid
 }
 
 object AXI4AR{
@@ -196,6 +204,8 @@ class AXI4R(val dataWidth : Int) extends Bundle{
   val rlast = Input(Bool())
   val rvalid = Input(Bool())
   val rready = Output(Bool())
+
+  def fire = this.rready && this.rvalid
 }
 
 object AXI4R{
