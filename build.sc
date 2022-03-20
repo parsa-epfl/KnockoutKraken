@@ -1,6 +1,6 @@
 import mill._, scalalib._
 import $ivy.`com.lihaoyi::mill-contrib-scalapblib:`
-import $ivy.`com.lihaoyi::mill-contrib-bloop:$MILL_VERSION`
+import $ivy.`com.lihaoyi::mill-contrib-bloop:`
 import contrib.scalapblib._
 
 object Devteroflex extends ScalaPBModule {
