@@ -83,7 +83,7 @@ int initFPGAContext(FPGAContext *c) {
 
   c->base_address.dram_base = 0ULL;
   c->base_address.pt_base = 0;
-  c->base_address.page_base = c->dram_size >> 8;
+  c->ppage_base_addr = c->dram_size >> 8;
   
   c->base_address.axi_base = c->dram_size;
   c->base_address.message = 0x8000;

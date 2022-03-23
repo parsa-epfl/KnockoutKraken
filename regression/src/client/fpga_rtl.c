@@ -12,42 +12,26 @@
 #include <string.h>
 #include <stdbool.h>
 
-#define DRAM_AXI_BASE_ADDR (1UL << 40)
-
 /**
  * @file the interface for simulator.
  */
-
-int initFPGAContext(FPGAContext *c){
+int initFPGAContext(FPGAContext *c) {
   c->dram_size = 1024 * 1024 * 16;
   c->axi_fd = -1;
   c->axil_fd = -1;
 
-  c->base_address.axil_base = 0;
-  c->base_address.transplant_data = 0;
-  c->base_address.tt = 0x8000;
-  c->base_address.transplant_ctl = 0x9000;
-  c->base_address.message_queue = 0x10000;
-  c->base_address.instrumentation_trace = 0x1F000;
-
-  c->base_address.dram_base = 0;
-  c->base_address.pt_base = 0;
-  c->base_address.page_base = c->dram_size >> 8;
-  
-  c->base_address.axi_base = c->dram_size;
-  c->base_address.message = 0x8000;
+  c->ppage_base_addr = (c->dram_size >> 8);
 
   printf("Init AXI socket\n");
-  if(initIPC(&c->axi_fd, "/dev/shm/axi") !=0) {
+  if(initIPC_client(&c->axi_fd, "/dev/shm/axi") !=0) {
     goto failed;
   }
-
   printf("Init AXIL socket\n");
-  if(initIPC(&c->axil_fd, "/dev/shm/axi_lite") !=0) {
+  if(initIPC_client(&c->axil_fd, "/dev/shm/axi_lite") !=0) {
     goto failed;
   }
-
   printf("Done with sockets\n");
+
   return 0;
 
 failed:

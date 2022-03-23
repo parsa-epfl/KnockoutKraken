@@ -138,9 +138,7 @@ public:
    */ 
   static double time;
 
-  bool isAXIDRAM(uint64_t addr) {
-    return (addr < dram_size);
-  }
+  bool isAXIDRAM(uint64_t addr);
 
   void closeSimulation();
 
@@ -148,7 +146,6 @@ public:
   uint32_t *dram;
   size_t dram_size;
   size_t dram_addr_mask;
-  size_t axi_base_addr;
 
 private:
   std::condition_variable subroutine_cv;

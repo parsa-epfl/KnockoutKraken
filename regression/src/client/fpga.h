@@ -3,44 +3,27 @@
 #include <stdint.h>
 #include <stdio.h>
 
-typedef struct AXIBaseAddress {
-  uint32_t axil_base;
+// Base addresses
+// BAR1 - AXIL
+#define BASE_ADDR_AXIL             (0x000000000000)
 
-  uint32_t tt;
-  uint32_t transplant_data;
-  uint32_t transplant_ctl;
-  uint32_t instrumentation_trace;
-  uint32_t message_queue; 
-
-  uint64_t dram_base;
-  uint64_t pt_base;
-  uint64_t page_base;
-
-  uint64_t axi_base;
-  uint64_t message;
-} AXIBaseAddress;
-
-#ifndef AWS_FPGA
+// PCIS - AXI
+#define BASE_ADDR_DRAM             (0x000800000000)
+#define BASE_ADDR_RTL              (0x001000000000)
 
 typedef struct FPGAContext {
+#ifndef AWS_FPGA
   ssize_t axil_fd;
   ssize_t axi_fd;
-  uint64_t dram_size;
-
-  AXIBaseAddress base_address;
-} FPGAContext;
-
 #else
-
-typedef struct FPGAContext {
   int axil;
   int read_fd;
   int write_fd;
+#endif
   uint64_t dram_size;
-  AXIBaseAddress base_address;
+  uint64_t ppage_base_addr;
 } FPGAContext;
 
-#endif
 
 /**
  * @file the interface for manipulating FPGA.

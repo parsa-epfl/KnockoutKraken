@@ -57,12 +57,12 @@ static void step_ldst_all_sizes_pair_load(FPGAContext *ctx,
                                           uint64_t exp1, uint64_t exp2) {
   uint32_t pending_threads;
   INFO("Push thread and start");
-  registerAndPushState(ctx, thid, asid, state);
-  REQUIRE(transplant_start(ctx, thid) == 0);
+  transplantRegisterAndPush(ctx, thid, asid, state);
+  REQUIRE(transplantStart(ctx, thid) == 0);
   INFO("Wait for transplant and fetch")
-  transplant_waitTillPending(ctx, &pending_threads);
+  transplantWaitTillPending(ctx, &pending_threads);
   REQUIRE(pending_threads & (1 << thid));
-  transplantBack(ctx, thid, state);
+  transplantUnregisterAndPull(ctx, thid, state);
   check_ldst_all_sizes_pair_load(state, exp1, exp2);
   state->pc += 4; // Get next instruction
 }
@@ -92,9 +92,9 @@ static int test_ldst_all_sizes_pair(FPGAContext *ctx) {
 
   INFO("- Push Instruction Page");
   MessageFPGA pf_reply;
-  pushPageToFPGA(ctx, page_inst_paddr, page);
+  dramPagePush(ctx, page_inst_paddr, page);
   makeMissReply(INST_FETCH, -1, asid, pc, page_inst_paddr, &pf_reply);
-  sendMessageToFPGA(ctx, &pf_reply, sizeof(pf_reply));
+  mmuMsgSend(ctx, &pf_reply);
 
   INFO("- Prepare Data page with load values")
   makeDeadbeefPage(page, PAGE_SIZE);
@@ -111,18 +111,18 @@ static int test_ldst_all_sizes_pair(FPGAContext *ctx) {
   write_page_block(page, bytes, vaddr_ld + step_size, 16);
 
   INFO("- Push Data Page");
-  pushPageToFPGA(ctx, page_data_ld_paddr, page);
+  dramPagePush(ctx, page_data_ld_paddr, page);
   makeMissReply(DATA_LOAD, -1, asid, vaddr_ld, page_data_ld_paddr, &pf_reply);
-  sendMessageToFPGA(ctx, &pf_reply, sizeof(pf_reply));
+  mmuMsgSend(ctx, &pf_reply);
 
   INFO("- Push Store Page");
   makeDeadbeefPage(page, PAGE_SIZE);
-  pushPageToFPGA(ctx, page_data_st_paddr, page);
+  dramPagePush(ctx, page_data_st_paddr, page);
   makeMissReply(DATA_STORE, -1, asid, vaddr_st, page_data_st_paddr, &pf_reply);
-  sendMessageToFPGA(ctx, &pf_reply, sizeof(pf_reply));
+  mmuMsgSend(ctx, &pf_reply);
 
   INFO("- Register thread")
-  registerThreadWithProcess(ctx, thid, asid);
+  mmuRegisterTHID2ASID(ctx, thid, asid);
 
   // INFO("Verify load pair byte");
   // step_ldst_all_sizes_loads(ctx, &state, 0xAB, 0xBA);
@@ -187,7 +187,7 @@ TEST_CASE("out-of-page-bound-pair-load") {
 
   DevteroflexArchState state;
   state.pc = 0x1000;
-  uint64_t inst_pa = ctx.base_address.page_base;
+  uint64_t inst_pa = ctx.ppage_base_addr;
   uint64_t load_vas[] = {0x2FFC, 0x3000};
   uint64_t store_vas[] = {0x3FFC, 0x4000};
 
@@ -206,12 +206,12 @@ TEST_CASE("out-of-page-bound-pair-load") {
   fclose(f);
 
   INFO("- Start execution");
-  REQUIRE(registerAndPushState(&ctx, thid, asid, &state) == 0);
-  REQUIRE(transplant_start(&ctx, thid) == 0);
+  REQUIRE(transplantRegisterAndPush(&ctx, thid, asid, &state) == 0);
+  REQUIRE(transplantStart(&ctx, thid) == 0);
 
   // FPGA requires instruction page.
   MessageFPGA message;
-  queryMessageFromFPGA(&ctx, (uint8_t *) &message);
+  mmuMsgGetForce(&ctx, &message);
   INFO("- Check page fault request");
   REQUIRE(message.type == sPageFaultNotify);
   REQUIRE(message.asid == asid);
@@ -221,9 +221,9 @@ TEST_CASE("out-of-page-bound-pair-load") {
 
   INFO("- Push instruction page");
   MessageFPGA pf_reply;
-  pushPageToFPGA(&ctx, inst_pa, page);
+  dramPagePush(&ctx, inst_pa, page);
   makeMissReply(INST_FETCH, thid, asid, state.pc, inst_pa, &pf_reply);
-  sendMessageToFPGA(&ctx, &pf_reply, sizeof(pf_reply));
+  mmuMsgSend(&ctx, &pf_reply);
 
   // Then, there should be three page faults.
   uint64_t expected_vas[] = {0x2000, 0x3000, 0x4000};
@@ -240,7 +240,7 @@ TEST_CASE("out-of-page-bound-pair-load") {
   MemoryAccessType expected_access_types[] = {DATA_LOAD, DATA_LOAD, DATA_STORE};
   for(int i = 0; i < 3; ++i){
     INFO("- Query " << i << " page fault message");
-    queryMessageFromFPGA(&ctx, (uint8_t *) &message);
+    mmuMsgGetForce(&ctx, &message);
     REQUIRE(message.type == sPageFaultNotify);
     REQUIRE(message.asid == asid);
     REQUIRE(message.vpn_lo == VPN_GET_LO(expected_vas[i]));
@@ -248,19 +248,19 @@ TEST_CASE("out-of-page-bound-pair-load") {
     CHECK(message.PageFaultNotif.permission == expected_access_types[i]);
 
     INFO("- Resolve " << i << " page fault");
-    pushPageToFPGA(&ctx, pas[i], data_pages[i]);
+    dramPagePush(&ctx, pas[i], data_pages[i]);
     makeMissReply(expected_access_types[i], thid, asid, expected_vas[i], pas[i], &pf_reply);
-    sendMessageToFPGA(&ctx, &pf_reply, sizeof(pf_reply));
+    mmuMsgSend(&ctx, &pf_reply);
   }
 
   INFO("- Transplat back");
   uint32_t pending_threads = 0;
   while(!pending_threads) {
-    REQUIRE(queryThreadState(&ctx, &pending_threads) == 0);
+    REQUIRE(transplantPending(&ctx, &pending_threads) == 0);
     usleep(1e5);
   }
   REQUIRE((pending_threads & (1 << thid)) != 0);
-  transplantBack(&ctx, thid, &state);
+  transplantUnregisterAndPull(&ctx, thid, &state);
 
   synchronizePage(&ctx, asid, (uint8_t *)data_pages[1], expected_vas[1], pas[1], true);
   synchronizePage(&ctx, asid, (uint8_t *)data_pages[2], expected_vas[2], pas[2], true);
@@ -286,7 +286,7 @@ TEST_CASE("ldr-wback-addr") {
     int asid = 0x10;
 
     INFO("Write instruction")
-    int paddr = ctx.base_address.page_base;
+    int paddr = ctx.ppage_base_addr;
     uint8_t page[PAGE_SIZE] = {0}; 
     makeDeadbeefPage(page, PAGE_SIZE);
     ((uint32_t *) page)[0] = 0x38401c08; // ldrb    w8, [x0, #1]!
@@ -298,32 +298,32 @@ TEST_CASE("ldr-wback-addr") {
     MessageFPGA pf_reply;
 
     INFO("Push instruction page");
-    pushPageToFPGA(&ctx, paddr, page);
+    dramPagePush(&ctx, paddr, page);
     makeMissReply(INST_FETCH, -1, asid, state.pc, paddr, &pf_reply);
-    sendMessageToFPGA(&ctx, &pf_reply, sizeof(pf_reply));
+    mmuMsgSend(&ctx, &pf_reply);
 
     INFO("Push data page");
     page[addr & 0xFFF] = 0x11;
-    pushPageToFPGA(&ctx, paddr + PAGE_SIZE, page);
+    dramPagePush(&ctx, paddr + PAGE_SIZE, page);
     makeMissReply(DATA_LOAD, -1, asid, addr, paddr + PAGE_SIZE, &pf_reply);
-    sendMessageToFPGA(&ctx, &pf_reply, sizeof(pf_reply));
+    mmuMsgSend(&ctx, &pf_reply);
 
     INFO("Push state");
-    registerAndPushState(&ctx, 0, asid, &state);
+    transplantRegisterAndPush(&ctx, 0, asid, &state);
 
     INFO("Start Execution");
-    transplant_start(&ctx, 0); 
+    transplantStart(&ctx, 0); 
 
     INFO("Advance");
     advanceTicks(&ctx, 200);
 
     INFO("Check now execution stopped");
     uint32_t pending_threads = 0;
-    transplant_pending(&ctx, &pending_threads);
+    transplantPending(&ctx, &pending_threads);
     assert(pending_threads);
 
     INFO("Check transplant");
-    transplantBack(&ctx, 0, &state);
+    transplantUnregisterAndPull(&ctx, 0, &state);
     INFO("Check address");
     assert(state.xregs[0] == addr);
     INFO("Check data");

@@ -79,7 +79,7 @@ void handleDRAMSubroute(TopDUT &dut) {
       uint64_t addr_byte = dut->M_AXI_awaddr;
       CHECK(dut, addr_byte < dut.dram_size, "AXI write address out of bound");
       CHECK(dut, (addr_byte & 0x3F) == 0, "AXI write address is not aligned");
-      CHECK(dut, (dut->M_AXI_arsize == 6), "AXI write burst count must be 64B");
+      CHECK(dut, (dut->M_AXI_awsize == 6), "AXI write burst count must be 64B");
       uint32_t id = dut->M_AXI_awid;
       uint32_t burst_count = dut->M_AXI_awlen + 1;
       dut->M_AXI_awready = 1;
@@ -308,8 +308,8 @@ void AXIRoutine(TopDUT &dut, IPCServer &ipc) {
     } else if (result.is_write) {
       // it's a writing request, activate AXI writing request channel.
       // printf("SHELL:HOST:AXI FPGA:WR[0x%lx]:BURST[%lu]\n", result.addr, result.byte_size);
-      dut->S_AXI_awaddr = result.addr - dut.axi_base_addr; // get rid of base address.
-      dut->S_AXI_awsize = 6; // 64Byte
+      dut->S_AXI_awaddr = result.addr;
+      dut->S_AXI_awsize = 6;
       dut->S_AXI_awburst = 1;
       dut->S_AXI_awlen = (result.byte_size / BYTES_PER_BLOCK) - 1;
       dut->S_AXI_awvalid = true;
@@ -364,7 +364,7 @@ void AXIRoutine(TopDUT &dut, IPCServer &ipc) {
     } else {
       // printf("SHELL:HOST:AXI FPGA:RD[0x%lx]:BURST[%lu]\n", result.addr, result.byte_size);
       // read operation
-      dut->S_AXI_araddr = result.addr - dut.axi_base_addr;
+      dut->S_AXI_araddr;
       dut->S_AXI_arlen = (result.byte_size / BYTES_PER_BLOCK) - 1;
       dut->S_AXI_arburst = 1;
       dut->S_AXI_arsize = 6;

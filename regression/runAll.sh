@@ -14,18 +14,19 @@ cd build
 # 2. Generate test list
 
 allTests=(
-  "multiple-pages-in-a-row" 
+  "check-dram-address"
   "transplant-in" 
-  "MMU-push-and-evict-pte" 
-  "basic-transplant-with-initial-page-fault" 
   "transplant-transplants" 
-  "execute-instruction-with-context-in-dram" 
-  "execute-instruction" 
+  "check-flag-undef"
+  "check-flag-transplant"
   "host-cmd-stop-cpu"
   "host-cmd-force-transplant"
   "host-cmd-singlestep"
-  "check-flag-undef"
-  "check-flag-transplant"
+  "MMU-push-and-evict-pte" 
+  "basic-transplant-with-initial-page-fault" 
+  "execute-instruction" 
+  "execute-instruction-with-context-in-dram" 
+  "multiple-pages-in-a-row" 
   "test-ldst-pair-all-sizes"
   "ldr-wback-addr"
   )

@@ -118,11 +118,11 @@ class TraceWrapper(val dramAddrW: Int, val axilAddrW: Int, val axilBaseAddr: Int
 object ARMFlexInstrumentedVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
   import java.io._
-  val fr = new FileWriter(new File("regression/rtl/ARMFlexTop.v"))
+  val fr = new FileWriter(new File("regression/cl_devteroflex/design/ARMFlexTop.v"))
   fr.write(c.emitVerilog(
     new ARMFlexTopInstrumented(
       new PipelineParams(thidN = 8, pAddrW =  24),
       new MemoryHierarchyParams(thidN = 8, pAddrW = 24)
-      ), annotations = Seq(TargetDirAnnotation("regression/rtl/"))))
+      ), annotations = Seq(TargetDirAnnotation("regression/cl_devteroflex/design/"))))
   fr.close()
 }
