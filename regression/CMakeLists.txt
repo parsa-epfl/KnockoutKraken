@@ -31,6 +31,8 @@ add_executable(
   src/client/fpga_helpers.c
 )
 
+set(RTL_FOLDER cl_devteroflex/design)
+
 if(AWS_FPGA_LIBRARY_PATH)
   message("Find AWS:" ${AWS_FPGA_LIBRARY_PATH})
   target_include_directories(KnockoutTestGenerator PUBLIC ${AWS_FPGA_LIBRARY_PATH}/include)
@@ -53,7 +55,7 @@ else()
   target_sources(StressTest PRIVATE src/client/fpga_rtl.c src/client/ipc.c)
 
   add_executable(KnockoutSimulator src/server/main.cc src/server/dut.cc src/server/subroutine.cc src/server/ipc.cc)
-  verilate(KnockoutSimulator SOURCES rtl/devteroflex_top.sv rtl/ARMFlexTop.v rtl/BRAMTDP.v rtl/MultAdd_3input.v TOP_MODULE ${SIMULATOR_TOP_MODULE} TRACE_FST VERILATOR_ARGS)
+  verilate(KnockoutSimulator SOURCES ${RTL_FOLDER}/devteroflex_top.sv ${RTL_FOLDER}/ARMFlexTop.v ${RTL_FOLDER}/BRAMTDP.v ${RTL_FOLDER}/MultAdd_3input.v TOP_MODULE ${SIMULATOR_TOP_MODULE} TRACE_FST VERILATOR_ARGS)
   target_link_libraries(KnockoutSimulator PRIVATE Threads::Threads)  
 endif()
 
