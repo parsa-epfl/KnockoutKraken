@@ -8,13 +8,13 @@ import arm.PROCESSOR_TYPES._
 import armflex.util._
 
 import Trans2State._
+import antmicro.Bus.AXI4
 
 object TransplantIO extends Bundle {
   class Trans2CPU(val thidN: Int) extends Bundle {
     val thread = Output(UInt(log2Ceil(thidN).W))
-    val updatingPState = Output(Bool())
     val rfile_wr = Flipped(new RFileIO.WRPort(thidN))
-    val pstate = Output(new PStateRegs)
+    val pstate = Output(Valid(new PStateRegs))
     val start = Output(Bool())
   }
   class CPU2Trans(val thidN: Int) extends Bundle {
@@ -45,141 +45,129 @@ class TransplantUnit(thidN: Int) extends Module {
   val trans2cpu = IO(new TransplantIO.Trans2CPU(thidN))
   val host2trans = IO(new TransplantIO.Host2Trans(thidN))
   val trans2host = IO(new TransplantIO.Trans2Host(thidN, hostBRAMParams))
-  val hostBramPort = IO(new BRAMPort()(hostBRAMParams))
 
   val mem2trans = IO(new TransplantIO.Mem2Trans(thidN))
 
-  // Mantains always the latest state of the rfile
-  private val stateBuffer = Module(new BRAM()(new BRAMParams(NB_COL = DATA_SZ / 8, COL_WIDTH = 8, NB_ELE = thidN * REG_N)))
-  private val stateBufferWrPort = stateBuffer.portA
-  private val stateBufferRdPort = stateBuffer.portB
+  private val rCpu2transPending = RegInit(0.U(thidN.W))
+  private val wCpu2transBeingHandled = WireInit(false.B)
+  // At present lower thread always has the highest priority for transplanting. 
+  private val wSelectedC2TRequest = PriorityEncoder(rCpu2transPending)
+  private val wCpu2transHandledReq = WireInit(wCpu2transBeingHandled.asUInt << wSelectedC2TRequest) // always clear the first one. 
 
-  // Buffer to communicate with Host by exposing BRAM Port
-  private val hostBuffer = Module(new BRAM()(hostBRAMParams))
-  hostBramPort <> hostBuffer.portB
-  private val hostTransPort = hostBuffer.portA
+  // All possible sources that trigger packing a state.
+  private val wCpu2transInstFault = Mux(mem2trans.instFault.valid, 1.U << mem2trans.instFault.tag, 0.U)
+  private val wCpu2transDataFault = Mux(mem2trans.dataFault.valid, 1.U << mem2trans.dataFault.tag, 0.U)
+  private val wCpu2transCpuTrans = Mux(cpu2trans.doneCPU.valid, 1.U << cpu2trans.doneCPU.tag, 0.U)
+  // Aggregate all the sources
+  private val wCpu2transInsert = WireInit(wCpu2transCpuTrans | wCpu2transDataFault | wCpu2transInstFault)
 
-  private val s_IDLE :: s_TRANS :: Nil = Enum(2)
-  private val s_BRAM2CPU :: s_CPU2BRAM :: Nil = Enum(2)
-  private val state = RegInit(s_IDLE) // Reads from State, pushes to BRAM
-  private val stateDir = RegInit(s_BRAM2CPU) // Reads from BRAM, pushes to State
+  // The final pending register will be new inserted + force - handled.
+  rCpu2transPending := (rCpu2transPending & ~wCpu2transHandledReq) | wCpu2transInsert | host2trans.forceTransplant
 
-  private val thread = RegInit(0.U(log2Ceil(thidN).W))
-  private val thread_next = WireInit(thread)
-  thread := thread_next
+  // The state machine controlling copying data.
+  // BRAM to CPU: Copy all registers, and then copy the PState
+  // CPU to BRAM: Just copy the PState
+  val sTIdle :: sTSyncingB2CXReg :: sTSyncingB2CPState :: sTSyncingC2BPState :: Nil = Enum(4)
 
-  private val stateRegType = RegInit(r_DONE)
-  private val bramOFFST = RegInit(0.U(log2Ceil(hostBuffer.params.NB_ELE).W))
-  private val currReg = RegInit(0.U(log2Ceil(ARCH_MAX_OFFST).W))
+  val rSyncState = RegInit(sTIdle)
+  val rCurrentSyncReg = RegInit(0.U(5.W)) // 64 places most for each thread.
+  val rSyncThread = RegInit(0.U(log2Ceil(thidN).W))
 
-  private val cpu2transPending = RegInit(0.U(thidN.W))
-  private val cpu2transCpuTrans = Wire(UInt(thidN.W))
-  private val cpu2transInstFault = Wire(UInt(thidN.W))
-  private val cpu2transDataFault = Wire(UInt(thidN.W))
-  private val cpu2transInsert = WireInit(cpu2transCpuTrans | cpu2transDataFault | cpu2transInstFault)
-  private val cpu2transClear = WireInit(0.U(log2Ceil(thidN).W))
-  private val cpu2transClearEn = WireInit(false.B)
-  private val cpu2transClearBit = WireInit(cpu2transClearEn.asUInt << cpu2transClear)
+  private val uTransplantBRAM = Module(new TransplantBRAM(thidN))
 
-  cpu2transInstFault := Mux(mem2trans.instFault.valid, 1.U << mem2trans.instFault.tag, 0.U)
-  cpu2transDataFault := Mux(mem2trans.dataFault.valid, 1.U << mem2trans.dataFault.tag, 0.U)
-  cpu2transCpuTrans  := Mux(cpu2trans.doneCPU.valid, 1.U << cpu2trans.doneCPU.tag, 0.U)
-  cpu2transPending := (cpu2transPending & ~cpu2transClearBit) | cpu2transInsert | host2trans.forceTransplant
+  val S_AXI = IO(Flipped(new AXI4(16, 512)))
+  S_AXI <> uTransplantBRAM.S_AXI
 
-  trans2host.doneTrans.valid := false.B
-  trans2host.clear.valid := false.B
-  trans2cpu.start := false.B
-  switch(state) {
-    is(s_IDLE) {
-      when(host2trans.pending =/= 0.U || cpu2transPending =/= 0.U) {
-        state := s_TRANS
-        stateRegType := r_XREGS
-        bramOFFST := thread_next << log2Ceil(ARCH_MAX_OFFST)
-        currReg := 0.U
-      }
-      when(host2trans.pending =/= 0.U) {
-        stateDir := s_BRAM2CPU
-        thread_next := PriorityEncoder(host2trans.pending)
-        trans2host.clear.valid := true.B
-      }.elsewhen(cpu2transPending =/= 0.U) {
-        stateDir := s_CPU2BRAM
-        thread_next := PriorityEncoder(cpu2transPending)
-        cpu2transClearEn := true.B
-        cpu2transClear := thread_next
+  assert(!(uTransplantBRAM.iReadRequest.valid && uTransplantBRAM.iWriteRequest.valid), "It's impossible to see two request happens at the same time!")
+
+  switch(rSyncState){
+    is(sTIdle){
+      when(host2trans.pending =/= 0.U){
+        rSyncState := sTSyncingB2CXReg
+        rCurrentSyncReg := 0.U
+        rSyncThread := PriorityEncoder(host2trans.pending)
+      }.elsewhen(rCpu2transPending =/= 0.U){
+        rSyncState := sTSyncingC2BPState
+        rCurrentSyncReg := 0.U
+        rSyncThread := wSelectedC2TRequest
       }
     }
-    is(s_TRANS) {
-      bramOFFST := bramOFFST + 1.U
-      currReg := currReg + 1.U
-      when(currReg === (ARCH_PC_OFFST - 1).U) {
-        stateRegType := r_PC
-      }.elsewhen(currReg === (ARCH_SP_OFFST - 1).U) {
-        stateRegType := r_SP
-      }.elsewhen(currReg === (ARCH_FLAGS_OFFST - 1).U) {
-        stateRegType := r_FLAGS
-      }.elsewhen(currReg === (ARCH_ICOUNT_OFFST - 1).U) {
-        stateRegType := r_ICOUNT
-      }.elsewhen(currReg === (ARCH_MAX_OFFST - 1).U) {
-        stateRegType := r_DONE
-      }
-      when(stateRegType === r_DONE) {
-        when(stateDir === s_CPU2BRAM) {
-          trans2host.doneTrans.valid := true.B
-        }.elsewhen(stateDir === s_BRAM2CPU) {
-          trans2cpu.start := true.B
-        }
-        state := s_IDLE
-      }
+
+    is(sTSyncingB2CXReg){
+      rCurrentSyncReg := rCurrentSyncReg + 1.U
+      rSyncState := Mux(
+        rCurrentSyncReg === REG_N.U,
+        sTSyncingB2CPState,
+        sTSyncingB2CXReg
+      )
+      assert(uTransplantBRAM.iReadRequest.ready)
+    }
+
+    is(sTSyncingB2CPState){
+      rSyncState := sTIdle
+      assert(uTransplantBRAM.iReadPStateRequest.ready)
+    }
+
+    is(sTSyncingC2BPState){
+      rSyncState := sTIdle
+      assert(uTransplantBRAM.iPstateWriteRequest.ready)
     }
   }
 
-  trans2host.doneTrans.tag := thread
-  trans2host.clear.tag := thread_next
-  trans2cpu.thread := thread
-  trans2cpu.pstate := cpu2trans.pstate
-  trans2cpu.updatingPState := state === s_TRANS && stateDir === s_BRAM2CPU
+  // The CPU2BRAM request will be handed when the syncing unit is idle, and there is no request from the BRAM2CPU.
+  wCpu2transBeingHandled := rSyncState === sTIdle && host2trans.pending === 0.U && rCpu2transPending =/= 0.U
+  
+  // CPU2BRAM Logic.
+  // - determine the write request. The data is write into tht TBRAM. 
+  uTransplantBRAM.iPstateWriteRequest.bits.threadID := rSyncThread
+  uTransplantBRAM.iPstateWriteRequest.bits.state := cpu2trans.pstate
+  uTransplantBRAM.iPstateWriteRequest.valid := rSyncState === sTSyncingC2BPState
 
-  stateBufferRdPort.DI := 0.U
-  stateBufferRdPort.WE := 0.U
-  stateBufferRdPort.EN := true.B
-  stateBufferRdPort.ADDR := Cat(thread, currReg)
+  // When CPU2BRAM is done, we need to notify the host that data copies is finished.
+  trans2host.doneTrans.valid := RegNext(uTransplantBRAM.iPstateWriteRequest.valid)
+  trans2host.doneTrans.tag := rSyncThread
+  // Clear the transplant request from the host as well. (Why?)
+  trans2host.clear.valid := wCpu2transBeingHandled
+  trans2host.clear.tag := wSelectedC2TRequest
+  
 
-  hostTransPort.EN := state === s_TRANS
-  hostTransPort.WE := Fill(hostTransPort.params.NB_COL, stateDir === s_CPU2BRAM)
-  hostTransPort.ADDR := Mux(stateDir === s_BRAM2CPU, bramOFFST, RegNext(bramOFFST))
-  hostTransPort.DI := stateBufferRdPort.DO
-  private val stateRegTypeCurr = WireInit(RegNext(stateRegType))
-  when(stateRegType === r_XREGS) {
-    hostTransPort.DI := stateBufferRdPort.DO
-  }.elsewhen(stateRegTypeCurr === r_PC) {
-    hostTransPort.DI := cpu2trans.pstate.PC
-    trans2cpu.pstate.PC := hostTransPort.DO
-  }.elsewhen(stateRegTypeCurr === r_SP) {
-    // TODO SP is not used yet
-    //hostTransPort.DI := cpu2trans.pstate.SP 
-    //trans2cpu.pstate.SP := hostTransPort.DO
-  }.elsewhen(stateRegTypeCurr === r_FLAGS) {
-    hostTransPort.DI := cpu2trans.pstate.flags.asUInt
-    trans2cpu.pstate.flags := hostTransPort.DO.asTypeOf(trans2cpu.pstate.flags.cloneType)
-  }.elsewhen(stateRegTypeCurr === r_ICOUNT) {
-    hostTransPort.DI := Cat(cpu2trans.pstate.icountBudget, cpu2trans.pstate.icount)
-    trans2cpu.pstate.icount := hostTransPort.DO(31, 0)
-    trans2cpu.pstate.icountBudget := hostTransPort.DO(63,32)
-  }
+  // BRAM2CPU Logic
+  // - determine the read port. It's from the TBRAM
+  uTransplantBRAM.iReadRequest.bits.threadID := rSyncThread
+  uTransplantBRAM.iReadRequest.bits.registerIndex := rCurrentSyncReg
+  uTransplantBRAM.iReadRequest.valid := rSyncState === sTSyncingB2CXReg
 
-  // RFile response comes 1 cycle delay
-  trans2cpu.rfile_wr.en := RegNext(state === s_TRANS && stateRegType === r_XREGS && stateDir === s_BRAM2CPU)
-  trans2cpu.rfile_wr.addr := RegNext(Cat(thread, currReg))
-  trans2cpu.rfile_wr.data := hostTransPort.DO
-  trans2cpu.rfile_wr.tag := RegNext(thread)
+  // - Which is the write port?
+  // First, make the data and address aligned.
+  val rB2CRegIndexAlignedWithRead = Reg(Valid(UInt(log2Ceil(REG_N).W)))
+  rB2CRegIndexAlignedWithRead.bits := rCurrentSyncReg
+  rB2CRegIndexAlignedWithRead.valid := rSyncState === sTSyncingB2CXReg
+
+  // For normal registers, it's pretty easy to update them.
+  trans2cpu.rfile_wr.en := rB2CRegIndexAlignedWithRead.valid
+  trans2cpu.rfile_wr.addr := rB2CRegIndexAlignedWithRead.bits
+  trans2cpu.rfile_wr.data := uTransplantBRAM.oReadReply
+  trans2cpu.rfile_wr.tag := rSyncThread
+
+  // For the pstate, we have a special port.
+  uTransplantBRAM.iReadPStateRequest.bits := rSyncThread
+  uTransplantBRAM.iReadPStateRequest.valid := rSyncState === sTSyncingB2CPState
+  trans2cpu.pstate.valid := RegNext(rSyncState === sTSyncingB2CPState)
+  trans2cpu.pstate.bits := uTransplantBRAM.oReadPStateReply
+  
+  // Restart a thread after transfer is done.
+  trans2cpu.thread := rSyncThread
+  trans2cpu.start := RegNext(rSyncState === sTSyncingB2CPState)
+
+  // Bypass the control signal
   cpu2trans.stopCPU := host2trans.stopCPU
   trans2host.doneCPU := cpu2trans.doneCPU
 
-  RFileIO.wr2BRAM(stateBufferWrPort, cpu2trans.rfile_wr, (currReg.getWidth - REG_SZ))
-  when(state === s_TRANS && stateDir === s_BRAM2CPU) {
-    // Forward transplant writes when getting state from host
-    RFileIO.wr2BRAM(stateBufferWrPort, trans2cpu.rfile_wr, (currReg.getWidth - REG_SZ))
-  }
+  // Listen to the pipeline write request and update register inside
+  uTransplantBRAM.iWriteRequest.bits.registerIndex := cpu2trans.rfile_wr.addr
+  uTransplantBRAM.iWriteRequest.bits.threadID := cpu2trans.rfile_wr.tag
+  uTransplantBRAM.iWriteRequest.bits.value := cpu2trans.rfile_wr.data
+  uTransplantBRAM.iWriteRequest.valid := cpu2trans.rfile_wr.en
 
 }
 

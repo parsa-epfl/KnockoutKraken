@@ -48,20 +48,17 @@ class PipelineAxi(params: PipelineParams) extends Module {
   private val uAxilToCSR = Module(new AXI4LiteCSR(params.axiDataW, csrAddr_range._2 - csrAddr_range._1))
 
   private val transplantCtrl_regCount = 4
-  private val cfgBusCSR_archstate = new CSRBusSlave(0, 0x8000 >> 2)
   private val cfgBusCSR_thid2asid = new CSRBusSlave(0x8000 >> 2, params.thidN) // Address is 32b word addressed
   private val cfgBusCSR_transplant = new CSRBusSlave(0x9000 >> 2, transplantCtrl_regCount) // Address is 32b word addressed
 
-  private val uCSRToArchState = Module(new CSR2BRAM(pipeline.transplantU.hostBRAMParams))
   private val uCSRthid2asid = Module(new CSR_thid2asid(params.thidN, params.asidW, thid2asidPortsN = 2))
   private val uCSR2ToTransplant = Module(new CSR(params.axiDataW, transplantCtrl_regCount))
 
   private val uCSRmux = Module(new CSRBusMasterToNSlaves(params.axiDataW, Seq(
-                              cfgBusCSR_archstate, cfgBusCSR_thid2asid, cfgBusCSR_transplant), csrAddr_range))
+                              cfgBusCSR_thid2asid, cfgBusCSR_transplant), csrAddr_range))
   uCSRmux.masterBus <> uAxilToCSR.io.bus
-  uCSRmux.slavesBus(0) <> uCSRToArchState.io.bus
-  uCSRmux.slavesBus(1) <> uCSRthid2asid.bus
-  uCSRmux.slavesBus(2) <> uCSR2ToTransplant.io.bus
+  uCSRmux.slavesBus(0) <> uCSRthid2asid.bus
+  uCSRmux.slavesBus(1) <> uCSR2ToTransplant.io.bus
 
   val S_AXIL = IO(Flipped(uAxilToCSR.io.ctl.cloneType))
   S_AXIL <> uAxilToCSR.io.ctl
@@ -80,7 +77,8 @@ class PipelineAxi(params: PipelineParams) extends Module {
   pipeline.hostIO.host2trans.forceTransplant := host2transForceTransplant
 
   // BRAM (Architecture State)
-  pipeline.hostIO.port <> uCSRToArchState.io.port
+  val S_AXI_ArchState = Flipped(pipeline.hostIO.S_AXI)
+  pipeline.hostIO.S_AXI <> S_AXI_ArchState
 
   // Memory port.
   val mem_io = IO(pipeline.mem_io.cloneType)
@@ -142,7 +140,7 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   // -------- Transplant ---------
   val transplantU = Module(new TransplantUnit(params.thidN))
   class HostIO extends Bundle {
-    val port = transplantU.hostBramPort.cloneType
+    val S_AXI = Flipped(transplantU.S_AXI.cloneType)
     val trans2host = transplantU.trans2host.cloneType
     val host2trans = transplantU.host2trans.cloneType
   }
@@ -154,10 +152,10 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
 
   // Update State - Highjack commit ports from pipeline
   archstate.pstateIO.transplant.thread := transplantU.trans2cpu.thread
-  pipeline.archstate.commit.ready := archstate.pstateIO.commit.ready && !transplantU.trans2cpu.updatingPState
+  pipeline.archstate.commit.ready := archstate.pstateIO.commit.ready && !transplantU.trans2cpu.pstate.valid
   transplantU.cpu2trans.rfile_wr <> pipeline.archstate.commit.wr
   transplantU.cpu2trans.doneCPU := pipeline.transplantIO.done
-  when(transplantU.trans2cpu.updatingPState) {
+  when(transplantU.trans2cpu.pstate.valid) {
     archstate.rfile_wr <> transplantU.trans2cpu.rfile_wr
     archstate.pstateIO.commit.fire := true.B
     archstate.pstateIO.commit.tag := transplantU.trans2cpu.thread
@@ -171,11 +169,11 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   }
   pipeline.transplantIO.start.valid := transplantU.trans2cpu.start
   pipeline.transplantIO.start.tag := transplantU.trans2cpu.thread
-  pipeline.transplantIO.start.bits.get := transplantU.trans2cpu.pstate.PC
+  pipeline.transplantIO.start.bits.get := transplantU.trans2cpu.pstate.bits.PC
   // Transplant from Host
   transplantU.host2trans <> hostIO.host2trans
   transplantU.trans2host <> hostIO.trans2host
-  transplantU.hostBramPort <> hostIO.port
+  transplantU.S_AXI <> hostIO.S_AXI
   pipeline.transplantIO.stopCPU := transplantU.cpu2trans.stopCPU
   archstate.pstateIO.forceTransplant := hostIO.host2trans.forceTransplant
 

@@ -236,8 +236,8 @@ class PipelineAxiHacked(params: PipelineParams) extends Module {
   val S_AXIL_TRANSPLANT = IO(Flipped(axiLiteCSR.io.ctl.cloneType))
   S_AXIL_TRANSPLANT <> axiLiteCSR.io.ctl
 
-  val transplant_ram = IO(pipeline.hostIO.port.cloneType)
-  transplant_ram <> pipeline.hostIO.port
+  val S_AXI_ARCHSTATE = IO(Flipped(pipeline.hostIO.S_AXI.cloneType))
+  S_AXI_ARCHSTATE <> pipeline.hostIO.S_AXI
 
   val trans2host = WireInit(Mux(pipeline.hostIO.trans2host.doneTrans.valid, 1.U << pipeline.hostIO.trans2host.doneTrans.tag, 0.U))
   val host2transClear = WireInit(Mux(pipeline.hostIO.trans2host.clear.valid, 1.U << pipeline.hostIO.trans2host.clear.tag, 0.U))

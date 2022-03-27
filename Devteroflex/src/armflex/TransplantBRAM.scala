@@ -3,6 +3,8 @@ package armflex
 import chisel3._
 import chisel3.util._
 
+import arm.PROCESSOR_TYPES._
+
 import antmicro.Bus.AXI4
 import armflex.util.BRAM
 import armflex.util.BRAMParams
@@ -17,6 +19,8 @@ class TransplantBRAM(
   threadNumber: Int
 ) extends Module {
   assert(threadNumber <= 128)
+  assert(DATA_SZ == 64)
+  assert(REG_N == 32)
 
   val S_AXI = IO(Flipped(new AXI4(16, 512)))
   val sAXIIdle :: sAXIReading :: sAXIReadWaitComplete :: sAXIWriting :: sAXIWriteResponse :: Nil = Enum(5)
@@ -142,43 +146,90 @@ class TransplantBRAM(
     val registerIndex = UInt(6.W) // up to 64 64bit place is available.
 
     def bramAddr = Cat(threadID, registerIndex >> 3)
-    def bramMask = (0xFF.U) << ((registerIndex(2, 0)) * 8.U)
+    def bramMask = (0xFF.U(8.W)) << ((registerIndex(2, 0)) * 8.U)
 
     val value = UInt(64.W)
 
-    def bramWriteData = value << ((registerIndex(2, 0) * 8.U))
+    def bramWriteData = value << ((registerIndex(2, 0) * 64.U))
   }
 
+  // This port is for the normal register writing.
   val iWriteRequest = IO(Flipped(Decoupled(new TransplantBRAMWriteRequest)))
   iWriteRequest.ready := true.B
 
+  // This port is for submitting the pstate.
+  class TransplantBRAMPStateSubmitRequest extends Bundle {
+    val threadID = UInt(log2Ceil(threadNumber).W)
+    val state = new PStateRegs()
+
+    def bramAddr = Cat(threadID, 4.U) // Cat(threadID, 0b100.U)
+
+    // 32 -> PC, 33 -> SP(0), 34 -> FLGAS, 35 -> ICount
+    def writeData: UInt = {
+      val res = Wire(Vec(64, UInt(64.W)))
+      res(0) := state.PC
+      res(1) := 0.U
+      res(2) := state.flags
+      res(3) := Cat(state.icountBudget, state.icount)
+      for (i <- 4 to 64){
+        res(i) := DontCare
+      }
+
+      return res.asUInt()
+    }
+
+    def writeMask = Cat(0xFFFF.U(16.W), 0xFFFF.U(16.W))
+  }
+
+  val iPstateWriteRequest = IO(Flipped(Decoupled(new TransplantBRAMPStateSubmitRequest)))
+  iPstateWriteRequest.ready := !iWriteRequest.valid
+
+
   class TransplantBRAMReadRequest extends Bundle {
     val threadID = UInt(log2Ceil(threadNumber).W)
-    val registerIndex = UInt(64.W)
+    val registerIndex = UInt(6.W)
 
     def bramAddr = Cat(threadID, registerIndex >> 3)
   }
 
   val iReadRequest = IO(Flipped(Decoupled(new TransplantBRAMReadRequest)))
-  iReadRequest.ready := !iWriteRequest.valid
+  iReadRequest.ready := iPstateWriteRequest.ready && !iPstateWriteRequest.valid
 
   val rReadBias = RegNext(iReadRequest.bits.registerIndex(2, 0))
   val oReadReply = IO(Output(UInt(64.W)))
 
-  uBRAM.portB.ADDR := Mux(
-    iWriteRequest.valid,
-    iWriteRequest.bits.bramAddr,
-    iReadRequest.bits.bramAddr
-  )
-  uBRAM.portB.DI := iWriteRequest.bits.bramWriteData
-  uBRAM.portB.WE := Mux(
-    iWriteRequest.valid,
-    iWriteRequest.bits.bramMask,
-    0.U
-  )
-  uBRAM.portB.EN := iWriteRequest.valid || iReadRequest.valid
+  val iReadPStateRequest = IO(Flipped(Decoupled(UInt(6.W))))
+  iReadPStateRequest.ready := iReadRequest.ready && !iReadRequest.valid
 
-  oReadReply := uBRAM.portB.DO >> rReadBias
+  val oReadPStateReply = IO(Output(new PStateRegs))
+
+  // determine the BRAM address
+  when(iWriteRequest.valid){
+    uBRAM.portB.ADDR := iWriteRequest.bits.bramAddr
+    uBRAM.portB.DI := iWriteRequest.bits.bramWriteData
+    uBRAM.portB.WE := iWriteRequest.bits.bramMask
+  }.elsewhen(iPstateWriteRequest.fire){
+    uBRAM.portB.ADDR := iPstateWriteRequest.bits.bramAddr
+    uBRAM.portB.DI := iPstateWriteRequest.bits.writeData
+    uBRAM.portB.WE := iPstateWriteRequest.bits.writeMask
+  }.elsewhen(iReadRequest.fire){
+    uBRAM.portB.ADDR := iReadRequest.bits.bramAddr
+    uBRAM.portB.DI := DontCare
+    uBRAM.portB.WE := 0.U
+  }.otherwise {
+    uBRAM.portB.ADDR := Cat(iReadPStateRequest.bits, 4.U) // Cat(threadID, 0b100.U)
+    uBRAM.portB.DI := DontCare
+    uBRAM.portB.WE := 0.U
+  }
+
+  uBRAM.portB.EN := true.B
+
+  oReadReply := uBRAM.portB.DO >> (rReadBias * 64.U)
+  // Fixed position.
+  oReadPStateReply.PC := uBRAM.portB.DO(63, 0)
+  oReadPStateReply.flags := uBRAM.portB.DO(127, 64)
+  oReadPStateReply.icount := uBRAM.portB.DO(159, 128)
+  oReadPStateReply.icountBudget := uBRAM.portB.DO(191, 160)
 }
 
 object TransplantBRAMVerilogEmitter extends App {
