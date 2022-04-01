@@ -95,8 +95,5 @@ class AXIControlledMessageQueue extends Module {
       }
     }
   }
-
-
-
 }
 

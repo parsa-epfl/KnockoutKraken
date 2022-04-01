@@ -26,7 +26,7 @@ class TransplantBRAM(
   val sAXIIdle :: sAXIReading :: sAXIReadWaitComplete :: sAXIWriting :: sAXIWriteResponse :: Nil = Enum(5)
 
   val uBRAM = Module(new BRAM()(new BRAMParams(
-    64, 8, 1024, "", true
+    64, 8, 1024, "", false
   )))
 
   // Two AXI transactions use the same BRAM ports, and cannot happen at the same time.
@@ -154,6 +154,7 @@ class TransplantBRAM(
   }
 
   // This port is for the normal register writing.
+  // TODO: Change priority, otherwise we will have starving. 
   val iWriteRequest = IO(Flipped(Decoupled(new TransplantBRAMWriteRequest)))
   iWriteRequest.ready := true.B
 
@@ -164,14 +165,14 @@ class TransplantBRAM(
 
     def bramAddr = Cat(threadID, 4.U) // Cat(threadID, 0b100.U)
 
-    // 32 -> PC, 33 -> SP(0), 34 -> FLGAS, 35 -> ICount
+    // TODO: We actually change the software interface! Be careful!
+    // 32 -> PC, 33 -> FLGAS, 34 -> ICount
     def writeData: UInt = {
       val res = Wire(Vec(64, UInt(64.W)))
       res(0) := state.PC
-      res(1) := 0.U
-      res(2) := state.flags
-      res(3) := Cat(state.icountBudget, state.icount)
-      for (i <- 4 to 64){
+      res(1) := state.flags.asUInt
+      res(2) := Cat(state.icountBudget, state.icount)
+      for (i <- 3 until 64){
         res(i) := DontCare
       }
 
@@ -195,7 +196,7 @@ class TransplantBRAM(
   val iReadRequest = IO(Flipped(Decoupled(new TransplantBRAMReadRequest)))
   iReadRequest.ready := iPstateWriteRequest.ready && !iPstateWriteRequest.valid
 
-  val rReadBias = RegNext(iReadRequest.bits.registerIndex(2, 0))
+  val rReadBias = RegEnable(iReadRequest.bits.registerIndex(2, 0), iReadRequest.fire)
   val oReadReply = IO(Output(UInt(64.W)))
 
   val iReadPStateRequest = IO(Flipped(Decoupled(UInt(6.W))))
@@ -226,10 +227,10 @@ class TransplantBRAM(
 
   oReadReply := uBRAM.portB.DO >> (rReadBias * 64.U)
   // Fixed position.
-  oReadPStateReply.PC := uBRAM.portB.DO(63, 0)
-  oReadPStateReply.flags := uBRAM.portB.DO(127, 64)
-  oReadPStateReply.icount := uBRAM.portB.DO(159, 128)
-  oReadPStateReply.icountBudget := uBRAM.portB.DO(191, 160)
+  oReadPStateReply.PC := uBRAM.portB.DO(63, 0) // 32 -> PC
+  oReadPStateReply.flags := uBRAM.portB.DO(127, 64).asTypeOf(new PStateFlags) // 33 -> Flags
+  oReadPStateReply.icount := uBRAM.portB.DO(159, 128) // 34[31:0] -> icount
+  oReadPStateReply.icountBudget := uBRAM.portB.DO(191, 160) // 34[63:32] -> icount budget
 }
 
 object TransplantBRAMVerilogEmitter extends App {

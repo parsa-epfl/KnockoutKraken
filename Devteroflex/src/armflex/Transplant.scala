@@ -7,7 +7,6 @@ import arm.PROCESSOR_TYPES._
 
 import armflex.util._
 
-import Trans2State._
 import antmicro.Bus.AXI4
 
 object TransplantIO extends Bundle {
@@ -32,19 +31,17 @@ object TransplantIO extends Bundle {
     val stopCPU = Input(UInt(thidN.W))
     val forceTransplant = Input(UInt(thidN.W))
   }
-  class Trans2Host(val thidN: Int, val bramCfg: BRAMParams) extends Bundle {
+  class Trans2Host(val thidN: Int) extends Bundle {
     val doneCPU = Output(ValidTag(thidN))
     val doneTrans = Output(ValidTag(thidN))
     val clear = Output(ValidTag(thidN))
   }
 }
 class TransplantUnit(thidN: Int) extends Module {
-  val hostBRAMParams =
-    new BRAMParams(NB_COL = DATA_SZ / 8, COL_WIDTH = 8, NB_ELE = thidN * (1 << log2Ceil(ARCH_MAX_OFFST)))
   val cpu2trans = IO(new TransplantIO.CPU2Trans(thidN))
   val trans2cpu = IO(new TransplantIO.Trans2CPU(thidN))
   val host2trans = IO(new TransplantIO.Host2Trans(thidN))
-  val trans2host = IO(new TransplantIO.Trans2Host(thidN, hostBRAMParams))
+  val trans2host = IO(new TransplantIO.Trans2Host(thidN))
 
   val mem2trans = IO(new TransplantIO.Mem2Trans(thidN))
 
@@ -169,16 +166,7 @@ class TransplantUnit(thidN: Int) extends Module {
   uTransplantBRAM.iWriteRequest.bits.value := cpu2trans.rfile_wr.data
   uTransplantBRAM.iWriteRequest.valid := cpu2trans.rfile_wr.en
 
+  // TODO: Not sure how to notify CPU that you should stop when the uTransplantBRAM.iWriteRequest is not valid. 
 }
 
-// In parsa-epfl/qemu/fa-qflex
-// Read fa-qflex-helper.c to get indexes of values
-object Trans2State {
-  val r_DONE :: r_XREGS :: r_PC :: r_SP :: r_FLAGS :: r_ICOUNT :: Nil = Enum(6)
-  val ARCH_XREGS_OFFST = 0
-  val ARCH_PC_OFFST = 32
-  val ARCH_SP_OFFST = 33
-  val ARCH_FLAGS_OFFST = 34
-  val ARCH_ICOUNT_OFFST = 35
-  val ARCH_MAX_OFFST = ARCH_ICOUNT_OFFST + 1
-}
+
