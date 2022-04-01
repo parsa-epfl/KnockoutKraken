@@ -139,26 +139,8 @@ class TransplantBRAM(
   S_AXI.b.bresp := 0.U
   S_AXI.b.bvalid := rAXIState === sAXIWriteResponse
 
-  
   // Use the 2nd BRAM ports to sync data with the CPU.
-  class TransplantBRAMWriteRequest extends Bundle {
-    val threadID = UInt(log2Ceil(threadNumber).W)
-    val registerIndex = UInt(6.W) // up to 64 64bit place is available.
-
-    def bramAddr = Cat(threadID, registerIndex >> 3)
-    def bramMask = (0xFF.U(8.W)) << ((registerIndex(2, 0)) * 8.U)
-
-    val value = UInt(64.W)
-
-    def bramWriteData = value << ((registerIndex(2, 0) * 64.U))
-  }
-
-  // This port is for the normal register writing.
-  // TODO: Change priority, otherwise we will have starving. 
-  val iWriteRequest = IO(Flipped(Decoupled(new TransplantBRAMWriteRequest)))
-  iWriteRequest.ready := true.B
-
-  // This port is for submitting the pstate.
+  // This port is for submitting the pstate. It has the highest priority.
   class TransplantBRAMPStateSubmitRequest extends Bundle {
     val threadID = UInt(log2Ceil(threadNumber).W)
     val state = new PStateRegs()
@@ -183,8 +165,7 @@ class TransplantBRAM(
   }
 
   val iPstateWriteRequest = IO(Flipped(Decoupled(new TransplantBRAMPStateSubmitRequest)))
-  iPstateWriteRequest.ready := !iWriteRequest.valid
-
+  iPstateWriteRequest.ready := true.B
 
   class TransplantBRAMReadRequest extends Bundle {
     val threadID = UInt(log2Ceil(threadNumber).W)
@@ -193,6 +174,7 @@ class TransplantBRAM(
     def bramAddr = Cat(threadID, registerIndex >> 3)
   }
 
+  // Register read port. It has the 2nd prioryty.
   val iReadRequest = IO(Flipped(Decoupled(new TransplantBRAMReadRequest)))
   iReadRequest.ready := iPstateWriteRequest.ready && !iPstateWriteRequest.valid
 
@@ -203,6 +185,22 @@ class TransplantBRAM(
   iReadPStateRequest.ready := iReadRequest.ready && !iReadRequest.valid
 
   val oReadPStateReply = IO(Output(new PStateRegs))
+
+  class TransplantBRAMWriteRequest extends Bundle {
+    val threadID = UInt(log2Ceil(threadNumber).W)
+    val registerIndex = UInt(6.W) // up to 64 64bit place is available.
+
+    def bramAddr = Cat(threadID, registerIndex >> 3)
+    def bramMask = (0xFF.U(8.W)) << ((registerIndex(2, 0)) * 8.U)
+
+    val value = UInt(64.W)
+
+    def bramWriteData = value << ((registerIndex(2, 0) * 64.U))
+  }
+
+  // This port is for the normal register writing.
+  val iWriteRequest = IO(Flipped(Decoupled(new TransplantBRAMWriteRequest)))
+  iWriteRequest.ready := iReadPStateRequest.ready && !iReadPStateRequest.valid
 
   // determine the BRAM address
   when(iWriteRequest.valid){

@@ -10,17 +10,32 @@ import armflex.util._
 import antmicro.Bus.AXI4
 
 object TransplantIO extends Bundle {
-  class Trans2CPU(val thidN: Int) extends Bundle {
+  class Trans2CPU(val thidN: Int) extends Bundle { // Push state back to CPU
     val thread = Output(UInt(log2Ceil(thidN).W))
+    // This port is used for state synchronization.
     val rfile_wr = Flipped(new RFileIO.WRPort(thidN))
+    // This port is used to commit pstate. (Using this.thread to index thread.)
     val pstate = Output(Valid(new PStateRegs))
+
+    // This port is used to restart a thread?
     val start = Output(Bool())
+
+    // If this signal is true, the pipeline should be stalled, and no instruction will move forward.
+    val stallPipeline = Output(Bool())
   }
-  class CPU2Trans(val thidN: Int) extends Bundle {
+  class CPU2Trans(val thidN: Int) extends Bundle { // Get state from the CPU
+    // This port is listened to update the state accordingly.
     val rfile_wr = new RFileIO.WRPort(thidN)
+    // This port can be used to fetch the pstate. Whose pstate???
     val pstate = Input(new PStateRegs)
+    // This port indicates that which thread is requesting transplant because it depletes the icount.
     val doneCPU = Input(ValidTag(thidN))
+    // This port transfer the singlestep command to the CPU.
     val stopCPU = Output(UInt(thidN.W))
+
+    // If this signal is true, the pipeline should be stalled, and no instruction will move forward.
+    // It will become true when there is a structural hazard and we cannot commit the state.
+    val stallPipeline = Output(Bool())
   }
   class Mem2Trans(val thidN: Int) extends Bundle {
     val instFault = Input(ValidTag(thidN))
@@ -120,6 +135,9 @@ class TransplantUnit(thidN: Int) extends Module {
   uTransplantBRAM.iPstateWriteRequest.bits.state := cpu2trans.pstate
   uTransplantBRAM.iPstateWriteRequest.valid := rSyncState === sTSyncingC2BPState
 
+  // stall the pipeline when we decide to write the PState.
+  cpu2trans.stallPipeline := uTransplantBRAM.iPstateWriteRequest.valid
+
   // When CPU2BRAM is done, we need to notify the host that data copies is finished.
   trans2host.doneTrans.valid := RegNext(uTransplantBRAM.iPstateWriteRequest.valid)
   trans2host.doneTrans.tag := rSyncThread
@@ -145,6 +163,7 @@ class TransplantUnit(thidN: Int) extends Module {
   trans2cpu.rfile_wr.addr := rB2CRegIndexAlignedWithRead.bits
   trans2cpu.rfile_wr.data := uTransplantBRAM.oReadReply
   trans2cpu.rfile_wr.tag := rSyncThread
+  
 
   // For the pstate, we have a special port.
   uTransplantBRAM.iReadPStateRequest.bits := rSyncThread
@@ -152,6 +171,9 @@ class TransplantUnit(thidN: Int) extends Module {
   trans2cpu.pstate.valid := RegNext(rSyncState === sTSyncingB2CPState)
   trans2cpu.pstate.bits := uTransplantBRAM.oReadPStateReply
   
+  // During the synchronization of ArchState, the pipeline is stalled.
+  trans2cpu.stallPipeline := trans2cpu.pstate.valid || trans2cpu.rfile_wr.en
+
   // Restart a thread after transfer is done.
   trans2cpu.thread := rSyncThread
   trans2cpu.start := RegNext(rSyncState === sTSyncingB2CPState)
@@ -165,8 +187,6 @@ class TransplantUnit(thidN: Int) extends Module {
   uTransplantBRAM.iWriteRequest.bits.threadID := cpu2trans.rfile_wr.tag
   uTransplantBRAM.iWriteRequest.bits.value := cpu2trans.rfile_wr.data
   uTransplantBRAM.iWriteRequest.valid := cpu2trans.rfile_wr.en
-
-  // TODO: Not sure how to notify CPU that you should stop when the uTransplantBRAM.iWriteRequest is not valid. 
 }
 
 
