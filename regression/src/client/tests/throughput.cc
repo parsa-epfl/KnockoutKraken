@@ -13,13 +13,13 @@ static int run_thread_test(FPGAContext *ctx, int threads) {
     uint8_t deadbeefedPage[PAGE_SIZE] = {0};
 
     INFO("Get and push instruction page");
-    int paddr = ctx->base_address.page_base;
+    int paddr = ctx->ppage_base_addr;
     FILE *f = fopen("../src/client/tests/asm/executables/infinite-loop.bin", "rb");
     REQUIRE(f != nullptr);
     REQUIRE(fread(page, 1, 4096, f) != 0);
     fclose(f);
 
-    pushPageToFPGA(ctx, paddr, page);
+    dramPagePush(ctx, paddr, page);
 
     DevteroflexArchState state;
     INFO("Prepare states");
@@ -30,15 +30,15 @@ static int run_thread_test(FPGAContext *ctx, int threads) {
         INFO("Push instruction page");
         MessageFPGA pf_reply;
         makeMissReply(INST_FETCH, -1, thid << 4, state.pc, paddr, &pf_reply);
-        sendMessageToFPGA(ctx, &pf_reply, sizeof(pf_reply));
+        mmuMsgSend(ctx, &pf_reply, sizeof(pf_reply));
 
         INFO("Push state");
-        registerAndPushState(ctx, thid, get_asid(thid), &state);
+        transplantRegisterAndPush(ctx, thid, get_asid(thid), &state);
     }
 
     INFO("Start threads");
     for (uint32_t thid = 0; thid < threads; thid++) {
-        transplant_start(ctx, thid);
+        transplantStart(ctx, thid);
     }
 
     INFO("Wait for warmup");

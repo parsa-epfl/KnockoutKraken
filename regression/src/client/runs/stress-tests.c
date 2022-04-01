@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
     uint8_t page[PAGE_SIZE] = {0};
     int ret = initFPGAContext(&ctx);
     printf("initFPGAContext retuned %i, should be 0\n", ret);
-    int paddr = ctx.base_address.page_base;
+    int paddr = ctx.ppage_base_addr;
 
     printf("Get program page\n");
     FILE *f = fopen("../src/client/tests/asm/executables/infinite-loop.bin", "rb");
@@ -26,14 +26,14 @@ int main(int argc, char **argv) {
     fclose(f);
 
     printf("Push instruction page and state\n");
-    pushPageToFPGA(&ctx, paddr, page);
+    dramPagePush(&ctx, paddr, page);
     for(int thread = 0; thread < threads; thread++) {
         initArchState(&state, thread << 12);
         initState_infinite_loop(&state, true);
-        registerAndPushState(&ctx, thread, thread, &state);
+        transplantRegisterAndPush(&ctx, thread, thread, &state);
         MessageFPGA pf_reply;
         makeMissReply(INST_FETCH, -1, thread, state.pc, paddr, &pf_reply);
-        sendMessageToFPGA(&ctx, &pf_reply, sizeof(pf_reply));
+        mmuMsgSend(&ctx, &pf_reply);
     }
 
     printf("Advance\n");
@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
 
     printf("Start Execution\n");
     for(int thread = 0; thread < threads; thread++) {
-        transplant_start(&ctx, thread);
+        transplantStart(&ctx, thread);
     }
 
     printf("Advance\n");
@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
     trace_PC_counter_bursts(&ctx, &cntBursts);
 
     printf("Stop CPU\n");
-    transplant_stopCPU(&ctx, 0);
+    transplantStopCPU(&ctx, 0);
 
     printf("Advance\n");
     advanceTicks(&ctx, 100);

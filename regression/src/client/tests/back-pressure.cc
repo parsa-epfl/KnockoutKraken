@@ -17,14 +17,6 @@ static inline void tagPage(uint8_t *pages, uint64_t thid, size_t nbPages) {
   }
 }
 
-static inline void checkPagePerWord(uint8_t *page_expect, uint8_t *page_actual) {
-  uint64_t *page_expect64 = (uint64_t *) page_expect;
-  uint64_t *page_actual64 = (uint64_t *) page_actual;
-  for(size_t word = 0; word < PAGE_SIZE/8; word++) {
-      REQUIRE(page_expect64[word] == page_actual64[word]);
-  }
-}
-
 
 static int test_stress_memory(
   FPGAContext *ctx, 
@@ -82,15 +74,15 @@ static int test_stress_memory(
       curr_ld_page_vaddr[thid], 
       curr_st_page_vaddr[thid]);
     state[thid].pc = safeCheckTransplants ? pc : pc+4;
-    registerAndPushState(ctx, thid, asid[thid], &state[thid]);
+    transplantRegisterAndPush(ctx, thid, asid[thid], &state[thid]);
   }
 
   INFO("- Push Instruction Pages to each thread");
   MessageFPGA pf_reply;
-  pushPageToFPGA(ctx, page_inst_paddr, page);
+  dramPagePush(ctx, page_inst_paddr, page);
   for(uint32_t thid = 0; thid < thidN; thid++) {
     makeMissReply(INST_FETCH, -1, asid[thid], pc, page_inst_paddr, &pf_reply);
-    sendMessageToFPGA(ctx, &pf_reply, sizeof(pf_reply));
+    mmuMsgSend(ctx, &pf_reply);
   }
 
   uint32_t completed = 0;
@@ -100,13 +92,13 @@ static int test_stress_memory(
   if(safeCheckTransplants) {
     INFO("Start programs");
     for(uint32_t thid = 0; thid < thidN; thid++) {
-      REQUIRE(transplant_start(ctx, thid) == 0);
+      REQUIRE(transplantStart(ctx, thid) == 0);
     }
     INFO("Wait for all threads to request transplant");
     while(completed != threadsMask) {
-      transplant_pending(ctx, &pending_threads);
+      transplantPending(ctx, &pending_threads);
       if(pending_threads)  {
-        transplant_freePending(ctx, pending_threads);
+        transplantFreePending(ctx, pending_threads);
         completed |= pending_threads;
       }
       advanceTicks(ctx, 1000);
@@ -114,7 +106,7 @@ static int test_stress_memory(
     }
     INFO("Verify state and push back programs to start benchmark");
     for(uint32_t thid = 0; thid < thidN; thid++) {
-      transplantBack(ctx, thid, &fetchedState);
+      transplantUnregisterAndPull(ctx, thid, &fetchedState);
       requireStateIsIdentical(fetchedState, state[thid]);
       state[thid].pc += 4;
     }
@@ -124,8 +116,8 @@ static int test_stress_memory(
 
   INFO("- Start programs");
   for(uint32_t thid = 0; thid < thidN; thid++) {
-   registerAndPushState(ctx, thid, asid[thid], &state[thid]);
-   REQUIRE(transplant_start(ctx, thid) == 0);
+   transplantRegisterAndPush(ctx, thid, asid[thid], &state[thid]);
+   REQUIRE(transplantStart(ctx, thid) == 0);
   }
 
   INFO("- Wait program complete");
@@ -134,15 +126,15 @@ static int test_stress_memory(
   iterations = 0;
   MessageFPGA message;
   while(completed != threadsMask) {
-    transplant_pending(ctx, &pending_threads);
+    transplantPending(ctx, &pending_threads);
     if(pending_threads)  {
       INFO("Detected pending transplants");
-      transplant_freePending(ctx, pending_threads);
+      transplantFreePending(ctx, pending_threads);
       completed |= pending_threads;
       printf("Detected pending transplants: 0x%x, curr completed: 0x%x\n", pending_threads, completed);
     }
-    if(hasMessagePending(ctx)) {
-      getMessagePending(ctx, (uint8_t *) &message);
+    if(mmuMsgHasPending(ctx)) {
+      mmuMsgGetPending(ctx, &message);
       REQUIRE(message.type == sPageFaultNotify); // NOTE: running out of entries in a PT set could send another request type
       if(message.PageFaultNotif.permission == DATA_LOAD) {
         INFO("Load page fault detected");
@@ -154,10 +146,10 @@ static int test_stress_memory(
         REQUIRE(message.vpn_hi == VPN_GET_HI(vaddr));
         REQUIRE(message.vpn_lo == VPN_GET_LO(vaddr));
         //printf("Thread[%i]:PAGE_FAULT:VA[%lx]\n", thid, vaddr);
-        pushPageToFPGA(ctx, paddr, &pages[thid*nDataPagesPerThread*PAGE_SIZE+pageIdx*PAGE_SIZE]);
+        dramPagePush(ctx, paddr, &pages[thid*nDataPagesPerThread*PAGE_SIZE+pageIdx*PAGE_SIZE]);
         makeMissReply(DATA_LOAD, thid, asid[thid], vaddr, paddr, &pf_reply);
         printf("Thread[%i]:MISS_REPLY:VA[0x%016lx]->PA[0x%016lx]\n", thid, vaddr, paddr);
-        sendMessageToFPGA(ctx, &pf_reply, sizeof(pf_reply));
+        mmuMsgSend(ctx, &pf_reply);
         curr_ld_page_paddr[thid]+=PAGE_SIZE;
         curr_ld_page_vaddr[thid]+=PAGE_SIZE;
         curr_ld_page_idx[thid]++;
@@ -170,9 +162,9 @@ static int test_stress_memory(
         REQUIRE(message.asid == asid[thid]);
         REQUIRE(message.vpn_hi == VPN_GET_HI(vaddr));
         REQUIRE(message.vpn_lo == VPN_GET_LO(vaddr));
-        pushPageToFPGA(ctx, paddr, &pages[thid*nDataPagesPerThread*PAGE_SIZE+pageIdx*PAGE_SIZE]);
+        dramPagePush(ctx, paddr, &pages[thid*nDataPagesPerThread*PAGE_SIZE+pageIdx*PAGE_SIZE]);
         makeMissReply(DATA_STORE, thid, asid[thid], vaddr, paddr, &pf_reply);
-        sendMessageToFPGA(ctx, &pf_reply, sizeof(pf_reply));
+        mmuMsgSend(ctx, &pf_reply);
         curr_st_page_paddr[thid]+=PAGE_SIZE;
         curr_st_page_vaddr[thid]+=PAGE_SIZE;
         curr_st_page_idx[thid]++;
