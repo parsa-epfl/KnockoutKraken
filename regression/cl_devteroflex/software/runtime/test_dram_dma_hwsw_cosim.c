@@ -185,7 +185,7 @@ int dma_example_hwsw_cosim(int slot_id, size_t buffer_size)
     bool passed = true;
     for (dimm = 0; dimm < 4; dimm++) {
         rc = do_dma_read(read_fd, read_buffer, buffer_size,
-            dimm * MEM_16G, dimm, slot_id);
+            dimm * MEM_16G, (dimm * MEM_16G) >> 34, slot_id);
         fail_on(rc, out, "DMA read failed on DIMM: %d", dimm);
         uint64_t differ = buffer_compare(read_buffer, write_buffer, buffer_size);
         if (differ != 0) {

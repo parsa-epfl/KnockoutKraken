@@ -106,6 +106,7 @@ ${CL_ROOT}/design/ARMFlexTop.v
 ${CL_ROOT}/design/devteroflex_top.sv
 
 ${CL_ROOT}/design/cl_axi_flop.sv
+${CL_ROOT}/design/cl_axi_rename.sv
 ${CL_ROOT}/design/cl_axil_flop.sv
 ${CL_ROOT}/design/axil_slave.sv
 ${CL_ROOT}/design/mem_scrb.sv

@@ -1,3 +1,4 @@
+
 // Amazon FPGA Hardware Development Kit
 //
 // Copyright 2016 Amazon.com, Inc. or its affiliates. All Rights Reserved.
@@ -13,22 +14,14 @@
 // implied. See the License for the specific language governing permissions and
 // limitations under the License.
 
+`ifndef CL_COMMON_DEFAULTS
+`define CL_COMMON_DEFAULTS
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
+// Value to return for PCIS access to unimplemented register address
+`define UNIMPLEMENTED_REG_VALUE 32'hdeaddead
 
-// Vivado does not support svGetScopeFromName
-#ifndef VIVADO_SIM
-#include "svdpi.h"
-#endif
+// CL Register Addresses
+`define HELLO_WORLD_REG_ADDR    32'h0000_0500
+`define VLED_REG_ADDR           32'h0000_0504
 
-#include "sh_dpi_tasks.c"
-
-void test_main(uint32_t *exit_code) {
-
-  // NULL Test
-  printf("Running test_null");
-
-  *exit_code = 0;
-}
+`endif

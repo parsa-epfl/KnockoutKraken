@@ -37,9 +37,9 @@
 `define CL_DRAM_DMA_AXI_MSTR_CWDR_ADDR  32'h0000_000C
 `define CL_DRAM_DMA_AXI_MSTR_CRDR_ADDR  32'h0000_0010
 
-//`define DDR_A_ABSENT 1
-//`define DDR_B_ABSENT 1
-//`define DDR_D_ABSENT 1
+`define DDR_A_ABSENT 1
+`define DDR_B_ABSENT 1
+`define DDR_D_ABSENT 1
 
 // Defining local macros that will instantiate the desired DDR controllers in
 // the CL.
