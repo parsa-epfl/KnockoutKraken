@@ -39,42 +39,23 @@ class PipelineParams(
 
 import antmicro.Bus.AXI4Lite
 
-class PipelineAxi(params: PipelineParams) extends Module {
-  private val axiAddr_range = (0, 0xA000)
-  private val csrAddr_range = (axiAddr_range._1 >> 2, axiAddr_range._2 >> 2)
-
-  val pipeline = Module(new PipelineWithTransplant(params))
-
-  private val uAxilToCSR = Module(new AXI4LiteCSR(params.axiDataW, csrAddr_range._2 - csrAddr_range._1))
-
-  private val transplantCtrl_regCount = 4
-  private val cfgBusCSR_thid2asid = new CSRBusSlave(0x8000 >> 2, params.thidN) // Address is 32b word addressed
-  private val cfgBusCSR_transplant = new CSRBusSlave(0x9000 >> 2, transplantCtrl_regCount) // Address is 32b word addressed
+class PipelineWithCSR(params: PipelineParams) extends Module {
+  private val uCSRmux = Module(new CSRBusMasterToNSlaves(
+    params.axiDataW, Seq(
+      new CSRBusSlaveConfig(0, 128),
+      new CSRBusSlaveConfig(0x100, 4),
+    ), 
+    (0, 0x200)
+  ))
 
   private val uCSRthid2asid = Module(new CSR_thid2asid(params.thidN, params.asidW, thid2asidPortsN = 2))
-  private val uCSR2ToTransplant = Module(new CSR(params.axiDataW, transplantCtrl_regCount))
-
-  private val uCSRmux = Module(new CSRBusMasterToNSlaves(params.axiDataW, Seq(
-                              cfgBusCSR_thid2asid, cfgBusCSR_transplant), csrAddr_range))
-  uCSRmux.masterBus <> uAxilToCSR.io.bus
   uCSRmux.slavesBus(0) <> uCSRthid2asid.bus
-  uCSRmux.slavesBus(1) <> uCSR2ToTransplant.io.bus
 
-  val S_AXIL = IO(Flipped(uAxilToCSR.io.ctl.cloneType))
-  S_AXIL <> uAxilToCSR.io.ctl
+  val pipeline = Module(new PipelineWithTransplant(params))
+  uCSRmux.slavesBus(1) <> pipeline.hostIO.S_CSR
 
-  val doneCPU = WireInit(Mux(pipeline.hostIO.trans2host.doneCPU.valid, 1.U << pipeline.hostIO.trans2host.doneCPU.tag, 0.U))
-  val doneTrans = WireInit(Mux(pipeline.hostIO.trans2host.doneTrans.valid, 1.U << pipeline.hostIO.trans2host.doneTrans.tag, 0.U))
-  val host2transClear = WireInit(Mux(pipeline.hostIO.trans2host.clear.valid, 1.U << pipeline.hostIO.trans2host.clear.tag, 0.U))
-
-  SetCSR(doneTrans.asUInt, uCSR2ToTransplant.io.csr(0), params.axiDataW)
-  val pendingHostTrans = ClearCSR(host2transClear.asUInt, uCSR2ToTransplant.io.csr(1), params.axiDataW)
-  val host2transStopCPU = ClearCSR(doneCPU.asUInt, uCSR2ToTransplant.io.csr(2), params.axiDataW)
-  val host2transForceTransplant = ClearCSR((-1).S(params.axiDataW).asUInt, uCSR2ToTransplant.io.csr(3), params.axiDataW)
-
-  pipeline.hostIO.host2trans.pending := pendingHostTrans
-  pipeline.hostIO.host2trans.stopCPU := host2transStopCPU
-  pipeline.hostIO.host2trans.forceTransplant := host2transForceTransplant
+  val S_CSR = IO(Flipped(uCSRmux.masterBus.cloneType))
+  S_CSR <> uCSRmux.masterBus
 
   // BRAM (Architecture State)
   val S_AXI_ArchState = Flipped(pipeline.hostIO.S_AXI)
@@ -89,7 +70,6 @@ class PipelineAxi(params: PipelineParams) extends Module {
   // mem.inst.req
   uCSRthid2asid.thid_i(0) := pipeline.mem_io.inst.tlb.req.bits.thid
   mem_io.inst.tlb.req.bits.asid := uCSRthid2asid.asid_o(0).bits
-
 
   uCSRthid2asid.thid_i(1) := pipeline.mem_io.data.tlb.req.bits.thid
   mem_io.data.tlb.req.bits.asid := uCSRthid2asid.asid_o(1).bits
@@ -141,8 +121,7 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   val transplantU = Module(new TransplantUnit(params.thidN))
   class HostIO extends Bundle {
     val S_AXI = Flipped(transplantU.S_AXI.cloneType)
-    val trans2host = transplantU.trans2host.cloneType
-    val host2trans = transplantU.host2trans.cloneType
+    val S_CSR = Flipped(transplantU.S_CSR.cloneType)
   }
   val hostIO = IO(new HostIO)
   // Mem Fault - Transplant
@@ -173,11 +152,10 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   pipeline.transplantIO.start.tag := transplantU.trans2cpu.thread
   pipeline.transplantIO.start.bits.get := transplantU.trans2cpu.pstate.bits.PC
   // Transplant from Host
-  transplantU.host2trans <> hostIO.host2trans
-  transplantU.trans2host <> hostIO.trans2host
+  transplantU.S_CSR <> hostIO.S_CSR
   transplantU.S_AXI <> hostIO.S_AXI
   pipeline.transplantIO.stopCPU := transplantU.cpu2trans.stopCPU
-  archstate.pstateIO.forceTransplant := hostIO.host2trans.forceTransplant
+  archstate.pstateIO.forceTransplant := transplantU.cpu2trans.forceTransplant
 
   // Instrumentation interface
   val instrument = IO(pipeline.instrument.cloneType)

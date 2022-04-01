@@ -29,7 +29,7 @@ class ARMFlexTopInstrumented(
   val S_AXIL = IO(Flipped(axilMulti.S_AXIL.cloneType))
   S_AXI <> devteroFlexTop.AXI_MEM.AXI_MMU.S_AXI
   S_AXIL <> axilMulti.S_AXIL
-  axilMulti.M_AXIL(0) <> devteroFlexTop.S_AXIL_TRANSPLANT
+  // axilMulti.M_AXIL(0) <> devteroFlexTop.S_AXIL_TRANSPLANT
   axilMulti.M_AXIL(1) <> devteroFlexTop.AXI_MEM.AXI_MMU.S_AXIL_QEMU_MQ
   for(i <- 0 until devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_R.length)
     axiMulti_R.S_IF(i) <> devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_R(i)
@@ -76,7 +76,7 @@ class TraceWrapper(val dramAddrW: Int, val axilAddrW: Int, val axilBaseAddr: Int
   private val dramPortTransformer = Module(new DRAMWrapperWrite(new DRAMPortParams(dramAddrW, 512)))
   private val nCSR = 6
   private val uAxilToCSR = Module(new AXI4LiteCSR(32, nCSR))
-  private val cfgBusCSR = new CSRBusSlave(0, nCSR)
+  private val cfgBusCSR = new CSRBusSlaveConfig(0, nCSR)
   private val uCSR = Module(new CSR(32, nCSR))
   uAxilToCSR.io.ctl <> S_AXIL
   uCSR.io.bus <> uAxilToCSR.io.bus

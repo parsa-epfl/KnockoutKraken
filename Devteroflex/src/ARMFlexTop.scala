@@ -90,7 +90,7 @@ class ARMFlexTop(
   assert(paramsPipeline.pAddrW == paramsMemoryHierarchy.pAddrW)
   assert(paramsPipeline.blockSize == paramsMemoryHierarchy.cacheBlockSize)
 
-  val u_pipeline = Module(new PipelineAxi(paramsPipeline))
+  val u_pipeline = Module(new PipelineWithCSR(paramsPipeline))
   private val memory = Module(new MemorySystem(paramsMemoryHierarchy))
   u_pipeline.mmu_io <> memory.pipeline_io.mmu
   // TLB interconnect
@@ -112,9 +112,9 @@ class ARMFlexTop(
   memory.pipeline_io.inst.cache <> u_pipeline.mem_io.inst.cache
   memory.pipeline_io.data.cache <> u_pipeline.mem_io.data.cache
 
-  val S_AXIL_TRANSPLANT = IO(Flipped(u_pipeline.S_AXIL.cloneType))
+  // val S_AXIL_TRANSPLANT = IO(Flipped(u_pipeline.S_AXIL.cloneType))
   val AXI_MEM = IO(memory.axiShell_io.cloneType)
-  S_AXIL_TRANSPLANT <> u_pipeline.S_AXIL
+  // S_AXIL_TRANSPLANT <> u_pipeline.S_AXIL
   AXI_MEM <> memory.axiShell_io
 
   // Instrumentation Interface
@@ -140,7 +140,7 @@ class ARMFlexTopSimulator(
   val S_AXIL = IO(Flipped(axilMulti.S_AXIL.cloneType))
   S_AXI <> devteroFlexTop.AXI_MEM.AXI_MMU.S_AXI
   S_AXIL <> axilMulti.S_AXIL
-  axilMulti.M_AXIL(0) <> devteroFlexTop.S_AXIL_TRANSPLANT
+  // axilMulti.M_AXIL(0) <> devteroFlexTop.S_AXIL_TRANSPLANT
   axilMulti.M_AXIL(1) <> devteroFlexTop.AXI_MEM.AXI_MMU.S_AXIL_QEMU_MQ
   for(i <- 0 until devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_R.length)
     axiMulti_R.S_IF(i) <> devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_R(i)
@@ -230,21 +230,17 @@ class PipelineAxiHacked(params: PipelineParams) extends Module {
   val regCount = 2
   val pipeline = Module(new PipelineWithTransplant(params))
   val axiLiteCSR = Module(new AXI4LiteCSR(axidataW, 40))
+  val AXILiteRealCSR = Module(new AXI4LiteCSR(axidataW, 0x200))
   val csr = Module(new CSR(axidataW, 40))
   csr.io.bus <> axiLiteCSR.io.bus
 
   val S_AXIL_TRANSPLANT = IO(Flipped(axiLiteCSR.io.ctl.cloneType))
   S_AXIL_TRANSPLANT <> axiLiteCSR.io.ctl
 
+  axiLiteCSR.io.bus <> pipeline.hostIO.S_CSR
+
   val S_AXI_ARCHSTATE = IO(Flipped(pipeline.hostIO.S_AXI.cloneType))
   S_AXI_ARCHSTATE <> pipeline.hostIO.S_AXI
-
-  val trans2host = WireInit(Mux(pipeline.hostIO.trans2host.doneTrans.valid, 1.U << pipeline.hostIO.trans2host.doneTrans.tag, 0.U))
-  val host2transClear = WireInit(Mux(pipeline.hostIO.trans2host.clear.valid, 1.U << pipeline.hostIO.trans2host.clear.tag, 0.U))
-
-  SetCSR(trans2host.asUInt, csr.io.csr(0), axidataW)
-  val pendingHostTrans = ClearCSR(host2transClear.asUInt, csr.io.csr(1), axidataW)
-  pipeline.hostIO.host2trans.pending := pendingHostTrans
 
   // Hacked port
   pipeline.mem_io.wake := SimpleCSR(csr.io.csr(2), axidataW).asTypeOf(pipeline.mem_io.wake)
