@@ -21,6 +21,8 @@ add_executable(
   src/client/tests/back-pressure.cc
   src/client/tests/trace-module.cc
   src/client/tests/host-control.cc
+  src/client/tests/aws-shell-ops.cc
+  src/client/tests/transplants.cc
 )
 
 add_executable(
