@@ -159,16 +159,18 @@ int dramPagePush(const FPGAContext *c, uint64_t paddr, void *page);
 int dramPagePull(const FPGAContext *c, uint64_t paddr, void *page);
 
 
-#define BASE_ADDR_MMU_MSG_QUEUE          (BASE_ADDR_AXIL + 0x10000)
+#define BASE_ADDR_MMU_MSG_QUEUE          (BASE_ADDR_AXIL + 0x200 * 4)
 #define MMU_MSG_QUEUE_REG_OFST_FREE      (0x0)
 #define MMU_MSG_QUEUE_REG_OFST_PENDING   (0x4)
+#define MMU_MSG_QUEUE_REG_OFST_PUSH      (0x8)
+#define MMU_MSG_QUEUE_REG_OFST_POP       (0xC)
 
-#define BASE_ADDR_AXI_MMU_MSG            (BASE_ADDR_RTL + 0x8000)
+#define BASE_ADDR_AXI_MMU_MSG            (BASE_ADDR_RTL + 0x10000)
 
 // State transplants
-#define BASE_ADDR_TRANSPLANT_DATA        (BASE_ADDR_AXIL + 0x0)
-#define BASE_ADDR_BIND_ASID_THID         (BASE_ADDR_AXIL + 0X8000)
-#define BASE_ADDR_TRANSPLANT_CTRL        (BASE_ADDR_AXIL + 0x9000)
+#define BASE_ADDR_TRANSPLANT_DATA        (BASE_ADDR_RTL + 0x0)
+#define BASE_ADDR_BIND_ASID_THID         (BASE_ADDR_AXIL + 0x0)
+#define BASE_ADDR_TRANSPLANT_CTRL        (BASE_ADDR_AXIL + 0x100 * 4)
 #define TRANS_REG_OFFST_PENDING          (0x4 * 0)
 #define TRANS_REG_OFFST_FREE_PENDING     (0x4 * 0)
 #define TRANS_REG_OFFST_START            (0x4 * 1)

@@ -74,38 +74,11 @@ int transplantSinglestep(const FPGAContext *c, uint32_t thid, uint32_t asid, Dev
 }
 
 int transplantGetState(const FPGAContext *c, uint32_t thid, uint64_t *state) {
-  int ret = 0;
-  uint32_t reg_val1;
-  uint32_t reg_val2;
-  size_t base_offset = BASE_ADDR_TRANSPLANT_DATA + (thid << 7) * 0x4;
-  for (int reg = 0; reg < ARCH_PSTATE_TOT_REGS; reg++) {
-    ret = readAXIL(c, base_offset + (2 * reg) * 4, &reg_val1);
-    if (ret)
-      return ret;
-    ret = readAXIL(c, base_offset + (2 * reg + 1) * 4, &reg_val2);
-    if (ret)
-      return ret;
-    state[reg] = reg_val1 | ((uint64_t)reg_val2) << 32;
-  }
-  return 0;
+  return readAXI(c, BASE_ADDR_TRANSPLANT_DATA + thid * 512, state, 320);
 }
 
 int transplantPushState(const FPGAContext *c, uint32_t thid, uint64_t *state) {
-  int ret = 0;
-  uint32_t reg_val1;
-  uint32_t reg_val2;
-  size_t base_offset = BASE_ADDR_TRANSPLANT_DATA + (thid << 7) * 0x4;
-  for (int reg = 0; reg < ARCH_PSTATE_TOT_REGS; reg++) {
-    reg_val1 = (uint64_t)state[reg];
-    reg_val2 = ((uint64_t)state[reg] >> 32);
-    ret = writeAXIL(c, base_offset + (2 * reg) * 4, reg_val1);
-    if (ret)
-      return ret;
-    ret = writeAXIL(c, base_offset + (2 * reg + 1) * 4, reg_val2);
-    if (ret)
-      return ret;
-  }
-  return 0;
+  return writeAXI(c, BASE_ADDR_TRANSPLANT_DATA + thid * 512, state, 320);
 }
 
 int transplantWaitTillPending(const FPGAContext *c, uint32_t *pending_threads) {
@@ -161,20 +134,23 @@ int mmuMsgGetForce(const FPGAContext *c, MessageFPGA *msg) {
   do {
     hasMessage = mmuMsgHasPending(c);
   } while (!hasMessage);
-  return mmuMsgGetPending(c, msg);
+  res = mmuMsgGetPending(c, msg);
+  if (res != 0) return res;
+  // pop the message
+  return writeAXIL(c, BASE_ADDR_MMU_MSG_QUEUE + MMU_MSG_QUEUE_REG_OFST_POP, 1);
 }
 
 /**
  * Check whether there is a MMU message pending.
  * @param message the buffer for the message.
- * @returns 0 if successful.
+ * @returns true if there is a message.
  *
  * @note associate with S_AXI_QEMU_MQ and S_AXIL_QEMU_MQ
  * @note this will block the routine until it get message.
  */
 bool mmuMsgHasPending(const FPGAContext *c) {
   uint32_t ret = -1;
-  readAXIL(c, BASE_ADDR_MMU_MSG_QUEUE + 0x4, &ret);
+  readAXIL(c, BASE_ADDR_MMU_MSG_QUEUE + MMU_MSG_QUEUE_REG_OFST_PENDING, &ret);
   return !(ret == 0);
 }
 
@@ -201,9 +177,12 @@ int mmuMsgGetPending(const FPGAContext *c, MessageFPGA *msg) {
 int mmuMsgSend(const FPGAContext *c, MessageFPGA *msg) {
   uint32_t res = -1;
   do {
-    readAXIL(c, BASE_ADDR_MMU_MSG_QUEUE, &res);
+    readAXIL(c, BASE_ADDR_MMU_MSG_QUEUE + MMU_MSG_QUEUE_REG_OFST_FREE, &res);
   } while (res == 0); // wait for the message to be 1.
-  return writeAXI(c, BASE_ADDR_AXI_MMU_MSG, msg, sizeof(MessageFPGA));
+  res = writeAXI(c, BASE_ADDR_AXI_MMU_MSG, msg, sizeof(MessageFPGA));
+  if (res != 0) return res;
+  // send the message out
+  return writeAXIL(c, BASE_ADDR_MMU_MSG_QUEUE + MMU_MSG_QUEUE_REG_OFST_PUSH, 1);
 }
 
 /**
