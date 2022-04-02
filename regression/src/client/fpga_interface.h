@@ -135,7 +135,6 @@ typedef struct MessageFPGA
 typedef struct DevteroflexArchState {
 	uint64_t xregs[32];
 	uint64_t pc;
-	uint64_t sp;
 	uint64_t flags;
     union {
         uint64_t icountRegs;
@@ -144,6 +143,7 @@ typedef struct DevteroflexArchState {
             uint32_t icountBudget;
         };
     };
+    uint64_t _unused_[5];
 } DevteroflexArchState;
 
 
