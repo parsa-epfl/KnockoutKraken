@@ -7,6 +7,7 @@ import armflex_cache.{CacheMMUIO, CacheParams, PageTableParams, TLB2MMUIO, TLBMM
 import armflex_mmu.peripheral._
 import chisel3._
 import chisel3.util._
+import antmicro.CSR.CSRBusBundle
 
 /**
  * Parameter structure for the whole memory system
@@ -78,14 +79,9 @@ case class MemoryHierarchyParams(
 }
 
 class MMU2ShellIO(params: MemoryHierarchyParams) extends Bundle {
-  // Amazon Shell IO
-  // AXI DMA wide access ports
+  // Page Table DMA ports
   val M_DMA_R = Vec(4, new AXIReadMasterIF(params.dramAddrW, params.dramdataW))
   val M_DMA_W = Vec(3, new AXIWriteMasterIF(params.dramAddrW, params.dramdataW))
-  // AXIL DMA host access ports
-  // Minimal AXI address space is 128 bytes -> log2Ceil 128 bits for addressing
-  val S_AXI = Flipped(new AXI4(log2Ceil(128), 512)) // F1 AWS exposed 512-bit AXI bus
-  val S_AXIL_QEMU_MQ = Flipped(new AXI4Lite(32, 32)) // F1 AWS exposed 32-bit AXIL bus to host
   // Host interrupt
   val msgPendingInt = Output(Bool())
 }
@@ -182,9 +178,12 @@ class MMU(
   when(u_qemuPageEvictHandler.M_DMA_W.req.fire) {
     assert(u_qemuPageEvictHandler.M_DMA_W.req.bits.address < (1 << (params.pAddrW - 8)).U, "Page eviction handler should not write the page region.\"")
   }
-  // Host access
-  axiShell_io.S_AXIL_QEMU_MQ <> u_qemuMsgQueue.S_AXIL
-  axiShell_io.S_AXI <> u_qemuMsgQueue.S_AXI
+
+  // Bus to the host
+  val S_AXI = IO(Flipped(new AXI4(log2Ceil(128), 512))) // F1 AWS exposed 512-bit AXI bus. For message transferring only.
+  val S_CSR = IO(Flipped(new CSRBusBundle(32, 4))) // Control registers for MMU.
+  S_CSR <> u_qemuMsgQueue.S_CSR
+  S_AXI <> u_qemuMsgQueue.S_AXI
 
   // Host interrupt TODO: We use polling at the moment, not interrupts
   axiShell_io.msgPendingInt := u_qemuMsgEncoder.o.valid

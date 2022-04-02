@@ -20,17 +20,16 @@ class ARMFlexTopInstrumented(
 ) extends Module {
   import armflex.util.AXIReadMultiplexer
   import armflex.util.AXIWriteMultiplexer
+  private val axilMulti = Module(new AXILInterconnectorNonOptimized(Seq(0x00000, 0x30000), 32, 32))
   private val devteroFlexTop = Module(new ARMFlexTop(paramsPipeline, paramsMemoryHierarchy))
+  axilMulti.M_AXIL(0) <> devteroFlexTop.S_AXIL
   private val axiMulti_R = Module(new AXIReadMultiplexer(paramsMemoryHierarchy.dramAddrW, 512, 6))
   private val axiMulti_W = Module(new AXIWriteMultiplexer(paramsMemoryHierarchy.dramAddrW, 512, 6))
-  //private val axilMulti = Module(new AXILInterconnector(Seq(0x00000, 0x10000, 0x1F000), Seq(0x08000, 0x10000, 0x1F000), 32, 32))
-  private val axilMulti = Module(new AXILInterconnectorNonOptimized(Seq(0x00000, 0x10000, 0x1F000), 32, 32))
-  val S_AXI = IO(Flipped(devteroFlexTop.AXI_MEM.AXI_MMU.S_AXI.cloneType))
+  val S_AXI = IO(Flipped(devteroFlexTop.S_AXI.cloneType))
   val S_AXIL = IO(Flipped(axilMulti.S_AXIL.cloneType))
-  S_AXI <> devteroFlexTop.AXI_MEM.AXI_MMU.S_AXI
+  S_AXI <> devteroFlexTop.S_AXI
   S_AXIL <> axilMulti.S_AXIL
-  // axilMulti.M_AXIL(0) <> devteroFlexTop.S_AXIL_TRANSPLANT
-  axilMulti.M_AXIL(1) <> devteroFlexTop.AXI_MEM.AXI_MMU.S_AXIL_QEMU_MQ
+  
   for(i <- 0 until devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_R.length)
     axiMulti_R.S_IF(i) <> devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_R(i)
   for(i <- 0 until devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_W.length)
@@ -63,7 +62,7 @@ class ARMFlexTopInstrumented(
     paramsMemoryHierarchy.dramAddrW, axilMulti.S_AXIL.addrWidth, 0x1F000))
   traceWrapper.commit.bits <> devteroFlexTop.instrument.commit.bits.pc
   traceWrapper.commit.handshake(devteroFlexTop.instrument.commit)
-  axilMulti.M_AXIL(2) <> traceWrapper.S_AXIL
+  axilMulti.M_AXIL(1) <> traceWrapper.S_AXIL
   axiMulti_W.S_IF(W_IDX+2) <> traceWrapper.M_AXI_W
 }
 

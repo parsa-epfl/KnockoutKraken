@@ -8,6 +8,9 @@ import armflex_mmu.{MMU, MemoryHierarchyParams}
 import armflex.util.ExtraUtils._
 import firrtl.options.TargetDirAnnotation
 import scala.collection.DebugUtils
+import antmicro.CSR.AXI4LiteCSR
+import antmicro.CSR.CSRBusMasterToNSlaves
+import antmicro.CSR.CSRBusSlaveConfig
 
 class MemorySystemPipelinePortIO(params: MemoryHierarchyParams) extends Bundle {
   val cache = Flipped(new PipeCache.PipeCacheIO(params.getCacheParams.pAddrWidth, params.getCacheParams.blockSize))
@@ -46,6 +49,12 @@ class MemorySystem(params: MemoryHierarchyParams) extends Module {
     val M_AXI_DMA_icacheW = icacheAdaptor.M_DMA_W.cloneType
     val M_AXI_DMA_dcacheW = dcacheAdaptor.M_DMA_W.cloneType
   })
+
+  val S_CSR = IO(Flipped(mmu.S_CSR.cloneType))
+  S_CSR <> mmu.S_CSR
+
+  val S_AXI = IO(Flipped(mmu.S_AXI.cloneType))
+  S_AXI <> mmu.S_AXI
 
   pipeline_io.inst.cache <> icache.pipeline_io
   pipeline_io.data.cache <> dcache.pipeline_io
@@ -112,9 +121,35 @@ class ARMFlexTop(
   memory.pipeline_io.inst.cache <> u_pipeline.mem_io.inst.cache
   memory.pipeline_io.data.cache <> u_pipeline.mem_io.data.cache
 
-  // val S_AXIL_TRANSPLANT = IO(Flipped(u_pipeline.S_AXIL.cloneType))
+  
+  // Wrap S_CSR bus with an AXIL
+  val uAXIL2CSR = Module(new AXI4LiteCSR(32, 0x300))
+  val S_AXIL = IO(Flipped(uAXIL2CSR.io.ctl.cloneType))
+  S_AXIL <> uAXIL2CSR.io.ctl
+  val uCSRMux = Module(new CSRBusMasterToNSlaves(32, Seq(
+    new CSRBusSlaveConfig(0, 0x100),
+    new CSRBusSlaveConfig(0x100, 4),
+    new CSRBusSlaveConfig(0x200, 4)
+  ), (0, 0x300)))
+  uCSRMux.masterBus <> uAXIL2CSR.io.bus
+  uCSRMux.slavesBus(0) <> u_pipeline.S_CSR_TreadTable
+  uCSRMux.slavesBus(1) <> u_pipeline.S_CSR_Pipeline
+  uCSRMux.slavesBus(2) <> memory.S_CSR
+
+  // Aggregate AXI slaves
+  val uAXIMux = Module(new AXIInterconnector(
+    Seq(0x00000, 0x10000),
+    Seq(0x10000, 0x10000),
+    17,
+    512
+  ))
+  uAXIMux.M_AXI(0) <> u_pipeline.S_AXI_ArchState // 0x00000 to 0x10000
+  uAXIMux.M_AXI(1) <> memory.S_AXI // 0x10000 to 0x20000
+
+  val S_AXI = IO(Flipped(uAXIMux.S_AXI.cloneType))
+  S_AXI <> uAXIMux.S_AXI
+
   val AXI_MEM = IO(memory.axiShell_io.cloneType)
-  // S_AXIL_TRANSPLANT <> u_pipeline.S_AXIL
   AXI_MEM <> memory.axiShell_io
 
   // Instrumentation Interface
@@ -134,14 +169,11 @@ class ARMFlexTopSimulator(
   val devteroFlexTop = Module(new ARMFlexTop(paramsPipeline, paramsMemoryHierarchy))
   private val axiMulti_R = Module(new AXIReadMultiplexer(paramsMemoryHierarchy.dramAddrW, 512, 6))
   private val axiMulti_W = Module(new AXIWriteMultiplexer(paramsMemoryHierarchy.dramAddrW, 512, 5))
-  //private val axilMulti = Module(new AXILInterconnector(Seq(0x00000, 0x10000), Seq(0x08000,0x10000), 32, 32))
-  private val axilMulti = Module(new AXILInterconnectorNonOptimized(Seq(0x00000, 0x10000), 32, 32))
-  val S_AXI = IO(Flipped(devteroFlexTop.AXI_MEM.AXI_MMU.S_AXI.cloneType))
-  val S_AXIL = IO(Flipped(axilMulti.S_AXIL.cloneType))
-  S_AXI <> devteroFlexTop.AXI_MEM.AXI_MMU.S_AXI
-  S_AXIL <> axilMulti.S_AXIL
-  // axilMulti.M_AXIL(0) <> devteroFlexTop.S_AXIL_TRANSPLANT
-  axilMulti.M_AXIL(1) <> devteroFlexTop.AXI_MEM.AXI_MMU.S_AXIL_QEMU_MQ
+  val S_AXI = IO(Flipped(devteroFlexTop.S_AXI.cloneType))
+  val S_AXIL = IO(Flipped(devteroFlexTop.S_AXIL.cloneType))
+  S_AXI <> devteroFlexTop.S_AXI
+  S_AXIL <> devteroFlexTop.S_AXIL
+  
   for(i <- 0 until devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_R.length)
     axiMulti_R.S_IF(i) <> devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_R(i)
   for(i <- 0 until devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_W.length)

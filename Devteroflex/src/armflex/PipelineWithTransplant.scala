@@ -40,25 +40,16 @@ class PipelineParams(
 import antmicro.Bus.AXI4Lite
 
 class PipelineWithCSR(params: PipelineParams) extends Module {
-  private val uCSRmux = Module(new CSRBusMasterToNSlaves(
-    params.axiDataW, Seq(
-      new CSRBusSlaveConfig(0, 128),
-      new CSRBusSlaveConfig(0x100, 4),
-    ), 
-    (0, 0x200)
-  ))
-
   private val uCSRthid2asid = Module(new CSR_thid2asid(params.thidN, params.asidW, thid2asidPortsN = 2))
-  uCSRmux.slavesBus(0) <> uCSRthid2asid.bus
+  val S_CSR_TreadTable = IO(Flipped(uCSRthid2asid.bus.cloneType))
+  S_CSR_TreadTable <> uCSRthid2asid.bus
 
   val pipeline = Module(new PipelineWithTransplant(params))
-  uCSRmux.slavesBus(1) <> pipeline.hostIO.S_CSR
-
-  val S_CSR = IO(Flipped(uCSRmux.masterBus.cloneType))
-  S_CSR <> uCSRmux.masterBus
+  val S_CSR_Pipeline = IO(Flipped(pipeline.hostIO.S_CSR.cloneType))
+  S_CSR_Pipeline <> pipeline.hostIO.S_CSR
 
   // BRAM (Architecture State)
-  val S_AXI_ArchState = Flipped(pipeline.hostIO.S_AXI)
+  val S_AXI_ArchState = IO(Flipped(pipeline.hostIO.S_AXI.cloneType))
   pipeline.hostIO.S_AXI <> S_AXI_ArchState
 
   // Memory port.
@@ -140,7 +131,7 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
     archstate.rfile_wr <> transplantU.trans2cpu.rfile_wr
     archstate.pstateIO.commit.fire := true.B
     archstate.pstateIO.commit.tag := transplantU.trans2cpu.thread
-    archstate.pstateIO.commit.pstate.next := transplantU.trans2cpu.pstate
+    archstate.pstateIO.commit.pstate.next := transplantU.trans2cpu.pstate.bits
     archstate.pstateIO.commit.isTransplantUnit := true.B
     archstate.pstateIO.commit.isCommitUnit := false.B
     transplantU.cpu2trans.pstate := archstate.pstateIO.commit.pstate.curr
