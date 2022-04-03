@@ -31,7 +31,7 @@ object TransplantIO extends Bundle {
     val rfile_wr = new RFileIO.WRPort(thidN)
     // This port can be used to fetch the pstate. Whose pstate???
     val pstate = Input(new PStateRegs)
-    // This port indicates that which thread is requesting transplant because it depletes the icount.
+    // This port indicates that which thread is requesting transplant.
     val doneCPU = Input(ValidTag(thidN))
     // This port transfer the singlestep command to the CPU.
     val stopCPU = Output(UInt(thidN.W))
@@ -46,16 +46,6 @@ object TransplantIO extends Bundle {
   class Mem2Trans(val thidN: Int) extends Bundle {
     val instFault = Input(ValidTag(thidN))
     val dataFault = Input(ValidTag(thidN))
-  }
-  class Host2Trans(val thidN: Int) extends Bundle {
-    val pending = Input(UInt(thidN.W))
-    val stopCPU = Input(UInt(thidN.W))
-    val forceTransplant = Input(UInt(thidN.W))
-  }
-  class Trans2Host(val thidN: Int) extends Bundle {
-    val doneCPU = Output(ValidTag(thidN))
-    val doneTrans = Output(ValidTag(thidN))
-    val clear = Output(ValidTag(thidN))
   }
 }
 class TransplantUnit(thidN: Int) extends Module {
@@ -139,7 +129,7 @@ class TransplantUnit(thidN: Int) extends Module {
     is(sTSyncingB2CXReg){
       rCurrentSyncReg := rCurrentSyncReg + 1.U
       rSyncState := Mux(
-        rCurrentSyncReg === REG_N.U,
+        rCurrentSyncReg === (REG_N - 1).U,
         sTSyncingB2CPState,
         sTSyncingB2CXReg
       )
@@ -209,7 +199,7 @@ class TransplantUnit(thidN: Int) extends Module {
 
   // Also clear the CSR[1]
   wB2CDoneMask := WireInit(Mux(
-    trans2cpu.start,
+    rSyncState === sTSyncingB2CPState,
     1.U << rSyncThread,
     0.U
   ))

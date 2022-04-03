@@ -364,7 +364,7 @@ void AXIRoutine(TopDUT &dut, IPCServer &ipc) {
     } else {
       // printf("SHELL:HOST:AXI FPGA:RD[0x%lx]:BURST[%lu]\n", result.addr, result.byte_size);
       // read operation
-      dut->S_AXI_araddr;
+      dut->S_AXI_araddr = result.addr;
       dut->S_AXI_arlen = (result.byte_size / BYTES_PER_BLOCK) - 1;
       dut->S_AXI_arburst = 1;
       dut->S_AXI_arsize = 6;

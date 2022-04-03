@@ -179,7 +179,7 @@ int mmuMsgSend(const FPGAContext *c, MessageFPGA *msg) {
   do {
     readAXIL(c, BASE_ADDR_MMU_MSG_QUEUE + MMU_MSG_QUEUE_REG_OFST_FREE, &res);
   } while (res == 0); // wait for the message to be 1.
-  res = writeAXI(c, BASE_ADDR_AXI_MMU_MSG, msg, sizeof(MessageFPGA));
+  res = writeAXI(c, BASE_ADDR_AXI_MMU_MSG + 64, msg, sizeof(MessageFPGA));
   if (res != 0) return res;
   // send the message out
   return writeAXIL(c, BASE_ADDR_MMU_MSG_QUEUE + MMU_MSG_QUEUE_REG_OFST_PUSH, 1);

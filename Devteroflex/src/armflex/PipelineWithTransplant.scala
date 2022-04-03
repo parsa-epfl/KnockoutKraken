@@ -102,8 +102,8 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   pipeline.archstate.issue.rd <> archstate.rfile_rd
 
   // Writeback state from commit
-  archstate.pstateIO.commit <> pipeline.archstate.commit
-  archstate.rfile_wr <> pipeline.archstate.commit.wr
+  
+  
 
   // -------- Stats ------
   // TODO Performance counter stats
@@ -120,25 +120,46 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   transplantU.mem2trans.instFault := 0.U.asTypeOf(transplantU.mem2trans.instFault) // pipeline.mem_io.instFault
   transplantU.mem2trans.dataFault := 0.U.asTypeOf(transplantU.mem2trans.dataFault) // pipeline.mem_io.dataFault
 
+  // Shanqing sincerely to @Rafael: PLEASE!!! Only update one signal from one place, not multiple places? Otherwise when debugging you have to search all possible sources and this is a disaster!!!!
+  // Doing this can bring some benefit when writing, but it's a bomb buried deep for future debugging!
+  archstate.pstateIO.commit <> pipeline.archstate.commit
+
   // Update State - Highjack commit ports from pipeline
   archstate.pstateIO.transplant.thread := transplantU.trans2cpu.thread
+  
   pipeline.archstate.commit.ready := archstate.pstateIO.commit.ready && 
                                     !transplantU.trans2cpu.stallPipeline && 
                                     !transplantU.cpu2trans.stallPipeline
-  transplantU.cpu2trans.rfile_wr <> pipeline.archstate.commit.wr
-  transplantU.cpu2trans.doneCPU := pipeline.transplantIO.done
-  when(transplantU.trans2cpu.pstate.valid) {
+  
+  // Multiplex the archstate write port.
+  when(transplantU.trans2cpu.rfile_wr.en){
+    // transplant unit always has the highest priority to write into the register file.
     archstate.rfile_wr <> transplantU.trans2cpu.rfile_wr
+    // Don't worry, the pipeline should be stalled.
+    assert(pipeline.archstate.commit.ready === false.B)
+  }.otherwise {
+    archstate.rfile_wr <> pipeline.archstate.commit.wr
+  }
+
+  
+  // By default, the Pstate is from the CPU.
+  // @Rafael you have update to the archstate.pstateIO.commit in another place.
+  when(transplantU.trans2cpu.pstate.valid) {
+    // PState is from the pipeline.
     archstate.pstateIO.commit.fire := true.B
     archstate.pstateIO.commit.tag := transplantU.trans2cpu.thread
     archstate.pstateIO.commit.pstate.next := transplantU.trans2cpu.pstate.bits
     archstate.pstateIO.commit.isTransplantUnit := true.B
     archstate.pstateIO.commit.isCommitUnit := false.B
     transplantU.cpu2trans.pstate := archstate.pstateIO.commit.pstate.curr
+    assert(pipeline.archstate.commit.ready === false.B)
   }.otherwise {
     // Read State for Host
     transplantU.cpu2trans.pstate := archstate.pstateIO.transplant.pstate
   }
+
+  transplantU.cpu2trans.rfile_wr <> pipeline.archstate.commit.wr
+  transplantU.cpu2trans.doneCPU := pipeline.transplantIO.done
   pipeline.transplantIO.start.valid := transplantU.trans2cpu.start
   pipeline.transplantIO.start.tag := transplantU.trans2cpu.thread
   pipeline.transplantIO.start.bits.get := transplantU.trans2cpu.pstate.bits.PC

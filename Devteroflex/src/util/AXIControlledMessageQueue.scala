@@ -70,7 +70,7 @@ class AXIControlledMessageQueue extends Module {
   val rAXIWriteState = RegInit(sAXI_AW)
   val rAXIWriteBuffer = RegInit(0.U(512.W))
 
-  S_AXI.aw.awready := rAXIWriteState === sAXI_AW
+  S_AXI.aw.awready := rAXIWriteState === sAXI_AW && S_AXI.aw.awaddr(6) === true.B
 
   S_AXI.w.wready := rAXIWriteState === sAXI_W
 
