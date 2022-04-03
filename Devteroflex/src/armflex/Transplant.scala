@@ -111,8 +111,6 @@ class TransplantUnit(thidN: Int) extends Module {
   val S_AXI = IO(Flipped(new AXI4(16, 512)))
   S_AXI <> uTransplantBRAM.S_AXI
 
-  assert(!(uTransplantBRAM.iReadRequest.valid && uTransplantBRAM.iWriteRequest.valid), "It's impossible to see two request happens at the same time!")
-
   switch(rSyncState){
     is(sTIdle){
       when(rUnpackRequest =/= 0.U){
@@ -190,8 +188,8 @@ class TransplantUnit(thidN: Int) extends Module {
   trans2cpu.pstate.valid := RegNext(rSyncState === sTSyncingB2CPState)
   trans2cpu.pstate.bits := uTransplantBRAM.oReadPStateReply
   
-  // During the synchronization of ArchState, the pipeline is stalled.
-  trans2cpu.stallPipeline := trans2cpu.pstate.valid || trans2cpu.rfile_wr.en
+  // During the synchronization of ArchState (or the BRAM port is occupied), the pipeline is stalled.
+  trans2cpu.stallPipeline := trans2cpu.pstate.valid || trans2cpu.rfile_wr.en || uTransplantBRAM.iReadRequest.valid || uTransplantBRAM.iReadPStateRequest.valid
 
   // Restart a thread after transfer is done.
   trans2cpu.thread := rSyncThread
