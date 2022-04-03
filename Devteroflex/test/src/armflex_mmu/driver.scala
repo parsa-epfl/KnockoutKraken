@@ -7,6 +7,7 @@ import armflex_mmu.peripheral.PageTableSetPacket
 import chisel3._
 import chisel3.util.log2Ceil
 import chiseltest._
+import antmicro.CSR.AXI4LiteCSR
 
 object PageDemanderTestHelper {
 
@@ -84,8 +85,8 @@ class MMUDUT(
   val icache_wb_queue_empty_i = IO(Input(u_page_demander.cacheAxiCtrl_io.icacheWbEmpty.cloneType))
   icache_wb_queue_empty_i <> u_page_demander.cacheAxiCtrl_io.icacheWbEmpty
   // AXI slave of the page buffer
-  val S_AXI = IO(Flipped(u_page_demander.axiShell_io.S_AXI.cloneType))
-  S_AXI <> u_page_demander.axiShell_io.S_AXI
+  val S_AXI = IO(Flipped(u_page_demander.S_AXI.cloneType))
+  S_AXI <> u_page_demander.S_AXI
   // AXI Master for pushing message to QEMU
   // I TLB backend request
   val itlb_miss_request_i = IO(Flipped(u_page_demander.tlb_io.inst.missReq.cloneType))
@@ -135,23 +136,20 @@ class MMUDUT(
   u_axi_write.M_AXI.ar <> AXI4AR.stub(params.dramAddrW)
   u_axi_write.M_AXI.r <> AXI4R.stub(params.dramdataW)
 
-  val u_axil_inter = Module(new AXILInterconnector(
-    Seq(0x8000), Seq(0xC000), 32, 32
-    ))
+  val uAXIL2CSR = Module(new AXI4LiteCSR(32, 4))
+  uAXIL2CSR.io.bus <> u_page_demander.S_CSR
 
-  val S_AXIL = IO(Flipped(u_axil_inter.S_AXIL.cloneType))
-  S_AXIL <> u_axil_inter.S_AXIL
-
-  // u_axil_inter.M_AXIL(0) <> u_page_demander.S_AXIL_TT
-  u_axil_inter.M_AXIL(0) <> u_page_demander.axiShell_io.S_AXIL_QEMU_MQ
-
-  // Helper 1: the page set converter
+  val S_AXIL = IO(Flipped(uAXIL2CSR.io.ctl.cloneType))
+  S_AXIL <> uAXIL2CSR.io.ctl
+  
+  // Decode a message from a raw Uint.
   val u_helper_page_set_converter = Module(new PageDemanderTestHelper.PageSetConverter(params.getPageTableParams))
   val pageset_packet_i = IO(Input(u_helper_page_set_converter.pageset_packet_i.cloneType))
   pageset_packet_i <> u_helper_page_set_converter.pageset_packet_i
   val pageset_converter_raw_o = IO(Output(u_helper_page_set_converter.raw_o.cloneType))
   pageset_converter_raw_o <> u_helper_page_set_converter.raw_o
 
+  // Encode a message into a raw UInt.
   val pageset_packet_o = IO(Output(new PageTableSetPacket(params.getPageTableParams)))
   pageset_packet_o <> u_helper_page_set_converter.pageset_packet_o
   val pageset_converter_raw_i = IO(Input(Vec(3, UInt(512.W))))
@@ -192,7 +190,8 @@ object PageDemanderDriver {
     }
 
     def sendQEMUMessage(message_type: BigInt, rawMessage: Seq[BigInt]) = timescope {
-      target.S_AXI.aw.awaddr.poke(0.U)
+      // Do AXI Write operation
+      target.S_AXI.aw.awaddr.poke(0x40.U)
       target.S_AXI.aw.awready.expect(true.B)
       target.S_AXI.aw.awvalid.poke(true.B)
       target.S_AXI.aw.awburst.poke(1.U)
@@ -207,13 +206,36 @@ object PageDemanderDriver {
       target.S_AXI.w.wlast.poke(true.B)
       target.S_AXI.w.wstrb.poke(((BigInt(1) << 64) - 1).U)
       timescope {
-        waitForSignalToBe(target.S_AXI.w.wready)
         target.S_AXI.w.wvalid.poke(true.B)
+        waitForSignalToBe(target.S_AXI.w.wready)
         tk()
       }
-      waitForSignalToBe(target.S_AXI.b.bvalid)
-      target.S_AXI.b.bready.poke(true.B)
-      tk()
+
+      timescope {
+        target.S_AXI.b.bready.poke(true.B)
+        waitForSignalToBe(target.S_AXI.b.bvalid)
+        tk()
+      }
+
+      // Confirm to send a message
+      target.S_AXIL.aw.awaddr.poke(8.U)
+      timescope {
+        target.S_AXIL.aw.awvalid.poke(true.B)
+        waitForSignalToBe(target.S_AXIL.aw.awready)
+        target.tk()
+      }
+      target.S_AXIL.w.wdata.poke(0.U)
+      target.S_AXIL.w.wstrb.poke(0xF.U)
+      timescope {
+        target.S_AXIL.w.wvalid.poke(true.B)
+        waitForSignalToBe(target.S_AXIL.w.wready)
+        target.tk()
+      }
+      timescope {
+        target.S_AXIL.b.bready.poke(true.B)
+        waitForSignalToBe(target.S_AXIL.b.bvalid)
+        target.tk()
+      }
     }
 
     def sendPageFaultResponse(vpn: BigInt, thid: Int, asid: Int, perm: Int, ppn: Int) = {
@@ -235,18 +257,18 @@ object PageDemanderDriver {
       do{
         println("Access S_AXIL_QEMU_MQ by 0x4")
         timescope {
-          target.S_AXIL.ar.araddr.poke((0x4 + 0x8000).U)
+          target.S_AXIL.ar.araddr.poke((0x4).U)
           target.S_AXIL.ar.arvalid.poke(true.B)
           waitForSignalToBe(target.S_AXIL.ar.arready)
           tk()
         }
         target.S_AXIL.r.rvalid.expect(true.B)
-        val result = target.S_AXIL.r.rdata.peek().litValue
-        if(result != 0){
-          message_available = true
-        }
         timescope {
           target.S_AXIL.r.rready.poke(true.B)
+          val result = target.S_AXIL.r.rdata.peek().litValue
+          if(result != 0){
+            message_available = true
+          }
           tk()
         }
       } while(!message_available);
@@ -265,6 +287,25 @@ object PageDemanderDriver {
       timescope {
         target.S_AXI.r.rready.poke(true.B)
         tk()
+      }
+      // pop the message
+      target.S_AXIL.aw.awaddr.poke(12.U)
+      timescope {
+        target.S_AXIL.aw.awvalid.poke(true.B)
+        waitForSignalToBe(target.S_AXIL.aw.awready)
+        target.tk()
+      }
+      target.S_AXIL.w.wdata.poke(0.U)
+      target.S_AXIL.w.wstrb.poke(0xF.U)
+      timescope {
+        target.S_AXIL.w.wvalid.poke(true.B)
+        waitForSignalToBe(target.S_AXIL.w.wready)
+        target.tk()
+      }
+      timescope {
+        target.S_AXIL.b.bready.poke(true.B)
+        waitForSignalToBe(target.S_AXIL.b.bvalid)
+        target.tk()
       }
     }
 

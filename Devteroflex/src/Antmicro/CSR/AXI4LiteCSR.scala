@@ -29,6 +29,7 @@ import chisel3.util._
 
 class AXI4LiteCSR(dataWidth: Int, regCount: Int) extends Module {
   val addrWidth = log2Ceil(regCount) + 2 // Byte addressed
+  assert(dataWidth == 32) // Since we already add 2 to the address, the dataWidth must be 32bit.
   val io = IO(new Bundle{
     val ctl = Flipped(new AXI4Lite(addrWidth, dataWidth))
     val bus = new CSRBusBundle(dataWidth, regCount)
@@ -69,7 +70,7 @@ class AXI4LiteCSR(dataWidth: Int, regCount: Int) extends Module {
       when(io.ctl.aw.awvalid){
         state := sWriteAddr
         addr := io.ctl.aw.awaddr >> log2Ceil(dataWidth/8).U
-        awready := true.B
+        awready := true.B // TODO: I don't think awready should wait for the awvalid :facepalm:
 
       }.elsewhen(io.ctl.ar.arvalid){
         state := sReadAddr
