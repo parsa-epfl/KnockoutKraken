@@ -8,7 +8,18 @@ import chiseltest._
 import armflex.util._
 
 import armflex.util.SoftwareStructs._
-import armflex.Trans2State._
+
+object Trans2State {
+  val r_DONE :: r_XREGS :: r_PC :: r_SP :: r_FLAGS :: r_ICOUNT :: Nil = Enum(6)
+  val ARCH_XREGS_OFFST = 0
+  val ARCH_PC_OFFST = 32
+  val ARCH_SP_OFFST = 33
+  val ARCH_FLAGS_OFFST = 34
+  val ARCH_ICOUNT_OFFST = 35
+  val ARCH_MAX_OFFST = ARCH_ICOUNT_OFFST + 1
+}
+
+import Trans2State._
 
 object BRAMPortDriver {
   implicit class BRAMPortDriver(target: BRAMPort)(implicit clock: Clock) {

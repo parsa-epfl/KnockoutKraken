@@ -13,7 +13,7 @@ void initArchState(
   for (int i = 0; i < 32; ++i) {
     state->xregs[i] = i;
   }
-  state->sp = 0;
+  //state->sp = 0;
   state->pc = pc;
   state->flags = 0;
   state->icountRegs = 0;

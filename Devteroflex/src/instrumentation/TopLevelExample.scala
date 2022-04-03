@@ -78,8 +78,8 @@ class CSRExample(val params: CSRExampleParams, val computeParams: ComputeExample
 
   // Here we have the base address and number of registers for the modules
   // addressable by AXIL
-  private val cfgBusCSR_stateregs = new CSRBusSlave(params.bramBaseAddr, params.bramWords)
-  private val cfgBusCSR_ctrlregs = new CSRBusSlave(params.ctrlRegsBaseAddr, params.ctrlRegWords)
+  private val cfgBusCSR_stateregs = new CSRBusSlaveConfig(params.bramBaseAddr, params.bramWords)
+  private val cfgBusCSR_ctrlregs = new CSRBusSlaveConfig(params.ctrlRegsBaseAddr, params.ctrlRegWords)
 
   // We have two CSR modules, one translate transactions to access BRAM 
   // and the other one allows you to use one of the multiple CSR modules 
