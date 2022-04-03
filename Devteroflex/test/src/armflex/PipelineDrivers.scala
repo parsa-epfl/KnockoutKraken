@@ -9,7 +9,6 @@ import chiseltest.internal._
 import chisel3.util.DecoupledIO
 import chisel3.experimental.BundleLiterals._
 
-import armflex.Trans2State._
 import armflex.TestDriversExtra._
 
 import armflex.util._
@@ -30,12 +29,12 @@ object PipelineDrivers {
       pipeline.traceIn.valid.poke(false.B)
       pipeline.traceExpect.valid.poke(false.B)
 
-      pipeline.hostIO.port.init
+      // pipeline.hostIO.port.init
       pipeline.hostIO.done.valid.poke(false.B)
     }
 
     def transplantAndStart(tag: Int, pstate: PState): Unit = {
-      pipeline.hostIO.port.wr(tag, pstate)
+      // pipeline.hostIO.port.wr(tag, pstate)
       timescope {
         pipeline.hostIO.done.valid.poke(true.B)
         pipeline.hostIO.done.tag.poke(tag.U)
@@ -43,10 +42,10 @@ object PipelineDrivers {
       }
     }
 
-    def getTransplantOut(tag: Int): PState = {
-      val state = pipeline.hostIO.port.rdState(tag)
-      state
-    }
+    // def getTransplantOut(tag: Int): PState = {
+    //   val state = pipeline.hostIO.port.rdState(tag)
+    //   state
+    // }
 
     def traceIn(trace: CommitTrace): Unit =
       pipeline.traceIn.enqueue(trace)
@@ -159,7 +158,7 @@ import antmicro.CSR.ClearReg
 class PipelineHardDriverModule(params: PipelineParams) extends Module {
   val pipeline = Module(new PipelineWithTransplant(params))
   val hostIO = IO(new Bundle {
-    val port = pipeline.hostIO.port.cloneType
+    //val port = pipeline.hostIO.port.cloneType
     val done = Input(ValidTag(params.thidN))
     val transOut = Output(ValidTag(params.thidN))
   })
