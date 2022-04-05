@@ -36,6 +36,7 @@ class AXIControlledMessageQueue extends Module {
   val S_AXI = IO(Flipped(new AXI4(log2Ceil(128), 512)))
 
   // Read logic. Reading from 0x00 means it get the message, but not pop out.
+  // TODO: Make writing to 0x00 and reading to 0x40 meaningful. 
   val rAXIReadValid = RegInit(false.B)
   val rAXIRid = RegInit(0.U(AXI4.idWidth.W))
   switch(rAXIReadValid){
