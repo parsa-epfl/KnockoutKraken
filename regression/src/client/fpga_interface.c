@@ -163,7 +163,7 @@ bool mmuMsgHasPending(const FPGAContext *c) {
  * @note this will block the routine until it get message.
  */
 int mmuMsgGetPending(const FPGAContext *c, MessageFPGA *msg) {
-  return readAXI(c, BASE_ADDR_AXI_MMU_MSG, msg, sizeof(MessageFPGA));
+  return readAXI(c, BASE_ADDR_AXI_MMU_MSG, msg, sizeof(MessageFPGA)) | writeAXIL(c, BASE_ADDR_MMU_MSG_QUEUE + MMU_MSG_QUEUE_REG_OFST_POP, 1);
 }
 
 /**

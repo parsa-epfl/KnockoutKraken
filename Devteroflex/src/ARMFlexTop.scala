@@ -241,11 +241,13 @@ object ARMFlexTopVerilogEmitter extends App {
       new MemoryHierarchyParams(thidN = 32, pAddrW = 34)
     ), annotations = Seq(TargetDirAnnotation("fpga/")))
   
+  
   // renaming AXI wires
   val processed_v = v.replaceAll("""([MS]_AXI[A-Z_]*_)(aw|w|b|r|ar)_""", "$1")
 
   val fr = new FileWriter(new File("fpga/ARMFlexTop.v"))
-  fr.write(processed_v)
+  fr.write(v)
+  // fr.write(processed_v)
   fr.close()
 }
 
