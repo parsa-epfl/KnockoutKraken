@@ -28,7 +28,6 @@
 void test_main(uint32_t *exit_code) {
 
   // NULL Test
-  printf("Running test_null");
 
   *exit_code = 0;
 }

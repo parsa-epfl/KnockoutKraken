@@ -1,0 +1,120 @@
+#-----------------------------------------------------------
+# Vivado v2021.1 (64-bit)
+# SW Build 3247384 on Thu Jun 10 19:36:07 MDT 2021
+# IP Build 3246043 on Fri Jun 11 00:30:35 MDT 2021
+# Start of session at: Sat Apr  9 21:29:48 2022
+# Process ID: 4066957
+# Current directory: /home/eda/Projects/knockoutkraken/regression/cl_devteroflex
+# Command line: vivado
+# Log file: /home/eda/Projects/knockoutkraken/regression/cl_devteroflex/vivado.log
+# Journal file: /home/eda/Projects/knockoutkraken/regression/cl_devteroflex/vivado.jou
+#-----------------------------------------------------------
+start_gui
+load_feature simulator
+open_wave_database {/home/eda/Projects/knockoutkraken/regression/cl_devteroflex/verif/sim/tb.wdb}
+source ./verif/sim/vivado/test_dram_dma_hwsw_cosim_c/tb.wdb
+open_wave_database {/home/eda/Projects/knockoutkraken/regression/cl_devteroflex/verif/sim/vivado/test_dram_dma_hwsw_cosim_c/tb.wdb}
+source ./verif/scripts/waves.tcl
+current_wave_config {Untitled 1}
+add_wave {{/tb/card/fpga/CL/clk_main_a0}} 
+current_wave_config {Untitled 1}
+add_wave {{/tb/card/fpga/CL/lcl_cl_sh_ddra/awaddr}} 
+open_wave_database {/home/eda/Projects/knockoutkraken/regression/cl_devteroflex/verif/sim/vivado/test_dram_dma_hwsw_cosim_c/tb.wdb}
+add_wave {{/tb/card/fpga/CL/CL_DMA_PCIS_SLV/lcl_cl_sh_ddra/awaddr}} 
+open_wave_database {/home/eda/Projects/knockoutkraken/regression/cl_devteroflex/verif/sim/vivado/test_dram_dma_hwsw_cosim_c/tb.wdb}
+source ./verif/scripts/waves.tcl
+current_wave_config {Untitled 3}
+add_wave {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_awid}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_awaddr}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_awlen}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_awsize}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_awburst}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_awlock}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_awcache}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_awprot}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_awqos}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_awvalid}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_awready}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_wdata}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_wstrb}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_wlast}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_wvalid}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_wready}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_bid}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_bresp}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_bvalid}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_bready}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_arid}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_araddr}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_arlen}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_arsize}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_arburst}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_arlock}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_arcache}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_arprot}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_arqos}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_arvalid}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_arready}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_rid}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_rdata}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_rresp}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_rlast}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_rvalid}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/s_axi_rready}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_awid}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_awaddr}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_awlen}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_awsize}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_awburst}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_awlock}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_awcache}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_awprot}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_awregion}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_awqos}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_awvalid}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_awready}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_wdata}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_wstrb}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_wlast}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_wvalid}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_wready}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_bid}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_bresp}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_bvalid}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_bready}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_arid}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_araddr}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_arlen}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_arsize}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_arburst}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_arlock}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_arcache}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_arprot}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_arregion}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_arqos}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_arvalid}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_arready}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_rid}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_rdata}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_rresp}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_rlast}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_rvalid}} {{/tb/card/fpga/CL/CL_PCIS_XBAR_SLV/PCIS_CROSSBAR/axi_interconnect_0/xbar/m_axi_rready}} 
+close_sim
+close_project
+open_project /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.xpr
+current_sim simulation_3
+create_bd cl_dram_xbar
+create_bd_design cl_dram_xbar
+source ./design/create_dram_xbar.tcl
+source ./design/create_dram_xbar.tcl
+source ./design/create_dram_xbar.tcl
+source ./design/create_dram_xbar.tcl
+source ./design/create_dram_xbar.tcl
+delete_bd_objs [get_bd_nets ACLK_WIRE]
+source ./design/create_dram_xbar.tcl
+source ./design/create_dram_xbar.tcl
+delete_bd_objs [get_bd_nets ACLK_WIRE]
+source ./design/create_dram_xbar.tcl
+undo
+undo
+undo
+source ./design/create_dram_xbar.tcl
+set_property synth_checkpoint_mode Singular [get_files  /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.srcs/sources_1/bd/cl_dram_xbar/cl_dram_xbar.bd]
+generate_target all [get_files  /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.srcs/sources_1/bd/cl_dram_xbar/cl_dram_xbar.bd]
+export_ip_user_files -of_objects [get_files /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.srcs/sources_1/bd/cl_dram_xbar/cl_dram_xbar.bd] -no_script -sync -force -quiet
+create_ip_run [get_files -of_objects [get_fileset sources_1] /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.srcs/sources_1/bd/cl_dram_xbar/cl_dram_xbar.bd]
+launch_runs cl_dram_xbar_synth_1 -jobs 10
+wait_on_run cl_dram_xbar_synth_1
+export_simulation -of_objects [get_files /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.srcs/sources_1/bd/cl_dram_xbar/cl_dram_xbar.bd] -directory /home/eda/VivadoProjects/IP_generator_2021.1/ip_user_files/sim_scripts -ip_user_files_dir /home/eda/VivadoProjects/IP_generator_2021.1/ip_user_files -ipstatic_source_dir /home/eda/VivadoProjects/IP_generator_2021.1/ip_user_files/ipstatic -lib_map_path [list {modelsim=/home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.cache/compile_simlib/modelsim} {questa=/home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.cache/compile_simlib/questa} {ies=/home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.cache/compile_simlib/ies} {xcelium=/home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.cache/compile_simlib/xcelium} {vcs=/home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.cache/compile_simlib/vcs} {riviera=/home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.cache/compile_simlib/riviera}] -use_ip_compiled_libs -force -quiet
+make_wrapper -files [get_files /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.srcs/sources_1/bd/cl_dram_xbar/cl_dram_xbar.bd] -top
+add_files -norecurse -copy_to /home/eda/VivadoProjects/IP_generator_2021.1 /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.gen/sources_1/bd/cl_dram_xbar/hdl/cl_dram_xbar_wrapper.v
+create_bd_design cl_xbar
+source ./design/create_dram_xbar.tcl
+source ./design/create_pcis_xbar.tcl
+delete_bd_objs [get_bd_intf_nets M_AXI_DRAM_IO]
+delete_bd_objs [get_bd_intf_ports M_AXI_DRAM]
+delete_bd_objs [get_bd_intf_nets S_PCIS_DRAM_AXI_IO]
+delete_bd_objs [get_bd_intf_ports S_PCIS_DRAM_AXI]
+connect_bd_intf_net -boundary_type upper [get_bd_intf_pins axi_interconnect_0/M00_AXI] [get_bd_intf_pins axi_dram_xbar/S00_AXI]
+regenerate_bd_layout
+startgroup
+apply_bd_automation -rule xilinx.com:bd_rule:clkrst -config { Clk {/ACLK (250 MHz)} Freq {100} Ref_Clk0 {} Ref_Clk1 {} Ref_Clk2 {}}  [get_bd_pins axi_interconnect_0/ACLK]
+apply_bd_automation -rule xilinx.com:bd_rule:clkrst -config { Clk {/ACLK (250 MHz)} Freq {100} Ref_Clk0 {} Ref_Clk1 {} Ref_Clk2 {}}  [get_bd_pins axi_interconnect_0/M00_ACLK]
+apply_bd_automation -rule xilinx.com:bd_rule:clkrst -config { Clk {/ACLK (250 MHz)} Freq {100} Ref_Clk0 {} Ref_Clk1 {} Ref_Clk2 {}}  [get_bd_pins axi_interconnect_0/M01_ACLK]
+apply_bd_automation -rule xilinx.com:bd_rule:clkrst -config { Clk {/ACLK (250 MHz)} Freq {100} Ref_Clk0 {} Ref_Clk1 {} Ref_Clk2 {}}  [get_bd_pins axi_interconnect_0/S00_ACLK]
+endgroup
+regenerate_bd_layout
+undo
+undo
+startgroup
+apply_bd_automation -rule xilinx.com:bd_rule:clkrst -config { Clk {/ACLK (250 MHz)} Freq {100} Ref_Clk0 {} Ref_Clk1 {} Ref_Clk2 {}}  [get_bd_pins axi_interconnect_0/ACLK]
+apply_bd_automation -rule xilinx.com:bd_rule:clkrst -config { Clk {/ACLK (250 MHz)} Freq {100} Ref_Clk0 {} Ref_Clk1 {} Ref_Clk2 {}}  [get_bd_pins axi_interconnect_0/M00_ACLK]
+apply_bd_automation -rule xilinx.com:bd_rule:clkrst -config { Clk {/ACLK (250 MHz)} Freq {100} Ref_Clk0 {} Ref_Clk1 {} Ref_Clk2 {}}  [get_bd_pins axi_interconnect_0/M01_ACLK]
+apply_bd_automation -rule xilinx.com:bd_rule:clkrst -config { Clk {/ACLK (250 MHz)} Freq {100} Ref_Clk0 {} Ref_Clk1 {} Ref_Clk2 {}}  [get_bd_pins axi_interconnect_0/S00_ACLK]
+endgroup
+delete_bd_objs [get_bd_cells rst_ACLK_250M]
+regenerate_bd_layout
+export_ip_user_files -of_objects  [get_files /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.srcs/sources_1/bd/cl_xbar/cl_xbar.bd] -no_script -reset -force -quiet
+remove_files  /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.srcs/sources_1/bd/cl_xbar/cl_xbar.bd
+file delete -force /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.srcs/sources_1/bd/cl_xbar
+file delete -force /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.gen/sources_1/bd/cl_xbar
+source ./design/create_xbar.tcl
+source ./design/create_xbar.tcl
+source ./design/create_xbar.tcl
+delete_bd_objs [get_bd_intf_ports S_PCIS_DRAM_AXI]
+source ./design/create_xbar.tcl
+assign_bd_address -target_address_space /S_AXI_PCIS [get_bd_addr_segs M_00G_16G_AXI/Reg] -force
+assign_bd_address -target_address_space /S_AXI_PCIS [get_bd_addr_segs M_16G_32G_AXI/Reg] -force
+assign_bd_address -target_address_space /S_AXI_PCIS [get_bd_addr_segs M_32G_48G_AXI/Reg] -force
+assign_bd_address -target_address_space /S_AXI_PCIS [get_bd_addr_segs M_48G_64G_AXI/Reg] -force
+delete_bd_objs [get_bd_addr_segs S_AXI_PCIS/SEG_M01_AXI_Reg] [get_bd_addr_segs S_AXI_PCIS/SEG_M_00G_16G_AXI_Reg] [get_bd_addr_segs S_AXI_PCIS/SEG_M_16G_32G_AXI_Reg] [get_bd_addr_segs S_AXI_PCIS/SEG_M_32G_48G_AXI_Reg] [get_bd_addr_segs S_AXI_PCIS/SEG_M_48G_64G_AXI_Reg]
+assign_bd_address -target_address_space /S_AXI_PCIS [get_bd_addr_segs M_00G_16G_AXI/Reg] -force
+set_property offset 0x0000000000000000 [get_bd_addr_segs {S_AXI_PCIS/SEG_M_00G_16G_AXI_Reg}]
+set_property range 64G [get_bd_addr_segs {S_AXI_PCIS/SEG_M_00G_16G_AXI_Reg}]
+set_property range 16G [get_bd_addr_segs {S_AXI_PCIS/SEG_M_00G_16G_AXI_Reg}]
+delete_bd_objs [get_bd_addr_segs S_AXI_PCIS/SEG_M_00G_16G_AXI_Reg]
+source ./design/create_xbar.tcl
+export_ip_user_files -of_objects  [get_files /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.srcs/sources_1/bd/cl_xbar/cl_xbar.bd] -no_script -reset -force -quiet
+remove_files  /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.srcs/sources_1/bd/cl_xbar/cl_xbar.bd
+file delete -force /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.srcs/sources_1/bd/cl_xbar
+file delete -force /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.gen/sources_1/bd/cl_xbar
+source ./design/create_xbar.tcl
+source ./design/create_xbar.tcl
+set_property synth_checkpoint_mode Singular [get_files  /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.srcs/sources_1/bd/cl_xbar/cl_xbar.bd]
+generate_target all [get_files  /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.srcs/sources_1/bd/cl_xbar/cl_xbar.bd]
+export_ip_user_files -of_objects [get_files /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.srcs/sources_1/bd/cl_xbar/cl_xbar.bd] -no_script -sync -force -quiet
+create_ip_run [get_files -of_objects [get_fileset sources_1] /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.srcs/sources_1/bd/cl_xbar/cl_xbar.bd]
+launch_runs cl_xbar_synth_1 -jobs 10
+wait_on_run cl_xbar_synth_1
+export_simulation -of_objects [get_files /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.srcs/sources_1/bd/cl_xbar/cl_xbar.bd] -directory /home/eda/VivadoProjects/IP_generator_2021.1/ip_user_files/sim_scripts -ip_user_files_dir /home/eda/VivadoProjects/IP_generator_2021.1/ip_user_files -ipstatic_source_dir /home/eda/VivadoProjects/IP_generator_2021.1/ip_user_files/ipstatic -lib_map_path [list {modelsim=/home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.cache/compile_simlib/modelsim} {questa=/home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.cache/compile_simlib/questa} {ies=/home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.cache/compile_simlib/ies} {xcelium=/home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.cache/compile_simlib/xcelium} {vcs=/home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.cache/compile_simlib/vcs} {riviera=/home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.cache/compile_simlib/riviera}] -use_ip_compiled_libs -force -quiet
+export_ip_user_files -of_objects  [get_files /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.srcs/sources_1/bd/axi_interconnect_pcis/axi_interconnect_pcis.bd] -no_script -reset -force -quiet
+export_ip_user_files -of_objects  [get_files /home/eda/Projects/aws-fpga-devtero/hdk/common/shell_v04261818/design/ip/cl_axi_interconnect/cl_axi_interconnect.bd] -no_script -reset -force -quiet
+remove_files  {/home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.srcs/sources_1/bd/axi_interconnect_pcis/axi_interconnect_pcis.bd /home/eda/Projects/aws-fpga-devtero/hdk/common/shell_v04261818/design/ip/cl_axi_interconnect/cl_axi_interconnect.bd}
+file delete -force /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.srcs/sources_1/bd/axi_interconnect_pcis
+file delete -force /home/eda/VivadoProjects/IP_generator_2021.1/managed_ip_project/managed_ip_project.gen/sources_1/bd/axi_interconnect_pcis /home/eda/Projects/aws-fpga-devtero/hdk/common/shell_v04261818/design/ip/cl_axi_interconnect

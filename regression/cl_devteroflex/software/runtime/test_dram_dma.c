@@ -34,14 +34,7 @@
 #define USER_INTERRUPTS_MAX  (16)
 
 /* use the standard out logger */
-//static const struct logger *logger = &logger_stdout;
-#if !defined(SV_TEST)
-/* use the stdout logger */
-const struct logger *logger = &logger_stdout;
-#else
-# define log_error(...) printf(__VA_ARGS__); printf("\n")
-# define log_info(...) printf(__VA_ARGS__); printf("\n")
-#endif
+static const struct logger *logger = &logger_stdout;
 
 void usage(const char* program_name);
 int dma_example(int slot_id, size_t buffer_size);

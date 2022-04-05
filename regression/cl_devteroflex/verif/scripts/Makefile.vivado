@@ -32,9 +32,9 @@ compile: compile-c compile-verilog
 run:
 
 ifeq ($(TEST),test_null)
-	rm -f /home/eda/.sockets/axi*
+	rm -f /dev/shm/axi*
 	cd $(SIM_DIR) && xsim -R -log $(C_TEST).log $(PLUSARGS) -tclbatch $(SCRIPTS_DIR)/waves.tcl tb
 else
-	rm -f /home/eda/.sockets/axi*
+	rm -f /dev/shm/axi*
 	cd $(SIM_DIR) && xsim -R -log $(TEST).log $(PLUSARGS) -tclbatch $(SCRIPTS_DIR)/waves.tcl tb
 endif

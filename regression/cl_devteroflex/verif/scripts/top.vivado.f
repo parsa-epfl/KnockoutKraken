@@ -48,37 +48,79 @@ ${HDK_SHELL_DESIGN_DIR}/ip/src_register_slice/sim/src_register_slice.v
 ${HDK_SHELL_DESIGN_DIR}/ip/axi_register_slice/sim/axi_register_slice.v
 ${HDK_SHELL_DESIGN_DIR}/ip/axi_register_slice_light/sim/axi_register_slice_light.v
 
-# DRAM interconnect
-${HDK_SHELL_DESIGN_DIR}/ip/cl_axi_interconnect/ipshared/9909/hdl/axi_data_fifo_v2_1_vl_rfs.v
-${HDK_SHELL_DESIGN_DIR}/ip/cl_axi_interconnect/ipshared/c631/hdl/axi_crossbar_v2_1_vl_rfs.v
-${HDK_SHELL_DESIGN_DIR}/ip/cl_axi_interconnect/ip/cl_axi_interconnect_xbar_0/sim/cl_axi_interconnect_xbar_0.v
-${HDK_SHELL_DESIGN_DIR}/ip/cl_axi_interconnect/ip/cl_axi_interconnect_s00_regslice_0/sim/cl_axi_interconnect_s00_regslice_0.v
-${HDK_SHELL_DESIGN_DIR}/ip/cl_axi_interconnect/ip/cl_axi_interconnect_s01_regslice_0/sim/cl_axi_interconnect_s01_regslice_0.v
-${HDK_SHELL_DESIGN_DIR}/ip/cl_axi_interconnect/ip/cl_axi_interconnect_m00_regslice_0/sim/cl_axi_interconnect_m00_regslice_0.v
-${HDK_SHELL_DESIGN_DIR}/ip/cl_axi_interconnect/ip/cl_axi_interconnect_m01_regslice_0/sim/cl_axi_interconnect_m01_regslice_0.v
-${HDK_SHELL_DESIGN_DIR}/ip/cl_axi_interconnect/ip/cl_axi_interconnect_m02_regslice_0/sim/cl_axi_interconnect_m02_regslice_0.v
-${HDK_SHELL_DESIGN_DIR}/ip/cl_axi_interconnect/ip/cl_axi_interconnect_m03_regslice_0/sim/cl_axi_interconnect_m03_regslice_0.v
-${HDK_SHELL_DESIGN_DIR}/ip/cl_axi_interconnect/sim/cl_axi_interconnect.v
+# SH PCIS XBAR
+#${CL_ROOT}/design/sh_pcis_xbar/ipshared/axi_crossbar/hdl/axi_crossbar_v2_1_vl_rfs.v
+#${CL_ROOT}/design/sh_pcis_xbar/ipshared/axi_data_fifo/hdl/axi_data_fifo_v2_1_vl_rfs.v
+#${CL_ROOT}/design/sh_pcis_xbar/ipshared/axi_infrastructure/hdl/axi_infrastructure_v1_1_vl_rfs.v
+#${CL_ROOT}/design/sh_pcis_xbar/ipshared/axi_register_slice/hdl/axi_register_slice_v2_1_vl_rfs.v
+#${CL_ROOT}/design/sh_pcis_xbar/ipshared/fifo_generator/hdl/fifo_generator_v13_2_rfs.v
+#
+#${CL_ROOT}/design/sh_pcis_xbar/ip/sh_pcis_xbar_xbar_0/sim/sh_pcis_xbar_xbar_0.v
+#${CL_ROOT}/design/sh_pcis_xbar/ip/sh_pcis_xbar_s00_regslice_0/sim/sh_pcis_xbar_s00_regslice_0.v
+#${CL_ROOT}/design/sh_pcis_xbar/ip/sh_pcis_xbar_m00_regslice_0/sim/sh_pcis_xbar_m00_regslice_0.v
+#${CL_ROOT}/design/sh_pcis_xbar/ip/sh_pcis_xbar_m01_regslice_0/sim/sh_pcis_xbar_m01_regslice_0.v
+#${CL_ROOT}/design/sh_pcis_xbar/sim/sh_pcis_xbar.v
+
+# CL DRAM XBAR
+#${CL_ROOT}/design/cl_dram_xbar/ipshared/axi_crossbar/hdl/axi_crossbar_v2_1_vl_rfs.v
+#${CL_ROOT}/design/cl_dram_xbar/ipshared/axi_data_fifo/hdl/axi_data_fifo_v2_1_vl_rfs.v
+#${CL_ROOT}/design/cl_dram_xbar/ipshared/axi_infrastructure/hdl/axi_infrastructure_v1_1_vl_rfs.v
+#${CL_ROOT}/design/cl_dram_xbar/ipshared/axi_register_slice/hdl/axi_register_slice_v2_1_vl_rfs.v
+#${CL_ROOT}/design/cl_dram_xbar/ipshared/fifo_generator/hdl/fifo_generator_v13_2_rfs.v
+#
+#${CL_ROOT}/design/cl_dram_xbar/ip/cl_dram_xbar_xbar_0/sim/cl_dram_xbar_xbar_0.v
+#${CL_ROOT}/design/cl_dram_xbar/ip/cl_dram_xbar_s00_regslice_0/sim/cl_dram_xbar_s00_regslice_0.v
+#${CL_ROOT}/design/cl_dram_xbar/ip/cl_dram_xbar_s01_regslice_0/sim/cl_dram_xbar_s01_regslice_0.v
+#${CL_ROOT}/design/cl_dram_xbar/ip/cl_dram_xbar_m00_regslice_0/sim/cl_dram_xbar_m00_regslice_0.v
+#${CL_ROOT}/design/cl_dram_xbar/ip/cl_dram_xbar_m01_regslice_0/sim/cl_dram_xbar_m01_regslice_0.v
+#${CL_ROOT}/design/cl_dram_xbar/ip/cl_dram_xbar_m02_regslice_0/sim/cl_dram_xbar_m02_regslice_0.v
+#${CL_ROOT}/design/cl_dram_xbar/ip/cl_dram_xbar_m03_regslice_0/sim/cl_dram_xbar_m03_regslice_0.v
+#${CL_ROOT}/design/cl_dram_xbar/sim/cl_dram_xbar.v
+
+# CL XBAR (Unified)
+#${CL_ROOT}/design/cl_xbar/ipshared/axi_crossbar/hdl/axi_crossbar_v2_1_vl_rfs.v
+#${CL_ROOT}/design/cl_xbar/ipshared/axi_data_fifo/hdl/axi_data_fifo_v2_1_vl_rfs.v
+#${CL_ROOT}/design/cl_xbar/ipshared/axi_infrastructure/hdl/axi_infrastructure_v1_1_vl_rfs.v
+#${CL_ROOT}/design/cl_xbar/ipshared/axi_register_slice/hdl/axi_register_slice_v2_1_vl_rfs.v
+#${CL_ROOT}/design/cl_xbar/ipshared/fifo_generator/hdl/fifo_generator_v13_2_rfs.v
+#
+#${CL_ROOT}/design/cl_xbar/ip/cl_xbar_xbar_0/sim/cl_xbar_xbar_0.v
+#${CL_ROOT}/design/cl_xbar/ip/cl_xbar_s00_regslice_0/sim/cl_xbar_s00_regslice_0.v
+#${CL_ROOT}/design/cl_xbar/ip/cl_xbar_s01_regslice_0/sim/cl_xbar_s01_regslice_0.v
+#${CL_ROOT}/design/cl_xbar/ip/cl_xbar_m00_regslice_0/sim/cl_xbar_m00_regslice_0.v
+#${CL_ROOT}/design/cl_xbar/ip/cl_xbar_m01_regslice_0/sim/cl_xbar_m01_regslice_0.v
+#${CL_ROOT}/design/cl_xbar/ip/cl_xbar_m02_regslice_0/sim/cl_xbar_m02_regslice_0.v
+#${CL_ROOT}/design/cl_xbar/ip/cl_xbar_m03_regslice_0/sim/cl_xbar_m03_regslice_0.v
+#${CL_ROOT}/design/cl_xbar/ip/cl_xbar_m04_regslice_0/sim/cl_xbar_m04_regslice_0.v
+
+
+# CL XBAR (Nested)
+${CL_ROOT}/design/cl_xbar/ipshared/axi_crossbar/hdl/axi_crossbar_v2_1_vl_rfs.v
+${CL_ROOT}/design/cl_xbar/ipshared/axi_data_fifo/hdl/axi_data_fifo_v2_1_vl_rfs.v
+${CL_ROOT}/design/cl_xbar/ipshared/axi_infrastructure/hdl/axi_infrastructure_v1_1_vl_rfs.v
+${CL_ROOT}/design/cl_xbar/ipshared/axi_register_slice/hdl/axi_register_slice_v2_1_vl_rfs.v
+${CL_ROOT}/design/cl_xbar/ipshared/fifo_generator/hdl/fifo_generator_v13_2_rfs.v
+
+${CL_ROOT}/design/cl_xbar/ip/cl_xbar_xbar_0/sim/cl_xbar_xbar_0.v
+${CL_ROOT}/design/cl_xbar/ip/cl_xbar_s00_regslice_3/sim/cl_xbar_s00_regslice_3.v
+${CL_ROOT}/design/cl_xbar/ip/cl_xbar_s01_regslice_0/sim/cl_xbar_s01_regslice_0.v
+${CL_ROOT}/design/cl_xbar/ip/cl_xbar_m00_regslice_3/sim/cl_xbar_m00_regslice_3.v
+${CL_ROOT}/design/cl_xbar/ip/cl_xbar_m01_regslice_3/sim/cl_xbar_m01_regslice_3.v
+${CL_ROOT}/design/cl_xbar/ip/cl_xbar_m02_regslice_0/sim/cl_xbar_m02_regslice_0.v
+${CL_ROOT}/design/cl_xbar/ip/cl_xbar_m03_regslice_0/sim/cl_xbar_m03_regslice_0.v
+
+${CL_ROOT}/design/cl_xbar/ip/cl_xbar_xbar_1/sim/cl_xbar_xbar_1.v
+${CL_ROOT}/design/cl_xbar/ip/cl_xbar_s00_regslice_2/sim/cl_xbar_s00_regslice_2.v
+${CL_ROOT}/design/cl_xbar/ip/cl_xbar_m00_regslice_2/sim/cl_xbar_m00_regslice_2.v
+${CL_ROOT}/design/cl_xbar/ip/cl_xbar_m01_regslice_2/sim/cl_xbar_m01_regslice_2.v
+
+${CL_ROOT}/design/cl_xbar/sim/cl_xbar.v
 
 ${HDK_SHELL_DESIGN_DIR}/ip/dest_register_slice/hdl/axi_register_slice_v2_1_vl_rfs.v
 ${HDK_SHELL_DESIGN_DIR}/ip/axi_clock_converter_0/hdl/axi_clock_converter_v2_1_vl_rfs.v
 ${HDK_SHELL_DESIGN_DIR}/ip/axi_clock_converter_0/hdl/fifo_generator_v13_2_rfs.v
 
-# PCIS interconnect
-${CL_ROOT}/design/axi_interconnect_pcis/ipshared/axi_crossbar/hdl/axi_crossbar_v2_1_vl_rfs.v
-${CL_ROOT}/design/axi_interconnect_pcis/ipshared/axi_data_fifo/hdl/axi_data_fifo_v2_1_vl_rfs.v
-${CL_ROOT}/design/axi_interconnect_pcis/ipshared/axi_infrastructure/hdl/axi_infrastructure_v1_1_vl_rfs.v
-${CL_ROOT}/design/axi_interconnect_pcis/ipshared/axi_register_slice/hdl/axi_register_slice_v2_1_vl_rfs.v
-${CL_ROOT}/design/axi_interconnect_pcis/ipshared/fifo_generator/hdl/fifo_generator_v13_2_rfs.v
-
-${CL_ROOT}/design/axi_interconnect_pcis/ip/axi_interconnect_pcis_xbar_0/sim/axi_interconnect_pcis_xbar_0.v
-${CL_ROOT}/design/axi_interconnect_pcis/ip/axi_interconnect_pcis_s00_regslice_0/sim/axi_interconnect_pcis_s00_regslice_0.v
-${CL_ROOT}/design/axi_interconnect_pcis/ip/axi_interconnect_pcis_m00_regslice_0/sim/axi_interconnect_pcis_m00_regslice_0.v
-${CL_ROOT}/design/axi_interconnect_pcis/ip/axi_interconnect_pcis_m01_regslice_0/sim/axi_interconnect_pcis_m01_regslice_0.v
-${CL_ROOT}/design/axi_interconnect_pcis/sim/axi_interconnect_pcis.v
-
 # Extra stuff
-
 
 ${HDK_COMMON_DIR}/verif/models/ddr4_rdimm_wrapper/ddr4_bi_delay.sv
 ${HDK_COMMON_DIR}/verif/models/ddr4_rdimm_wrapper/ddr4_db_delay_model.sv
@@ -105,17 +147,19 @@ ${CL_ROOT}/design/MultAdd_3input.v
 ${CL_ROOT}/design/ARMFlexTop.v
 ${CL_ROOT}/design/devteroflex_top.sv
 
-${CL_ROOT}/design/cl_axi_flop.sv
+#${CL_ROOT}/design/cl_axi_flop.sv
 ${CL_ROOT}/design/cl_axi_rename.sv
-${CL_ROOT}/design/cl_axil_flop.sv
+#${CL_ROOT}/design/cl_axil_flop.sv
 ${CL_ROOT}/design/axil_slave.sv
 ${CL_ROOT}/design/mem_scrb.sv
 ${CL_ROOT}/design/cl_tst_scrb.sv
 ${CL_ROOT}/design/cl_tst.sv
 ${CL_ROOT}/design/cl_int_tst.sv
 ${CL_ROOT}/design/cl_dram_dma_pkg.sv
-${CL_ROOT}/design/cl_dma_pcis_slv.sv
-${CL_ROOT}/design/cl_pcis_interconnect.sv
+#${CL_ROOT}/design/cl_dma_pcis_slv.sv
+#${CL_ROOT}/design/cl_dram_xbar.sv
+#${CL_ROOT}/design/cl_pcis_xbar.sv
+${CL_ROOT}/design/cl_xbar.sv
 ${CL_ROOT}/design/cl_pcim_mstr.sv
 ${CL_ROOT}/design/cl_ila.sv
 ${CL_ROOT}/design/cl_vio.sv

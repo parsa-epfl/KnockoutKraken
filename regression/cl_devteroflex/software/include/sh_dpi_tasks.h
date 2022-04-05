@@ -50,7 +50,7 @@ void log_printf(const char *format, ...)
 
   va_end(args);
 }
-dfsd
+
 void int_handler(uint32_t int_num)
 {
 // Vivado does not support svGetScopeFromName

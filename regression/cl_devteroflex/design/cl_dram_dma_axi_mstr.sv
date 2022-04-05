@@ -24,7 +24,7 @@ module cl_dram_dma_axi_mstr (
 
     input            aclk,
     input            aresetn,
-    axi_bus_t.slave  cl_rtl_m_axi,  // AXI Master Bus
+    axi_bus_t.slave  cl_rtl_dram,  // AXI Master Bus
     cfg_bus_t.master axi_mstr_cfg_bus  // Config Bus for Register Access
 );
 
@@ -157,8 +157,8 @@ module cl_dram_dma_axi_mstr (
    // Command Done
    // ----------------------
 
-   assign cmd_done_ns = cmd_done_q | (axi_mstr_sm_rd_data & cl_rtl_m_axi.rvalid) |
-                                     (axi_mstr_sm_wr_resp & cl_rtl_m_axi.bvalid) ;
+   assign cmd_done_ns = cmd_done_q | (axi_mstr_sm_rd_data & cl_rtl_dram.rvalid) |
+                                     (axi_mstr_sm_wr_resp & cl_rtl_dram.bvalid) ;
 
    always_ff @(posedge aclk)
       if (!aresetn) begin
@@ -238,7 +238,7 @@ module cl_dram_dma_axi_mstr (
    // ----------------------
 
    assign cmd_rd_data_ns[31:0] =
-         (axi_mstr_sm_rd_data & cl_rtl_m_axi.rvalid) ? (cl_rtl_m_axi.rdata[511:0] >> (8 * cmd_addr_lo_q[5:0])) :
+         (axi_mstr_sm_rd_data & cl_rtl_dram.rvalid) ? (cl_rtl_dram.rdata[511:0] >> (8 * cmd_addr_lo_q[5:0])) :
                                                           cmd_rd_data_q[31:0]         ;
 
    always_ff @(posedge aclk)
@@ -279,27 +279,27 @@ module cl_dram_dma_axi_mstr (
        end
 
        AXI_MSTR_SM_WR: begin
-         if (cl_rtl_m_axi.awready) axi_mstr_sm_ns[2:0] = AXI_MSTR_SM_WR_DATA;
+         if (cl_rtl_dram.awready) axi_mstr_sm_ns[2:0] = AXI_MSTR_SM_WR_DATA;
          else                         axi_mstr_sm_ns[2:0] = AXI_MSTR_SM_WR;
        end
 
        AXI_MSTR_SM_WR_DATA: begin
-         if (cl_rtl_m_axi.wready) axi_mstr_sm_ns[2:0]  = AXI_MSTR_SM_WR_RESP;
+         if (cl_rtl_dram.wready) axi_mstr_sm_ns[2:0]  = AXI_MSTR_SM_WR_RESP;
          else                        axi_mstr_sm_ns[2:0]  = AXI_MSTR_SM_WR_DATA;
        end
 
        AXI_MSTR_SM_WR_RESP: begin
-         if (cl_rtl_m_axi.bvalid)  axi_mstr_sm_ns[2:0] = AXI_MSTR_SM_IDLE;
+         if (cl_rtl_dram.bvalid)  axi_mstr_sm_ns[2:0] = AXI_MSTR_SM_IDLE;
          else                         axi_mstr_sm_ns[2:0] = AXI_MSTR_SM_WR_RESP;
        end
 
        AXI_MSTR_SM_RD: begin
-         if (cl_rtl_m_axi.arready) axi_mstr_sm_ns[2:0] = AXI_MSTR_SM_RD_DATA;
+         if (cl_rtl_dram.arready) axi_mstr_sm_ns[2:0] = AXI_MSTR_SM_RD_DATA;
          else                         axi_mstr_sm_ns[2:0] = AXI_MSTR_SM_RD;
        end
 
        AXI_MSTR_SM_RD_DATA: begin
-         if (cl_rtl_m_axi.rvalid)  axi_mstr_sm_ns[2:0] = AXI_MSTR_SM_IDLE;
+         if (cl_rtl_dram.rvalid)  axi_mstr_sm_ns[2:0] = AXI_MSTR_SM_IDLE;
          else                         axi_mstr_sm_ns[2:0] = AXI_MSTR_SM_RD_DATA;
        end
 
@@ -330,31 +330,31 @@ module cl_dram_dma_axi_mstr (
 // -----------------------------------------------------------------------------
 
    // Write Address
-   assign cl_rtl_m_axi.awid[15:0]   = 16'b0;                     // Only 1 outstanding command
-   assign cl_rtl_m_axi.awaddr[63:0] = {cmd_addr_hi_q[31:0], cmd_addr_lo_q[31:0]};
-   assign cl_rtl_m_axi.awlen[7:0]   = 8'h00;                     // Always 1 burst
-   assign cl_rtl_m_axi.awsize[2:0]  = 3'b010;                    // Always 4 bytes
-   assign cl_rtl_m_axi.awvalid      = axi_mstr_sm_wr;
+   assign cl_rtl_dram.awid[15:0]   = 16'b0;                     // Only 1 outstanding command
+   assign cl_rtl_dram.awaddr[63:0] = {cmd_addr_hi_q[31:0], cmd_addr_lo_q[31:0]};
+   assign cl_rtl_dram.awlen[7:0]   = 8'h00;                     // Always 1 burst
+   assign cl_rtl_dram.awsize[2:0]  = 3'b010;                    // Always 4 bytes
+   assign cl_rtl_dram.awvalid      = axi_mstr_sm_wr;
 
    // Write Data
-   assign cl_rtl_m_axi.wid[15:0]    = 16'b0;                        // Only 1 outstanding command
-   assign cl_rtl_m_axi.wdata[511:0] = {480'b0, cmd_wr_data_q[31:0]} << (8 * cmd_addr_lo_q[5:0]);
-   assign cl_rtl_m_axi.wstrb[63:0]  = 64'h0000_0000_0000_000F << cmd_addr_lo_q[5:0];      // Always 4 bytes
+   assign cl_rtl_dram.wid[15:0]    = 16'b0;                        // Only 1 outstanding command
+   assign cl_rtl_dram.wdata[511:0] = {480'b0, cmd_wr_data_q[31:0]} << (8 * cmd_addr_lo_q[5:0]);
+   assign cl_rtl_dram.wstrb[63:0]  = 64'h0000_0000_0000_000F << cmd_addr_lo_q[5:0];      // Always 4 bytes
 
-   assign cl_rtl_m_axi.wlast        = 1'b1;                         // Always 1 burst
-   assign cl_rtl_m_axi.wvalid       = axi_mstr_sm_wr_data;
+   assign cl_rtl_dram.wlast        = 1'b1;                         // Always 1 burst
+   assign cl_rtl_dram.wvalid       = axi_mstr_sm_wr_data;
 
    // Write Response
-   assign cl_rtl_m_axi.bready       = axi_mstr_sm_wr_resp;
+   assign cl_rtl_dram.bready       = axi_mstr_sm_wr_resp;
 
    // Read Address
-   assign cl_rtl_m_axi.arid[15:0]   = 16'b0;                     // Only 1 outstanding command
-   assign cl_rtl_m_axi.araddr[63:0] = {cmd_addr_hi_q[31:0], cmd_addr_lo_q[31:0]};
-   assign cl_rtl_m_axi.arlen[7:0]   = 8'h00;                     // Always 1 burst
-   assign cl_rtl_m_axi.arsize[2:0]  = 3'b010;                    // Always 4 bytes
-   assign cl_rtl_m_axi.arvalid      = axi_mstr_sm_rd;
+   assign cl_rtl_dram.arid[15:0]   = 16'b0;                     // Only 1 outstanding command
+   assign cl_rtl_dram.araddr[63:0] = {cmd_addr_hi_q[31:0], cmd_addr_lo_q[31:0]};
+   assign cl_rtl_dram.arlen[7:0]   = 8'h00;                     // Always 1 burst
+   assign cl_rtl_dram.arsize[2:0]  = 3'b010;                    // Always 4 bytes
+   assign cl_rtl_dram.arvalid      = axi_mstr_sm_rd;
 
    // Read Data
-   assign cl_rtl_m_axi.rready       = axi_mstr_sm_rd_data;
+   assign cl_rtl_dram.rready       = axi_mstr_sm_rd_data;
 
 endmodule
