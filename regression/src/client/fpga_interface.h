@@ -118,10 +118,9 @@ typedef struct MessageFPGA
  * CF/VF/NF/ZF : uint64_t
  */
 #define ARCH_PSTATE_PC_OFFST     (32)
-#define ARCH_PSTATE_SP_OFFST     (33)
-#define ARCH_PSTATE_FLAGS_OFFST  (34)
-#define ARCH_PSTATE_ICOUNT_OFFST (35)
-#define ARCH_PSTATE_TOT_REGS     (36)
+#define ARCH_PSTATE_FLAGS_OFFST  (33)
+#define ARCH_PSTATE_ICOUNT_OFFST (34)
+#define ARCH_PSTATE_TOT_REGS     (35)
 #define ARCH_PSTATE_NF_MASK      (3)    // 64bit 3
 #define ARCH_PSTATE_ZF_MASK      (2)    // 64bit 2
 #define ARCH_PSTATE_CF_MASK      (1)    // 64bit 1
