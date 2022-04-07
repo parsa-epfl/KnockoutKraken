@@ -188,11 +188,14 @@ int transplantStopCPU(const FPGAContext *c, uint32_t thid);
 int transplantForceTransplant(const FPGAContext *c, uint32_t thid);
 
 // See cpu.h to match MMUAccessType
+#ifndef MemoryAccessType
 typedef enum MemoryAccessType {
     DATA_LOAD  = 0,
     DATA_STORE = 1,
     INST_FETCH = 2
 } MemoryAccessType;
+#define MemoryAccessType
+#endif
 
 static inline void makeEvictRequest(int asid, uint64_t va, MessageFPGA *evict_request)
 {
