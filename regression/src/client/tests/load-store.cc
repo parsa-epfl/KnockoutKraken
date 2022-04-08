@@ -237,7 +237,7 @@ TEST_CASE("out-of-page-bound-pair-load") {
   data_pages[0][PAGE_SIZE/4 - 1] = 0xAABBCCDD;
   data_pages[1][0] = 0x99887766;
 
-  MemoryAccessType expected_access_types[] = {DATA_LOAD, DATA_LOAD, DATA_STORE};
+  int expected_access_types[3] = {DATA_LOAD, DATA_LOAD, DATA_STORE};
   for(int i = 0; i < 3; ++i){
     INFO("- Query " << i << " page fault message");
     mmuMsgGetForce(&ctx, &message);
