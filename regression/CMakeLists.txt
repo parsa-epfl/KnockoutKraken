@@ -12,6 +12,7 @@ add_executable(
   src/client/main.cpp
   src/client/fpga_interface.c
   src/client/test-helpers.cc
+  src/client/fpga_helpers.c
   src/client/ipc.c
   src/client/tests/asm/asm_helpers.c
   src/client/tests/load-store.cc
@@ -52,7 +53,3 @@ else()
   target_sources(StressTest PRIVATE src/client/fpga_rtl.c src/client/ipc.c)
 endif()
 
-#add_executable(garbage_server src/garbage_server.cc)
-#add_executable(garbage_client src/garbage_client.cc)
-# add_executable(FuckRoutine src/fuck_routine.cc)
-#target_link_libraries(FuckRoutine Threads::Threads)
