@@ -13,7 +13,7 @@ TEST_CASE("trace-pcs-then-stop-single") {
     REQUIRE(initFPGAContext(&ctx) == 0);
     initArchState(&state, 0);
     initState_infinite_loop(&state, true);
-    int paddr = ctx.base_address.page_base;
+    int paddr = ctx.ppage_base_addr;
 
     INFO("Get program page");
     FILE *f = fopen("../src/client/tests/asm/executables/infinite-loop.bin", "rb");
@@ -22,18 +22,18 @@ TEST_CASE("trace-pcs-then-stop-single") {
     fclose(f);
 
     INFO("Push instruction page and state");
-    pushPageToFPGA(&ctx, paddr, page);
+    dramPagePush(&ctx, paddr, page);
     int thread = 0;
     MessageFPGA pf_reply;
     makeMissReply(INST_FETCH, -1, thread, state.pc, paddr, &pf_reply);
-    sendMessageToFPGA(&ctx, &pf_reply, sizeof(pf_reply));
-    registerAndPushState(&ctx, thread, thread, &state);
+    mmuMsgSend(&ctx, &pf_reply);
+    transplantRegisterAndPush(&ctx, thread, thread, &state);
 
     INFO("Advance");
     advanceTicks(&ctx, 100);
 
     INFO("Start Execution");
-    transplant_start(&ctx, thread);
+    transplantStart(&ctx, thread);
 
     INFO("Advance");
     advanceTicks(&ctx, 100);
@@ -56,7 +56,7 @@ TEST_CASE("trace-pcs-then-stop-single") {
     trace_PC_counter_stalls(&ctx, &cntStalls);
 
     INFO("Stop CPU");
-    transplant_stopCPU(&ctx, 0);
+    transplantStopCPU(&ctx, 0);
 
     INFO("Advance");
     advanceTicks(&ctx, 100);

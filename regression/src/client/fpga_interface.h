@@ -1,4 +1,5 @@
-#pragma once
+#ifndef FPGA_INTERFACE_H
+#define FPGA_INTERFACE_H
 
 #include "fpga.h"
 
@@ -145,36 +146,45 @@ typedef struct DevteroflexArchState {
     };
 } DevteroflexArchState;
 
-int registerThreadWithProcess(const struct FPGAContext *c, uint32_t thread_id, uint32_t process_id);
-int checkRxMessageQueue(const struct FPGAContext *c, uint32_t *result);
-int queryMessageFromFPGA(const struct FPGAContext *c, uint8_t message[64]);
-bool hasMessagePending(const FPGAContext *c);
-int getMessagePending(const FPGAContext *c, uint8_t message[64]);
-int sendMessageToFPGA(const struct FPGAContext *c,  void *raw_message, size_t message_size);
-int pushPageToFPGA(const struct FPGAContext *c, uint64_t paddr, void *page);
-int fetchPageFromFPGA(const struct FPGAContext *c, uint64_t paddr, void *buffer);
- 
-int registerAndPushState(const struct FPGAContext *c, uint32_t thread_id, uint32_t process_id, DevteroflexArchState *state);
-int queryThreadState(const struct FPGAContext *c, uint32_t *pending_threads);
-int transplantBack(const struct FPGAContext *c, uint32_t thread_id, DevteroflexArchState *state);
 
-// Helper functions
-int transplant_getState(const FPGAContext *c, uint32_t thread_id, uint64_t *state);
-int transplant_pushState(const FPGAContext *c, uint32_t thread_id, uint64_t *state);
+// MMU
+int  mmuRegisterTHID2ASID(const struct FPGAContext *c, uint32_t thid, uint32_t asid);
+bool mmuMsgHasPending(const FPGAContext *c);
+int  mmuMsgGetPending(const FPGAContext *c, MessageFPGA *msg);
+int  mmuMsgGetForce(const FPGAContext *c, MessageFPGA *msg);
+int  mmuMsgSend(const FPGAContext *c,  MessageFPGA *msg);
 
+// DRAM
+int dramPagePush(const FPGAContext *c, uint64_t paddr, void *page);
+int dramPagePull(const FPGAContext *c, uint64_t paddr, void *page);
+
+
+#define BASE_ADDR_MMU_MSG_QUEUE          (BASE_ADDR_AXIL + 0x10000)
+#define MMU_MSG_QUEUE_REG_OFST_FREE      (0x0)
+#define MMU_MSG_QUEUE_REG_OFST_PENDING   (0x4)
+
+#define BASE_ADDR_AXI_MMU_MSG            (BASE_ADDR_RTL + 0x8000)
+
+// State transplants
+#define BASE_ADDR_TRANSPLANT_DATA        (BASE_ADDR_AXIL + 0x0)
+#define BASE_ADDR_BIND_ASID_THID         (BASE_ADDR_AXIL + 0X8000)
+#define BASE_ADDR_TRANSPLANT_CTRL        (BASE_ADDR_AXIL + 0x9000)
 #define TRANS_REG_OFFST_PENDING          (0x4 * 0)
 #define TRANS_REG_OFFST_FREE_PENDING     (0x4 * 0)
 #define TRANS_REG_OFFST_START            (0x4 * 1)
 #define TRANS_REG_OFFST_STOP_CPU         (0x4 * 2)
 #define TRANS_REG_OFFST_FORCE_TRANSPLANT (0x4 * 3)
-
-int transplant_singlestep(const FPGAContext *c, uint32_t thid, uint32_t asid, DevteroflexArchState *state);
-int transplant_pending(const FPGAContext *c, uint32_t *pending_threads);
-int transplant_freePending(const FPGAContext *c, uint32_t pending_threads);
-int transplant_waitTillPending(const FPGAContext *c, uint32_t *pending_threads);
-int transplant_start(const FPGAContext *c, uint32_t thread_id);
-int transplant_stopCPU(const FPGAContext *c, uint32_t thread_id);
-int transplant_forceTransplant(const FPGAContext *c, uint32_t thread_id);
+int transplantRegisterAndPush(const FPGAContext *c, uint32_t thid, uint32_t asid, DevteroflexArchState *state);
+int transplantUnregisterAndPull(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state);
+int transplantGetState(const FPGAContext *c, uint32_t thid, uint64_t *state);
+int transplantPushState(const FPGAContext *c, uint32_t thid, uint64_t *state);
+int transplantSinglestep(const FPGAContext *c, uint32_t thid, uint32_t asid, DevteroflexArchState *state);
+int transplantPending(const FPGAContext *c, uint32_t *pending_threads);
+int transplantFreePending(const FPGAContext *c, uint32_t pending_threads);
+int transplantWaitTillPending(const FPGAContext *c, uint32_t *pending_threads);
+int transplantStart(const FPGAContext *c, uint32_t thid);
+int transplantStopCPU(const FPGAContext *c, uint32_t thid);
+int transplantForceTransplant(const FPGAContext *c, uint32_t thid);
 
 // See cpu.h to match MMUAccessType
 typedef enum MemoryAccessType {
@@ -215,6 +225,7 @@ static inline void makeMissReply(int type, int thid, int asid, uint64_t va, uint
 }
 
 // Instrumentation control
+#define BASE_ADDR_INSTRUMENTATION_TRACE  (BASE_ADDR_AXIL + 0x1F000)
 #define TRACE_PC_OFFST_PADDR       (0*0x4)
 #define TRACE_PC_OFFST_START       (1*0x4)
 #define TRACE_PC_OFFST_CNT_EXE     (2*0x4)
@@ -234,4 +245,6 @@ int trace_PC_counter_stop(const FPGAContext *c);
 
 #ifndef AWS_FPGA
 int writeSimCtrl(const FPGAContext *c, int type, int value);
+#endif
+
 #endif

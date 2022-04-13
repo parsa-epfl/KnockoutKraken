@@ -13,43 +13,42 @@
 
 /**
  * Bind a thread id with process id.
- * @param thread_id the given thread id.
- * @param process_id the process id. 
+ * @param thid the given thread id.
+ * @param asid the process id. 
  * @returns 0 if successful.
  *
  * @note associate with S_AXIL_TT
  * @note pairing a thread id with 0 asid means translanting back since no asid in a system will be zero.
  */
-int registerThreadWithProcess(const FPGAContext *c, uint32_t thread_id,
-                              uint32_t process_id) {
-  const uint32_t axi_tt_base = c->base_address.axil_base + c->base_address.tt;
-  return writeAXIL(c, axi_tt_base + thread_id * 4, process_id);
+int mmuRegisterTHID2ASID(const FPGAContext *c, uint32_t thid,
+                              uint32_t asid) {
+  return writeAXIL(c, BASE_ADDR_BIND_ASID_THID + thid * 4, asid);
 }
 
 /**
  * Push the context of specific thread to the FPGA.
  * 
- * @param thread_id the thread if that this thread will be bind to.
- * @param process_id the process id for the address space.
+ * @param thid the thread if that this thread will be bind to.
+ * @param asid the process id for the address space.
  * @param state the state registers of the context.
  * 
  * @returns 0 if successful.
  * 
  * @note this function will not start the transplant but only bind.
  */
-int registerAndPushState(const struct FPGAContext *c, uint32_t thread_id, uint32_t process_id, DevteroflexArchState *state) {
+int transplantRegisterAndPush(const FPGAContext *c, uint32_t thid, uint32_t asid, DevteroflexArchState *state) {
   // 1. register thread id.
-  int res = registerThreadWithProcess(c, thread_id, process_id);
+  int res = mmuRegisterTHID2ASID(c, thid, asid);
   if(res != 0) return res;
   // 2. push the state.
-  res = transplant_pushState(c, thread_id, (uint64_t *)state);
+  res = transplantPushState(c, thid, (uint64_t *)state);
   return res;
 }
 
 /**
  * Transplant a thread back from the FPGA and load its context.
  * 
- * @param thread_id the thread that should be transplanted.
+ * @param thid the thread that should be transplanted.
  * @param state the state registers of the thread.
  * 
  * @returns 0 if successful.
@@ -57,41 +56,28 @@ int registerAndPushState(const struct FPGAContext *c, uint32_t thread_id, uint32
  * @note Please make sure that target thread must be ready to be transplanted back. Unknown case will be happened if thread is still working.
  * FIXME: Add mechanism to stop the execution of that thread on FPGA
  */
-int transplantBack(const struct FPGAContext *c, uint32_t thread_id, DevteroflexArchState *state) {
+int transplantUnregisterAndPull(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state) {
   // 1. unregister thread id.
-  int res = registerThreadWithProcess(c, thread_id, 0);
+  int res = mmuRegisterTHID2ASID(c, thid, 0);
   if(res != 0) return res;
   // 2. Read staste.
-  res = transplant_getState(c, thread_id, (uint64_t *)state);
+  res = transplantGetState(c, thid, (uint64_t *)state);
   return res;
 }
 
-/**
- * Query the state of all threads to see if each one requires a transplant back.
- * 
- * @param pending_threads the state of each theads
- * 
- * @returns 0 if successful.
- */
-int queryThreadState(const struct FPGAContext *c, uint32_t *pending_threads) {
-
-  return transplant_pending(c, pending_threads);
-}
-
-int transplant_singlestep(const FPGAContext *c, uint32_t thid, uint32_t asid, DevteroflexArchState *state) {
+int transplantSinglestep(const FPGAContext *c, uint32_t thid, uint32_t asid, DevteroflexArchState *state) {
   int res = 0;
-  res |= registerAndPushState(c, thid, asid, state);
-  res |= transplant_stopCPU(c, thid);
-  res |= transplant_start(c, thid);
+  res |= transplantRegisterAndPush(c, thid, asid, state);
+  res |= transplantStopCPU(c, thid);
+  res |= transplantStart(c, thid);
   return res;
 }
 
-int transplant_getState(const FPGAContext *c, uint32_t thread_id, uint64_t *state) {
-  const uint32_t axi_transplant_base = c->base_address.axil_base + c->base_address.transplant_data;
+int transplantGetState(const FPGAContext *c, uint32_t thid, uint64_t *state) {
   int ret = 0;
   uint32_t reg_val1;
   uint32_t reg_val2;
-  size_t base_offset = axi_transplant_base + (thread_id << 7) * 4;
+  size_t base_offset = BASE_ADDR_TRANSPLANT_DATA + (thid << 7) * 0x4;
   for (int reg = 0; reg < ARCH_PSTATE_TOT_REGS; reg++) {
     ret = readAXIL(c, base_offset + (2 * reg) * 4, &reg_val1);
     if (ret)
@@ -104,13 +90,11 @@ int transplant_getState(const FPGAContext *c, uint32_t thread_id, uint64_t *stat
   return 0;
 }
 
-// TODO: Strongly suggest that functions are named in camel style.
-int transplant_pushState(const FPGAContext *c, uint32_t thread_id, uint64_t *state) {
-  const uint32_t axi_transplant_base = c->base_address.axil_base + c->base_address.transplant_data;
+int transplantPushState(const FPGAContext *c, uint32_t thid, uint64_t *state) {
   int ret = 0;
   uint32_t reg_val1;
   uint32_t reg_val2;
-  size_t base_offset = axi_transplant_base + (thread_id << 7) * 4;
+  size_t base_offset = BASE_ADDR_TRANSPLANT_DATA + (thid << 7) * 0x4;
   for (int reg = 0; reg < ARCH_PSTATE_TOT_REGS; reg++) {
     reg_val1 = (uint64_t)state[reg];
     reg_val2 = ((uint64_t)state[reg] >> 32);
@@ -124,16 +108,16 @@ int transplant_pushState(const FPGAContext *c, uint32_t thread_id, uint64_t *sta
   return 0;
 }
 
-int transplant_waitTillPending(const FPGAContext *c, uint32_t *pending_threads) {
+int transplantWaitTillPending(const FPGAContext *c, uint32_t *pending_threads) {
   uint32_t pending = 0;
 #ifndef AWS_FPGA
   printf("Waiting for transplant pending...\n");
 #endif
   while(!pending) {
-    if(queryThreadState(c, &pending)) return -1;
+    if(transplantPending(c, &pending)) return -1;
     usleep(1e5);
   }
-  transplant_freePending(c, pending);
+  transplantFreePending(c, pending);
   *pending_threads = pending;
 #ifndef AWS_FPGA
   printf("Pending Threads[%x]\n", pending);
@@ -141,30 +125,25 @@ int transplant_waitTillPending(const FPGAContext *c, uint32_t *pending_threads) 
   return 0;
 }
 
-int transplant_pending(const FPGAContext *c, uint32_t *pending_threads) {
-  const uint32_t axi_transplant_ctrl_base = c->base_address.axil_base + c->base_address.transplant_ctl;
+int transplantPending(const FPGAContext *c, uint32_t *pending_threads) {
   *pending_threads = 0;
-  return readAXIL(c, axi_transplant_ctrl_base + TRANS_REG_OFFST_PENDING, pending_threads);
+  return readAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRANS_REG_OFFST_PENDING, pending_threads);
 }
 
-int transplant_freePending(const FPGAContext *c, uint32_t pending_threads) {
-  const uint32_t axi_transplant_ctrl_base = c->base_address.axil_base + c->base_address.transplant_ctl;
-  return writeAXIL(c, axi_transplant_ctrl_base + TRANS_REG_OFFST_FREE_PENDING, pending_threads);
+int transplantFreePending(const FPGAContext *c, uint32_t pending_threads) {
+  return writeAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRANS_REG_OFFST_FREE_PENDING, pending_threads);
 }
 
-int transplant_start(const FPGAContext *c, uint32_t thread_id) {
-  const uint32_t axi_transplant_ctrl_base = c->base_address.axil_base + c->base_address.transplant_ctl;
-  return writeAXIL(c, axi_transplant_ctrl_base + TRANS_REG_OFFST_START, 1 << thread_id);
+int transplantStart(const FPGAContext *c, uint32_t thid) {
+  return writeAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRANS_REG_OFFST_START, 1 << thid);
 }
 
-int transplant_stopCPU(const FPGAContext *c, uint32_t thread_id) {
-  const uint32_t axi_transplant_ctrl_base = c->base_address.axil_base + c->base_address.transplant_ctl;
-  return writeAXIL(c, axi_transplant_ctrl_base + TRANS_REG_OFFST_STOP_CPU, 1 << thread_id);
+int transplantStopCPU(const FPGAContext *c, uint32_t thid) {
+  return writeAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRANS_REG_OFFST_STOP_CPU, 1 << thid);
 }
 
-int transplant_forceTransplant(const FPGAContext *c, uint32_t thread_id) {
-  const uint32_t axi_transplant_ctrl_base = c->base_address.axil_base + c->base_address.transplant_ctl;
-  return writeAXIL(c, axi_transplant_ctrl_base + TRANS_REG_OFFST_FORCE_TRANSPLANT, 1 << thread_id);
+int transplantForceTransplant(const FPGAContext *c, uint32_t thid) {
+  return writeAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRANS_REG_OFFST_FORCE_TRANSPLANT, 1 << thid);
 }
 
 
@@ -176,15 +155,13 @@ int transplant_forceTransplant(const FPGAContext *c, uint32_t thread_id) {
  * @note associate with S_AXI_QEMU_MQ and S_AXIL_QEMU_MQ
  * @note this will block the routine until it get message.
  */
-int queryMessageFromFPGA(const FPGAContext *c, uint8_t message[64]) {
-  const uint32_t query_base = c->base_address.axil_base + c->base_address.message_queue;
-  const uint64_t data_base = c->base_address.axi_base + c->base_address.message;
+int mmuMsgGetForce(const FPGAContext *c, MessageFPGA *msg) {
   uint32_t res = -1;
   bool hasMessage = false;
   do {
-    hasMessage = hasMessagePending(c);
+    hasMessage = mmuMsgHasPending(c);
   } while (!hasMessage);
-  return readAXI(c, data_base, (uint64_t *) message, 64);
+  return mmuMsgGetPending(c, msg);
 }
 
 /**
@@ -195,11 +172,10 @@ int queryMessageFromFPGA(const FPGAContext *c, uint8_t message[64]) {
  * @note associate with S_AXI_QEMU_MQ and S_AXIL_QEMU_MQ
  * @note this will block the routine until it get message.
  */
-bool hasMessagePending(const FPGAContext *c) {
-  const uint32_t query_base = c->base_address.axil_base + c->base_address.message_queue;
-  uint32_t res = -1;
-  readAXIL(c, query_base + 0x4, &res);
-  return !(res == 0);
+bool mmuMsgHasPending(const FPGAContext *c) {
+  uint32_t ret = -1;
+  readAXIL(c, BASE_ADDR_MMU_MSG_QUEUE + 0x4, &ret);
+  return !(ret == 0);
 }
 
 /**
@@ -210,22 +186,8 @@ bool hasMessagePending(const FPGAContext *c) {
  * @note associate with S_AXI_QEMU_MQ and S_AXIL_QEMU_MQ
  * @note this will block the routine until it get message.
  */
-int getMessagePending(const FPGAContext *c, uint8_t message[64]) {
-  const uint32_t query_base = c->base_address.axil_base + c->base_address.message_queue;
-  const uint64_t data_base = c->base_address.axi_base + c->base_address.message;
-  return readAXI(c, data_base, (uint64_t *) message, 64);
-}
-
-/**
- * Check whether the receiver queue is empty.
- * @param data the result of the queue. 0 means it's empty, and 1 means it has at least one message.
- * 
- * @return 0 if successful.
- * 
- */
-int checkRxMessageQueue(const FPGAContext *c, uint32_t *data) {
-  const uint32_t query_base = c->base_address.axil_base + c->base_address.message_queue;
-  return readAXIL(c, query_base + 0x4, data);
+int mmuMsgGetPending(const FPGAContext *c, MessageFPGA *msg) {
+  return readAXI(c, BASE_ADDR_AXI_MMU_MSG, msg, sizeof(MessageFPGA));
 }
 
 /**
@@ -236,18 +198,12 @@ int checkRxMessageQueue(const FPGAContext *c, uint32_t *data) {
  *
  * @note associate with S_AXI_QEMU_MQ
  */
-int sendMessageToFPGA(const FPGAContext *c, void *raw_message,
-                      size_t message_size) {
-  const uint32_t query_base = c->base_address.axil_base + c->base_address.message_queue;
-  const uint64_t data_base = c->base_address.axi_base + c->base_address.message;
+int mmuMsgSend(const FPGAContext *c, MessageFPGA *msg) {
   uint32_t res = -1;
   do {
-    readAXIL(c, query_base, &res);
+    readAXIL(c, BASE_ADDR_MMU_MSG_QUEUE, &res);
   } while (res == 0); // wait for the message to be 1.
-  uint64_t buffer[8];
-  bzero(buffer, 64);
-  memcpy(buffer, raw_message, message_size);
-  return writeAXI(c, data_base, buffer, 64);
+  return writeAXI(c, BASE_ADDR_AXI_MMU_MSG, msg, sizeof(MessageFPGA));
 }
 
 /**
@@ -258,12 +214,12 @@ int sendMessageToFPGA(const FPGAContext *c, void *raw_message,
  * @return 0 if successful.
  * 
  */
-int pushPageToFPGA(const struct FPGAContext *c, uint64_t paddr, void *page){
+int dramPagePush(const FPGAContext *c, uint64_t paddr, void *page){
   if(paddr & (PAGE_SIZE-1)){
-    printf("Warning: misaligned address found: %lu. \n Its lower 12bit should be zero. \n", paddr);
-    paddr ^= (paddr & 4095UL);
+    printf("Warning: misaligned address found: 0x%016lx. \n Its lower 12bit should be zero. \n", paddr);
+    paddr ^= (paddr & 0xFFFUL);
   }
-  return writeAXI(c, c->base_address.dram_base + paddr, page, PAGE_SIZE);
+  return writeAXI(c, BASE_ADDR_DRAM + paddr, page, PAGE_SIZE);
 }
 
 
@@ -274,12 +230,45 @@ int pushPageToFPGA(const struct FPGAContext *c, uint64_t paddr, void *page){
  * 
  * @return 0 if successful.
  */
-int fetchPageFromFPGA(const struct FPGAContext *c, uint64_t paddr, void *buffer){
+int dramPagePull(const FPGAContext *c, uint64_t paddr, void *page){
   if(paddr & (PAGE_SIZE-1)){
-    printf("Warning: misaligned address found: %lu. \n Its lower 12bit should be zero. \n", paddr);
-    paddr ^= (paddr & 4095UL);
+    printf("Warning: misaligned address found: 0x%016lx. \n Its lower 12bit should be zero. \n", paddr);
+    paddr ^= (paddr & 0xFFFUL);
   }
-  return readAXI(c, c->base_address.dram_base + paddr, buffer, PAGE_SIZE);
+  return readAXI(c, BASE_ADDR_DRAM + paddr, page, PAGE_SIZE);
+}
+
+// Instrumentation helpers
+int trace_PC_set_paddr(const FPGAContext *c, uint32_t paddr) {
+  return writeAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRACE_PC_OFFST_PADDR, paddr);
+}
+
+int trace_PC_start(const FPGAContext *c) {
+  return writeAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRACE_PC_OFFST_START, 1 << 0);
+}
+
+int trace_PC_counter_reset(const FPGAContext *c) {
+  return writeAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRACE_PC_OFFST_START, 1 << 1);
+}
+
+int trace_PC_counter_execute(const FPGAContext *c, uint32_t* count) {
+  return readAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRACE_PC_OFFST_CNT_EXE, count);
+}
+
+int trace_PC_counter_stalls(const FPGAContext *c, uint32_t* count) {
+  return readAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRACE_PC_OFFST_CNT_STALLS, count);
+}
+
+int trace_PC_counter_start(const FPGAContext *c) {
+  return writeAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRACE_PC_OFFST_CNT_CTLREG, 1);
+}
+
+int trace_PC_counter_stop(const FPGAContext *c) {
+  return writeAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRACE_PC_OFFST_CNT_CTLREG, 0);
+}
+
+int trace_PC_counter_bursts(const FPGAContext *c, uint32_t* count) {
+  return readAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRACE_PC_OFFST_CNT_BURSTS, count);
 }
 
 #ifndef AWS_FPGA
@@ -288,43 +277,3 @@ int writeSimCtrl(const FPGAContext *c, int type, int value) {
 }
 #endif
 
-// Instrumentation helpers
-int trace_PC_set_paddr(const FPGAContext *c, uint32_t paddr) {
-  const uint32_t axil_trace_base = c->base_address.axil_base + c->base_address.instrumentation_trace;
-  return writeAXIL(c, axil_trace_base + TRACE_PC_OFFST_PADDR, paddr);
-}
-
-int trace_PC_start(const FPGAContext *c) {
-  const uint32_t axil_trace_base = c->base_address.axil_base + c->base_address.instrumentation_trace;
-  return writeAXIL(c, axil_trace_base + TRACE_PC_OFFST_START, 1 << 0);
-}
-
-int trace_PC_counter_reset(const FPGAContext *c) {
-  const uint32_t axil_trace_base = c->base_address.axil_base + c->base_address.instrumentation_trace;
-  return writeAXIL(c, axil_trace_base + TRACE_PC_OFFST_START, 1 << 1);
-}
-
-int trace_PC_counter_execute(const FPGAContext *c, uint32_t* count) {
-  const uint32_t axil_trace_base = c->base_address.axil_base + c->base_address.instrumentation_trace;
-  return readAXIL(c, axil_trace_base + TRACE_PC_OFFST_CNT_EXE, count);
-}
-
-int trace_PC_counter_stalls(const FPGAContext *c, uint32_t* count) {
-  const uint32_t axil_trace_base = c->base_address.axil_base + c->base_address.instrumentation_trace;
-  return readAXIL(c, axil_trace_base + TRACE_PC_OFFST_CNT_STALLS, count);
-}
-
-int trace_PC_counter_start(const FPGAContext *c) {
-  const uint32_t axil_trace_base = c->base_address.axil_base + c->base_address.instrumentation_trace;
-  return writeAXIL(c, axil_trace_base + TRACE_PC_OFFST_CNT_CTLREG, 1);
-}
-
-int trace_PC_counter_stop(const FPGAContext *c) {
-  const uint32_t axil_trace_base = c->base_address.axil_base + c->base_address.instrumentation_trace;
-  return writeAXIL(c, axil_trace_base + TRACE_PC_OFFST_CNT_CTLREG, 0);
-}
-
-int trace_PC_counter_bursts(const FPGAContext *c, uint32_t* count) {
-  const uint32_t axil_trace_base = c->base_address.axil_base + c->base_address.instrumentation_trace;
-  return readAXIL(c, axil_trace_base + TRACE_PC_OFFST_CNT_BURSTS, count);
-}

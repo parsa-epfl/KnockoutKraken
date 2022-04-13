@@ -15,7 +15,10 @@ typedef struct MemoryRequestAXIL {
   uint32_t w_data;
 } MemoryRequestAXIL;
 
-int initIPC(ssize_t *socket_fd, const char* filename);
+#define EMPTY_MESSAGE (1)
+
+int initIPC_client(ssize_t *socket_fd, const char* filename);
+int initIPC_server(ssize_t *client_fd, const char* filename);
 int sendIPC(uint8_t *buffer, ssize_t port, size_t tot_bytes);
 int recvIPC(uint8_t *buffer, ssize_t port, size_t expected_bytes);
- 
+int recvIPC_nonblocky(uint8_t *buffer, ssize_t port, size_t expected_bytes);

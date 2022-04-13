@@ -20,7 +20,6 @@ TopDUT::TopDUT(bool withTrace) {
   error_occurred = false;
 
   this->dram_size = dram_size;
-  this->axi_base_addr = dram_size;
   size_t power2_dram_size = 0;
   for (power2_dram_size = 1; dram_size > 0;
        dram_size >>= 1, power2_dram_size <<= 1);
@@ -38,6 +37,10 @@ TopDUT::~TopDUT() {
   delete dut;
   delete[] dram;
 }
+
+ bool TopDUT::isAXIDRAM(uint64_t addr) {
+   return (BASE_ADDR_DRAM <= addr && addr < (BASE_ADDR_DRAM + dram_size));
+ }
 
 void TopDUT::reset() {
   // get the lock of the dut
