@@ -11,4 +11,7 @@ test.fst
 test.fst.hier
 Makefile
 cmake_install.cmake
-rtl/
+cl_dram_dma_refactored
+*/*/.Xil
+*.old
+*/vivado*.*
