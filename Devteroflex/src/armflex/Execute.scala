@@ -346,6 +346,8 @@ class DataProcessing extends Module
       lower
     }
   }
+  val rbitVec = VecInit(operand.asBools.reverse)
+  val rbit = WireInit(rbitVec.asUInt)
 
   rev := MuxLookup(io.op, operand, Seq(
     OP_REV16 -> Catify(operand, 64, 4),
@@ -353,7 +355,9 @@ class DataProcessing extends Module
     OP_REV   -> Catify(operand, 64, 1)
   ))
 
+
   res := MuxLookup(io.op, io.a, Seq(
+    OP_RBIT -> rbit,
     OP_CLS -> countLeadingBits,
     OP_CLZ -> countLeadingBits,
     OP_REV -> rev,
@@ -363,6 +367,7 @@ class DataProcessing extends Module
 
   io.res := res
 
+  val rbitVec32 = VecInit(operand(31,0).asBools.reverse)
   when(io.is32bit) {
     countLeadingBits :=
     ALU.CountLeadingZeroBits(Mux(io.op === OP_CLS,
@@ -370,6 +375,7 @@ class DataProcessing extends Module
     rev := MuxLookup(io.op, operand, Seq(
       OP_REV16 -> Catify(operand, 32, 2),
       OP_REV32 -> Catify(operand, 32, 1)))
+    rbit := rbitVec32.asUInt
   }
 }
 
