@@ -53,7 +53,8 @@ class TLBPipelineResp(params: PageTableParams) extends Bundle {
   val thid = UInt(log2Ceil(params.thidN).W)
 
   def toPipeTLBResponse: PipeTLB.PipeTLBResp = {
-    val res = Wire(new PipeTLB.PipeTLBResp(params.pPageW + params.pageW))
+    val res = Wire(new PipeTLB.PipeTLBResp(params.thidN, params.pPageW + params.pageW))
+    res.thid := thid
     res.addr := entry.ppn << params.pageW
     res.hit := hit
     res.miss := !hit
@@ -256,14 +257,14 @@ class TLB(
         printf(p"${location}:Bank:RD[0x${Hexadecimal(u_dataBankManager.frontend_request_i.bits.addr)}]\n")
       }
     }
-    when(u_dataBankManager.bank_ram_reply_data_i.fire){
-      when(u_dataBankManager.bank_ram_write_request_o.fire && u_dataBankManager.bank_ram_write_request_o.bits.addr === u_dataBankManager.bank_ram_request_addr_o.bits) {
-        // Forwarding from writeport
-        printf(p"${location}:Bank:Resp:Forward[${u_dataBankManager.bank_ram_write_request_o.bits.data}]\n")
-      }.otherwise{
-        printf(p"${location}:Bank:Resp:Get[SET TOO BIG TO PRINT]\n")
-      }
-    }
+//    when(u_dataBankManager.bank_ram_reply_data_i.fire){
+//      when(u_dataBankManager.bank_ram_write_request_o.fire && u_dataBankManager.bank_ram_write_request_o.bits.addr === u_dataBankManager.bank_ram_request_addr_o.bits) {
+//        // Forwarding from writeport
+//        printf(p"${location}:Bank:Resp:Forward[${u_dataBankManager.bank_ram_write_request_o.bits.data}]\n")
+//      }.otherwise{
+//        printf(p"${location}:Bank:Resp:Get[SET TOO BIG TO PRINT]\n")
+//      }
+//    }
   }
 }
 

@@ -140,4 +140,10 @@ void TopDUT::attachCurrentRoutine(std::unique_lock<std::mutex> &lock) {
 void TopDUT::closeSimulation(void) {
   puts("Closing simulation.\n");
   tfp->close();
+
+  // dump DRAM to a file.
+  FILE *f = fopen("dram.bin", "rb");
+  fwrite(this->dram, 1, this->dram_size, f);
+  fflush(f);
+  fclose(f);
 }

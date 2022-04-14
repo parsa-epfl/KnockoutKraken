@@ -118,7 +118,8 @@ class ARMFlexTopSimulator(
   private val devteroFlexTop = Module(new ARMFlexTop(paramsPipeline, paramsMemoryHierarchy))
   private val axiMulti_R = Module(new AXIReadMultiplexer(paramsMemoryHierarchy.dramAddrW, 512, 6))
   private val axiMulti_W = Module(new AXIWriteMultiplexer(paramsMemoryHierarchy.dramAddrW, 512, 5))
-  private val axilMulti = Module(new AXILInterconnectorNonOptimized(Seq(0x00000, 0x10000, 0x1F000), 32, 32))
+  //private val axilMulti = Module(new AXILInterconnector(Seq(0x00000, 0x10000), Seq(0x08000,0x10000), 32, 32))
+  private val axilMulti = Module(new AXILInterconnectorNonOptimized(Seq(0x00000, 0x10000), 32, 32))
   val S_AXI = IO(Flipped(devteroFlexTop.AXI_MEM.AXI_MMU.S_AXI.cloneType))
   val S_AXIL = IO(Flipped(axilMulti.S_AXIL.cloneType))
   S_AXI <> devteroFlexTop.AXI_MEM.AXI_MMU.S_AXI
@@ -207,7 +208,7 @@ class PipelineAxiHacked(params: PipelineParams) extends Module {
   val transplant_ram = IO(pipeline.hostIO.port.cloneType)
   transplant_ram <> pipeline.hostIO.port
 
-  val trans2host = WireInit(Mux(pipeline.hostIO.trans2host.done.valid, 1.U << pipeline.hostIO.trans2host.done.tag, 0.U))
+  val trans2host = WireInit(Mux(pipeline.hostIO.trans2host.doneTrans.valid, 1.U << pipeline.hostIO.trans2host.doneTrans.tag, 0.U))
   val host2transClear = WireInit(Mux(pipeline.hostIO.trans2host.clear.valid, 1.U << pipeline.hostIO.trans2host.clear.tag, 0.U))
 
   SetCSR(trans2host.asUInt, csr.io.csr(0), axidataW)

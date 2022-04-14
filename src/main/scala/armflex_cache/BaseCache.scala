@@ -298,14 +298,22 @@ class BaseCache(
         printf(p"${location}:Bank:RD[0x${Hexadecimal(u_dataBankManager.frontend_request_i.bits.addr)}]\n")
       }
     }
-    when(u_dataBankManager.bank_ram_reply_data_i.fire){
-      when(u_dataBankManager.bank_ram_write_request_o.fire && u_dataBankManager.bank_ram_write_request_o.bits.addr === u_dataBankManager.bank_ram_request_addr_o.bits) {
-        // Forwarding from writeport
-        printf(p"${location}:Bank:Resp:Forward[${u_dataBankManager.bank_ram_write_request_o.bits.data}]\n")
-      }.otherwise{
-        printf(p"${location}:Bank:Resp:Get[SET TOO BIG TO PRINT]\n")
-      }
-    }
+//    when(u_dataBankManager.bank_ram_reply_data_i.fire){
+//      when(u_dataBankManager.bank_ram_write_request_o.fire && u_dataBankManager.bank_ram_write_request_o.bits.addr === u_dataBankManager.bank_ram_request_addr_o.bits) {
+//        // Forwarding from writeport
+//        printf(p"${location}:Bank:Resp:Forward[${u_dataBankManager.bank_ram_write_request_o.bits.data}]\n")
+//      }.otherwise{
+//        printf(p"${location}:Bank:Resp:Get[SET TOO BIG TO PRINT]\n")
+//      }
+//    }
+  }
+
+  // there should be no access to the Page Table Region.
+  when(u_dataBankManager.frontend_request_i.fire){
+    assert(
+      (u_dataBankManager.frontend_request_i.bits.addr << log2Ceil(params.blockSize / 8)) >= (1 << (params.pAddrWidth - 8)).U,
+      "It's forbidden for the cache to access the page table region."
+    )
   }
 }
 

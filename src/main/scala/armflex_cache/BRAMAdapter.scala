@@ -59,8 +59,8 @@ class BRAMPortAdapter(
 ) extends Module {
   val set_t = Vec(params.associativity, new CacheEntry(params))
 
-  val frontend_read_request_i = IO(Flipped(Decoupled(UInt(params.setWidth.W))))
-  val frontend_read_reply_data_o = IO(Decoupled(set_t.cloneType))
+  val frontend_read_request_i = IO(Flipped(Valid(UInt(params.setWidth.W))))
+  val frontend_read_reply_data_o = IO(Output(set_t.cloneType))
 
   implicit val bramParams = new BRAMParams(
     params.associativity, new CacheEntry(params).getWidth, params.setNumber, implementedWithRegister = params.implementedWithRegister
@@ -69,17 +69,10 @@ class BRAMPortAdapter(
   val bram_ports = IO(Flipped(Vec(2, new BRAMPort())))
 
   bram_ports(0).ADDR := frontend_read_request_i.bits
-  bram_ports(0).EN := true.B
+  bram_ports(0).EN := frontend_read_request_i.valid
   bram_ports(0).WE := 0.U
   bram_ports(0).DI := 0.U
-  frontend_read_reply_data_o.bits := bram_ports(0).DO.asTypeOf(set_t.cloneType)
-  if(params.implementedWithRegister){
-    frontend_read_reply_data_o.valid := frontend_read_request_i.valid
-    frontend_read_request_i.ready := true.B
-  } else {
-    frontend_read_reply_data_o.valid := RegNext(frontend_read_request_i.valid)
-    frontend_read_request_i.ready := true.B
-  }
+  frontend_read_reply_data_o := bram_ports(0).DO.asTypeOf(set_t.cloneType)
 
   val frontend_write_request_i = IO(Flipped(Decoupled(new BankWriteRequestPacket(params))))
   bram_ports(1).ADDR := frontend_write_request_i.bits.addr

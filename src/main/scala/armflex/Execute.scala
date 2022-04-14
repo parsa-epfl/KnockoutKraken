@@ -277,12 +277,14 @@ class DecodeBitMasks extends Module
   // Further, <length of run - 1> all-ones is a reserved pattern.
   //
   // In all cases the rotation is by immr % e (and immr is 6 bits).
+  def replicate(bits:UInt, target:Int, source:Int):UInt = Fill(target/source, bits(source - 1, 0))
 
   val OnesTable = VecInit.tabulate(DATA_SZ + 1) { i => BigInt("0"*(DATA_SZ-i) ++ "1"*i, 2).U }
 
   val welem = Wire(DATA_T)
-  val wmask = Wire(DATA_T)
+  val welemROR = Wire(DATA_T)
   val telem = Wire(DATA_T)
+  val wmask = Wire(DATA_T)
   val tmask = Wire(DATA_T)
 
   val toBeEncoded = WireInit(UInt(7.W), Cat(io.immn, ~io.imms))
@@ -298,16 +300,21 @@ class DecodeBitMasks extends Module
   val onesD = WireInit(d +& 1.U)
 
   welem := OnesTable(onesS)
-  wmask := ALU.rotateRight(VecInit(welem.asBools), r).asUInt // ROR(welem, R) and truncate esize
+  welemROR := ALU.rotateRight(VecInit(welem.asBools), r).asUInt // ROR(welem, R) and truncate esize
+  val wmaskSeq = for(length <- 0 until 7) yield replicate(welemROR, 64, 1 << length)
+  val wmaskVec = VecInit(wmaskSeq)
+  wmask := wmaskVec(len)
 
   telem := OnesTable(onesD)
-  tmask := telem
+  val tmaskSeq = for(length <- 0 until 7) yield replicate(telem, 64, 1 << length)
+  val tmaskVec = VecInit(tmaskSeq)
+  tmask := tmaskVec(len)
 
   io.wmask := wmask
   io.tmask := tmask
 
   when(io.is32bit) {
-    wmask := ALU.rotateRight(VecInit(welem(31,0).asBools), r(4,0)).asUInt.pad(64)
+    welemROR := ALU.rotateRight(VecInit(welem(31,0).asBools), r(4,0)).asUInt.pad(64)
   }
 }
 
@@ -315,7 +322,6 @@ class DataProcessing extends Module
 {
   val io = IO(new Bundle {
     val a = Input(DATA_T)
-    val b = Input(DATA_T)
     val op = Input(OP_T)
     val is32bit = Input(Bool())
     val res = Output(DATA_T)
@@ -336,7 +342,8 @@ class DataProcessing extends Module
       Cat(Catify(bits(size-1, size/2), size/2, containers/2),
           Catify(bits(size/2-1, 0),    size/2, containers/2))
     } else {
-      Cat(for(idx <- size/8-1 to 0 by -1) yield (ALU.getByte(bits, idx)))
+      val lower = WireInit(Cat(for(idx <- size/8-1 to 0 by -1) yield (ALU.getByte(bits, (size/8-1) - idx))))
+      lower
     }
   }
 
@@ -344,17 +351,6 @@ class DataProcessing extends Module
     OP_REV16 -> Catify(operand, 64, 4),
     OP_REV32 -> Catify(operand, 64, 2),
     OP_REV   -> Catify(operand, 64, 1)
-    //OP_REV16 -> Cat(
-    //  Cat(operand(0,0), operand(0,0)),
-    //  Cat(operand(0,0), operand(0,0)),
-    //  Cat(operand(0,0), operand(0,0)),
-    //  Cat(operand(0,0), operand(0,0))),
-    //OP_REV32 -> Cat(
-    //  Cat(operand(0,0), operand(0,0), operand(0,0), operand(0,0)),
-    //  Cat(operand(0,0), operand(0,0), operand(0,0), operand(0,0))),
-    //OP_REV   -> Cat(
-    //  operand(0,0), operand(0,0), operand(0,0), operand(0,0),
-    //  operand(0,0), operand(0,0), operand(0,0), operand(0,0))
   ))
 
   res := MuxLookup(io.op, io.a, Seq(
@@ -521,17 +517,16 @@ class ExecuteUnit extends Module
   // Data-Processing
   val dataProcessing = Module(new DataProcessing)
   dataProcessing.io.a := rVal1
-  dataProcessing.io.b := rVal2
   dataProcessing.io.op := io.dinst.op
   dataProcessing.io.is32bit := io.dinst.is32bit
 
   // Data-Processing 3
-  // val dataProc3S = Module(new DataProc3S)
-  // dataProc3S.io.op := io.dinst.op
-  // dataProc3S.io.rVal1 := rVal1
-  // dataProc3S.io.rVal2 := rVal2
-  // dataProc3S.io.rVal3 := rVal3
-  // dataProc3S.io.is32bit := io.dinst.is32bit
+  val dataProc3S = Module(new DataProc3S)
+  dataProc3S.io.op := io.dinst.op
+  dataProc3S.io.rVal1 := rVal1
+  dataProc3S.io.rVal2 := rVal2
+  dataProc3S.io.rVal3 := rVal3
+  dataProc3S.io.is32bit := io.dinst.is32bit
 
   val addWithCarry = Module(new AddWithCarry)
   // I_ASSR || I_ASImm
@@ -560,7 +555,7 @@ class ExecuteUnit extends Module
     I_LogI  -> logicALU.io.res,
     I_DP1S  -> dataProcessing.io.res,
     I_DP2S  -> shiftALU.io.res,
-//    I_DP3S  -> dataProc3S.io.res,
+    I_DP3S  -> dataProc3S.io.res,
     I_ASSR  -> addWithCarry.io.res,
     I_ASER  -> addWithCarry.io.res,
     I_ASImm -> addWithCarry.io.res,

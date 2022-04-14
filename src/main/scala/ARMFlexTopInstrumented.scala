@@ -17,7 +17,7 @@ import armflex.util.AXILInterconnectorNonOptimized
 class ARMFlexTopInstrumented(
   paramsPipeline: PipelineParams,
   paramsMemoryHierarchy: MemoryHierarchyParams
-) extends MultiIOModule {
+) extends Module {
   import armflex.util.AXIReadMultiplexer
   import armflex.util.AXIWriteMultiplexer
   private val devteroFlexTop = Module(new ARMFlexTop(paramsPipeline, paramsMemoryHierarchy))
@@ -67,7 +67,7 @@ class ARMFlexTopInstrumented(
   axiMulti_W.S_IF(W_IDX+2) <> traceWrapper.M_AXI_W
 }
 
-class TraceWrapper(val dramAddrW: Int, val axilAddrW: Int, val axilBaseAddr: Int) extends MultiIOModule {
+class TraceWrapper(val dramAddrW: Int, val axilAddrW: Int, val axilBaseAddr: Int) extends Module {
   val S_AXIL = IO(Flipped(new AXI4Lite(axilAddrW, 32))) 
   val M_AXI_W = IO(new AXIWriteMasterIF(dramAddrW, 512))
   val commit = IO(Flipped(Decoupled(UInt(64.W))))

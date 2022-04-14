@@ -12,15 +12,6 @@ void requireStateIsIdentical(const ArmflexArchState &state1,
   }
 }
 
-void initArchState(ArmflexArchState *state, uint64_t pc) {
-  for (int i = 0; i < 32; ++i) {
-    state->xregs[i] = i;
-  }
-  state->nzcv = 0;
-  state->sp = 0;
-  state->pc = pc;
-}
-
 void synchronizePage(FPGAContext *ctx, int asid, uint8_t *page, uint64_t vaddr,
                      uint64_t paddr, bool expect_modified) {
   INFO("Synchronize page");
@@ -37,36 +28,22 @@ void synchronizePage(FPGAContext *ctx, int asid, uint8_t *page, uint64_t vaddr,
   REQUIRE(message.asid == asid);
   REQUIRE(message.vpn_hi == VPN_GET_HI(vaddr));
   REQUIRE(message.vpn_lo == VPN_GET_LO(vaddr));
+  REQUIRE(message.EvictNotif.ppn == GET_PPN_FROM_PADDR(paddr));
+
+  if(message.EvictNotif.modified) {
+    INFO("2. Query Eviction Notification Complete");
+    queryMessageFromFPGA(ctx, (uint8_t *)&message);
+
+    REQUIRE(message.type == sEvictDone);
+    REQUIRE(message.asid == asid);
+    REQUIRE(message.vpn_hi == VPN_GET_HI(vaddr));
+    REQUIRE(message.vpn_lo == VPN_GET_LO(vaddr));
+    REQUIRE(message.EvictDone.ppn == GET_PPN_FROM_PADDR(paddr));
+    REQUIRE(message.EvictDone.permission == DATA_STORE);
+    REQUIRE(message.EvictDone.modified == expect_modified);
+  }
 
   // Let's query message. It should send an eviction completed message
-  INFO("2. Query Eviction Notification Complete");
-  queryMessageFromFPGA(ctx, (uint8_t *)&message);
-
-  REQUIRE(message.type == sEvictDone);
-  REQUIRE(message.asid == asid);
-  REQUIRE(message.vpn_hi == VPN_GET_HI(vaddr));
-  REQUIRE(message.vpn_lo == VPN_GET_LO(vaddr));
-  REQUIRE(message.EvictDone.ppn == GET_PPN_FROM_PADDR(paddr));
-  REQUIRE(message.EvictDone.permission == DATA_STORE);
-  REQUIRE(message.EvictDone.modified == expect_modified);
-
+  INFO("3. Fetch physical page from FPGA")
   fetchPageFromFPGA(ctx, paddr, page);
-}
-
-void makeDeadbeefPage(uint8_t *pages, size_t bytes) {
-  uint32_t *page_word = (uint32_t *)pages;
-  for (int word = 0; word < bytes / 4; word++) {
-    page_word[word] = 0xDEADBEEF;
-  }
-}
-
-void makeZeroPage(uint8_t *page) {
-  uint32_t *page_word = (uint32_t *)page;
-  for (int word = 0; word < PAGE_SIZE / 4; word++) {
-    page_word[word] = 0xFFFFFFFF;
-  }
-}
-
-void advanceTicks(const FPGAContext *c, int ticks) {
-  writeSimCtrl(c, cycleStep, ticks);
 }
