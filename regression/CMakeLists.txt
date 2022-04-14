@@ -16,7 +16,16 @@ add_executable(
   src/client/tests/asm/asm_helpers.c
   src/client/tests/load-store.cc
   src/client/tests/back-pressure.cc
+  src/client/tests/trace-module.cc
   src/client/tests/host-control.cc
+)
+
+add_executable(
+  StressTest
+  src/client/runs/stress-tests.c
+  src/client/tests/asm/asm_helpers.c
+  src/client/fpga_interface.c
+  src/client/fpga_helpers.c
 )
 
 if(AWS_FPGA_LIBRARY_PATH)
@@ -26,13 +35,21 @@ if(AWS_FPGA_LIBRARY_PATH)
   target_compile_definitions(KnockoutTestGenerator PUBLIC AWS_FPGA)
   target_sources(KnockoutTestGenerator PRIVATE src/client/fpga_aws.c)
   target_link_libraries(KnockoutTestGenerator Threads::Threads fpga_mgmt)
+  
+  target_include_directories(StressTest PUBLIC ${AWS_FPGA_LIBRARY_PATH}/include)
+  target_link_directories(StressTest PUBLIC ${AWS_FPGA_LIBRARY_PATH}/lib)
+  target_compile_definitions(StressTest PUBLIC AWS_FPGA)
+  target_sources(StressTest PRIVATE src/client/fpga_aws.c)
+  target_link_libraries(StressTest Threads::Threads fpga_mgmt)
+
 else()
   find_package(verilator REQUIRED)
   target_sources(KnockoutTestGenerator PRIVATE src/client/fpga_rtl.c)
   add_executable(KnockoutSimulator src/server/main.cc src/server/dut.cc src/server/subroutine.cc src/server/ipc.cc)
   #set(VERILATOR_ARGS +define+STOP_COND=1'h0)
-  verilate(KnockoutSimulator SOURCES rtl/ARMFlexTop.v rtl/BRAMTDP.v TOP_MODULE ARMFlexTopSimulator TRACE_FST VERILATOR_ARGS)
+  verilate(KnockoutSimulator SOURCES rtl/ARMFlexTop.v rtl/BRAMTDP.v TOP_MODULE ARMFlexTopInstrumented TRACE_FST VERILATOR_ARGS)
   target_link_libraries(KnockoutSimulator PRIVATE Threads::Threads)
+  target_sources(StressTest PRIVATE src/client/fpga_rtl.c src/client/ipc.c)
 endif()
 
 #add_executable(garbage_server src/garbage_server.cc)

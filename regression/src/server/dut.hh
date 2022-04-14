@@ -30,7 +30,7 @@
 
 class TopDUT {
 public:
-  TopDUT(size_t dram_size = 1024 * 1024 * 16);
+  TopDUT(bool withTrace = true);
   ~TopDUT();
 
   /**
@@ -148,6 +148,7 @@ private:
   size_t decoupled_count;
   std::vector<std::thread> subroutines;
   bool terminating;
+  bool withTrace;
 
   bool error_occurred;
 

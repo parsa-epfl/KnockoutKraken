@@ -195,3 +195,110 @@ object AXIInterconnectorVerilogEmitter extends App {
     Seq(0x1000, 0x2000, 0x3000), Seq(0xF000, 0xF000, 0xF000), 16, 32
   ))
 }
+
+class AXILInterconnectorNonOptimized(
+  addrSegments: Seq[BigInt],
+  addrW: Int = 32,
+  dataW: Int = 32
+) extends MultiIOModule {
+  val S_AXIL = IO(Flipped(new AXI4Lite(addrW, dataW)))
+  val M_AXIL = IO(Vec(addrSegments.length, new AXI4Lite(addrW, dataW)))
+
+  val sIdle :: sReadData :: sWriteData :: sWriteResp :: Nil = Enum(4)
+  val state = RegInit(sIdle)
+
+  val addrPort = WireInit(0.U(log2Ceil(addrSegments.length).W))
+  val selectedPort = RegInit(0.U(log2Ceil(addrSegments.length).W))
+
+
+  for(segment <- 0 until addrSegments.length){
+    // AR
+    M_AXIL(segment).ar.araddr := S_AXIL.ar.araddr
+    M_AXIL(segment).ar.arprot := S_AXIL.ar.arprot
+    M_AXIL(segment).ar.arvalid := false.B
+    S_AXIL.ar.arready := false.B
+ 
+    // AW
+    M_AXIL(segment).aw.awaddr := S_AXIL.aw.awaddr
+    M_AXIL(segment).aw.awprot := S_AXIL.aw.awprot
+    M_AXIL(segment).aw.awvalid := false.B
+    S_AXIL.aw.awready := false.B
+
+    // R
+    M_AXIL(segment).r.rready := false.B
+    S_AXIL.r.rvalid := false.B
+
+    // W
+    M_AXIL(segment).w.wdata := S_AXIL.w.wdata
+    M_AXIL(segment).w.wstrb := S_AXIL.w.wstrb
+    M_AXIL(segment).w.wvalid := false.B
+    S_AXIL.w.wready := false.B
+
+    // B
+    M_AXIL(segment).b.bready := false.B
+  }
+
+  // Handshakes
+  addrPort := (addrSegments.length - 1).U
+  for (port <- 0 until addrSegments.length - 1) {
+    when(S_AXIL.aw.awvalid && addrSegments(port).U <= S_AXIL.aw.awaddr && 
+         S_AXIL.aw.awaddr < addrSegments(port + 1).U) {
+      addrPort := port.U
+    }.elsewhen(S_AXIL.ar.arvalid && addrSegments(port).U <= S_AXIL.ar.araddr && 
+               S_AXIL.ar.araddr < addrSegments(port + 1).U) {
+      addrPort := port.U
+    }
+  }
+
+  // AW
+  M_AXIL(addrPort).aw.awvalid := S_AXIL.aw.awvalid && state === sIdle
+  S_AXIL.aw.awready := M_AXIL(addrPort).aw.awready && state === sIdle
+
+  // AR
+  M_AXIL(addrPort).ar.arvalid := S_AXIL.ar.arvalid && state === sIdle
+  S_AXIL.ar.arready := M_AXIL(addrPort).ar.arready && state === sIdle
+
+  // R
+  S_AXIL.r.rresp := M_AXIL(selectedPort).r.rresp
+  S_AXIL.r.rdata := M_AXIL(selectedPort).r.rdata
+  S_AXIL.r.rvalid := M_AXIL(selectedPort).r.rvalid && state === sReadData
+  M_AXIL(selectedPort).r.rready := S_AXIL.r.rready && state === sReadData
+
+  // W
+  M_AXIL(selectedPort).w.wvalid := S_AXIL.w.wvalid && state === sWriteData
+  S_AXIL.w.wready := M_AXIL(selectedPort).w.wready && state === sWriteData
+
+  // B
+  S_AXIL.b.bresp := M_AXIL(selectedPort).b.bresp
+  S_AXIL.b.bvalid := M_AXIL(selectedPort).b.bvalid && state === sWriteResp
+  M_AXIL(selectedPort).b.bready := S_AXIL.b.bready && state === sWriteResp
+  
+  val awFire = WireInit(S_AXIL.aw.awvalid && S_AXIL.aw.awready)
+  val arFire = WireInit(S_AXIL.ar.arvalid && S_AXIL.ar.arready)
+  switch(state){
+    is(sIdle){
+      when(awFire) {
+        state := sWriteData
+        selectedPort := addrPort
+      }.elsewhen(arFire) {
+        state := sReadData
+        selectedPort := addrPort
+      }
+    }
+    is(sReadData){
+      when(S_AXIL.r.rready && S_AXIL.r.rvalid){
+        state := sIdle
+      }
+    }
+    is(sWriteData){
+      when(S_AXIL.w.wvalid && S_AXIL.w.wready){
+        state := sWriteResp
+      }
+    }
+    is(sWriteResp){
+      when(S_AXIL.b.bready && S_AXIL.b.bvalid){
+        state := sIdle
+      }
+    }
+  }
+}

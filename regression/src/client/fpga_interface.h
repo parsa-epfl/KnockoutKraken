@@ -194,6 +194,24 @@ static inline void makeMissReply(int type, int thid, int asid, uint64_t va, uint
     miss_reply->MissReply.ppn = GET_PPN_FROM_PADDR(paddr);
 }
 
+// Instrumentation control
+#define TRACE_PC_OFFST_PADDR       (0*0x4)
+#define TRACE_PC_OFFST_START       (1*0x4)
+#define TRACE_PC_OFFST_CNT_EXE     (2*0x4)
+#define TRACE_PC_OFFST_CNT_STALLS  (3*0x4)
+#define TRACE_PC_OFFST_CNT_CTLREG  (4*0x4)
+#define TRACE_PC_OFFST_CNT_BURSTS  (5*0x4)
+
+int trace_PC_set_paddr(const FPGAContext *c, uint32_t paddr);
+int trace_PC_start(const FPGAContext *c);
+int trace_PC_counter_reset(const FPGAContext *c);
+int trace_PC_counter_execute(const FPGAContext *c, uint32_t* count);
+int trace_PC_counter_stalls(const FPGAContext *c, uint32_t* count);
+int trace_PC_counter_bursts(const FPGAContext *c, uint32_t* count);
+int trace_PC_counter_start(const FPGAContext *c);
+int trace_PC_counter_stop(const FPGAContext *c);
+
+
 #ifndef AWS_FPGA
 int writeSimCtrl(const FPGAContext *c, int type, int value);
 #endif

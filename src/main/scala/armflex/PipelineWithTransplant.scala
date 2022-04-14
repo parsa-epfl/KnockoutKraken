@@ -41,7 +41,7 @@ class PipelineAxi(params: PipelineParams) extends Module {
   private val axiAddr_range = (0, 0xA000)
   private val csrAddr_range = (axiAddr_range._1 >> 2, axiAddr_range._2 >> 2)
 
-  private val pipeline = Module(new PipelineWithTransplant(params))
+  val pipeline = Module(new PipelineWithTransplant(params))
 
   private val uAxilToCSR = Module(new AXI4LiteCSR(params.axiDataW, csrAddr_range._2 - csrAddr_range._1))
 
@@ -90,6 +90,10 @@ class PipelineAxi(params: PipelineParams) extends Module {
 
   uCSRthid2asid.thid_i(1) := pipeline.mem_io.data.tlb.req.bits.thid
   mem_io.data.tlb.req.bits.asid := uCSRthid2asid.asid_o(1).bits
+
+  // Instrumentation Interface
+  val instrument = IO(pipeline.instrument.cloneType)
+  instrument <> pipeline.instrument
 
   if(true) {// TODO conditional assertions
     when(pipeline.mem_io.data.tlb.req.valid){
@@ -166,6 +170,10 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   transplantU.trans2host <> hostIO.trans2host
   transplantU.hostBramPort <> hostIO.port
   pipeline.transplantIO.stopCPU := transplantU.cpu2trans.stopCPU
+
+  // Instrumentation interface
+  val instrument = IO(pipeline.instrument.cloneType)
+  instrument <> pipeline.instrument
 
   if(false) { // TODO Conditional assertions and printing
     when(archstate.pstate.commit.next.valid) {
