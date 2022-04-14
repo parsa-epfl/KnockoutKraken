@@ -275,3 +275,44 @@ int writeSimCtrl(const FPGAContext *c, int type, int value) {
   return writeAXILMagic(c, type, value);
 }
 #endif
+
+// Instrumentation helpers
+int trace_PC_set_paddr(const FPGAContext *c, uint32_t paddr) {
+  const uint32_t axil_trace_base = c->base_address.axil_base + c->base_address.instrumentation_trace;
+  return writeAXIL(c, axil_trace_base + TRACE_PC_OFFST_PADDR, paddr);
+}
+
+int trace_PC_start(const FPGAContext *c) {
+  const uint32_t axil_trace_base = c->base_address.axil_base + c->base_address.instrumentation_trace;
+  return writeAXIL(c, axil_trace_base + TRACE_PC_OFFST_START, 1 << 0);
+}
+
+int trace_PC_counter_reset(const FPGAContext *c) {
+  const uint32_t axil_trace_base = c->base_address.axil_base + c->base_address.instrumentation_trace;
+  return writeAXIL(c, axil_trace_base + TRACE_PC_OFFST_START, 1 << 1);
+}
+
+int trace_PC_counter_execute(const FPGAContext *c, uint32_t* count) {
+  const uint32_t axil_trace_base = c->base_address.axil_base + c->base_address.instrumentation_trace;
+  return readAXIL(c, axil_trace_base + TRACE_PC_OFFST_CNT_EXE, count);
+}
+
+int trace_PC_counter_stalls(const FPGAContext *c, uint32_t* count) {
+  const uint32_t axil_trace_base = c->base_address.axil_base + c->base_address.instrumentation_trace;
+  return readAXIL(c, axil_trace_base + TRACE_PC_OFFST_CNT_STALLS, count);
+}
+
+int trace_PC_counter_start(const FPGAContext *c) {
+  const uint32_t axil_trace_base = c->base_address.axil_base + c->base_address.instrumentation_trace;
+  return writeAXIL(c, axil_trace_base + TRACE_PC_OFFST_CNT_CTLREG, 1);
+}
+
+int trace_PC_counter_stop(const FPGAContext *c) {
+  const uint32_t axil_trace_base = c->base_address.axil_base + c->base_address.instrumentation_trace;
+  return writeAXIL(c, axil_trace_base + TRACE_PC_OFFST_CNT_CTLREG, 0);
+}
+
+int trace_PC_counter_bursts(const FPGAContext *c, uint32_t* count) {
+  const uint32_t axil_trace_base = c->base_address.axil_base + c->base_address.instrumentation_trace;
+  return readAXIL(c, axil_trace_base + TRACE_PC_OFFST_CNT_BURSTS, count);
+}

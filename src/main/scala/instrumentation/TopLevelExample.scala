@@ -10,7 +10,7 @@ import armflex.util.ExtraUtils._
 import javax.script.Bindings
 
 class TopLevelExampleParams(
-  val dramParams: DRAMExampleParams,
+  val dramParams: DRAMPortParams,
   val csrParams: CSRExampleParams,
   val computeParams: ComputeExampleParams
 )
@@ -315,7 +315,7 @@ object ARMFlexTopVerilogEmitter extends App {
 
   c.emitVerilog(
     new TopLevelExample(new TopLevelExampleParams(
-      new DRAMExampleParams(),
+      new DRAMPortParams(),
       new CSRExampleParams(),
       new ComputeExampleParams()
     )), annotations = Seq(TargetDirAnnotation("test/example/")))
@@ -328,9 +328,10 @@ object ARMFlexTopVerilogEmitter extends App {
   */
 class TopLevelExampleDRAM(val params: TopLevelExampleParams) extends Module {
   private val system = Module(new TopLevelExample(params))
-  private val dram = Module(new DRAMWrapper(params.dramParams))
-  system.dram_io.read <> dram.read
-  system.dram_io.write <> dram.write
+  private val dramWrite = Module(new DRAMWrapperWrite(params.dramParams))
+  private val dramRead = Module(new DRAMWrapperRead(params.dramParams))
+  system.dram_io.read <> dramRead.read
+  system.dram_io.write <> dramWrite.write
   private val axiMulti_R = Module(new AXIReadMultiplexer(params.dramParams.pAddrW, params.dramParams.pDataW, 1))
   private val axiMulti_W = Module(new AXIWriteMultiplexer(params.dramParams.pAddrW, params.dramParams.pDataW, 1))
 
@@ -340,8 +341,8 @@ class TopLevelExampleDRAM(val params: TopLevelExampleParams) extends Module {
   })
   SHELL_IO.S_AXIL <> system.S_AXIL
 
-  dram.SHELL_IO_AXI.M_DMA_R <> axiMulti_R.S_IF(0)
-  dram.SHELL_IO_AXI.M_DMA_W <> axiMulti_W.S_IF(0)
+  dramRead.M_AXI_R <> axiMulti_R.S_IF(0)
+  dramWrite.M_AXI_W <> axiMulti_W.S_IF(0)
   // Interconnect Read ports
   SHELL_IO.M_AXI.ar <> axiMulti_R.M_AXI.ar
   SHELL_IO.M_AXI.r <> axiMulti_R.M_AXI.r

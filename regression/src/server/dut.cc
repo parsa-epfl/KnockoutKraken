@@ -5,12 +5,15 @@
 
 double TopDUT::time = 0;
 
-TopDUT::TopDUT(size_t dram_size) {
+TopDUT::TopDUT(bool withTrace) {
+  size_t dram_size = 1024 * 1024 * 16;
   dut = new VARMFlexTop();
   dram = new uint32_t[dram_size / 4];
   tfp = new VerilatedFstC;
-  dut->trace(tfp, 99);
-  tfp->open("test.fst");
+  if(withTrace) {
+    dut->trace(tfp, 99);
+    tfp->open("test.fst");
+  }
   ready_thread = 0;
   terminating = false;
   error_occurred = false;
@@ -26,10 +29,12 @@ TopDUT::TopDUT(size_t dram_size) {
 }
 
 TopDUT::~TopDUT() {
-  tfp->close();
+  if (withTrace) {
+    tfp->close();
+    delete tfp;
+  }
   dut->final();
   delete dut;
-  delete tfp;
   delete[] dram;
 }
 
