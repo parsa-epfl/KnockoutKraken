@@ -54,9 +54,21 @@ class MemorySystem(params: MemoryHierarchyParams) extends Module {
   pipeline_io.mmu <> mmu.pipeline_io
   axiShell_io.AXI_MMU <> mmu.axiShell_io
   axiShell_io.M_AXI_DMA_icacheR <> icacheAdaptor.M_DMA_R
+  when(icacheAdaptor.M_DMA_R.req.fire) {
+    assert(icacheAdaptor.M_DMA_R.req.bits.address >= (1 << (params.pAddrW - 8)).U, "iCache should not read the page table region.")
+  }
   axiShell_io.M_AXI_DMA_dcacheR <> dcacheAdaptor.M_DMA_R
+  when(dcacheAdaptor.M_DMA_R.req.fire) {
+    assert(dcacheAdaptor.M_DMA_R.req.bits.address >= (1 << (params.pAddrW - 8)).U, "dCache should not read the page table region.")
+  }
   axiShell_io.M_AXI_DMA_icacheW <> icacheAdaptor.M_DMA_W
+  when(icacheAdaptor.M_DMA_W.req.fire) {
+    assert(icacheAdaptor.M_DMA_W.req.bits.address >= (1 << (params.pAddrW - 8)).U, "iCache should not write the page table region.")
+  }
   axiShell_io.M_AXI_DMA_dcacheW <> dcacheAdaptor.M_DMA_W
+  when(dcacheAdaptor.M_DMA_W.req.fire) {
+    assert(dcacheAdaptor.M_DMA_W.req.bits.address >= (1 << (params.pAddrW - 8)).U, "dCache should not write the page table region.")
+  }
 }
 
 object MemorySystemVerilogEmitter extends App {

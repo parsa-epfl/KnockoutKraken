@@ -99,6 +99,10 @@ TEST_CASE("host-cmd-force-transplant") {
     INFO("Check now execution stopped");
     transplant_pending(&ctx, &pending_threads);
     assert(pending_threads);
+
+    INFO("Check flag")
+    transplantBack(&ctx, 0, &state);
+    assert(FLAGS_GET_IS_EXCEPTION(state.flags));
  
     releaseFPGAContext(&ctx);
 }

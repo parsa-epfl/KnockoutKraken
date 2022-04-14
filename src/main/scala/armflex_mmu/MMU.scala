@@ -63,10 +63,8 @@ case class MemoryHierarchyParams(
    *
    * @note sync this function with PageDemanderDriver.vpn2ptSetPA
    */
-  def vpn2ptSetPA(asid: UInt, vpn: UInt) = {
-
-
-    def entryNumberInLog2 = pAddrW - log2Ceil(pageSize)
+  def vpn2ptSetPA(asid: UInt, vpn: UInt, PTEsPerLine: Int) = {
+    def lineNumberInLog2 = pAddrW - log2Ceil(pageSize) - log2Ceil(PTEsPerLine)
     //val reducedAsid: Iterator[Seq[Bool]] = asid.asBools.sliding(asid.getWidth/4, asid.getWidth/4)
     //val resAsidReduced = reducedAsid.map { case boolSeq: Seq[Bool] => 
     //    val vecBool: Vec[Bool] = VecInit(boolSeq)
@@ -75,7 +73,7 @@ case class MemoryHierarchyParams(
     //}
     //resAsidReduced.reduce(Cat(_,_))
     val pageset_number = Cat(vpn(vpn.getWidth-1, 6), asid)
-    Cat(pageset_number(entryNumberInLog2-1, 0) * 3.U(2.W), 0.U(6.W)) // Zero pad 6
+    Cat(pageset_number(lineNumberInLog2-1, 0) * 3.U(2.W), 0.U(6.W)) // Zero pad 6
   }
 }
 
@@ -151,20 +149,39 @@ class MMU(
     val data = Flipped(new CacheMMUIO(params.getCacheParams))
   })
 
-
   // DRAM Access Modules
   // Page Walker DRAM Accesses
   axiShell_io.M_DMA_R(0) <> u_page_walker.M_DMA_R
+  when(u_page_walker.M_DMA_R.req.fire) {
+    assert(u_page_walker.M_DMA_R.req.bits.address < (1 << (params.pAddrW - 8)).U, "Page walker should not read the page region.")
+  }
   // TLB writeback handler
   axiShell_io.M_DMA_R(1) <> u_tlbEntryWbHandler.M_DMA_R
+  when(u_tlbEntryWbHandler.M_DMA_R.req.fire) {
+    assert(u_tlbEntryWbHandler.M_DMA_R.req.bits.address < (1 << (params.pAddrW - 8)).U, "TLB eviction handler should not read the page region.\"")
+  }
   axiShell_io.M_DMA_W(0) <> u_tlbEntryWbHandler.M_DMA_W
+  when(u_tlbEntryWbHandler.M_DMA_W.req.fire) {
+    assert(u_tlbEntryWbHandler.M_DMA_W.req.bits.address < (1 << (params.pAddrW - 8)).U, "TLB eviction handler should not write the page region.\"")
+  }
   // Miss request handler
   axiShell_io.M_DMA_R(2) <> u_qemuMissHandler.M_DMA_R
+  when(u_qemuMissHandler.M_DMA_R.req.fire) {
+    assert(u_qemuMissHandler.M_DMA_R.req.bits.address < (1 << (params.pAddrW - 8)).U, "Page fault handler should not read the page region.\"")
+  }
   axiShell_io.M_DMA_W(1) <> u_qemuMissHandler.M_DMA_W
+  when(u_qemuMissHandler.M_DMA_W.req.fire) {
+    assert(u_qemuMissHandler.M_DMA_W.req.bits.address < (1 << (params.pAddrW - 8)).U, "Page fault handler should not write the page region.\"")
+  }
   // Page Evict Handler
   axiShell_io.M_DMA_R(3) <> u_qemuPageEvictHandler.M_DMA_R
+  when(u_qemuPageEvictHandler.M_DMA_R.req.fire) {
+    assert(u_qemuPageEvictHandler.M_DMA_R.req.bits.address < (1 << (params.pAddrW - 8)).U, "Page eviction handler should not write the page region.\"")
+  }
   axiShell_io.M_DMA_W(2) <> u_qemuPageEvictHandler.M_DMA_W
-
+  when(u_qemuPageEvictHandler.M_DMA_W.req.fire) {
+    assert(u_qemuPageEvictHandler.M_DMA_W.req.bits.address < (1 << (params.pAddrW - 8)).U, "Page eviction handler should not write the page region.\"")
+  }
   // Host access
   axiShell_io.S_AXIL_QEMU_MQ <> u_qemuMsgQueue.S_AXIL
   axiShell_io.S_AXI <> u_qemuMsgQueue.S_AXI

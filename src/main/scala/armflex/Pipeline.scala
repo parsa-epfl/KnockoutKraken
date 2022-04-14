@@ -103,16 +103,14 @@ class Pipeline(params: PipelineParams) extends Module {
   archstate.issue.rd.port(1).addr := decReg.io.deq.bits.rs2
   archstate.issue.rd.port(2).addr := decReg.io.deq.bits.rd.bits
   issuer.io.enq <> decReg.io.deq // Issue is always ready, so no check for archstate.issue.ready necessary
-  // TODO When Issuer io deq ! ready -> register RFile RD output
-
-  // Execute : Issue -> Execute
-  val issued_dinst = WireInit(issuer.io.deq.bits)
+  // connect rfile read(address) interface
+  when(decReg.io.deq.bits.itype === I_DP3S) {
+    archstate.issue.rd.port(2).addr := decReg.io.deq.bits.imm(4, 0)
+  }
 
   // Issue ---------------------------
-  // connect rfile read(address) interface
-  when(issued_dinst.itype === I_DP3S) {
-    archstate.issue.rd.port(2).addr := issued_dinst.imm(4, 0)
-  }
+  // Execute : Issue -> Execute
+  val issued_dinst = WireInit(issuer.io.deq.bits)
 
   // Execute ---------------------------
   // Read register data from rfile

@@ -185,8 +185,8 @@ object PageDemanderDriver {
     }
 
     def vpn2ptSetPA(asid: BigInt, vpn: BigInt) = {
-      val entryNumberInLog2 = target.params.pAddrW - log2Ceil(target.params.pageSize)
-      val mask = (BigInt(1) << entryNumberInLog2) - 1
+      val PTEsPerLine = target.params.pAddrW - log2Ceil(target.params.pageSize) - log2Ceil(16);
+      val mask = (BigInt(1) << PTEsPerLine) - 1
       // Waring: Sync this function with MemoryHierarchyParams.vpn2ptSetPA
       (((((vpn >> 6) << target.params.asidW) | asid) & mask) * 3) << 6
     }

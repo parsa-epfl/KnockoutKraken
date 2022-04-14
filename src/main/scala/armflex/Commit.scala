@@ -112,7 +112,7 @@ class CommitUnit(thidN: Int) extends Module {
 
   assert(s_WB === 0.U && s_WB1 === 1.U && s_WB2 === 2.U)
   commit.archstate.wr.addr := rd(wbState).bits
-  commit.archstate.wr.data := Mux(commitQueue.io.deq.bits.is32bit, Cat(0.U, res(wbState)(31,0)), res(wbState))
+  commit.archstate.wr.data := res(wbState)
 
   switch(wbState) {
     is(s_WB) {

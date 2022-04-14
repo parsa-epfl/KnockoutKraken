@@ -277,3 +277,57 @@ TEST_CASE("out-of-page-bound-pair-load") {
 
   releaseFPGAContext(&ctx);
 }
+
+TEST_CASE("ldr-wback-addr") {
+    FPGAContext ctx;
+    DevteroflexArchState state;
+    REQUIRE(initFPGAContext(&ctx) == 0);
+    initArchState(&state, 0x0);
+    int asid = 0x10;
+
+    INFO("Write instruction")
+    int paddr = ctx.base_address.page_base;
+    uint8_t page[PAGE_SIZE] = {0}; 
+    makeDeadbeefPage(page, PAGE_SIZE);
+    ((uint32_t *) page)[0] = 0x38401c08; // ldrb    w8, [x0, #1]!
+    ((uint32_t *) page)[1] = 0x0; // Trigger transplant
+    state.xregs[8] = 0xDEADBEEF;
+    state.xregs[0] = 0xFFFF7e722b2;
+    uint64_t addr = state.xregs[0] + 1;
+
+    MessageFPGA pf_reply;
+
+    INFO("Push instruction page");
+    pushPageToFPGA(&ctx, paddr, page);
+    makeMissReply(INST_FETCH, -1, asid, state.pc, paddr, &pf_reply);
+    sendMessageToFPGA(&ctx, &pf_reply, sizeof(pf_reply));
+
+    INFO("Push data page");
+    page[addr & 0xFFF] = 0x11;
+    pushPageToFPGA(&ctx, paddr + PAGE_SIZE, page);
+    makeMissReply(DATA_LOAD, -1, asid, addr, paddr + PAGE_SIZE, &pf_reply);
+    sendMessageToFPGA(&ctx, &pf_reply, sizeof(pf_reply));
+
+    INFO("Push state");
+    registerAndPushState(&ctx, 0, asid, &state);
+
+    INFO("Start Execution");
+    transplant_start(&ctx, 0); 
+
+    INFO("Advance");
+    advanceTicks(&ctx, 200);
+
+    INFO("Check now execution stopped");
+    uint32_t pending_threads = 0;
+    transplant_pending(&ctx, &pending_threads);
+    assert(pending_threads);
+
+    INFO("Check transplant");
+    transplantBack(&ctx, 0, &state);
+    INFO("Check address");
+    assert(state.xregs[0] == addr);
+    INFO("Check data");
+    assert(state.xregs[8] == 0x11);
+ 
+    releaseFPGAContext(&ctx);
+}
