@@ -1,6 +1,7 @@
 #pragma once
 
-#include "VARMFlexTop.h"
+#include "Vdevteroflex_top.h"
+#include "../client/fpga_interface.h"
 #include <exception>
 #include <mutex>
 #include <thread>
@@ -36,10 +37,19 @@ public:
   /**
    * A pointer replacement.
    */
-  VARMFlexTop *operator-> (){
+  Vdevteroflex_top *operator-> (){
     return dut;
   }
 
+#ifdef DEBUG
+  /**
+   * Get commit state.
+   */
+  void getArchState(uint32_t thid, ArmflexArchState* state);
+  int isInstructionBeingCommitted();
+  int getTransplant();
+#endif
+ 
   /**
    * Reset the module. 
    * 
@@ -152,7 +162,7 @@ private:
 
   bool error_occurred;
 
-  VARMFlexTop *dut;
+  Vdevteroflex_top *dut;
   VerilatedFstC *tfp;
 };
 

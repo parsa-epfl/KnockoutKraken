@@ -100,6 +100,9 @@ class PipelineAxi(params: PipelineParams) extends Module {
   val instrument = IO(pipeline.instrument.cloneType)
   instrument <> pipeline.instrument
 
+  val dbg = IO(pipeline.dbg.cloneType)
+  dbg <> pipeline.dbg
+
   if(true) {// TODO conditional assertions
     when(pipeline.mem_io.data.tlb.req.valid){
       assert(uCSRthid2asid.asid_o(1).valid, "No memory request is allowed if the hardware thread is not registed.")
@@ -189,38 +192,37 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
     }
   }
 
+  class DebugBundle extends Bundle {
+    val fetch = ValidTag(params.thidN)
+    val issue = ValidTag(params.thidN)
+    val issuingMem = Output(Bool())
+    val issuingTransplant = Output(Bool())
+    val commit = ValidTag(params.thidN)
+    val commitIsTransplant = Output(Bool())
+    val transplant = Output(ValidTag(params.thidN))
+    val stateVec = archstate.dbg.vecState.get.cloneType
+  }
+
   //* DBG
   val dbg = IO(new Bundle {
-    val bits =
-      if (params.DebugSignals) Some(Output(new Bundle {
-        val fetch = ValidTag(params.thidN, new FullStateBundle)
-        val issue = ValidTag(params.thidN, new FullStateBundle)
-        val issuingMem = Output(Bool())
-        val issuingTransplant = Output(Bool())
-        val commit = ValidTag(params.thidN, new FullStateBundle)
-        val commitTransplant = Output(Valid(INST_T))
-        val stateVec = archstate.dbg.vecState.get.cloneType
-      }))
-      else None
+    val bits = if (params.DebugSignals) Some(Output(new DebugBundle)) else None
   })
 
   if(params.DebugSignals) {
     dbg.bits.get.stateVec := archstate.dbg.vecState.get
     dbg.bits.get.fetch.valid := pipeline.mem_io.inst.tlb.req.valid
     dbg.bits.get.fetch.tag := pipeline.mem_io.inst.tlb.req.bits.thid
-    dbg.bits.get.fetch.bits.get := archstate.dbg.vecState.get(dbg.bits.get.fetch.tag)
 
     dbg.bits.get.issue.tag := pipeline.dbg.issue.thread
-    dbg.bits.get.issue.bits.get := archstate.dbg.vecState.get(dbg.bits.get.issue.tag)
     dbg.bits.get.issuingMem := pipeline.dbg.issue.mem
     dbg.bits.get.issuingTransplant := pipeline.dbg.issue.transplant
     dbg.bits.get.issue.valid := pipeline.dbg.issue.valid
 
-    dbg.bits.get.commit.tag := pipeline.archstate.commit.sel.tag
-    dbg.bits.get.commit.valid := pipeline.archstate.commit.sel.valid
-    dbg.bits.get.commit.bits.get := archstate.dbg.vecState.get(dbg.bits.get.commit.tag)
-    dbg.bits.get.commitTransplant.valid := pipeline.transplantIO.done.valid
-    dbg.bits.get.commitTransplant.bits := pipeline.transplantIO.done.bits.get
+    dbg.bits.get.commit.tag := RegNext(pipeline.archstate.commit.sel.tag)
+    dbg.bits.get.commit.valid := RegNext(pipeline.archstate.commit.sel.valid)
+    dbg.bits.get.commitIsTransplant := RegNext(pipeline.transplantIO.done.valid)
+    dbg.bits.get.transplant.valid := transplantU.trans2cpu.start
+    dbg.bits.get.transplant.tag := transplantU.trans2cpu.thread
   }
   // */
 }

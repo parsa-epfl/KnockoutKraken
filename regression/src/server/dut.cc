@@ -1,5 +1,6 @@
 #include "dut.hh"
 #include "verilated.h"
+#include "../client/fpga_interface.h"
 #include <mutex>
 #include <thread>
 
@@ -7,7 +8,7 @@ double TopDUT::time = 0;
 
 TopDUT::TopDUT(bool withTrace) {
   size_t dram_size = 1024 * 1024 * 16;
-  dut = new VARMFlexTop();
+  dut = new Vdevteroflex_top();
   dram = new uint32_t[dram_size / 4];
   tfp = new VerilatedFstC;
   if(withTrace) {
@@ -147,3 +148,29 @@ void TopDUT::closeSimulation(void) {
   fflush(f);
   fclose(f);
 }
+
+#ifdef DEBUG
+int TopDUT::isInstructionBeingCommitted() {
+  if(dut->dbg_bits_commit_valid && !dut->dbg_bits_commitIsTransplant) {
+    return dut->dbg_bits_commit_tag;
+  } else {
+    return -1;
+  }
+}
+
+int TopDUT::getTransplant(void) {
+  if(dut->dbg_bits_transplant_valid) {
+    return dut->dbg_bits_transplant_tag;
+  } else {
+    return -1;
+  }
+}
+
+void TopDUT::getArchState(uint32_t thid, ArmflexArchState* state) {
+  state->pc = uint64_t(dut->dbg_bits_stateVec_regs_PC[thid*2]) | uint64_t(dut->dbg_bits_stateVec_regs_PC[thid*2 + 1]) << 32;
+  state->nzcv = uint64_t(dut->dbg_bits_stateVec_regs_NZCV[thid / 8] >> ((thid % 8) * 4)) & 0xF;
+  for(int reg = 0; reg < 32; reg++) {
+      state->xregs[reg] = uint64_t(dut->dbg_bits_stateVec_rfile[(thid*32 + reg) * 2]) | uint64_t(dut->dbg_bits_stateVec_rfile[(thid*32 + reg) * 2 + 1]) << 32;
+  }
+}
+#endif
