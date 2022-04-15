@@ -26,15 +26,15 @@ package antmicro.Bus
 import chisel3._
 
 class AXI4AW(val addrWidth : Int) extends Bundle{
-  val awid = Output(UInt(AXI4.idWidth.W))
+  // val awid = Output(UInt(AXI4.idWidth.W))
   val awaddr = Output(UInt(addrWidth.W))
   val awlen = Output(UInt(AXI4.lenWidth.W))
   val awsize = Output(UInt(AXI4.sizeWidth.W))
   val awburst = Output(UInt(AXI4.burstWidth.W))
-  val awlock = Output(Bool())
-  val awcache = Output(UInt(AXI4.cacheWidth.W))
-  val awprot = Output(UInt(AXI4.protWidth.W))
-  val awqos = Output(UInt(AXI4.qosWidth.W))
+  // val awlock = Output(Bool())
+  // val awcache = Output(UInt(AXI4.cacheWidth.W))
+  // val awprot = Output(UInt(AXI4.protWidth.W))
+  // val awqos = Output(UInt(AXI4.qosWidth.W))
   val awvalid = Output(Bool())
   val awready = Input(Bool())
 
@@ -44,12 +44,12 @@ class AXI4AW(val addrWidth : Int) extends Bundle{
 object AXI4AW {
   def apply(addr : UInt, len : UInt, size : UInt, valid : UInt) : AXI4AW = {
     val aw = Wire(new AXI4AW(addr.getWidth))
-    aw.awid := 0.U
+    // aw.awid := 0.U
     aw.awburst := 1.U
-    aw.awlock := 0.U
-    aw.awcache := 2.U
-    aw.awprot := 0.U
-    aw.awqos := 0.U
+    // aw.awlock := 0.U
+    // aw.awcache := 2.U
+    // aw.awprot := 0.U
+    // aw.awqos := 0.U
     aw.awaddr := addr
     aw.awlen := len
     aw.awsize := size
@@ -58,15 +58,15 @@ object AXI4AW {
   }
   def tieOff(addrWidth : Int): AXI4AW = {
     val aw = Wire(new AXI4AW(addrWidth))
-    aw.awid := 0.U
+    // aw.awid := 0.U
     aw.awaddr := 0.U
     aw.awlen := 0.U
     aw.awsize := 0.U
     aw.awburst := 0.U
-    aw.awlock := 0.U
-    aw.awcache := 0.U
-    aw.awprot := 0.U
-    aw.awqos := 0.U
+    // aw.awlock := 0.U
+    // aw.awcache := 0.U
+    // aw.awprot := 0.U
+    // aw.awqos := 0.U
     aw.awvalid := 0.U
     aw
   }
@@ -114,7 +114,7 @@ object AXI4W{
 }
 
 class AXI4B extends Bundle{
-  val bid = Input(UInt(AXI4.idWidth.W))
+  // val bid = Input(UInt(AXI4.idWidth.W))
   val bresp = Input(UInt(AXI4.respWidth.W))
   val bvalid = Input(Bool())
   val bready = Output(Bool())
@@ -137,7 +137,7 @@ object AXI4B{
 
   def stub(): AXI4B = {
     val b = Wire(new AXI4B())
-    b.bid := DontCare
+    // b.bid := DontCare
     b.bresp := DontCare
     b.bvalid := false.B
     b
@@ -145,15 +145,15 @@ object AXI4B{
 }
 
 class AXI4AR(val addrWidth : Int) extends Bundle{
-  val arid = Output(UInt(AXI4.idWidth.W))
+  // val arid = Output(UInt(AXI4.idWidth.W))
   val araddr = Output(UInt(addrWidth.W))
   val arlen = Output(UInt(AXI4.lenWidth.W))
   val arsize = Output(UInt(AXI4.sizeWidth.W))
   val arburst = Output(UInt(AXI4.burstWidth.W))
-  val arlock = Output(Bool())
-  val arcache = Output(UInt(AXI4.cacheWidth.W))
-  val arprot = Output(UInt(AXI4.protWidth.W))
-  val arqos = Output(UInt(AXI4.qosWidth.W))
+  // val arlock = Output(Bool())
+  // val arcache = Output(UInt(AXI4.cacheWidth.W))
+  // val arprot = Output(UInt(AXI4.protWidth.W))
+  // val arqos = Output(UInt(AXI4.qosWidth.W))
   val arvalid = Output(Bool())
   val arready = Input(Bool())
 
@@ -163,12 +163,12 @@ class AXI4AR(val addrWidth : Int) extends Bundle{
 object AXI4AR{
   def apply(addr : UInt, len : UInt, size : UInt, valid : UInt) : AXI4AR = {
     val ar = Wire(new AXI4AR(addr.getWidth))
-    ar.arid := 0.U
+    // ar.arid := 0.U
     ar.arburst := 1.U
-    ar.arlock := 0.U
-    ar.arcache := 2.U
-    ar.arprot := 0.U
-    ar.arqos := 0.U
+    // ar.arlock := 0.U
+    // ar.arcache := 2.U
+    // ar.arprot := 0.U
+    // ar.arqos := 0.U
     ar.araddr := addr
     ar.arlen := len
     ar.arsize := size
@@ -177,15 +177,15 @@ object AXI4AR{
   }
   def tieOff(addrWidth: Int): AXI4AR = {
     val ar = Wire(new AXI4AR(addrWidth))
-    ar.arid := 0.U
+    // ar.arid := 0.U
     ar.araddr := 0.U
     ar.arlen := 0.U
     ar.arsize := 0.U
     ar.arburst := 0.U
-    ar.arlock := 0.U
-    ar.arcache := 0.U
-    ar.arprot := 0.U
-    ar.arqos := 0.U
+    // ar.arlock := 0.U
+    // ar.arcache := 0.U
+    // ar.arprot := 0.U
+    // ar.arqos := 0.U
     ar.arvalid := 0.U
     ar
   }
@@ -198,7 +198,7 @@ object AXI4AR{
 }
 
 class AXI4R(val dataWidth : Int) extends Bundle{
-  val rid = Input(UInt(AXI4.idWidth.W))
+  // val rid = Input(UInt(AXI4.idWidth.W))
   val rdata = Input(UInt(dataWidth.W))
   val rresp = Input(UInt(AXI4.respWidth.W))
   val rlast = Input(Bool())
@@ -223,7 +223,7 @@ object AXI4R{
   def stub(dataWidth: Int): AXI4R = {
     val r = Wire(new AXI4R(dataWidth))
     r.rdata := DontCare
-    r.rid := DontCare
+    // r.rid := DontCare
     r.rlast := DontCare
     r.rresp := DontCare
     r.rvalid := false.B
@@ -240,12 +240,12 @@ class AXI4(val addrWidth : Int, val dataWidth : Int) extends Bundle{
 }
 
 object AXI4 {
-  val idWidth = 6
+  val idWidth = 0
   val lenWidth = 8
   val sizeWidth = 3
   val burstWidth = 2
-  val cacheWidth = 4
-  val protWidth = 3
-  val qosWidth = 4
+  val cacheWidth = 0
+  val protWidth = 0
+  val qosWidth = 0
   val respWidth = 2
 }

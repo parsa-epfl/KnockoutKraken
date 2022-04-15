@@ -22,7 +22,7 @@ class AXILInterconnector(
 
   for(i <- 0 until addrSegment.length){
     M_AXIL(i).ar.araddr := S_AXIL.ar.araddr
-    M_AXIL(i).ar.arprot := S_AXIL.ar.arprot
+    // M_AXIL(i).ar.arprot := S_AXIL.ar.arprot
     M_AXIL(i).ar.arvalid := S_AXIL.ar.arvalid && read_which === i.U
   }
   S_AXIL.ar.arready := M_AXIL(read_which).ar.arready
@@ -50,7 +50,7 @@ class AXILInterconnector(
 
   for(i <- 0 until addrSegment.length){
     M_AXIL(i).aw.awaddr := S_AXIL.aw.awaddr
-    M_AXIL(i).aw.awprot := S_AXIL.aw.awprot
+    // M_AXIL(i).aw.awprot := S_AXIL.aw.awprot
     M_AXIL(i).aw.awvalid := S_AXIL.aw.awvalid && i.U === write_which
   }
   S_AXIL.aw.awready := M_AXIL(write_which).aw.awready
@@ -86,110 +86,156 @@ class AXILInterconnector(
   response_which_queue.ready := S_AXIL.b.bvalid && S_AXIL.b.bready
 }
 
+// A serialized AXI interconnector. In this connector, incoming requests are processed one by one, and there is no overlap.
 class AXIInterconnector(
-  addrSegment: Seq[BigInt],
-  addrMask: Seq[BigInt],
+  slaveNumber: Int,
+  whichOut: (UInt, Int) => Bool, // given address and Int, decide whether it valid.
   addrWidth: Int = 64,
-  dataW: Int = 512
+  dataW: Int = 512,
 ) extends Module {
-  assert(addrMask.length == addrSegment.length)
   val S_AXI = IO(Flipped(new AXI4(addrWidth, dataW)))
-  val M_AXI = IO(Vec(addrMask.length, new AXI4(addrWidth, dataW)))
+  val M_AXI = IO(Vec(slaveNumber, new AXI4(addrWidth, dataW)))
+
+  val sReadIdle :: sReadForward :: Nil = Enum(2)
+
+  val rReadWhich = RegInit(0.U(log2Ceil(slaveNumber).W))
+  val rReadState = RegInit(sReadIdle)
 
   // AR
-  val read_which = OHToUInt(addrSegment.zip(addrMask).map { case (addr, mask) =>
-    (S_AXI.ar.araddr & mask.U) === addr.U
-  })
+  val read_which_oh = VecInit((0 until slaveNumber).map { i =>
+    whichOut(S_AXI.ar.araddr, i)
+  }).asUInt
 
-  for(i <- 0 until addrSegment.length){
+  assert(read_which_oh === 0.U || PopCount(read_which_oh) === 1.U)
+
+  val read_which = OHToUInt(read_which_oh)
+
+  for(i <- 0 until slaveNumber){
     M_AXI(i).ar.araddr := S_AXI.ar.araddr
     M_AXI(i).ar.arburst := S_AXI.ar.arburst
-    M_AXI(i).ar.arcache := S_AXI.ar.arcache
-    M_AXI(i).ar.arid := S_AXI.ar.arid
+    // M_AXI(i).ar.arcache := S_AXI.ar.arcache
+    // M_AXI(i).ar.arid := S_AXI.ar.arid
     M_AXI(i).ar.arlen := S_AXI.ar.arlen
-    M_AXI(i).ar.arlock := S_AXI.ar.arlock
-    M_AXI(i).ar.arprot := S_AXI.ar.arprot
-    M_AXI(i).ar.arqos := S_AXI.ar.arqos
+    // M_AXI(i).ar.arlock := S_AXI.ar.arlock
+    // M_AXI(i).ar.arprot := S_AXI.ar.arprot
+    // M_AXI(i).ar.arqos := S_AXI.ar.arqos
     M_AXI(i).ar.arsize := S_AXI.ar.arsize
-    M_AXI(i).ar.arvalid := S_AXI.ar.arvalid && read_which === i.U
+    M_AXI(i).ar.arvalid := S_AXI.ar.arvalid && whichOut(S_AXI.ar.araddr, i)
   }
-  S_AXI.ar.arready := M_AXI(read_which).ar.arready
 
-  val read_which_enq = Wire(Decoupled(UInt(log2Ceil(addrSegment.length).W)))
-  read_which_enq.bits := read_which
-  read_which_enq.valid := S_AXI.ar.arready && S_AXI.ar.arvalid
+  S_AXI.ar.arready := Mux(
+    read_which_oh === 0.U,
+    false.B,
+    M_AXI(read_which).ar.arready && rReadState === sReadIdle // target is not busy, and the queue to buffer address is empty.
+  )
 
-  val read_which_queue = Queue(read_which_enq, addrMask.length)
+  when(S_AXI.ar.fire){
+    rReadWhich := read_which
+  }
 
   // R
-  S_AXI.r.rdata := M_AXI(read_which_queue.bits).r.rdata
-  S_AXI.r.rid := M_AXI(read_which_queue.bits).r.rid
-  S_AXI.r.rlast := M_AXI(read_which_queue.bits).r.rlast
-  S_AXI.r.rresp := M_AXI(read_which_queue.bits).r.rresp
-  S_AXI.r.rvalid := M_AXI(read_which_queue.bits).r.rvalid && read_which_queue.valid
+  S_AXI.r.rdata := M_AXI(rReadWhich).r.rdata
+  // S_AXI.r.rid := M_AXI(read_which_queue.bits).r.rid
+  S_AXI.r.rlast := M_AXI(rReadWhich).r.rlast
+  S_AXI.r.rresp := M_AXI(rReadWhich).r.rresp
+  S_AXI.r.rvalid := M_AXI(rReadWhich).r.rvalid && rReadState === sReadForward
   
-  for(i <- 0 until addrSegment.length){
-    M_AXI(i).r.rready := S_AXI.r.rready && read_which_queue.bits === i.U && read_which_queue.valid
+  for(i <- 0 until slaveNumber){
+    M_AXI(i).r.rready := S_AXI.r.rready && rReadWhich === i.U && rReadState === sReadForward
   }
 
-  read_which_queue.ready := S_AXI.r.rvalid && S_AXI.r.rready && S_AXI.r.rlast
+  switch(rReadState){
+    is(sReadIdle){
+      rReadState := Mux(S_AXI.ar.fire, sReadForward, sReadIdle)
+    }
+    is(sReadForward){
+      rReadState := Mux(S_AXI.r.fire && S_AXI.r.rlast, sReadIdle, sReadForward)
+    }
+  }
+
+  val sWriteIdle :: sWriteForward :: sWriteResponse :: Nil = Enum(3)
+  val rWriteState = RegInit(sWriteIdle)
+  val rWriteWhich = RegInit(0.U(log2Ceil(slaveNumber).W))
 
   // AW
-  val write_which = OHToUInt(addrSegment.zip(addrMask).map { case (addr, mask) =>
-    (S_AXI.aw.awaddr & mask.U) === addr.U
-  })
+  val write_which_oh = VecInit((0 until slaveNumber).map { i =>
+    whichOut(S_AXI.aw.awaddr, i)
+  }).asUInt
 
-  for(i <- 0 until addrSegment.length){
+  assert(write_which_oh === 0.U || PopCount(write_which_oh) === 1.U)
+
+  val write_which = OHToUInt(write_which_oh)
+
+  for(i <- 0 until slaveNumber){
     M_AXI(i).aw.awaddr := S_AXI.aw.awaddr
     M_AXI(i).aw.awburst := S_AXI.aw.awburst
-    M_AXI(i).aw.awcache := S_AXI.aw.awcache
-    M_AXI(i).aw.awid := S_AXI.aw.awid
+    // M_AXI(i).aw.awcache := S_AXI.aw.awcache
+    // M_AXI(i).aw.awid := S_AXI.aw.awid
     M_AXI(i).aw.awlen := S_AXI.aw.awlen
-    M_AXI(i).aw.awlock := S_AXI.aw.awlock
-    M_AXI(i).aw.awprot := S_AXI.aw.awprot
-    M_AXI(i).aw.awqos := S_AXI.aw.awqos
+    // M_AXI(i).aw.awlock := S_AXI.aw.awlock
+    // M_AXI(i).aw.awprot := S_AXI.aw.awprot
+    // M_AXI(i).aw.awqos := S_AXI.aw.awqos
     M_AXI(i).aw.awsize := S_AXI.aw.awsize
-    M_AXI(i).aw.awvalid := S_AXI.aw.awvalid && i.U === write_which
+    M_AXI(i).aw.awvalid := S_AXI.aw.awvalid && whichOut(S_AXI.aw.awaddr, i)
   }
-  S_AXI.aw.awready := M_AXI(write_which).aw.awready
 
-  val write_which_enq = Wire(Decoupled(UInt(log2Ceil(addrSegment.length).W)))
-  write_which_enq.bits := write_which
-  write_which_enq.valid := S_AXI.aw.awvalid && S_AXI.aw.awready
+  S_AXI.aw.awready := Mux(
+    write_which_oh === 0.U,
+    false.B,
+    M_AXI(write_which).aw.awready && rWriteState === sWriteIdle
+  )
 
-  val write_which_queue = Queue(write_which_enq, addrMask.length)
+  when(S_AXI.aw.fire){
+    rWriteWhich := write_which
+  }
 
   // W
-  for(i <- 0 until addrSegment.length){
+  for(i <- 0 until slaveNumber){
     M_AXI(i).w.wdata := S_AXI.w.wdata
     M_AXI(i).w.wlast := S_AXI.w.wlast
     M_AXI(i).w.wstrb := S_AXI.w.wstrb
-    M_AXI(i).w.wvalid := S_AXI.w.wvalid && write_which_queue.bits === i.U && write_which_queue.valid
+    M_AXI(i).w.wvalid := S_AXI.w.wvalid && rWriteWhich === i.U && rWriteState === sWriteForward
   }
-  S_AXI.w.wready := M_AXI(write_which_queue.bits).w.wready && write_which_queue.valid
-  write_which_queue.ready := S_AXI.w.wready && S_AXI.w.wvalid && S_AXI.w.wlast
 
-  val response_which_enq = Wire(Decoupled(UInt(log2Ceil(addrSegment.length).W)))
-  response_which_enq.bits := write_which_queue.bits
-  response_which_enq.valid := write_which_queue.fire
-
-  val response_which_queue = Queue(response_which_enq, addrMask.length)
+  S_AXI.w.wready := M_AXI(rWriteWhich).w.wready && rWriteState === sWriteForward
 
   // B
-  S_AXI.b.bid := M_AXI(response_which_enq.bits).b.bid
-  S_AXI.b.bresp := M_AXI(response_which_queue.bits).b.bresp
-  S_AXI.b.bvalid := M_AXI(response_which_queue.bits).b.bvalid && response_which_queue.valid
-  for(i <- 0 until addrSegment.length){
-    M_AXI(i).b.bready := S_AXI.b.bready && i.U === response_which_queue.bits && response_which_queue.valid
+  // S_AXI.b.bid := M_AXI(response_which_enq.bits).b.bid
+  S_AXI.b.bresp := M_AXI(rWriteWhich).b.bresp
+  S_AXI.b.bvalid := M_AXI(rWriteWhich).b.bvalid && rWriteState === sWriteResponse
+  for(i <- 0 until slaveNumber){
+    M_AXI(i).b.bready := S_AXI.b.bready && i.U === rWriteWhich && rWriteState === sWriteResponse
   }
 
-  response_which_queue.ready := S_AXI.b.bvalid && S_AXI.b.bready
+  switch(rWriteState){
+    is(sWriteIdle){
+      rWriteState := Mux(S_AXI.aw.fire, sWriteForward, sWriteIdle)
+    }
+    is(sWriteForward){
+      rWriteState := Mux(S_AXI.w.fire && S_AXI.w.wlast, sWriteResponse, sWriteForward)
+    }
+    is(sWriteResponse){
+      rWriteState := Mux(S_AXI.b.fire, sWriteIdle, sWriteResponse)
+    }
+  }
 }
 
 object AXIInterconnectorVerilogEmitter extends App {
   val c = new chisel3.stage.ChiselStage
+
+  def addressMapFunction(addr: UInt, idx: Int): Bool = {
+    if (idx == 0) {
+      return addr < 0x1000.U
+    } else if(idx == 1) {
+      return addr < 0x2000.U && addr >= 0x1000.U
+    } else if(idx == 2) {
+      return addr < 0x3000.U && addr >= 0x2000.U
+    }
+    return false.B 
+  } 
+
   c.emitVerilog(new AXIInterconnector(
-    Seq(0x1000, 0x2000, 0x3000), Seq(0xF000, 0xF000, 0xF000), 16, 32
+    3, addressMapFunction, 16, 32
   ))
   c.emitVerilog(new AXILInterconnector(
     Seq(0x1000, 0x2000, 0x3000), Seq(0xF000, 0xF000, 0xF000), 16, 32
@@ -214,13 +260,13 @@ class AXILInterconnectorNonOptimized(
   for(segment <- 0 until addrSegments.length){
     // AR
     M_AXIL(segment).ar.araddr := S_AXIL.ar.araddr
-    M_AXIL(segment).ar.arprot := S_AXIL.ar.arprot
+    // M_AXIL(segment).ar.arprot := S_AXIL.ar.arprot
     M_AXIL(segment).ar.arvalid := false.B
     S_AXIL.ar.arready := false.B
  
     // AW
     M_AXIL(segment).aw.awaddr := S_AXIL.aw.awaddr
-    M_AXIL(segment).aw.awprot := S_AXIL.aw.awprot
+    // M_AXIL(segment).aw.awprot := S_AXIL.aw.awprot
     M_AXIL(segment).aw.awvalid := false.B
     S_AXIL.aw.awready := false.B
 

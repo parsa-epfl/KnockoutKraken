@@ -9,7 +9,7 @@ object AXIDrivers {
   implicit class AXI4LiteDriver(target: antmicro.Bus.AXI4Lite)(implicit clock: Clock) {
     def init(): Unit = {
       target.aw.awaddr.poke(0.U)
-      target.aw.awprot.poke(0.U)
+      // target.aw.awprot.poke(0.U)
       target.aw.awvalid.poke(false.B)
 
       target.w.wdata.poke(0.U)
@@ -20,7 +20,7 @@ object AXIDrivers {
 
       target.ar.arvalid.poke(false.B)
       target.ar.araddr.poke(0.U)
-      target.ar.arprot.poke(0.U)
+      // target.ar.arprot.poke(0.U)
 
       target.r.rready.poke(false.B)
     }

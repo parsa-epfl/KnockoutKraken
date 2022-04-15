@@ -38,11 +38,11 @@ class AXIControlledMessageQueue extends Module {
   // Read logic. Reading from 0x00 means it get the message, but not pop out.
   // TODO: Make writing to 0x00 and reading to 0x40 meaningful. 
   val rAXIReadValid = RegInit(false.B)
-  val rAXIRid = RegInit(0.U(AXI4.idWidth.W))
+  // val rAXIRid = RegInit(0.U(AXI4.idWidth.W))
   switch(rAXIReadValid){
     is(false.B){
       when(S_AXI.ar.fire && (S_AXI.ar.araddr(6)) === false.B){
-        rAXIRid := S_AXI.ar.arid
+        // rAXIRid := S_AXI.ar.arid
         // no burst is allowed!
         assert(S_AXI.ar.arlen === 0.U)
         rAXIReadValid := true.B
@@ -63,10 +63,10 @@ class AXIControlledMessageQueue extends Module {
   S_AXI.r.rdata := fifo_i.bits
   S_AXI.r.rresp := 0.U
   S_AXI.r.rlast := true.B
-  S_AXI.r.rid := rAXIRid
+  // S_AXI.r.rid := rAXIRid
 
   // Write logic. Write to 0x40 means place a message into the buffer.
-  val rAXIWriteId = RegInit(0.U(AXI4.idWidth.W))
+  // val rAXIWriteId = RegInit(0.U(AXI4.idWidth.W))
   val sAXI_AW :: sAXI_W :: sAXI_B :: Nil = Enum(3)
   val rAXIWriteState = RegInit(sAXI_AW)
   val rAXIWriteBuffer = RegInit(0.U(512.W))
@@ -76,14 +76,14 @@ class AXIControlledMessageQueue extends Module {
   S_AXI.w.wready := rAXIWriteState === sAXI_W
 
   S_AXI.b.bresp := 0.U
-  S_AXI.b.bid := rAXIWriteId
+  // S_AXI.b.bid := rAXIWriteId
   S_AXI.b.bvalid := rAXIWriteState === sAXI_B
 
   switch(rAXIWriteState){
     is(sAXI_AW){
       when(S_AXI.aw.fire && (S_AXI.aw.awaddr(6) === true.B)) {
         rAXIWriteState := sAXI_W
-        rAXIWriteId := S_AXI.aw.awid
+        // rAXIWriteId := S_AXI.aw.awid
         // no burst is allowed!
         assert(S_AXI.aw.awlen === 0.U)
       }
