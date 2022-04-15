@@ -98,7 +98,7 @@ class AXIInterconnector(
 
   val sReadIdle :: sReadForward :: Nil = Enum(2)
 
-  val rReadWhich = RegInit(0.U(log2Ceil(slaveNumber)))
+  val rReadWhich = RegInit(0.U(log2Ceil(slaveNumber).W))
   val rReadState = RegInit(sReadIdle)
 
   // AR
@@ -108,7 +108,7 @@ class AXIInterconnector(
 
   assert(read_which_oh === 0.U || PopCount(read_which_oh) === 1.U)
 
-  val read_which = PriorityEncoderOH(read_which_oh)
+  val read_which = OHToUInt(read_which_oh)
 
   for(i <- 0 until slaveNumber){
     M_AXI(i).ar.araddr := S_AXI.ar.araddr
@@ -155,7 +155,7 @@ class AXIInterconnector(
 
   val sWriteIdle :: sWriteForward :: sWriteResponse :: Nil = Enum(3)
   val rWriteState = RegInit(sWriteIdle)
-  val rWriteWhich = RegInit(0.U(log2Ceil(slaveNumber)))
+  val rWriteWhich = RegInit(0.U(log2Ceil(slaveNumber).W))
 
   // AW
   val write_which_oh = VecInit((0 until slaveNumber).map { i =>
@@ -164,7 +164,7 @@ class AXIInterconnector(
 
   assert(write_which_oh === 0.U || PopCount(write_which_oh) === 1.U)
 
-  val write_which = PriorityEncoderOH(read_which_oh)
+  val write_which = OHToUInt(write_which_oh)
 
   for(i <- 0 until slaveNumber){
     M_AXI(i).aw.awaddr := S_AXI.aw.awaddr
@@ -176,7 +176,7 @@ class AXIInterconnector(
     // M_AXI(i).aw.awprot := S_AXI.aw.awprot
     // M_AXI(i).aw.awqos := S_AXI.aw.awqos
     M_AXI(i).aw.awsize := S_AXI.aw.awsize
-    M_AXI(i).aw.awvalid := S_AXI.aw.awvalid && i.U === whichOut(S_AXI.aw.awaddr, i)
+    M_AXI(i).aw.awvalid := S_AXI.aw.awvalid && whichOut(S_AXI.aw.awaddr, i)
   }
 
   S_AXI.aw.awready := Mux(
