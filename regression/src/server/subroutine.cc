@@ -41,7 +41,6 @@ void handleDRAMSubroute(TopDUT &dut) {
       CHECK(dut, addr_byte < dut.dram_size, "AXI read address out of bound");
       CHECK(dut, (addr_byte & 0x3F) == 0, "AXI read address is not aligned");
       CHECK(dut, (dut->M_AXI_arsize == 6), "AXI read burst count must be 64B");
-      uint32_t id = dut->M_AXI_arid;
       uint32_t burst_count = dut->M_AXI_arlen + 1;
       dut->M_AXI_arready = 1;
 
@@ -55,7 +54,6 @@ void handleDRAMSubroute(TopDUT &dut) {
       for (int curr_block = 0; curr_block < burst_count; ++curr_block) {
         size_t addr_word = BYTE_TO_WORD(addr_byte) + curr_block * WORDS_PER_BLOCK;
 
-        dut->M_AXI_rid = id;
         dut->M_AXI_rresp = 0;
         for (size_t sub_word = 0; sub_word < WORDS_PER_BLOCK; ++sub_word) {
           dut->M_AXI_rdata[sub_word] = dut.dram[addr_word + sub_word];
@@ -80,7 +78,6 @@ void handleDRAMSubroute(TopDUT &dut) {
       CHECK(dut, addr_byte < dut.dram_size, "AXI write address out of bound");
       CHECK(dut, (addr_byte & 0x3F) == 0, "AXI write address is not aligned");
       CHECK(dut, (dut->M_AXI_awsize == 6), "AXI write burst count must be 64B");
-      uint32_t id = dut->M_AXI_awid;
       uint32_t burst_count = dut->M_AXI_awlen + 1;
       dut->M_AXI_awready = 1;
       dut->eval();
@@ -114,7 +111,6 @@ void handleDRAMSubroute(TopDUT &dut) {
       }
 
       dut->M_AXI_bvalid = true;
-      dut->M_AXI_bid = id;
       dut->M_AXI_bresp = 0;
       dut->eval();
       while (!dut->M_AXI_bready) {
@@ -171,7 +167,6 @@ void AXILRoutine(TopDUT &dut, IPCServer &ipc) {
       // printf("SHELL:HOST:AXIL:WR[0x%lx]:BURST[%lu]:DATA[%x]\n", result.addr, result.byte_size, result.w_data);
       // it's a writing request, activate AXI writing request channel.
       dut->S_AXIL_awaddr = result.addr;
-      dut->S_AXIL_awprot = 0;
       dut->S_AXIL_awvalid = true;
       dut->eval();
       while (!dut->S_AXIL_awready) {
@@ -221,7 +216,6 @@ void AXILRoutine(TopDUT &dut, IPCServer &ipc) {
     } else {
      // read operation
       dut->S_AXIL_araddr = result.addr;
-      dut->S_AXIL_arprot = 0;
       dut->S_AXIL_arvalid = true;
       dut->eval();
       while (!dut->S_AXIL_arready) {
