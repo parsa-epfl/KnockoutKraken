@@ -136,13 +136,23 @@ class ARMFlexTop(
   uCSRMux.slavesBus(1) <> u_pipeline.S_CSR_Pipeline
   uCSRMux.slavesBus(2) <> memory.S_CSR
 
+  def axiAddressMapFunction(addr: UInt, idx: Int): Bool = {
+    if(idx == 0)
+      return addr < 0x10000.U
+    else if(idx == 1)
+      return addr < 0x20000.U && addr >= 0x10000.U
+    else
+      return false.B
+  }
+
   // Aggregate AXI slaves
   val uAXIMux = Module(new AXIInterconnector(
-    Seq(0x00000, 0x10000),
-    Seq(0x10000, 0x10000),
+    2,
+    axiAddressMapFunction,
     17,
     512
   ))
+  
   uAXIMux.M_AXI(0) <> u_pipeline.S_AXI_ArchState // 0x00000 to 0x10000
   uAXIMux.M_AXI(1) <> memory.S_AXI // 0x10000 to 0x20000
 

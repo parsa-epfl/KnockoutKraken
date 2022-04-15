@@ -57,7 +57,7 @@ class TransplantBRAMTest extends AnyFreeSpec with ChiselScalatestTester {
 
     def sendContextThroughAXI(threadID: Int, context: Seq[UInt]) = {
       // do an AXI write transactions.
-      dut.S_AXI.aw.awid.poke(0.U)
+      // dut.S_AXI.aw.awid.poke(0.U)
       dut.S_AXI.aw.awburst.poke(1.U)
       dut.S_AXI.aw.awaddr.poke((threadID * 512).U) // thread 13.
       dut.S_AXI.aw.awlen.poke(7.U)

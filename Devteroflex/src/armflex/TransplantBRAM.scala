@@ -32,14 +32,14 @@ class TransplantBRAM(
   // Two AXI transactions use the same BRAM ports, and cannot happen at the same time.
   // the AXI contexts.
   val rAXIState = RegInit(sAXIIdle)
-  val rAXIID = RegInit(0.U(AXI4.idWidth.W))
+  // val rAXIID = RegInit(0.U(AXI4.idWidth.W))
   val rAXIAddr = RegInit(0.U(16.W))
   val rAXIAddrStep = RegInit(0.U(AXI4.sizeWidth.W))
   val rAXICounter = RegInit(0.U(AXI4.lenWidth.W))
   val rAXICounterEnd = RegInit(0.U(AXI4.lenWidth.W))
 
   class axi_read_meta_info_t extends Bundle {
-    val id = UInt(AXI4.idWidth.W)
+    // val id = UInt(AXI4.idWidth.W)
     val isLast = Bool()
   }
 
@@ -48,7 +48,7 @@ class TransplantBRAM(
   switch(rAXIState){
     is(sAXIIdle){
       when(S_AXI.ar.fire){
-        rAXIID := S_AXI.ar.arid
+        // rAXIID := S_AXI.ar.arid
         rAXIAddr := S_AXI.ar.araddr
         rAXICounter := 0.U
         rAXICounterEnd := S_AXI.ar.arlen
@@ -57,7 +57,7 @@ class TransplantBRAM(
         assert(S_AXI.ar.arburst === 1.U)
         rAXIState := sAXIReading
       }.elsewhen(S_AXI.aw.fire){
-        rAXIID := S_AXI.aw.awid
+        // rAXIID := S_AXI.aw.awid
         rAXIAddr := S_AXI.aw.awaddr
         rAXICounter := 0.U
         rAXICounterEnd := S_AXI.aw.awlen
@@ -114,7 +114,7 @@ class TransplantBRAM(
   }
 
   // BRAM sync
-  wAXIReadSync.bits.id := rAXIID
+  // wAXIReadSync.bits.id := rAXIID
   wAXIReadSync.bits.isLast := rAXICounter === rAXICounterEnd
   wAXIReadSync.valid := rAXIState === sAXIReading
 
@@ -124,7 +124,7 @@ class TransplantBRAM(
   S_AXI.ar.arready := rAXIState === sAXIIdle
 
   S_AXI.r.rdata := uBRAM.portA.DO
-  S_AXI.r.rid := wAXIReadSyncOut.bits.id
+  // S_AXI.r.rid := wAXIReadSyncOut.bits.id
   S_AXI.r.rlast := wAXIReadSyncOut.bits.isLast
   S_AXI.r.rresp := 0.U
   S_AXI.r.rvalid := wAXIReadSyncOut.valid
@@ -135,7 +135,7 @@ class TransplantBRAM(
 
   S_AXI.w.wready := rAXIState === sAXIWriting
 
-  S_AXI.b.bid := rAXIID
+  // S_AXI.b.bid := rAXIID
   S_AXI.b.bresp := 0.U
   S_AXI.b.bvalid := rAXIState === sAXIWriteResponse
 

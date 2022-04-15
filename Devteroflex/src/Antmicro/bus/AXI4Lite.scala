@@ -27,7 +27,7 @@ import chisel3._
 
 class AXI4LAW(val addrWidth : Int) extends Bundle {
   val awaddr = Output(UInt(addrWidth.W))
-  val awprot = Output(UInt(AXI4Lite.protWidth.W))
+  // val awprot = Output(UInt(AXI4Lite.protWidth.W))
   val awvalid = Output(Bool())
   val awready = Input(Bool())
 }
@@ -35,7 +35,7 @@ class AXI4LAW(val addrWidth : Int) extends Bundle {
 object AXI4LAW {
   def apply(addr : UInt, valid : UInt) : AXI4LAW = {
     val aw = Wire(new AXI4LAW(addr.getWidth))
-    aw.awprot := 0.U
+    // aw.awprot := 0.U
     aw.awaddr := addr
     aw.awvalid := valid
     aw
@@ -75,7 +75,7 @@ object AXI4LB{
 
 class AXI4LAR(val addrWidth : Int) extends Bundle {
   val araddr = Output(UInt(addrWidth.W))
-  val arprot = Output(UInt(AXI4Lite.protWidth.W))
+  // val arprot = Output(UInt(AXI4Lite.protWidth.W))
   val arvalid = Output(Bool())
   val arready = Input(Bool())
 }
@@ -83,14 +83,14 @@ class AXI4LAR(val addrWidth : Int) extends Bundle {
 object AXI4LAR {
   def apply(addr : UInt, valid : UInt) : AXI4LAR = {
     val ar = Wire(new AXI4LAR(addr.getWidth))
-    ar.arprot := 0.U
+    // ar.arprot := 0.U
     ar.araddr := addr
     ar.arvalid := valid
     ar
   }
   def tieOff(addrWidth : Int) : AXI4LAR = {
     val ar = Wire(new AXI4LAR(addrWidth))
-    ar.arprot := 0.U
+    // ar.arprot := 0.U
     ar.araddr := 0.U
     ar.arvalid := 0.U
     ar
@@ -126,6 +126,6 @@ class AXI4Lite(val addrWidth : Int, val dataWidth : Int) extends Bundle{
 }
 
 object AXI4Lite {
-  val protWidth = 3
+  val protWidth = 0
   val respWidth = 2
 }
