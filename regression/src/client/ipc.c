@@ -5,13 +5,10 @@
 #include "ipc.h"
 
 #include <stdlib.h>
-#include <bits/types/error_t.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stddef.h>
-#include <asm-generic/errno-base.h>
-#include <stdio.h>
 #include <errno.h>
 #include <sys/types.h>
 #include <unistd.h> 
