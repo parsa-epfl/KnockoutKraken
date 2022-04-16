@@ -74,19 +74,7 @@ int initFPGAContext(FPGAContext *c) {
 
   c->dram_size = 0x0400000000ULL; // Change DRAM_SIZE from here.
 
-  c->base_address.axil_base = 0;
-  c->base_address.transplant_data = 0;
-  c->base_address.tt = 0x8000;
-  c->base_address.transplant_ctl = 0x9000;
-  c->base_address.message_queue = 0x10000;
-  c->base_address.instrumentation_trace = 0x1F000;
-
-  c->base_address.dram_base = 0ULL;
-  c->base_address.pt_base = 0;
   c->ppage_base_addr = c->dram_size >> 8;
-  
-  c->base_address.axi_base = c->dram_size;
-  c->base_address.message = 0x8000;
 
   // init log
 
