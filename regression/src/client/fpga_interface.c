@@ -7,6 +7,8 @@
 #include <strings.h>
 #include <unistd.h>
 
+#include <assert.h>
+
 /**
  * @file Definition of functions to exchange data with FPGA.
  */
@@ -22,6 +24,7 @@
  */
 int mmuRegisterTHID2ASID(const FPGAContext *c, uint32_t thid,
                               uint32_t asid) {
+  assert(thid < 128 && "The maximum number of supported thread is 128.");
   return writeAXIL(c, BASE_ADDR_BIND_ASID_THID + thid * 4, asid);
 }
 
@@ -74,10 +77,12 @@ int transplantSinglestep(const FPGAContext *c, uint32_t thid, uint32_t asid, Dev
 }
 
 int transplantGetState(const FPGAContext *c, uint32_t thid, uint64_t *state) {
+  assert(thid < 128 && "The maximum number of supported thread is 128.");
   return readAXI(c, BASE_ADDR_TRANSPLANT_DATA + thid * 512, state, 320);
 }
 
 int transplantPushState(const FPGAContext *c, uint32_t thid, uint64_t *state) {
+  assert(thid < 128 && "The maximum number of supported thread is 128.");
   return writeAXI(c, BASE_ADDR_TRANSPLANT_DATA + thid * 512, state, 320);
 }
 
@@ -163,7 +168,10 @@ bool mmuMsgHasPending(const FPGAContext *c) {
  * @note this will block the routine until it get message.
  */
 int mmuMsgGetPending(const FPGAContext *c, MessageFPGA *msg) {
-  return readAXI(c, BASE_ADDR_AXI_MMU_MSG, msg, sizeof(MessageFPGA)) | writeAXIL(c, BASE_ADDR_MMU_MSG_QUEUE + MMU_MSG_QUEUE_REG_OFST_POP, 1);
+  if(readAXI(c, BASE_ADDR_AXI_MMU_MSG, msg, sizeof(MessageFPGA)) == 0){
+    return writeAXIL(c, BASE_ADDR_MMU_MSG_QUEUE + MMU_MSG_QUEUE_REG_OFST_POP, 1);
+  }
+  return -1;
 }
 
 /**
@@ -198,6 +206,7 @@ int dramPagePush(const FPGAContext *c, uint64_t paddr, void *page){
     printf("Warning: misaligned address found: 0x%016lx. \n Its lower 12bit should be zero. \n", paddr);
     paddr ^= (paddr & 0xFFFUL);
   }
+  assert(paddr < c->dram_size && "DRAM range overflow.");
   return writeAXI(c, BASE_ADDR_DRAM + paddr, page, PAGE_SIZE);
 }
 
@@ -214,6 +223,7 @@ int dramPagePull(const FPGAContext *c, uint64_t paddr, void *page){
     printf("Warning: misaligned address found: 0x%016lx. \n Its lower 12bit should be zero. \n", paddr);
     paddr ^= (paddr & 0xFFFUL);
   }
+  assert(paddr < c->dram_size && "DRAM range overflow.");
   return readAXI(c, BASE_ADDR_DRAM + paddr, page, PAGE_SIZE);
 }
 
