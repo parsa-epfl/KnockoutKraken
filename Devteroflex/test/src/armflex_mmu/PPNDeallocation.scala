@@ -71,11 +71,13 @@ class PPNDeallocationTester extends AnyFreeSpec with ChiselScalatestTester {
       dut.waitForSignalToBe(dut.dtlb_flush_request_o.valid)
       timescope {
         dut.dtlb_flush_request_o.ready.poke(true.B)
+        dut.itlb_flush_request_o.ready.poke(true.B)
         dut.tk()
       }
       // reply the flush request
       timescope {
         dut.dtlb_flush_reply_i.valid.poke(true.B)
+        dut.itlb_flush_reply_i.valid.poke(true.B)
         dut.tk()
       }
       

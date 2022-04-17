@@ -251,25 +251,26 @@ class MMU(
   u_qemuMissHandler.page_delete_req_o.ready := u_page_deleter.page_delete_req_i.ready
   u_qemuPageEvictHandler.page_delete_req_o.ready := u_page_deleter.page_delete_req_i.ready && !u_qemuMissHandler.page_delete_req_o.valid
 
-  // Evict TLB Entry
-  tlb_io.inst.flushReq.bits := u_page_deleter.tlb_flush_request_o.bits.req
-  tlb_io.inst.flushReq.valid := u_page_deleter.tlb_flush_request_o.valid && u_page_deleter.tlb_flush_request_o.bits.sel === 0.U
+  // Evict TLB Entry. Now the flush request will be sent to all TLBs.
+  tlb_io.inst.flushReq.bits := u_page_deleter.tlb_flush_request_o.bits
+  tlb_io.inst.flushReq.valid := u_page_deleter.tlb_flush_request_o.valid
 
-  tlb_io.data.flushReq.bits := u_page_deleter.tlb_flush_request_o.bits.req
-  tlb_io.data.flushReq.valid := u_page_deleter.tlb_flush_request_o.valid && u_page_deleter.tlb_flush_request_o.bits.sel === 1.U
+  tlb_io.data.flushReq.bits := u_page_deleter.tlb_flush_request_o.bits
+  tlb_io.data.flushReq.valid := u_page_deleter.tlb_flush_request_o.valid
+  u_page_deleter.tlb_flush_request_o.ready := tlb_io.inst.flushReq.ready && tlb_io.data.flushReq.ready
 
-  // u_page_deleter.tlb_flush_request_o.bits.sel === 0 -> Instruction TLB; === 1 -> Data TLB
-  u_page_deleter.tlb_flush_request_o.ready := Mux(
-    u_page_deleter.tlb_flush_request_o.bits.sel === 0.U,
-    tlb_io.inst.flushReq.ready,
-    tlb_io.data.flushReq.ready
-    )
+  when(u_page_deleter.tlb_flush_request_o.valid){
+    assert(tlb_io.inst.flushReq.ready, "iTLB flush port should be always ready when receiving flush request.")
+    assert(tlb_io.data.flushReq.ready, "dTLB flush port should be always ready when receiving flush request.")
+    assert(u_page_deleter.tlb_flush_request_o.ready)
+  }
 
+  // Pick the one that cause a flush hit. But the dTLB has a higher priority, because the entry can be dirty.
   u_page_deleter.tlb_frontend_reply_i := Mux(
-    u_page_deleter.tlb_flush_request_o.bits.sel === 0.U,
-    tlb_io.inst.flushResp,
-    tlb_io.data.flushResp
-    )
+    tlb_io.data.flushResp.bits.hit,
+    tlb_io.data.flushResp,
+    tlb_io.inst.flushResp
+  )
 
   // QEMU message encoder
   u_qemuMsgEncoder.evict_done_req_i <> u_page_deleter.done_message_o

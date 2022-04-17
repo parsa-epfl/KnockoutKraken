@@ -83,6 +83,7 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
       dut.waitForSignalToBe(dut.dtlb_flush_request_o.valid)
       timescope { // acknowledge the flush request.
         dut.dtlb_flush_request_o.ready.poke(true.B)
+        dut.itlb_flush_request_o.ready.poke(true.B)
         dut.tk()
       }
       // One cycle later, return the flush result of TLB

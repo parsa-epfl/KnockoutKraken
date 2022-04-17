@@ -62,7 +62,7 @@ class PTEntryPacket(params: PageTableParams) extends Bundle
   val modified = Bool() // 1
 
   def permValid(targetPerm: UInt): Bool = MuxLookup(targetPerm, false.B, Seq(
-    0.U -> (perm === 0.U || perm === 1.U),
+    0.U -> (perm === 0.U || perm === 1.U || perm === 2.U), // read request can simply access anything.
     1.U -> (perm === 1.U),
     2.U -> (perm === 2.U)
     ))
