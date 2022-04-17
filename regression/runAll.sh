@@ -29,11 +29,12 @@ allTests=(
   "multiple-pages-in-a-row" 
   "test-ldst-pair-all-sizes"
   "ldr-wback-addr"
+  "test-pressure-mmu-same-address"
+  "test-pressure-ldp-stp-short"
   )
 
 tbd=(
   "out-of-page-bound-pair-load"
-  "test-pressure-mmu-same-address"
 )
 
 # 3. Run each
