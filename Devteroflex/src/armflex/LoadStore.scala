@@ -27,7 +27,6 @@ class MInst extends Bundle {
   val rd = Valid(REG_T)
   val exceptions = Valid(new Bundle {
     val unalignedExcp = Bool()
-    val unalignedExcpSP = Bool()
   })
 }
 
@@ -271,7 +270,6 @@ class LDSTUnit extends Module {
     SIZE64 -> (minst.req(1).addr(2, 0) === 0.U)
     )))
 
-  minst.exceptions.bits.unalignedExcpSP := io.dinst.rs1 === 31.U && wback_addr(1, 0) =/= 0.U
   minst.exceptions.bits.unalignedExcp := !isAlignedMem_0 || (minst.isPair && !isAlignedMem_1)
   minst.exceptions.valid := minst.exceptions.bits.asUInt.orR
 

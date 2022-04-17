@@ -166,9 +166,6 @@ class Pipeline(params: PipelineParams) extends Module {
   val unalignedExcpData = WireInit(
     ldstU.io.minst.bits.exceptions.bits.unalignedExcp
   )
-  val unalignedExcpSP = WireInit(
-    ldstU.io.minst.bits.exceptions.bits.unalignedExcpSP
-  )
 
   val branchException = WireInit(
     brancher.io.binst.valid &&
@@ -196,8 +193,7 @@ class Pipeline(params: PipelineParams) extends Module {
   commitNext.exceptions.valid := memException || branchException
   commitNext.exceptions.bits := Cat(
     brancher.io.binst.bits.unalignedExcp.asUInt,
-    unalignedExcpData.asUInt,
-    unalignedExcpSP.asUInt
+    unalignedExcpData.asUInt
   )
 
   commitNext.undef := !issued_dinst.inst32.valid

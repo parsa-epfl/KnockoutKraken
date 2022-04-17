@@ -38,7 +38,6 @@ class LoadStoreUnitTest extends AnyFreeSpec with ChiselScalatestTester {
       pokeLSUImm(dut, BigInt("3902dfe0", 16), BigInt("0000FFFFEF981E10", 16))
       dut.clock.step(1)
       dut.io.minst.bits.exceptions.bits.unalignedExcp.expect(false.B)
-      dut.io.minst.bits.exceptions.bits.unalignedExcpSP.expect(true.B)
     }
   }
 }
