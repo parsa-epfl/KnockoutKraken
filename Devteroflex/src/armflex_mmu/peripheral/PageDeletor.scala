@@ -39,17 +39,11 @@ class PageDeletor(
   lsu_handshake_o.inst.flushPermReq.valid := state_r === sReqLSU && item_r.entry.perm === 2.U
   lsu_handshake_o.data.flushPermReq.valid := state_r === sReqLSU && item_r.entry.perm =/= 2.U
 
-  class tlb_flush_request_t extends Bundle {
-    val req = new PTTagPacket(params.getPageTableParams)
-    val sel = UInt(1.W)
-  }
-
   // sFlushTLB
-  val tlb_flush_request_o = IO(Decoupled(new tlb_flush_request_t))
+  val tlb_flush_request_o = IO(Decoupled(new PTTagPacket(params.getPageTableParams)))
   // TODO: Let tlb_flush_request_o.bits.req and item_r.tag has the same type.
-  tlb_flush_request_o.bits.req.asid := item_r.tag.asid
-  tlb_flush_request_o.bits.req.vpn := item_r.tag.vpn
-  tlb_flush_request_o.bits.sel := Mux(item_r.entry.perm === 2.U, 0.U, 1.U) // TODO: Support more than one TLB.
+  tlb_flush_request_o.bits.asid := item_r.tag.asid
+  tlb_flush_request_o.bits.vpn := item_r.tag.vpn
   tlb_flush_request_o.valid := state_r === sFlushTLBReq
   val tlb_frontend_reply_i = IO(Flipped(Valid(new TLBPipelineResp(params.getPageTableParams))))
 
