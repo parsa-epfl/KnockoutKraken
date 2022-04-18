@@ -115,10 +115,6 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
     val S_CSR = Flipped(transplantU.S_CSR.cloneType)
   }
   val hostIO = IO(new HostIO)
-  // Mem Fault - Transplant
-  // TODO: Add page Fault support
-  transplantU.mem2trans.instFault := 0.U.asTypeOf(transplantU.mem2trans.instFault) // pipeline.mem_io.instFault
-  transplantU.mem2trans.dataFault := 0.U.asTypeOf(transplantU.mem2trans.dataFault) // pipeline.mem_io.dataFault
 
   // Shanqing sincerely to @Rafael: PLEASE!!! Only update one signal from one place, not multiple places? Otherwise when debugging you have to search all possible sources and this is a disaster!!!!
   // Doing this can bring some benefit when writing, but it's a bomb buried deep for future debugging!

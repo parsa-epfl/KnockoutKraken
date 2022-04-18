@@ -79,7 +79,7 @@ class TransplantUnit(thidN: Int) extends Module {
   val rForceTransplantRequest = ClearCSR("h_ffff_ffff".U, uCSR.io.csr(3), 32)
   cpu2trans.forceTransplant := rForceTransplantRequest
 
-  val mem2trans = IO(new TransplantIO.Mem2Trans(thidN))
+  // val mem2trans = IO(new TransplantIO.Mem2Trans(thidN))
 
   private val rCpu2transPending = RegInit(0.U(thidN.W))
   private val wCpu2transBeingHandled = WireInit(false.B)
@@ -88,11 +88,11 @@ class TransplantUnit(thidN: Int) extends Module {
   private val wCpu2transHandledReq = WireInit(wCpu2transBeingHandled.asUInt << wSelectedC2TRequest) // always clear the first one. 
 
   // All possible sources that trigger packing a state.
-  private val wCpu2transInstFault = Mux(mem2trans.instFault.valid, 1.U << mem2trans.instFault.tag, 0.U)
-  private val wCpu2transDataFault = Mux(mem2trans.dataFault.valid, 1.U << mem2trans.dataFault.tag, 0.U)
+  // private val wCpu2transInstFault = Mux(mem2trans.instFault.valid, 1.U << mem2trans.instFault.tag, 0.U)
+  // private val wCpu2transDataFault = Mux(mem2trans.dataFault.valid, 1.U << mem2trans.dataFault.tag, 0.U)
   private val wCpu2transCpuTrans = Mux(cpu2trans.doneCPU.valid, 1.U << cpu2trans.doneCPU.tag, 0.U)
   // Aggregate all the sources
-  private val wCpu2transInsert = WireInit(wCpu2transCpuTrans | wCpu2transDataFault | wCpu2transInstFault)
+  private val wCpu2transInsert = WireInit(wCpu2transCpuTrans)
 
   // The final pending register will be new inserted + force - handled.
   rCpu2transPending := (rCpu2transPending & ~wCpu2transHandledReq) | wCpu2transInsert | rForceTransplantRequest
