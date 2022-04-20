@@ -78,12 +78,12 @@ int transplantSinglestep(const FPGAContext *c, uint32_t thid, uint32_t asid, Dev
 
 int transplantGetState(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state) {
   assert(thid < 128 && "The maximum number of supported thread is 128.");
-  return readAXI(c, BASE_ADDR_TRANSPLANT_DATA + thid * 512, state, 320);
+  return readAXI(c, BASE_ADDR_TRANSPLANT_DATA + thid * TRANS_STATE_THID_MAX_BYTES, state, TRANS_STATE_SIZE_BYTES);
 }
 
 int transplantPushState(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state) {
   assert(thid < 128 && "The maximum number of supported thread is 128.");
-  return writeAXI(c, BASE_ADDR_TRANSPLANT_DATA + thid * 512, state, 320);
+  return writeAXI(c, BASE_ADDR_TRANSPLANT_DATA + thid * TRANS_STATE_THID_MAX_BYTES, state, TRANS_STATE_SIZE_BYTES);
 }
 
 int transplantWaitTillPending(const FPGAContext *c, uint32_t *pending_threads) {

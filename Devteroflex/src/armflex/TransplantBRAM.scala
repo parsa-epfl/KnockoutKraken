@@ -9,26 +9,98 @@ import antmicro.Bus.AXI4
 import armflex.util.BRAM
 import armflex.util.BRAMParams
 
+import armflex.PStateConsts._
+import armflex.TransplantConsts._
+import armflex.TransplantBRAMIO._
+
+object TransplantBRAMIO {
+  // Given that registers are 64-bit wide, but that 
+  // a bram block is 512-bits we align with the block granularity
+  def bramAlignAddr(thid: UInt, regIdx: UInt) = Cat(thid, regIdx >> 3)
+  def bramAlignMask(regIdx: UInt) = (0xFF.U(8.W)) << ((regIdx(2, 0)) * 8.U)
+  def bramAlignData(regIdx: UInt, data: UInt) = data << ((regIdx(2, 0) * 64.U))
+
+  def bramBlockGetReg(block: UInt, regIdx: Int): UInt = block((regIdx + 1)*64 - 1, regIdx*64)
+  def bramBlockUnpackPState(block: UInt): PStateRegs = {
+    val pstate = Wire(new PStateRegs)
+    pstate.PC := bramBlockGetReg(block, ARCH_PSTATE_PC_OFFST % regsPerBlock)
+    pstate.flags := bramBlockGetReg(block, ARCH_PSTATE_FLAGS_OFFST % regsPerBlock).asTypeOf(new PStateFlags)
+    val icountReg = bramBlockGetReg(block, ARCH_PSTATE_ICOUNT_OFFST % regsPerBlock)
+    pstate.icount := icountReg(31, 0) // 34[31:0] -> icount
+    pstate.icountBudget := icountReg(63, 32) // 34[63:32] -> icount budget
+    pstate
+  }
+  def bramBlockPackPState(pstate: PStateRegs): UInt = {
+    val block = Wire(Vec(regsPerBlock, DATA_T))
+    block := DontCare
+    block(ARCH_PSTATE_PC_OFFST % regsPerBlock) := pstate.PC
+    block(ARCH_PSTATE_FLAGS_OFFST % regsPerBlock) := pstate.flags.asUInt
+    block(ARCH_PSTATE_ICOUNT_OFFST % regsPerBlock) := Cat(pstate.icountBudget, pstate.icount)
+    return block.asUInt()
+  }
+
+  class RdPort(thidN: Int) extends Bundle {
+    val thid = Input(UInt(log2Ceil(thidN).W))
+    val xreg = new Bundle {
+      val req = Flipped(Decoupled(new RdReq))
+      val resp = Output(DATA_T)
+    }
+    val pstate = new Bundle {
+      val req = Flipped(Decoupled())
+      val resp = Output(new PStateRegs)
+    }
+  }
+
+  class RdReq extends Bundle {
+    val regIdx = UInt(log2Ceil(TRANS_STATE_THID_MAX_REGS).W)
+  }
+
+  class WrPort(thidN: Int) extends Bundle {
+    val thid = Input(UInt(log2Ceil(thidN).W))
+    val xreg = new Bundle {
+      val req = Flipped(Decoupled(new WrReq))
+    }
+    val pstate = new Bundle {
+      val req = Flipped(Decoupled(new WrPStateReq))
+    }
+  }
+
+  class WrReq extends Bundle {
+    val regIdx = UInt(log2Ceil(TRANS_STATE_THID_MAX_REGS).W)
+    val data = DATA_T
+  }
+
+  class TransBRAM2CpuIO(thidN: Int) extends Bundle {
+    val rd = new RdPort(thidN)
+    val wr = new WrPort(thidN)
+  }
+
+  // Use the 2nd BRAM ports to sync data with the CPU.
+  // This port is for submitting the pstate. It has the highest priority.
+  class WrPStateReq extends Bundle {
+    val state = new PStateRegs()
+  }
+
+}
 
 // This registers store the ArchState that should be sent to the host and update by the host.
 // - Each thread has 32 64bit registers, and PC, the flag, and the stack pointer.
 // - We allocate 512 byte (64*64bit) space for each thread. The first 256 bytes are for the x0 - x31 registers, and then one 64byte for PC + Flag + Stack, and the following position are preserved for future reuse.
 // - At present we support at most 128 threads, so 16bit address at most. (Not sure if we have such a large space from the shell.)
 
-class TransplantBRAM(
-  threadNumber: Int
-) extends Module {
-  assert(threadNumber <= 128)
+class TransplantBRAM(thidN: Int) extends Module {
+  assert(thidN <= 128)
   assert(DATA_SZ == 64)
   assert(REG_N == 32)
 
-  val S_AXI = IO(Flipped(new AXI4(16, 512)))
+  val S_AXI = IO(Flipped(new AXI4(16, BLOCK_SZ)))
   val sAXIIdle :: sAXIReading :: sAXIReadWaitComplete :: sAXIWriting :: sAXIWriteResponse :: Nil = Enum(5)
 
-  val uBRAM = Module(new BRAM()(new BRAMParams(
-    64, 8, 1024, "", false
-  )))
+  val uBRAM = Module(new BRAM()(new BRAMParams(64, 8, 1024, "", false)))
 
+
+  // ---------------------- AXI -------------------------
+ 
   // Two AXI transactions use the same BRAM ports, and cannot happen at the same time.
   // the AXI contexts.
   val rAXIState = RegInit(sAXIIdle)
@@ -44,6 +116,10 @@ class TransplantBRAM(
   }
 
   val wAXIReadSync = Wire(Decoupled(new axi_read_meta_info_t))
+  wAXIReadSync.bits.isLast := false.B
+
+  val startB2C = WireInit(false.B)
+  val doneB2H = WireInit(false.B) // B2H: BRAM to HOST read
 
   switch(rAXIState){
     is(sAXIIdle){
@@ -70,16 +146,10 @@ class TransplantBRAM(
       when(wAXIReadSync.fire){
         rAXIAddr := rAXIAddr + (1.U << (rAXIAddrStep))
         rAXICounter := rAXICounter + 1.U
-        rAXIState := Mux(
-          rAXICounter === rAXICounterEnd,
-          sAXIReadWaitComplete,
-          sAXIReading
-        )
-      }
-    }
-    is(sAXIReadWaitComplete){ // wait for the last read transactions to be complete
-      when(S_AXI.r.fire){
-        rAXIState := sAXIIdle
+        when(rAXICounter === rAXICounterEnd) {
+          wAXIReadSync.bits.isLast := true.B
+          rAXIState := sAXIReadWaitComplete
+        }
       }
     }
     is(sAXIWriting){
@@ -87,13 +157,19 @@ class TransplantBRAM(
         rAXIAddr := rAXIAddr + (1.U << (rAXIAddrStep))
         rAXICounter := rAXICounter + 1.U
         when(rAXICounter === rAXICounterEnd){
-          assert(S_AXI.w.wlast)
           rAXIState := sAXIWriteResponse
         }
       }
     }
+    is(sAXIReadWaitComplete){ // wait for the last read transactions to be complete
+      when(S_AXI.r.fire){
+        doneB2H := true.B
+        rAXIState := sAXIIdle
+      }
+    }
     is(sAXIWriteResponse){
       when(S_AXI.b.fire){
+        startB2C := true.B
         rAXIState := sAXIIdle
       }
     }
@@ -115,7 +191,6 @@ class TransplantBRAM(
 
   // BRAM sync
   // wAXIReadSync.bits.id := rAXIID
-  wAXIReadSync.bits.isLast := rAXICounter === rAXICounterEnd
   wAXIReadSync.valid := rAXIState === sAXIReading
 
   // Sync data is valid together with the read output from the BRAM.
@@ -128,7 +203,6 @@ class TransplantBRAM(
   S_AXI.r.rlast := wAXIReadSyncOut.bits.isLast
   S_AXI.r.rresp := 0.U
   S_AXI.r.rvalid := wAXIReadSyncOut.valid
-
   wAXIReadSyncOut.ready := S_AXI.r.rready
 
   S_AXI.aw.awready := rAXIState === sAXIIdle && !S_AXI.ar.arvalid // write has lower priority.
@@ -139,96 +213,66 @@ class TransplantBRAM(
   S_AXI.b.bresp := 0.U
   S_AXI.b.bvalid := rAXIState === sAXIWriteResponse
 
-  // Use the 2nd BRAM ports to sync data with the CPU.
-  // This port is for submitting the pstate. It has the highest priority.
-  class TransplantBRAMPStateSubmitRequest extends Bundle {
-    val threadID = UInt(log2Ceil(threadNumber).W)
-    val state = new PStateRegs()
 
-    def bramAddr = Cat(threadID, 4.U) // Cat(threadID, 0b100.U)
+  // ---------------------- CPU -------------------------
+  val ports = IO(new TransBRAM2CpuIO(thidN))
+  val rdPort = ports.rd
+  val wrPort = ports.wr
 
-    // TODO: We actually change the software interface! Be careful!
-    // 32 -> PC, 33 -> FLGAS, 34 -> ICount
-    def writeData: UInt = {
-      val res = Wire(Vec(64, UInt(64.W)))
-      res(0) := state.PC
-      res(1) := state.flags.asUInt
-      res(2) := Cat(state.icountBudget, state.icount)
-      for (i <- 3 until 64){
-        res(i) := DontCare
-      }
-
-      return res.asUInt()
-    }
-
-    def writeMask = Cat(0xFFFF.U(16.W), 0xFFFF.U(16.W))
-  }
-
-  val iPstateWriteRequest = IO(Flipped(Decoupled(new TransplantBRAMPStateSubmitRequest)))
-  iPstateWriteRequest.ready := true.B
-
-  class TransplantBRAMReadRequest extends Bundle {
-    val threadID = UInt(log2Ceil(threadNumber).W)
-    val registerIndex = UInt(6.W)
-
-    def bramAddr = Cat(threadID, registerIndex >> 3)
-  }
-
-  // Register read port. It has the 2nd prioryty.
-  val iReadRequest = IO(Flipped(Decoupled(new TransplantBRAMReadRequest)))
-  iReadRequest.ready := iPstateWriteRequest.ready && !iPstateWriteRequest.valid
-
-  val rReadBias = RegEnable(iReadRequest.bits.registerIndex(2, 0), iReadRequest.fire)
-  val oReadReply = IO(Output(UInt(64.W)))
-
-  val iReadPStateRequest = IO(Flipped(Decoupled(UInt(6.W))))
-  iReadPStateRequest.ready := iReadRequest.ready && !iReadRequest.valid
-
-  val oReadPStateReply = IO(Output(new PStateRegs))
-
-  class TransplantBRAMWriteRequest extends Bundle {
-    val threadID = UInt(log2Ceil(threadNumber).W)
-    val registerIndex = UInt(6.W) // up to 64 64bit place is available.
-
-    def bramAddr = Cat(threadID, registerIndex >> 3)
-    def bramMask = (0xFF.U(8.W)) << ((registerIndex(2, 0)) * 8.U)
-
-    val value = UInt(64.W)
-
-    def bramWriteData = value << ((registerIndex(2, 0) * 64.U))
-  }
-
+  // Register read port. It has the 2nd priority.
+  val rRdBias = RegEnable(rdPort.xreg.req.bits.regIdx(2, 0), rdPort.xreg.req.fire)
+  rdPort.xreg.req.ready := ports.wr.pstate.req.ready && !ports.wr.pstate.req.valid
+  rdPort.pstate.req.ready := rdPort.xreg.req.ready && !rdPort.xreg.req.valid
   // This port is for the normal register writing.
-  val iWriteRequest = IO(Flipped(Decoupled(new TransplantBRAMWriteRequest)))
-  iWriteRequest.ready := iReadPStateRequest.ready && !iReadPStateRequest.valid
+  wrPort.xreg.req.ready := rdPort.pstate.req.ready && !rdPort.pstate.req.valid
+  wrPort.pstate.req.ready := true.B
+ 
+  rdPort.xreg.resp := uBRAM.portB.DO >> (rRdBias * 64.U)
+  rdPort.pstate.resp := bramBlockUnpackPState(uBRAM.portB.DO)
 
   // determine the BRAM address
-  when(iWriteRequest.valid){
-    uBRAM.portB.ADDR := iWriteRequest.bits.bramAddr
-    uBRAM.portB.DI := iWriteRequest.bits.bramWriteData
-    uBRAM.portB.WE := iWriteRequest.bits.bramMask
-  }.elsewhen(iPstateWriteRequest.fire){
-    uBRAM.portB.ADDR := iPstateWriteRequest.bits.bramAddr
-    uBRAM.portB.DI := iPstateWriteRequest.bits.writeData
-    uBRAM.portB.WE := iPstateWriteRequest.bits.writeMask
-  }.elsewhen(iReadRequest.fire){
-    uBRAM.portB.ADDR := iReadRequest.bits.bramAddr
+  when(wrPort.xreg.req.fire){
+    val xregIdx = wrPort.xreg.req.bits.regIdx
+    uBRAM.portB.ADDR := bramAlignAddr(wrPort.thid, xregIdx)
+    uBRAM.portB.DI   := bramAlignData(xregIdx, wrPort.xreg.req.bits.data)
+    uBRAM.portB.WE   := bramAlignMask(xregIdx)
+  }.elsewhen(wrPort.pstate.req.fire){
+    uBRAM.portB.ADDR := bramAlignAddr(wrPort.thid, TRANS_STATE_PState_OFFST.U)
+    uBRAM.portB.DI := bramBlockPackPState(wrPort.pstate.req.bits.state)
+    uBRAM.portB.WE := Fill(32, 1.U) // Write Half Block
+  }.elsewhen(rdPort.xreg.req.fire){
+    uBRAM.portB.ADDR := bramAlignAddr(rdPort.thid, rdPort.xreg.req.bits.regIdx)
+    uBRAM.portB.DI := DontCare
+    uBRAM.portB.WE := 0.U
+  }.elsewhen(rdPort.pstate.req.fire) {
+    uBRAM.portB.ADDR := bramAlignAddr(wrPort.thid, TRANS_STATE_PState_OFFST.U)
     uBRAM.portB.DI := DontCare
     uBRAM.portB.WE := 0.U
   }.otherwise {
-    uBRAM.portB.ADDR := Cat(iReadPStateRequest.bits, 4.U) // Cat(threadID, 0b100.U)
+    uBRAM.portB.ADDR := DontCare
     uBRAM.portB.DI := DontCare
     uBRAM.portB.WE := 0.U
   }
 
   uBRAM.portB.EN := true.B
 
-  oReadReply := uBRAM.portB.DO >> (rReadBias * 64.U)
-  // Fixed position.
-  oReadPStateReply.PC := uBRAM.portB.DO(63, 0) // 32 -> PC
-  oReadPStateReply.flags := uBRAM.portB.DO(127, 64).asTypeOf(new PStateFlags) // 33 -> Flags
-  oReadPStateReply.icount := uBRAM.portB.DO(159, 128) // 34[31:0] -> icount
-  oReadPStateReply.icountBudget := uBRAM.portB.DO(191, 160) // 34[63:32] -> icount budget
+  if (true) { // TODO Conditional asserts
+    when(rAXIState === sAXIReadWaitComplete && S_AXI.r.fire) {
+      assert(S_AXI.r.rlast, "Transplant:RD: rlast flag must be raised on last block")
+    }
+    when(rAXIState === sAXIWriting && rAXICounter === rAXICounterEnd && S_AXI.w.fire) {
+      assert(S_AXI.w.wlast, "Transplant:WR: wlast flag must be raised on last block")
+    }
+    when(rAXIState === sAXIIdle) {
+      when(S_AXI.ar.fire) {
+        assert(S_AXI.ar.arburst === 1.U, "Transplant:RD: arburst must be one")
+      }.elsewhen(S_AXI.aw.fire){
+        assert(S_AXI.aw.awburst === 1.U, "Transplant:WR: awburst must be one")
+      }
+    }
+    assert((wrPort.xreg.req.fire.asUInt + wrPort.pstate.req.fire.asUInt +
+           rdPort.xreg.req.fire.asUInt + rdPort.pstate.req.fire.asUInt) <= 1.U, "Can fire at most 1 request at the same time")
+  }
 }
 
 object TransplantBRAMVerilogEmitter extends App {

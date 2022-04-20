@@ -11,6 +11,11 @@ object PROCESSOR_TYPES
   def DATA_T = UInt(DATA_W)
   val DATA_X = 0.U(DATA_W)
 
+  // Block Size
+  val BLOCK_SZ = 512
+  val regsPerBlock = BLOCK_SZ/DATA_SZ
+  val BYTES_PER_BLOCK = BLOCK_SZ/8
+ 
   // Inst
   val INST_SZ = 32
   val INST_W = INST_SZ.W

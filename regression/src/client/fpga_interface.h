@@ -114,24 +114,9 @@ typedef struct MessageFPGA
  *
  * XREGS: uint64_t
  * PC   : uint64_t
- * SP   : uint64_t
- * CF/VF/NF/ZF : uint64_t
+ * Flags : uint64_t
+ * icount : uint64_t
  */
-#define ARCH_PSTATE_PC_OFFST     (32)
-#define ARCH_PSTATE_SP_OFFST     (33)
-#define ARCH_PSTATE_FLAGS_OFFST  (34)
-#define ARCH_PSTATE_ICOUNT_OFFST (35)
-#define ARCH_PSTATE_TOT_REGS     (36)
-#define ARCH_PSTATE_NF_MASK      (3)    // 64bit 3
-#define ARCH_PSTATE_ZF_MASK      (2)    // 64bit 2
-#define ARCH_PSTATE_CF_MASK      (1)    // 64bit 1
-#define ARCH_PSTATE_VF_MASK      (0)    // 64bit 0
-
-#define FLAGS_GET_NZCV(flags)               (flags & 0xF)
-#define FLAGS_GET_IS_EXCEPTION(flags)       (flags & (1 << 4))
-#define FLAGS_GET_IS_UNDEF(flags)           (flags & (1 << 5))
-#define FLAGS_GET_IS_ICOUNT_DEPLETED(flags) (flags & (1 << 6))
-
 typedef struct DevteroflexArchState {
 	uint64_t xregs[32];
 	uint64_t pc;
@@ -146,6 +131,21 @@ typedef struct DevteroflexArchState {
     uint64_t _unused_[5];
 } DevteroflexArchState;
 
+#define ARCH_PSTATE_XREG_OFFST   (0)
+#define ARCH_PSTATE_PC_OFFST     (32)
+#define ARCH_PSTATE_FLAGS_OFFST  (33)
+#define ARCH_PSTATE_ICOUNT_OFFST (34)
+#define ARCH_PSTATE_TOT_REGS     (35)
+
+#define FLAGS_GET_NZCV(flags)               (flags & 0xF)
+#define FLAGS_GET_IS_EXCEPTION(flags)       (flags & (1 << 4))
+#define FLAGS_GET_IS_UNDEF(flags)           (flags & (1 << 5))
+#define FLAGS_GET_IS_ICOUNT_DEPLETED(flags) (flags & (1 << 6))
+
+#define ARCH_PSTATE_NF_MASK      (3)    // 64bit 3
+#define ARCH_PSTATE_ZF_MASK      (2)    // 64bit 2
+#define ARCH_PSTATE_CF_MASK      (1)    // 64bit 1
+#define ARCH_PSTATE_VF_MASK      (0)    // 64bit 0
 
 // MMU
 int  mmuRegisterTHID2ASID(const struct FPGAContext *c, uint32_t thid, uint32_t asid);
@@ -176,6 +176,9 @@ int dramPagePull(const FPGAContext *c, uint64_t paddr, void *page);
 #define TRANS_REG_OFFST_START            (0x4 * 1)
 #define TRANS_REG_OFFST_STOP_CPU         (0x4 * 2)
 #define TRANS_REG_OFFST_FORCE_TRANSPLANT (0x4 * 3)
+#define TRANS_STATE_SIZE_BYTES      (320)   // 5 512-bit blocks; State fits in this amount of bytes
+#define TRANS_STATE_THID_MAX_BYTES  (512)   // 8 512-bit blocks; max bytes allocated per thread
+#define TRANS_STATE_THID_MAX_REGS   (512/8) // 64 64-bit words: total regs allocated per thread
 int transplantRegisterAndPush(const FPGAContext *c, uint32_t thid, uint32_t asid, DevteroflexArchState *state);
 int transplantUnregisterAndPull(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state);
 int transplantGetState(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state);

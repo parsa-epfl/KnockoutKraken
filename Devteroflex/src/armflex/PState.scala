@@ -41,20 +41,27 @@ class PStateRegs extends Bundle {
   val PC = DATA_T
 }
 
+object PStateConsts {
+  val ARCH_PSTATE_XREGS_OFFST  = (0)
+  val ARCH_PSTATE_PC_OFFST     = (32)
+  val ARCH_PSTATE_FLAGS_OFFST  = (33)
+  val ARCH_PSTATE_ICOUNT_OFFST = (34)
+  val ARCH_PSTATE_TOT_REGS     = (35)
+
+  val TRANS_STATE_PState_OFFST   = (32)  // Contains PC, flags, and icount
+  val TRANS_STATE_SIZE_BYTES     = (320) // 5 512-bit blocks; Full state fits in this amount of bytes
+  val TRANS_STATE_THID_MAX_BYTES = (512) // 8 512-bit blocks; Pad to next power of two 
+  val TRANS_STATE_THID_MAX_REGS  = (512/8) // 8 512-bit blocks; Pad to next power of two 
+  val TRANS_STATE_regsPerBlock = (512/64) // 8 64-bit regs in a 512-bit block
+}
+
 object PStateRegs {
   def apply(): PStateRegs = {
-    val wire = Wire(new PStateRegs)
-    wire.PC := DATA_X
-    wire.flags.NZCV := NZCV_X
-    wire.flags.isException := false.B
-    wire.flags.isUndef := false.B
-    wire.flags.isICountDepleted := false.B
-    wire.icount := 0.U
-    wire.icountBudget := 0.U
+    val wire = WireInit(new PStateRegs, 0.U.asTypeOf(new PStateRegs))
     wire
   }
-  def getNZCV(bits: UInt): UInt = bits(3, 0)
 }
+
 object RFileIO {
   class RDPort(thidN: Int) extends Bundle {
     val port = Vec(3, new Bundle {

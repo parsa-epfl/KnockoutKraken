@@ -17,23 +17,11 @@ class TransplantBRAMTestWrapper extends Module {
   val S_AXI = IO(Flipped(uCore.S_AXI.cloneType))
   S_AXI <> uCore.S_AXI
 
-  val iWriteRequest = IO(Flipped(uCore.iWriteRequest.cloneType))
-  iWriteRequest <> uCore.iWriteRequest
+  val wrPort = IO(uCore.ports.wr.cloneType)
+  wrPort <> uCore.ports.wr
 
-  val iPstateWriteRequest = IO(Flipped(uCore.iPstateWriteRequest.cloneType))
-  iPstateWriteRequest <> uCore.iPstateWriteRequest
-
-  val iReadRequest = IO(Flipped(uCore.iReadRequest.cloneType))
-  iReadRequest <> uCore.iReadRequest
-
-  val iReadPStateRequest = IO(Flipped(uCore.iReadPStateRequest.cloneType))
-  iReadPStateRequest <> uCore.iReadPStateRequest
-
-  val oReadPStateReply = IO(Output(uCore.oReadPStateReply.cloneType))
-  oReadPStateReply := uCore.oReadPStateReply
-
-  val oReadReply = IO(Output(uCore.oReadReply.cloneType))
-  oReadReply := uCore.oReadReply
+  val rdPort = IO(uCore.ports.rd.cloneType)
+  rdPort <> uCore.ports.rd
 
   // Converters, between 512bit UInt and 64bit Vector UInt.
   val i512Bits = IO(Input(UInt(512.W)))
@@ -55,11 +43,11 @@ class TransplantBRAMTest extends AnyFreeSpec with ChiselScalatestTester {
       dut.clock.step()
     }
 
-    def sendContextThroughAXI(threadID: Int, context: Seq[UInt]) = {
+    def sendContextThroughAXI(thid: Int, context: Seq[UInt]) = {
       // do an AXI write transactions.
       // dut.S_AXI.aw.awid.poke(0.U)
       dut.S_AXI.aw.awburst.poke(1.U)
-      dut.S_AXI.aw.awaddr.poke((threadID * 512).U) // thread 13.
+      dut.S_AXI.aw.awaddr.poke((thid * 512).U) // thread 13.
       dut.S_AXI.aw.awlen.poke(7.U)
       dut.S_AXI.aw.awsize.poke(6.U)
 
@@ -100,9 +88,9 @@ class TransplantBRAMTest extends AnyFreeSpec with ChiselScalatestTester {
       }
     }
 
-    def expectReadingContextThroughAXI(threadID: Int, context : Seq[UInt]) = {
+    def expectReadingContextThroughAXI(thid: Int, context : Seq[UInt]) = {
       // First, send the read request.
-      dut.S_AXI.ar.araddr.poke((threadID * 512).U)
+      dut.S_AXI.ar.araddr.poke((thid * 512).U)
       dut.S_AXI.ar.arburst.poke(1.U)
       dut.S_AXI.ar.arlen.poke(7.U)
       dut.S_AXI.ar.arsize.poke(6.U)
@@ -164,29 +152,29 @@ class TransplantBRAMTest extends AnyFreeSpec with ChiselScalatestTester {
         0, 1, 2, 3, 4, 5, 6, 7,
       ).map({x => x.U}))
       // read it back
-      dut.iReadRequest.bits.threadID.poke(13.U)
+      dut.rdPort.thid.poke(13.U)
 
       // Send the read request
       timescope {
-        dut.iReadRequest.bits.registerIndex.poke(1.U)
-        dut.iReadRequest.ready.expect(true.B)
-        dut.iReadRequest.valid.poke(true.B)
+        dut.rdPort.xreg.req.bits.regIdx.poke(1.U)
+        dut.rdPort.xreg.req.ready.expect(true.B)
+        dut.rdPort.xreg.req.valid.poke(true.B)
 
         dut.tick()
       }
 
       // Find the result!
-      dut.oReadReply.expect(1.U)
+      dut.rdPort.xreg.resp.expect(1.U)
 
-      dut.oReadPStateReply.PC.expect(0.U)
-      dut.oReadPStateReply.flags.expect(new PStateFlags().Lit(
+      dut.rdPort.pstate.resp.PC.expect(0.U)
+      dut.rdPort.pstate.resp.flags.expect(new PStateFlags().Lit(
         _.NZCV -> 1.U,
         _.isException -> false.B,
         _.isUndef -> false.B,
         _.isICountDepleted -> false.B
       ))
-      dut.oReadPStateReply.icount.expect(2.U)
-      dut.oReadPStateReply.icountBudget.expect(0.U)
+      dut.rdPort.pstate.resp.icount.expect(2.U)
+      dut.rdPort.pstate.resp.icountBudget.expect(0.U)
     }
   }
 
@@ -198,95 +186,94 @@ class TransplantBRAMTest extends AnyFreeSpec with ChiselScalatestTester {
     )
     test(new TransplantBRAMTestWrapper).withAnnotations(anno) { dut =>
       // write the registers.
-      dut.iWriteRequest.bits.registerIndex.poke(18.U)
-      dut.iWriteRequest.bits.threadID.poke(11.U)
-      dut.iWriteRequest.bits.value.poke(0x7777F823.U)
+      dut.wrPort.thid.poke(11.U)
+      dut.wrPort.xreg.req.bits.regIdx.poke(18.U)
+      dut.wrPort.xreg.req.bits.data.poke(0x7777F823.U)
       timescope {
-        dut.iWriteRequest.ready.expect(true.B)
-        dut.iWriteRequest.valid.poke(true.B)
+        dut.wrPort.xreg.req.ready.expect(true.B)
+        dut.wrPort.xreg.req.valid.poke(true.B)
         dut.tick()
       }
 
-      // Then push another read request just near by. It should not pollute the value.
-      dut.iWriteRequest.bits.registerIndex.poke(17.U)
-      dut.iWriteRequest.bits.threadID.poke(11.U)
-      dut.iWriteRequest.bits.value.poke(100.U)
+      // Then push another read request just near by. It should not pollute the data.
+      dut.wrPort.thid.poke(11.U)
+      dut.wrPort.xreg.req.bits.regIdx.poke(17.U)
+      dut.wrPort.xreg.req.bits.data.poke(100.U)
       timescope {
-        dut.iWriteRequest.ready.expect(true.B)
-        dut.iWriteRequest.valid.poke(true.B)
+        dut.wrPort.xreg.req.ready.expect(true.B)
+        dut.wrPort.xreg.req.valid.poke(true.B)
         dut.tick()
       }
 
       // This write request is sent out. Then let us read it from the read port.
-      dut.iReadRequest.bits.registerIndex.poke(18.U)
-      dut.iReadRequest.bits.threadID.poke(11.U)
+      dut.rdPort.thid.poke(11.U)
+      dut.rdPort.xreg.req.bits.regIdx.poke(18.U)
       timescope {
-        dut.iReadRequest.ready.expect(true.B)
-        dut.iReadRequest.valid.poke(true.B)
+        dut.rdPort.xreg.req.ready.expect(true.B)
+        dut.rdPort.xreg.req.valid.poke(true.B)
         dut.tick()
       }
-      dut.oReadReply.expect(0x7777F823.U)
+      dut.rdPort.xreg.resp.expect(0x7777F823.U)
 
       // prepare for the next request
-      dut.iReadRequest.bits.registerIndex.poke(17.U)
-      dut.iReadRequest.bits.threadID.poke(11.U)
+      dut.rdPort.thid.poke(11.U)
+      dut.rdPort.xreg.req.bits.regIdx.poke(17.U)
       timescope {
-        dut.iReadRequest.ready.expect(true.B)
-        dut.iReadRequest.valid.poke(true.B)
+        dut.rdPort.xreg.req.ready.expect(true.B)
+        dut.rdPort.xreg.req.valid.poke(true.B)
         dut.tick()
       }
-      dut.oReadReply.expect(100.U)
+      dut.rdPort.xreg.resp.expect(100.U)
 
       // Now we will commit some pState to the BRAM
-      dut.iPstateWriteRequest.bits.threadID.poke(11.U)
-      dut.iPstateWriteRequest.bits.state.PC.poke(128.U) // 32
-      dut.iPstateWriteRequest.bits.state.flags.NZCV.poke(1.U) // 33
-      dut.iPstateWriteRequest.bits.state.flags.isException.poke(false.B)
-      dut.iPstateWriteRequest.bits.state.flags.isICountDepleted.poke(true.B)
-      dut.iPstateWriteRequest.bits.state.flags.isUndef.poke(false.B)
-      dut.iPstateWriteRequest.bits.state.icount.poke(0xB.U) // 34
-      dut.iPstateWriteRequest.bits.state.icountBudget.poke(0xA.U)
+      dut.wrPort.thid.poke(11.U)
+      dut.wrPort.pstate.req.bits.state.PC.poke(128.U) // 32
+      dut.wrPort.pstate.req.bits.state.flags.NZCV.poke(1.U) // 33
+      dut.wrPort.pstate.req.bits.state.flags.isException.poke(false.B)
+      dut.wrPort.pstate.req.bits.state.flags.isICountDepleted.poke(true.B)
+      dut.wrPort.pstate.req.bits.state.flags.isUndef.poke(false.B)
+      dut.wrPort.pstate.req.bits.state.icount.poke(0xB.U) // 34
+      dut.wrPort.pstate.req.bits.state.icountBudget.poke(0xA.U)
       timescope {
-        dut.iPstateWriteRequest.ready.expect(true.B)
-        dut.iPstateWriteRequest.valid.poke(true.B)
+        dut.wrPort.pstate.req.ready.expect(true.B)
+        dut.wrPort.pstate.req.valid.poke(true.B)
         dut.tick()
       }
 
       // and immediately, we write a register to 35, and then read them out.
-      dut.iWriteRequest.bits.registerIndex.poke(35.U)
-      dut.iWriteRequest.bits.threadID.poke(11.U)
-      dut.iWriteRequest.bits.value.poke(1024.U)
+      dut.wrPort.thid.poke(11.U)
+      dut.wrPort.xreg.req.bits.regIdx.poke(35.U)
+      dut.wrPort.xreg.req.bits.data.poke(1024.U)
       timescope {
-        dut.iWriteRequest.ready.expect(true.B)
-        dut.iWriteRequest.valid.poke(true.B)
+        dut.wrPort.xreg.req.ready.expect(true.B)
+        dut.wrPort.xreg.req.valid.poke(true.B)
         dut.tick()
       }
 
       // Then, I will read all of them out.
       // First, the read 35.
-      dut.iReadRequest.bits.registerIndex.poke(35.U)
-      dut.iReadRequest.bits.threadID.poke(11.U)
+      dut.rdPort.thid.poke(11.U)
+      dut.rdPort.xreg.req.bits.regIdx.poke(35.U)
       timescope {
-        dut.iReadRequest.ready.expect(true.B)
-        dut.iReadRequest.valid.poke(true.B)
+        dut.rdPort.xreg.req.ready.expect(true.B)
+        dut.rdPort.xreg.req.valid.poke(true.B)
         dut.tick()
       }
-      dut.oReadReply.expect(1024.U)
+      dut.rdPort.xreg.resp.expect(1024.U)
 
       // Then, I read the pstate.
-      dut.iReadPStateRequest.bits.poke(11.U)
       timescope {
-        dut.iReadPStateRequest.ready.expect(true.B)
-        dut.iReadPStateRequest.valid.poke(true.B)
+        dut.rdPort.pstate.req.ready.expect(true.B)
+        dut.rdPort.pstate.req.valid.poke(true.B)
         dut.tick()
       }
-      dut.oReadPStateReply.PC.expect(128.U)
-      dut.oReadPStateReply.flags.NZCV.expect(1.U)
-      dut.oReadPStateReply.flags.isException.expect(false.B)
-      dut.oReadPStateReply.flags.isICountDepleted.expect(true.B)
-      dut.oReadPStateReply.flags.isUndef.expect(false.B)
-      dut.oReadPStateReply.icount.expect(0xB.U)
-      dut.oReadPStateReply.icountBudget.expect(0xA.U)
+      dut.rdPort.pstate.resp.PC.expect(128.U)
+      dut.rdPort.pstate.resp.flags.NZCV.expect(1.U)
+      dut.rdPort.pstate.resp.flags.isException.expect(false.B)
+      dut.rdPort.pstate.resp.flags.isICountDepleted.expect(true.B)
+      dut.rdPort.pstate.resp.flags.isUndef.expect(false.B)
+      dut.rdPort.pstate.resp.icount.expect(0xB.U)
+      dut.rdPort.pstate.resp.icountBudget.expect(0xA.U)
 
 
       // Now, finally, I have to read all these stuff from AXI.
