@@ -134,7 +134,7 @@ static int test_stress_memory(
       printf("Detected pending transplants: 0x%x, curr completed: 0x%x\n", pending_threads, completed);
     }
     if(mmuMsgHasPending(ctx)) {
-      mmuMsgGetPending(ctx, &message);
+      mmuMsgGet(ctx, &message);
       REQUIRE(message.type == sPageFaultNotify); // NOTE: running out of entries in a PT set could send another request type
       if(message.PageFaultNotif.permission == DATA_LOAD) {
         INFO("Load page fault detected");

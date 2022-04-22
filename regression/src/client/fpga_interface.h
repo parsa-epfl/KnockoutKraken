@@ -150,8 +150,8 @@ typedef struct DevteroflexArchState {
 // MMU
 int  mmuRegisterTHID2ASID(const struct FPGAContext *c, uint32_t thid, uint32_t asid);
 bool mmuMsgHasPending(const FPGAContext *c);
-int  mmuMsgGetPending(const FPGAContext *c, MessageFPGA *msg);
-int  mmuMsgGetForce(const FPGAContext *c, MessageFPGA *msg);
+int  mmuMsgGet(const FPGAContext *c, MessageFPGA *msg);
+int  mmuMsgPeek(const FPGAContext *c, MessageFPGA *msg);
 int  mmuMsgSend(const FPGAContext *c,  MessageFPGA *msg);
 
 // DRAM

@@ -211,7 +211,7 @@ TEST_CASE("out-of-page-bound-pair-load") {
 
   // FPGA requires instruction page.
   MessageFPGA message;
-  mmuMsgGetForce(&ctx, &message);
+  mmuMsgGet(&ctx, &message);
   INFO("- Check page fault request");
   REQUIRE(message.type == sPageFaultNotify);
   REQUIRE(message.asid == asid);
@@ -240,7 +240,7 @@ TEST_CASE("out-of-page-bound-pair-load") {
   int expected_access_types[] = {DATA_LOAD, DATA_LOAD, DATA_STORE};
   for(int i = 0; i < 3; ++i){
     INFO("- Query " << i << " page fault message");
-    mmuMsgGetForce(&ctx, &message);
+    mmuMsgGet(&ctx, &message);
     REQUIRE(message.type == sPageFaultNotify);
     REQUIRE(message.asid == asid);
     REQUIRE(message.vpn_lo == VPN_GET_LO(expected_vas[i]));

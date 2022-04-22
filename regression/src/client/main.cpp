@@ -50,7 +50,7 @@ TEST_CASE("MMU-push-and-evict-pte"){
 
   // Let's query message. It should send an eviction message
   MessageFPGA msg;
-  REQUIRE(mmuMsgGetForce(&c, &msg) == 0);
+  REQUIRE(mmuMsgGet(&c, &msg) == 0);
 
   REQUIRE(msg.type == sEvictNotify);
   REQUIRE(msg.asid == asid);
@@ -58,7 +58,7 @@ TEST_CASE("MMU-push-and-evict-pte"){
   REQUIRE(msg.vpn_lo == VPN_GET_LO(va));
 
   // Then there is a done message
-  REQUIRE(mmuMsgGetForce(&c, &msg) == 0);
+  REQUIRE(mmuMsgGet(&c, &msg) == 0);
 
   REQUIRE(msg.type == sEvictDone);
   REQUIRE(msg.asid == asid);
@@ -128,7 +128,7 @@ TEST_CASE("basic-transplant-with-initial-page-fault"){
 
   // Let's query message. It should be a page fault.
   MessageFPGA msg;
-  REQUIRE(mmuMsgGetForce(&c, &msg) == 0);
+  REQUIRE(mmuMsgGet(&c, &msg) == 0);
 
 
   REQUIRE(msg.type == sPageFaultNotify);
@@ -232,7 +232,7 @@ TEST_CASE("execute-instruction-with-context-in-dram"){
   // Let's query message. It should send an eviction message
   INFO("Query Eviction Notification");
   MessageFPGA msg;
-  mmuMsgGetForce(&c, &msg);
+  mmuMsgGet(&c, &msg);
 
   REQUIRE(msg.type == sEvictNotify);
   REQUIRE(msg.asid == asid);
@@ -241,7 +241,7 @@ TEST_CASE("execute-instruction-with-context-in-dram"){
 
   // Let's query message. It should send an eviction completed message
   INFO("Query Eviction Notification Complete");
-  mmuMsgGetForce(&c, &msg);
+  mmuMsgGet(&c, &msg);
 
   REQUIRE(msg.type == sEvictDone);
   REQUIRE(msg.asid == asid);
@@ -291,7 +291,7 @@ TEST_CASE("execute-instruction") {
   // First page fault here, it's instruction page.
   INFO("FPGA requires instruction page");
   MessageFPGA msg;
-  mmuMsgGetForce(&c, &msg);
+  mmuMsgGet(&c, &msg);
 
   INFO("Check page fault request");
   REQUIRE(msg.type == sPageFaultNotify);
@@ -318,7 +318,7 @@ TEST_CASE("execute-instruction") {
 
   // Page fault again for data. 
   INFO("FPGA requires data page");
-  REQUIRE(mmuMsgGetForce(&c, &msg) == 0);
+  REQUIRE(mmuMsgGet(&c, &msg) == 0);
 
   INFO("Check page fault request");
   REQUIRE(msg.type == sPageFaultNotify);
