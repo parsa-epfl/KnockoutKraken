@@ -23,7 +23,7 @@ void synchronizePage(FPGAContext *ctx, int asid, uint8_t *page, uint64_t vaddr,
   // Let's query message. It should send an eviction message
   INFO("1. Query Eviction Notification");
   MessageFPGA message;
-  mmuMsgGetForce(ctx, &message);
+  mmuMsgGet(ctx, &message);
 
   REQUIRE(message.type == sEvictNotify);
   REQUIRE(message.asid == asid);
@@ -32,7 +32,7 @@ void synchronizePage(FPGAContext *ctx, int asid, uint8_t *page, uint64_t vaddr,
   REQUIRE(message.EvictNotif.ppn == GET_PPN_FROM_PADDR(paddr));
 
   INFO("2. Query Eviction Notification Complete");
-  mmuMsgGetForce(ctx, &message);
+  mmuMsgGet(ctx, &message);
 
   REQUIRE(message.type == sEvictDone);
   REQUIRE(message.asid == asid);

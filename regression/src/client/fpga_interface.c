@@ -126,52 +126,50 @@ int transplantForceTransplant(const FPGAContext *c, uint32_t thid) {
 
 
 /**
- * Block till there's a message in the MMU pending.
- * @param message the buffer for the message.
+ * @brief Check whether there is a MMU message waiting for processing.
+ * @returns true if there is a message.
+ */
+bool mmuMsgHasPending(const FPGAContext *c) {
+  uint32_t ret = -1;
+  if(readAXIL(c, BASE_ADDR_MMU_MSG_QUEUE + MMU_MSG_QUEUE_REG_OFST_PENDING, &ret)){
+    printf("Error: Access pending registers trigger an error. \n");
+    exit(-1);
+  }
+  return !(ret == 0);
+}
+
+/**
+ * @brief Block till there's a message in the MMU pending.
+ * @param msg the buffer for the message.
  * @returns 0 if successful.
  *
  * @note associate with S_AXI_QEMU_MQ and S_AXIL_QEMU_MQ
  * @note this will block the routine until it get message.
  */
-int mmuMsgGetForce(const FPGAContext *c, MessageFPGA *msg) {
+int mmuMsgGet(const FPGAContext *c, MessageFPGA *msg) {
   uint32_t res = -1;
   bool hasMessage = false;
   do {
     hasMessage = mmuMsgHasPending(c);
   } while (!hasMessage);
-  res = mmuMsgGetPending(c, msg);
-  if (res != 0) return res;
-  // pop the message
-  return writeAXIL(c, BASE_ADDR_MMU_MSG_QUEUE + MMU_MSG_QUEUE_REG_OFST_POP, 1);
+  res = readAXI(c, BASE_ADDR_AXI_MMU_MSG, msg, sizeof(MessageFPGA));
+  if(res == 0){
+    return writeAXIL(c, BASE_ADDR_MMU_MSG_QUEUE + MMU_MSG_QUEUE_REG_OFST_POP, 1);
+  }
+  return res;
 }
 
-/**
- * Check whether there is a MMU message pending.
- * @param message the buffer for the message.
- * @returns true if there is a message.
- *
- * @note associate with S_AXI_QEMU_MQ and S_AXIL_QEMU_MQ
- * @note this will block the routine until it get message.
- */
-bool mmuMsgHasPending(const FPGAContext *c) {
-  uint32_t ret = -1;
-  readAXIL(c, BASE_ADDR_MMU_MSG_QUEUE + MMU_MSG_QUEUE_REG_OFST_PENDING, &ret);
-  return !(ret == 0);
-}
+
 
 /**
- * Block till there's a message in the MMU pending.
+ * @brief Peek the MMU message queue, without popping the message.
  * @param message the buffer for the message.
  * @returns 0 if successful.
  *
- * @note associate with S_AXI_QEMU_MQ and S_AXIL_QEMU_MQ
- * @note this will block the routine until it get message.
+ * @note may return invalid value if there is no message in the queue.
  */
-int mmuMsgGetPending(const FPGAContext *c, MessageFPGA *msg) {
-  if(readAXI(c, BASE_ADDR_AXI_MMU_MSG, msg, sizeof(MessageFPGA)) == 0){
-    return writeAXIL(c, BASE_ADDR_MMU_MSG_QUEUE + MMU_MSG_QUEUE_REG_OFST_POP, 1);
-  }
-  return -1;
+int mmuMsgPeek(const FPGAContext *c, MessageFPGA *msg) {
+  return readAXI(c, BASE_ADDR_AXI_MMU_MSG, msg, sizeof(MessageFPGA));
 }
 
 /**
