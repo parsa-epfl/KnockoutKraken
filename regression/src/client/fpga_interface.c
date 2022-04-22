@@ -44,7 +44,7 @@ int transplantRegisterAndPush(const FPGAContext *c, uint32_t thid, uint32_t asid
   int res = mmuRegisterTHID2ASID(c, thid, asid);
   if(res != 0) return res;
   // 2. push the state.
-  res = transplantPushState(c, thid, (uint64_t *)state);
+  res = transplantPushState(c, thid, state);
   return res;
 }
 
@@ -64,7 +64,7 @@ int transplantUnregisterAndPull(const FPGAContext *c, uint32_t thid, Devteroflex
   int res = mmuRegisterTHID2ASID(c, thid, 0);
   if(res != 0) return res;
   // 2. Read staste.
-  res = transplantGetState(c, thid, (uint64_t *)state);
+  res = transplantGetState(c, thid, state);
   return res;
 }
 
@@ -76,12 +76,12 @@ int transplantSinglestep(const FPGAContext *c, uint32_t thid, uint32_t asid, Dev
   return res;
 }
 
-int transplantGetState(const FPGAContext *c, uint32_t thid, uint64_t *state) {
+int transplantGetState(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state) {
   assert(thid < 128 && "The maximum number of supported thread is 128.");
   return readAXI(c, BASE_ADDR_TRANSPLANT_DATA + thid * 512, state, 320);
 }
 
-int transplantPushState(const FPGAContext *c, uint32_t thid, uint64_t *state) {
+int transplantPushState(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state) {
   assert(thid < 128 && "The maximum number of supported thread is 128.");
   return writeAXI(c, BASE_ADDR_TRANSPLANT_DATA + thid * 512, state, 320);
 }

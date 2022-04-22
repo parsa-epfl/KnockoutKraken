@@ -14,11 +14,11 @@ TEST_CASE("transplant-in") {
   int ret = 0;
   const int th = 0;
 
-  REQUIRE(transplantPushState(&c, th, (uint64_t *) &state) == 0);
+  REQUIRE(transplantPushState(&c, th, &state) == 0);
 
   // ---- Assert that correct state is was pushed
   DevteroflexArchState stateTransplant;
-  REQUIRE(transplantGetState(&c, th, (uint64_t *) &stateTransplant) == 0);
+  REQUIRE(transplantGetState(&c, th, &stateTransplant) == 0);
   requireStateIsIdentical(state, stateTransplant);
 
   releaseFPGAContext(&c);
@@ -52,7 +52,7 @@ TEST_CASE("transplant-transplants") {
   // ---- Assert that correct state is was pushed
   INFO("Assert state is identical after pushing")
   DevteroflexArchState stateTransplant;
-  transplantGetState(&c, th, (uint64_t *) &stateTransplant);
+  transplantGetState(&c, th, &stateTransplant);
   requireStateIsIdentical(state, stateTransplant);
 
   // ---- Start execution

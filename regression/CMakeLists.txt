@@ -23,6 +23,7 @@ add_executable(
   src/client/tests/host-control.cc
   src/client/tests/aws-shell-ops.cc
   src/client/tests/transplants.cc
+  src/client/tests/memory-ordering.cc
 )
 
 add_executable(
