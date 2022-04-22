@@ -1,4 +1,3 @@
-#include <cstdio>
 extern "C" {
 #include "../fpga.h"
 #include "../fpga_interface.h"
@@ -6,7 +5,6 @@ extern "C" {
 }
 
 #include "../test-helpers.hh"
-#include <stdbool.h>
 
 static void write_page_block(uint8_t *page, uint8_t *bytes, size_t addr,
                              size_t byteSize) {

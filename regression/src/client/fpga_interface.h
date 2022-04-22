@@ -178,8 +178,8 @@ int dramPagePull(const FPGAContext *c, uint64_t paddr, void *page);
 #define TRANS_REG_OFFST_FORCE_TRANSPLANT (0x4 * 3)
 int transplantRegisterAndPush(const FPGAContext *c, uint32_t thid, uint32_t asid, DevteroflexArchState *state);
 int transplantUnregisterAndPull(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state);
-int transplantGetState(const FPGAContext *c, uint32_t thid, uint64_t *state);
-int transplantPushState(const FPGAContext *c, uint32_t thid, uint64_t *state);
+int transplantGetState(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state);
+int transplantPushState(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state);
 int transplantSinglestep(const FPGAContext *c, uint32_t thid, uint32_t asid, DevteroflexArchState *state);
 int transplantPending(const FPGAContext *c, uint32_t *pending_threads);
 int transplantFreePending(const FPGAContext *c, uint32_t pending_threads);
