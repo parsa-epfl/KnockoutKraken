@@ -9,7 +9,7 @@
 
 // PCIS - AXI
 #define BASE_ADDR_DRAM             (0x000000000000)
-#define BASE_ADDR_RTL              (0x001000000000)
+#define BASE_ADDR_RTL              (0x000400000000)
 
 typedef struct FPGAContext {
 #ifndef AWS_FPGA
