@@ -58,28 +58,12 @@ class PipelineWithCSR(params: PipelineParams) extends Module {
   pipeline.mem_io <> mem_io
   pipeline.mmu_io <> mmu_io
 
-  // mem.inst.req
-  uCSRthid2asid.thid_i(0) := pipeline.mem_io.inst.tlb.req.bits.thid
-  mem_io.inst.tlb.req.bits.asid := uCSRthid2asid.asid_o(0).bits
-
-  uCSRthid2asid.thid_i(1) := pipeline.mem_io.data.tlb.req.bits.thid
-  mem_io.data.tlb.req.bits.asid := uCSRthid2asid.asid_o(1).bits
-
   // Instrumentation Interface
   val instrument = IO(pipeline.instrument.cloneType)
   instrument <> pipeline.instrument
 
   val dbg = IO(pipeline.dbg.cloneType)
   dbg <> pipeline.dbg
-
-  if(true) {// TODO conditional assertions
-    when(pipeline.mem_io.data.tlb.req.valid){
-      assert(uCSRthid2asid.asid_o(1).valid, "No memory request is allowed if the hardware thread is not registed.")
-    }
-    when(pipeline.mem_io.inst.tlb.req.valid) {
-      assert(uCSRthid2asid.asid_o(0).valid, "No memory request is allowed if the hardware thread is not registed.")
-    }
-  }
 }
 
 class PipelineWithTransplant(params: PipelineParams) extends Module {
@@ -93,6 +77,10 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   mem_io <> pipeline.mem_io
   mmu_io <> pipeline.mmu_io
   val archstate = Module(new ArchState(params.thidN, params.DebugSignals))
+  archstate.pstateIO.mem(0).thread := mem_io.inst.tlb.req.bits.asid
+  archstate.pstateIO.mem(1).thread := mem_io.data.tlb.req.bits.asid
+  mem_io.inst.tlb.req.bits.asid := archstate.pstateIO.mem(0).asid
+  mem_io.data.tlb.req.bits.asid := archstate.pstateIO.mem(1).asid
 
   // -------- Pipeline ---------
   // Get state from Issue

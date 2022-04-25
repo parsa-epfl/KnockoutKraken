@@ -128,14 +128,22 @@ typedef struct DevteroflexArchState {
             uint32_t icountBudget;
         };
     };
-    uint64_t _unused_[5];
+    union {
+        uint64_t asid_reg;
+        struct {
+            uint32_t asid;
+            uint32_t _asid_unused_;
+        }
+    }
+    uint64_t _unused_[4];
 } DevteroflexArchState;
 
 #define ARCH_PSTATE_XREG_OFFST   (0)
 #define ARCH_PSTATE_PC_OFFST     (32)
 #define ARCH_PSTATE_FLAGS_OFFST  (33)
 #define ARCH_PSTATE_ICOUNT_OFFST (34)
-#define ARCH_PSTATE_TOT_REGS     (35)
+#define ARCH_PSTATE_ASID_OFFST   (35)
+#define ARCH_PSTATE_TOT_REGS     (36)
 
 #define FLAGS_GET_NZCV(flags)               (flags & 0xF)
 #define FLAGS_GET_IS_EXCEPTION(flags)       (flags & (1 << 4))

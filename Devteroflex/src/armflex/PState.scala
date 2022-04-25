@@ -35,6 +35,8 @@ class PStateFlags extends Bundle {
 }
 
 class PStateRegs extends Bundle {
+  val asid_unused = UInt(32.W)
+  val asid = UInt(32.W)
   val icountBudget = UInt(32.W)
   val icount = UInt(32.W)
   val flags = new PStateFlags
@@ -46,7 +48,8 @@ object PStateConsts {
   val ARCH_PSTATE_PC_OFFST     = (32)
   val ARCH_PSTATE_FLAGS_OFFST  = (33)
   val ARCH_PSTATE_ICOUNT_OFFST = (34)
-  val ARCH_PSTATE_TOT_REGS     = (35)
+  val ARCH_PSTATE_ASID_OFFST   = (35)
+  val ARCH_PSTATE_TOT_REGS     = (36)
 
   val TRANS_STATE_PState_OFFST   = (32)  // Contains PC, flags, and icount
   val TRANS_STATE_SIZE_BYTES     = (320) // 5 512-bit blocks; Full state fits in this amount of bytes
@@ -133,6 +136,10 @@ class PStateIO(val thidN: Int) extends Bundle {
     val thread = Input(UInt(log2Ceil(thidN).W))
     val pstate = Output(new PStateRegs)
   }
+  val mem = Vec(2, new Bundle {
+    val thread = Input(UInt(log2Ceil(thidN).W))
+    val asid = Output(new PStateRegs)
+  })
 }
 
 class ArchState(thidN: Int, withDbg: Boolean) extends Module {
@@ -150,10 +157,14 @@ class ArchState(thidN: Int, withDbg: Boolean) extends Module {
   private val pstateMem_rd1 = pstateMem(pstateIO.issue.thread)    // Both of these can be optimized 
   private val pstateMem_rd2 = pstateMem(pstateIO.commit.tag) // by carring in the pipeline on fetch
   private val pstateMem_rd3 = pstateMem(pstateIO.transplant.thread)
+  private val pstateMem_rd4_asid = pstateMem(pstateIO.mem(0).thread).asid
+  private val pstateMem_rd5_asid = pstateMem(pstateIO.mem(1).thread).asid
   // pcMem_wr
   pstateIO.issue.pstate := pstateMem_rd1
   pstateIO.commit.pstate.curr := pstateMem_rd2
   pstateIO.transplant.pstate := pstateMem_rd3
+  pstateIO.mem(0).asid := pstateMem_rd4_asid
+  pstateIO.mem(1).asid := pstateMem_rd5_asid
   when(pstateIO.commit.fire) {
     pstateMem(pstateIO.commit.tag) := pstateIO.commit.pstate.next
   }

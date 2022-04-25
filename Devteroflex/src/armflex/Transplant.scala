@@ -6,11 +6,10 @@ import chisel3.util._
 import arm.PROCESSOR_TYPES._
 
 import armflex.util._
+import armflex.PStateConsts._
 
 import antmicro.Bus.AXI4
-import antmicro.CSR.CSR
-import antmicro.CSR.SetCSR
-import antmicro.CSR.ClearCSR
+import antmicro.CSR._
 
 object TransplantIO extends Bundle {
   class Trans2CPU(val thidN: Int) extends Bundle { // Push state back to CPU

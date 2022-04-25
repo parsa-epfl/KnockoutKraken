@@ -28,6 +28,9 @@ object TransplantBRAMIO {
     val icountReg = bramBlockGetReg(block, ARCH_PSTATE_ICOUNT_OFFST % regsPerBlock)
     pstate.icount := icountReg(31, 0) // 34[31:0] -> icount
     pstate.icountBudget := icountReg(63, 32) // 34[63:32] -> icount budget
+    val asidReg = bramBlockGetReg(block, ARCH_PSTATE_ASID_OFFST % regsPerBlock)
+    pstate.asid := asidReg(31, 0)
+    pstate.asid_unused := asidReg(63, 32)
     pstate
   }
   def bramBlockPackPState(pstate: PStateRegs): UInt = {
@@ -36,6 +39,7 @@ object TransplantBRAMIO {
     block(ARCH_PSTATE_PC_OFFST % regsPerBlock) := pstate.PC
     block(ARCH_PSTATE_FLAGS_OFFST % regsPerBlock) := pstate.flags.asUInt
     block(ARCH_PSTATE_ICOUNT_OFFST % regsPerBlock) := Cat(pstate.icountBudget, pstate.icount)
+    block(ARCH_PSTATE_ASID_OFFST % regsPerBlock) := Cat(pstate.asid_unused, pstate.asid)
     return block.asUInt()
   }
 

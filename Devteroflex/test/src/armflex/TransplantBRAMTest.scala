@@ -10,18 +10,21 @@ import chiseltest.internal._
 
 import firrtl.options.TargetDirAnnotation
 
-class TransplantBRAMTestWrapper extends Module {
-  val uCore = Module(new TransplantBRAM(16))
+class TransBram2HostUnitTestWrapper extends Module {
+  val uCore = Module(new TransBram2HostUnit(16))
 
   // IO wrapper
   val S_AXI = IO(Flipped(uCore.S_AXI.cloneType))
   S_AXI <> uCore.S_AXI
 
-  val wrPort = IO(uCore.ports.wr.cloneType)
-  wrPort <> uCore.ports.wr
+  val wrPort = IO(uCore.transBram2Cpu.wr.cloneType)
+  wrPort <> uCore.transBram2Cpu.wr
 
-  val rdPort = IO(uCore.ports.rd.cloneType)
-  rdPort <> uCore.ports.rd
+  val rdPort = IO(uCore.transBram2Cpu.rd.cloneType)
+  rdPort <> uCore.transBram2Cpu.rd
+
+  val ctrl = IO(uCore.transBram2Cpu.cloneType)
+  ctrl <> uCore.transBram2Cpu.ctrl
 
   // Converters, between 512bit UInt and 64bit Vector UInt.
   val i512Bits = IO(Input(UInt(512.W)))
@@ -36,9 +39,9 @@ class TransplantBRAMTestWrapper extends Module {
 
 }
 
-class TransplantBRAMTest extends AnyFreeSpec with ChiselScalatestTester {
-  // helper functions for TransplantBRAM
-  implicit class TransplantBRAMHelper(dut: TransplantBRAMTestWrapper) {
+class TransBram2HostUnitTest extends AnyFreeSpec with ChiselScalatestTester {
+  // helper functions for TransBram2HostUnit
+  implicit class TransBram2HostUnitHelper(dut: TransBram2HostUnitTestWrapper) {
     def tick() = {
       dut.clock.step()
     }
@@ -133,10 +136,10 @@ class TransplantBRAMTest extends AnyFreeSpec with ChiselScalatestTester {
   "AXI -> Normal" in {
     val anno = Seq(
       VerilatorBackendAnnotation,
-      TargetDirAnnotation("test/transplant/TransplantBRAMTest/AXIToNormal"),
+      TargetDirAnnotation("test/transplant/TransBram2HostUnitTest/AXIToNormal"),
       WriteVcdAnnotation
     )
-    test(new TransplantBRAMTestWrapper).withAnnotations(anno) { dut =>
+    test(new TransBram2HostUnitTestWrapper).withAnnotations(anno) { dut =>
 
       dut.tick()
       dut.tick()
@@ -148,12 +151,11 @@ class TransplantBRAMTest extends AnyFreeSpec with ChiselScalatestTester {
         0, 1, 2, 3, 4, 5, 6, 7,
         0, 1, 2, 3, 4, 5, 6, 7,
         0, 1, 2, 3, 4, 5, 6, 7,
-
         0, 1, 2, 3, 4, 5, 6, 7,
       ).map({x => x.U}))
+
       // read it back
       dut.rdPort.thid.poke(13.U)
-
       // Send the read request
       timescope {
         dut.rdPort.xreg.req.bits.regIdx.poke(1.U)
@@ -171,7 +173,8 @@ class TransplantBRAMTest extends AnyFreeSpec with ChiselScalatestTester {
         _.NZCV -> 1.U,
         _.isException -> false.B,
         _.isUndef -> false.B,
-        _.isICountDepleted -> false.B
+        _.isICountDepleted -> false.B,
+        _.execMode -> 0.U
       ))
       dut.rdPort.pstate.resp.icount.expect(2.U)
       dut.rdPort.pstate.resp.icountBudget.expect(0.U)
@@ -181,10 +184,10 @@ class TransplantBRAMTest extends AnyFreeSpec with ChiselScalatestTester {
   "Normal -> AXI" in {
     val anno = Seq(
       VerilatorBackendAnnotation,
-      TargetDirAnnotation("test/transplant/TransplantBRAMTest/NormalToAXI"),
+      TargetDirAnnotation("test/transplant/TransBram2HostUnitTest/NormalToAXI"),
       WriteVcdAnnotation
     )
-    test(new TransplantBRAMTestWrapper).withAnnotations(anno) { dut =>
+    test(new TransBram2HostUnitTestWrapper).withAnnotations(anno) { dut =>
       // write the registers.
       dut.wrPort.thid.poke(11.U)
       dut.wrPort.xreg.req.bits.regIdx.poke(18.U)
@@ -232,8 +235,11 @@ class TransplantBRAMTest extends AnyFreeSpec with ChiselScalatestTester {
       dut.wrPort.pstate.req.bits.state.flags.isException.poke(false.B)
       dut.wrPort.pstate.req.bits.state.flags.isICountDepleted.poke(true.B)
       dut.wrPort.pstate.req.bits.state.flags.isUndef.poke(false.B)
+      dut.wrPort.pstate.req.bits.state.flags.execMode.poke(PStateConsts.PSTATE_FLAGS_EXECUTE_WAIT.U)
       dut.wrPort.pstate.req.bits.state.icount.poke(0xB.U) // 34
       dut.wrPort.pstate.req.bits.state.icountBudget.poke(0xA.U)
+      dut.wrPort.pstate.req.bits.state.asid.poke(0.U)
+      dut.wrPort.pstate.req.bits.state.asid_unused.poke(0.U)
       timescope {
         dut.wrPort.pstate.req.ready.expect(true.B)
         dut.wrPort.pstate.req.valid.poke(true.B)
