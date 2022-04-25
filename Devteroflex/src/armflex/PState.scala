@@ -28,6 +28,7 @@ import armflex.util._
  */
 
 class PStateFlags extends Bundle {
+  val execMode = UInt(2.W)
   val isICountDepleted = Bool()
   val isUndef = Bool()
   val isException = Bool()
@@ -56,6 +57,10 @@ object PStateConsts {
   val TRANS_STATE_THID_MAX_BYTES = (512) // 8 512-bit blocks; Pad to next power of two 
   val TRANS_STATE_THID_MAX_REGS  = (512/8) // 8 512-bit blocks; Pad to next power of two 
   val TRANS_STATE_regsPerBlock = (512/64) // 8 64-bit regs in a 512-bit block
+
+  val PSTATE_FLAGS_EXECUTE_SINGLESTEP = (2)
+  val PSTATE_FLAGS_EXECUTE_NORMAL     = (1)
+  val PSTATE_FLAGS_EXECUTE_WAIT       = (0)
 }
 
 object PStateRegs {

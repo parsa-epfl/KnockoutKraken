@@ -11,9 +11,9 @@ import armflex.util.BRAMParams
 
 import armflex.PStateConsts._
 import armflex.TransplantConsts._
-import armflex.TransplantBRAMIO._
+import armflex.TransBram2HostUnitIO._
 
-object TransplantBRAMIO {
+object TransBram2HostUnitIO {
   // Given that registers are 64-bit wide, but that 
   // a bram block is 512-bits we align with the block granularity
   def bramAlignAddr(thid: UInt, regIdx: UInt) = Cat(thid, regIdx >> 3)
@@ -77,12 +77,18 @@ object TransplantBRAMIO {
   class TransBRAM2CpuIO(thidN: Int) extends Bundle {
     val rd = new RdPort(thidN)
     val wr = new WrPort(thidN)
+    val ctrl = new Trans2CpuCtrlIO(thidN)
   }
 
   // Use the 2nd BRAM ports to sync data with the CPU.
   // This port is for submitting the pstate. It has the highest priority.
   class WrPStateReq extends Bundle {
     val state = new PStateRegs()
+  }
+
+  class Trans2CpuCtrlIO(thidN: Int) extends Bundle {
+    val clearTrans2Host = Output(UInt(thidN.W)) // Clear pending bit BRAM->HOST
+    val setTrans2Cpu = Output(UInt(thidN.W)) // Raise transplant BRAM->CPU
   }
 
 }
@@ -92,16 +98,20 @@ object TransplantBRAMIO {
 // - We allocate 512 byte (64*64bit) space for each thread. The first 256 bytes are for the x0 - x31 registers, and then one 64byte for PC + Flag + Stack, and the following position are preserved for future reuse.
 // - At present we support at most 128 threads, so 16bit address at most. (Not sure if we have such a large space from the shell.)
 
-class TransplantBRAM(thidN: Int) extends Module {
+class TransBram2HostUnit(thidN: Int) extends Module {
   assert(thidN <= 128)
   assert(DATA_SZ == 64)
   assert(REG_N == 32)
+  val addrW = log2Ceil(thidN * TRANS_STATE_THID_MAX_BYTES)
 
-  val S_AXI = IO(Flipped(new AXI4(16, BLOCK_SZ)))
+  val S_AXI = IO(Flipped(new AXI4(addrW, BLOCK_SZ)))
   val sAXIIdle :: sAXIReading :: sAXIReadWaitComplete :: sAXIWriting :: sAXIWriteResponse :: Nil = Enum(5)
 
   val uBRAM = Module(new BRAM()(new BRAMParams(64, 8, 1024, "", false)))
 
+  val transBram2Cpu = IO(new TransBRAM2CpuIO(thidN))
+  val rdPort = transBram2Cpu.rd
+  val wrPort = transBram2Cpu.wr
 
   // ---------------------- AXI -------------------------
  
@@ -109,10 +119,12 @@ class TransplantBRAM(thidN: Int) extends Module {
   // the AXI contexts.
   val rAXIState = RegInit(sAXIIdle)
   // val rAXIID = RegInit(0.U(AXI4.idWidth.W))
-  val rAXIAddr = RegInit(0.U(16.W))
+  val rAXIAddr = RegInit(0.U(S_AXI.addrWidth.W))
   val rAXIAddrStep = RegInit(0.U(AXI4.sizeWidth.W))
   val rAXICounter = RegInit(0.U(AXI4.lenWidth.W))
   val rAXICounterEnd = RegInit(0.U(AXI4.lenWidth.W))
+
+  val thid = RegInit(0.U(S_AXI.addrWidth.W))
 
   class axi_read_meta_info_t extends Bundle {
     // val id = UInt(AXI4.idWidth.W)
@@ -122,8 +134,10 @@ class TransplantBRAM(thidN: Int) extends Module {
   val wAXIReadSync = Wire(Decoupled(new axi_read_meta_info_t))
   wAXIReadSync.bits.isLast := false.B
 
-  val startB2C = WireInit(false.B)
-  val doneB2H = WireInit(false.B) // B2H: BRAM to HOST read
+  val clearTrans2Host = WireInit(transBram2Cpu.ctrl.clearTrans2Host.cloneType, 0.U)
+  val setTrans2Cpu = WireInit(transBram2Cpu.ctrl.setTrans2Cpu.cloneType, 0.U)
+  transBram2Cpu.ctrl.clearTrans2Host := clearTrans2Host
+  transBram2Cpu.ctrl.setTrans2Cpu := setTrans2Cpu
 
   switch(rAXIState){
     is(sAXIIdle){
@@ -136,6 +150,8 @@ class TransplantBRAM(thidN: Int) extends Module {
         // only increase burst is supported.
         assert(S_AXI.ar.arburst === 1.U)
         rAXIState := sAXIReading
+
+        thid := S_AXI.ar.araddr(addrW-1, log2Ceil(TRANS_STATE_THID_MAX_BYTES))
       }.elsewhen(S_AXI.aw.fire){
         // rAXIID := S_AXI.aw.awid
         rAXIAddr := S_AXI.aw.awaddr
@@ -144,6 +160,8 @@ class TransplantBRAM(thidN: Int) extends Module {
         rAXIAddrStep := S_AXI.aw.awsize
         assert(S_AXI.aw.awburst === 1.U)
         rAXIState := sAXIWriting
+
+        thid := S_AXI.aw.awaddr(addrW-1, log2Ceil(TRANS_STATE_THID_MAX_BYTES))
       }
     }
     is(sAXIReading){
@@ -167,20 +185,20 @@ class TransplantBRAM(thidN: Int) extends Module {
     }
     is(sAXIReadWaitComplete){ // wait for the last read transactions to be complete
       when(S_AXI.r.fire){
-        doneB2H := true.B
+        clearTrans2Host := 1.U << thid
         rAXIState := sAXIIdle
       }
     }
     is(sAXIWriteResponse){
       when(S_AXI.b.fire){
-        startB2C := true.B
+        setTrans2Cpu := 1.U << thid
         rAXIState := sAXIIdle
       }
     }
   }
 
   // BRAM port
-  uBRAM.portA.ADDR := rAXIAddr >> 6
+  uBRAM.portA.ADDR := rAXIAddr >> log2Ceil(BLOCK_SZ/8)
   uBRAM.portA.DI := S_AXI.w.wdata
   when(rAXIState === sAXIReading){
     uBRAM.portA.EN := true.B
@@ -219,19 +237,16 @@ class TransplantBRAM(thidN: Int) extends Module {
 
 
   // ---------------------- CPU -------------------------
-  val ports = IO(new TransBRAM2CpuIO(thidN))
-  val rdPort = ports.rd
-  val wrPort = ports.wr
 
   // Register read port. It has the 2nd priority.
   val rRdBias = RegEnable(rdPort.xreg.req.bits.regIdx(2, 0), rdPort.xreg.req.fire)
-  rdPort.xreg.req.ready := ports.wr.pstate.req.ready && !ports.wr.pstate.req.valid
+  rdPort.xreg.req.ready := wrPort.pstate.req.ready && !wrPort.pstate.req.valid
   rdPort.pstate.req.ready := rdPort.xreg.req.ready && !rdPort.xreg.req.valid
   // This port is for the normal register writing.
   wrPort.xreg.req.ready := rdPort.pstate.req.ready && !rdPort.pstate.req.valid
   wrPort.pstate.req.ready := true.B
  
-  rdPort.xreg.resp := uBRAM.portB.DO >> (rRdBias * 64.U)
+  rdPort.xreg.resp := uBRAM.portB.DO >> (rRdBias * BYTES_PER_BLOCK.U)
   rdPort.pstate.resp := bramBlockUnpackPState(uBRAM.portB.DO)
 
   // determine the BRAM address
@@ -279,9 +294,9 @@ class TransplantBRAM(thidN: Int) extends Module {
   }
 }
 
-object TransplantBRAMVerilogEmitter extends App {
+object TransBram2HostUnitVerilogEmitter extends App {
   import chisel3.stage.ChiselStage
 
   val c = new ChiselStage;
-  c.emitVerilog(new TransplantBRAM(128))
+  c.emitVerilog(new TransBram2HostUnit(128))
 }
