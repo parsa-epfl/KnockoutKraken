@@ -68,6 +68,32 @@ object ExtraUtils {
 
 }
 
+
+/* If both set and clear are risen, it clears the register
+ */
+class SetClearReg(val width: Int) extends Module {
+  val io = IO(new Bundle {
+    val set = Input(UInt(width.W))
+    val clear = Input(UInt(width.W))
+    val value = Output(UInt(width.W))
+  })
+  val reg = RegInit(0.U(width.W))
+  reg := (reg | io.set) & (~io.clear)
+  io.value := reg
+}
+
+object SetClearReg {
+  def apply(width: Int) = {
+    val set = WireInit(0.U(width.W))
+    val clear = WireInit(0.U(width.W))
+    val reg = Module(new SetClearReg(width))
+    reg.io.set := set
+    reg.io.clear := clear
+    
+    (reg.io.value, set, clear)
+  }
+}
+
 /** An I/O Bundle for FlushReg (FlushRegister)
   * @params gen The type of data of the Reg
   */

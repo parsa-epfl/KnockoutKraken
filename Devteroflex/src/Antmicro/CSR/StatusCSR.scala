@@ -45,3 +45,21 @@ object StatusCSR{
     csr.io.value := status
   }
 }
+
+object StatusVecCSR {
+  def apply(vec: Vec[UInt], bus: CSRBusBundle, dataWidth: Int) = {
+    val csrVec = Module(new StatusVecCSR(vec.size, dataWidth))
+    csrVec.io.vec := vec
+    csrVec.io.bus := bus 
+  }
+}
+
+class StatusVecCSR(regCount: Int, dataWidth: Int) extends Module {
+  val io = IO(new Bundle {
+    val bus = Flipped(new CSRBusBundle(dataWidth, regCount))
+    val vec = Input(Vec(regCount, UInt(dataWidth.W)))
+  })
+
+  val data = WireInit(0.U(dataWidth.W))
+  io.bus.dataIn := io.vec(io.bus.addr)
+}
