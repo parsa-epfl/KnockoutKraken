@@ -122,7 +122,7 @@ TEST_CASE("basic-transplant-with-initial-page-fault"){
   uint32_t asid = GET_asid(th);
 
   // initialization.
-  transplantRegisterAndPush(&c, th, asid, &state);
+  transplantPushAndWait(&c, th, asid, &state);
   mmuRegisterTHID2ASID(&c, th, asid);
   transplantStart(&c, th);
 
@@ -196,7 +196,7 @@ TEST_CASE("execute-instruction-with-context-in-dram"){
 
   // prepare for transplant.
   INFO("Transplant state to FPGA");
-  REQUIRE(transplantRegisterAndPush(&c, thid, asid, &state) == 0);
+  REQUIRE(transplantPushAndWait(&c, thid, asid, &state) == 0);
 
   // start execution
   INFO("Start execution");
@@ -282,7 +282,7 @@ TEST_CASE("execute-instruction") {
   INFO("Transplant state to FPGA");
   uint32_t thid = 3;
   uint32_t asid = GET_asid(thid);
-  REQUIRE(transplantRegisterAndPush(&c, thid, asid, &state) == 0);
+  REQUIRE(transplantPushAndWait(&c, thid, asid, &state) == 0);
 
   // start execution
   INFO("Start execution");

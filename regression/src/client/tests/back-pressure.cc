@@ -74,7 +74,7 @@ static int test_stress_memory(
       curr_ld_page_vaddr[thid], 
       curr_st_page_vaddr[thid]);
     state[thid].pc = safeCheckTransplants ? pc : pc+4;
-    transplantRegisterAndPush(ctx, thid, asid[thid], &state[thid]);
+    transplantPushAndWait(ctx, thid, asid[thid], &state[thid]);
   }
 
   INFO("- Push Instruction Pages to each thread");
@@ -116,7 +116,7 @@ static int test_stress_memory(
 
   INFO("- Start programs");
   for(uint32_t thid = 0; thid < thidN; thid++) {
-   transplantRegisterAndPush(ctx, thid, asid[thid], &state[thid]);
+   transplantPushAndWait(ctx, thid, asid[thid], &state[thid]);
    REQUIRE(transplantStart(ctx, thid) == 0);
   }
 

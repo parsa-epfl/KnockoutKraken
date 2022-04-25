@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     for(int thread = 0; thread < threads; thread++) {
         initArchState(&state, thread << 12);
         initState_infinite_loop(&state, true);
-        transplantRegisterAndPush(&ctx, thread, thread, &state);
+        transplantPushAndWait(&ctx, thread, thread, &state);
         MessageFPGA pf_reply;
         makeMissReply(INST_FETCH, -1, thread, state.pc, paddr, &pf_reply);
         mmuMsgSend(&ctx, &pf_reply);

@@ -30,7 +30,7 @@ TEST_CASE("host-cmd-stop-cpu") {
     mmuMsgSend(&ctx, &pf_reply);
 
     INFO("Push state");
-    transplantRegisterAndPush(&ctx, 0, asid, &state);
+    transplantPushAndWait(&ctx, 0, asid, &state);
 
     INFO("Advance");
     advanceTicks(&ctx, 100);
@@ -77,7 +77,7 @@ TEST_CASE("host-cmd-force-transplant") {
     fclose(f);
 
     INFO("Push state");
-    transplantRegisterAndPush(&ctx, 0, asid, &state);
+    transplantPushAndWait(&ctx, 0, asid, &state);
 
     INFO("Advance");
     advanceTicks(&ctx, 100);
@@ -129,9 +129,9 @@ TEST_CASE("host-cmd-singlestep") {
     mmuMsgSend(&ctx, &pf_reply);
 
     INFO("Push state");
-    transplantRegisterAndPush(&ctx, 0, asid, &state);
+    transplantPushAndWait(&ctx, 0, asid, &state);
     INFO("Push state");
-    transplantRegisterAndPush(&ctx, 1, asid, &state);
+    transplantPushAndWait(&ctx, 1, asid, &state);
 
     INFO("Setup stop CPU");
     transplantStopCPU(&ctx, 0);
@@ -194,7 +194,7 @@ TEST_CASE("check-flag-undef") {
     mmuMsgSend(&ctx, &pf_reply);
 
     INFO("Push state");
-    transplantRegisterAndPush(&ctx, 0, asid, &state);
+    transplantPushAndWait(&ctx, 0, asid, &state);
 
     INFO("Start Execution");
     transplantStart(&ctx, 0); 
@@ -239,7 +239,7 @@ TEST_CASE("check-flag-transplant") {
     mmuMsgSend(&ctx, &pf_reply);
 
     INFO("Push state");
-    transplantRegisterAndPush(&ctx, 0, asid, &state);
+    transplantPushAndWait(&ctx, 0, asid, &state);
 
     INFO("Start Execution");
     transplantStart(&ctx, 0); 
@@ -284,7 +284,7 @@ TEST_CASE("check-icount-budget") {
 
     INFO("Push state");
     state.icountBudget = 100;
-    transplantRegisterAndPush(&ctx, 0, asid, &state);
+    transplantPushAndWait(&ctx, 0, asid, &state);
 
     INFO("Advance");
     advanceTicks(&ctx, 100);

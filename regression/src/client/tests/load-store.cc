@@ -55,7 +55,7 @@ static void step_ldst_all_sizes_pair_load(FPGAContext *ctx,
                                           uint64_t exp1, uint64_t exp2) {
   uint32_t pending_threads;
   INFO("Push thread and start");
-  transplantRegisterAndPush(ctx, thid, asid, state);
+  transplantPushAndWait(ctx, thid, asid, state);
   REQUIRE(transplantStart(ctx, thid) == 0);
   INFO("Wait for transplant and fetch")
   transplantWaitTillPending(ctx, &pending_threads);
@@ -204,7 +204,7 @@ TEST_CASE("out-of-page-bound-pair-load") {
   fclose(f);
 
   INFO("- Start execution");
-  REQUIRE(transplantRegisterAndPush(&ctx, thid, asid, &state) == 0);
+  REQUIRE(transplantPushAndWait(&ctx, thid, asid, &state) == 0);
   REQUIRE(transplantStart(&ctx, thid) == 0);
 
   // FPGA requires instruction page.
@@ -307,7 +307,7 @@ TEST_CASE("ldr-wback-addr") {
     mmuMsgSend(&ctx, &pf_reply);
 
     INFO("Push state");
-    transplantRegisterAndPush(&ctx, 0, asid, &state);
+    transplantPushAndWait(&ctx, 0, asid, &state);
 
     INFO("Start Execution");
     transplantStart(&ctx, 0); 

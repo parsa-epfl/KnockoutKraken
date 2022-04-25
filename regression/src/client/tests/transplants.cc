@@ -47,7 +47,7 @@ TEST_CASE("transplant-transplants") {
 
   // ---- Push thread state
   INFO("Push state and register asid")
-  transplantRegisterAndPush(&c, th, asid, &state);
+  transplantPushAndWait(&c, th, asid, &state);
 
   // ---- Assert that correct state is was pushed
   INFO("Assert state is identical after pushing")

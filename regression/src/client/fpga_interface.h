@@ -187,11 +187,11 @@ int dramPagePull(const FPGAContext *c, uint64_t paddr, void *page);
 #define TRANS_STATE_SIZE_BYTES      (320)   // 5 512-bit blocks; State fits in this amount of bytes
 #define TRANS_STATE_THID_MAX_BYTES  (512)   // 8 512-bit blocks; max bytes allocated per thread
 #define TRANS_STATE_THID_MAX_REGS   (512/8) // 64 64-bit words: total regs allocated per thread
-int transplantRegisterAndPush(const FPGAContext *c, uint32_t thid, uint32_t asid, DevteroflexArchState *state);
+int transplantPushAndWait(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state);
 int transplantUnregisterAndPull(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state);
 int transplantGetState(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state);
 int transplantPushState(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state);
-int transplantSinglestep(const FPGAContext *c, uint32_t thid, uint32_t asid, DevteroflexArchState *state);
+int transplantSinglestep(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state);
 int transplantPending(const FPGAContext *c, uint32_t *pending_threads);
 int transplantFreePending(const FPGAContext *c, uint32_t pending_threads);
 int transplantWaitTillPending(const FPGAContext *c, uint32_t *pending_threads);

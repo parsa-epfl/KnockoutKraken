@@ -22,10 +22,9 @@
  * @note associate with S_AXIL_TT
  * @note pairing a thread id with 0 asid means translanting back since no asid in a system will be zero.
  */
-int mmuRegisterTHID2ASID(const FPGAContext *c, uint32_t thid,
-                              uint32_t asid) {
+int mmuRegisterTHID2ASID(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state) {
   assert(thid < 128 && "The maximum number of supported thread is 128.");
-  return writeAXIL(c, BASE_ADDR_BIND_ASID_THID + thid * 4, asid);
+  return writeAXIL(c, BASE_ADDR_BIND_ASID_THID + thid * 4, state->asid);
 }
 
 /**
@@ -39,9 +38,9 @@ int mmuRegisterTHID2ASID(const FPGAContext *c, uint32_t thid,
  * 
  * @note this function will not start the transplant but only bind.
  */
-int transplantRegisterAndPush(const FPGAContext *c, uint32_t thid, uint32_t asid, DevteroflexArchState *state) {
+int transplantPushAndWait(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state) {
   // 1. register thread id.
-  int res = mmuRegisterTHID2ASID(c, thid, asid);
+  int res = mmuRegisterTHID2ASID(c, thid, state->asid);
   if(res != 0) return res;
   // 2. push the state.
   res = transplantPushState(c, thid, state);
@@ -68,9 +67,9 @@ int transplantUnregisterAndPull(const FPGAContext *c, uint32_t thid, Devteroflex
   return res;
 }
 
-int transplantSinglestep(const FPGAContext *c, uint32_t thid, uint32_t asid, DevteroflexArchState *state) {
+int transplantSinglestep(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state) {
   int res = 0;
-  res |= transplantRegisterAndPush(c, thid, asid, state);
+  res |= transplantPushAndWait(c, thid, asid, state);
   res |= transplantStopCPU(c, thid);
   res |= transplantStart(c, thid);
   return res;
