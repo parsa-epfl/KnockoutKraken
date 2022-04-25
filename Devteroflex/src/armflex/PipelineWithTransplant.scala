@@ -40,9 +40,11 @@ class PipelineParams(
 import antmicro.Bus.AXI4Lite
 
 class PipelineWithCSR(params: PipelineParams) extends Module {
-  private val uCSRthid2asid = Module(new CSR_thid2asid(params.thidN, params.asidW, thid2asidPortsN = 2))
-  val S_CSR_TreadTable = IO(Flipped(uCSRthid2asid.bus.cloneType))
-  S_CSR_TreadTable <> uCSRthid2asid.bus
+  // TODO: Not used anyways as we rely on another mechanism, we could remove this
+  private val uCSRVecAsid = Module(new StatusVecCSR(params.thidN, params.axiDataW))
+  val S_CSR_ThreadTable = IO(Flipped(uCSRVecAsid.io.bus.cloneType))
+  S_CSR_ThreadTable <> uCSRVecAsid.io.bus
+  uCSRVecAsid.io.vec := 0.U.asTypeOf(uCSRVecAsid.io.vec.cloneType)
 
   val pipeline = Module(new PipelineWithTransplant(params))
   val S_CSR_Pipeline = IO(Flipped(pipeline.hostIO.S_CSR.cloneType))

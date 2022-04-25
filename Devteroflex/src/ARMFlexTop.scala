@@ -132,7 +132,7 @@ class ARMFlexTop(
     new CSRBusSlaveConfig(0x200, 4)
   ), (0, 0x300)))
   uCSRMux.masterBus <> uAXIL2CSR.io.bus
-  uCSRMux.slavesBus(0) <> u_pipeline.S_CSR_TreadTable
+  uCSRMux.slavesBus(0) <> u_pipeline.S_CSR_ThreadTable
   uCSRMux.slavesBus(1) <> u_pipeline.S_CSR_Pipeline
   uCSRMux.slavesBus(2) <> memory.S_CSR
 
