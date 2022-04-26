@@ -13,14 +13,13 @@ import antmicro.CSR._
 
 object TransplantIO extends Bundle {
   class Trans2CPU(val thidN: Int) extends Bundle { // Push state back to CPU
-    val thread = Output(UInt(log2Ceil(thidN).W))
     // This port is used for state synchronization.
     val rfile_wr = Flipped(new RFileIO.WRPort(thidN))
     // This port is used to commit pstate. (Using this.thread to index thread.)
     val pstate = Output(Valid(new PStateRegs))
 
     // This port is used to restart a thread?
-    val start = Output(Bool())
+    val start = Output(Valid(UInt(log2Ceil(thidN).W)))
 
     // If this signal is true, the pipeline should be stalled, and no instruction will move forward.
     val stallPipeline = Output(Bool())
@@ -123,15 +122,14 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
   setCpu2Trans := setCpu2TransCpuDone | setCpu2TransHostForce
 
 
-  private val startThread = WireInit(0.U(thidN.W))
+  private val startThread = WireInit(0.U(log2Ceil(thidN).W))
+  private val sendStart = WireInit(false.B)
   // uCSR[4]: Transplant waiting for start signal
   val (rStartingCpu, setStartingCpu, clearStartingCpu) = SetClearReg(thidN)
   val (rWaitStartCpu, setWaitStartCpu, clearWaitStartCpu) = SetClearReg(thidN)
   StatusCSR(rWaitStartCpu, uCSR.io.csr(TRANS_REG_OFFST_WAITING), thidN)
   // uCSR[0]: Start a waiting thread
-  setStartingCpu := PulseCSR(uCSR.io.csr(TRANS_REG_OFFST_START), thidN)
-  clearStartingCpu := startThread
-  clearWaitStartCpu := startThread
+  setStartingCpu := PulseCSR(uCSR.io.csr(TRANS_REG_OFFST_START), thidN) & rWaitStartCpu
 
   // The state machine of copying data.
   // BRAM to CPU (B2C): Copy all registers, and then copy the PState
@@ -146,16 +144,24 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
   private val doneTransplantNextCycle = WireInit(false.B)
   private val doneTransplant = RegNext(doneTransplantNextCycle)
   when(doneTransplant) {
+    startThread := rSyncThread
     when(trans2cpu.pstate.bits.flags.execMode === PSTATE_FLAGS_EXECUTE_WAIT.U) {
-      setWaitStartCpu := 1.U << trans2cpu.thread
+      setWaitStartCpu := 1.U << startThread
     }.elsewhen(trans2cpu.pstate.bits.flags.execMode === PSTATE_FLAGS_EXECUTE_NORMAL.U) {
-      startThread := 1.U << trans2cpu.thread
+      sendStart := true.B
+      clearStartingCpu := 1.U << startThread
+      clearWaitStartCpu := 1.U << startThread
     }.elsewhen(trans2cpu.pstate.bits.flags.execMode === PSTATE_FLAGS_EXECUTE_SINGLESTEP.U) {
-      setStopCpuTrans := 1.U << trans2cpu.thread
-      startThread := 1.U << trans2cpu.thread
+      sendStart := true.B
+      setStopCpuTrans := 1.U << startThread
+      clearStartingCpu := 1.U << startThread
+      clearWaitStartCpu := 1.U << startThread
     }
   }.elsewhen(rStartingCpu.orR) {
-    startThread := 1.U << PriorityEncoder(rStartingCpu)
+    startThread := PriorityEncoder(rStartingCpu)
+    clearStartingCpu := 1.U << startThread
+    clearWaitStartCpu := 1.U << startThread
+    sendStart := true.B
   }
 
   switch(rSyncState){
@@ -238,8 +244,8 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
   trans2cpu.busyTrans2Cpu := rSyncState === sTSyncingB2CXReg || rSyncState === sTSyncingB2CPState
 
   // Restart a thread after transfer is done.
-  trans2cpu.thread := rSyncThread
-  trans2cpu.start := startThread.orR
+  trans2cpu.start.bits := startThread
+  trans2cpu.start.valid := sendStart
 
 
   if (true) { // TODO Conditional assertions

@@ -111,7 +111,7 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   archstate.pstateIO.commit <> pipeline.archstate.commit
 
   // Update State - Highjack commit ports from pipeline
-  archstate.pstateIO.transplant.thread := transplantU.trans2cpu.thread
+  archstate.pstateIO.transplant.thread := transplantU.trans2cpu.start.bits
   
   pipeline.archstate.commit.ready := archstate.pstateIO.commit.ready && 
                                     !transplantU.trans2cpu.stallPipeline && 
@@ -133,7 +133,7 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   when(transplantU.trans2cpu.pstate.valid) {
     // PState is from the pipeline.
     archstate.pstateIO.commit.fire := true.B
-    archstate.pstateIO.commit.tag := transplantU.trans2cpu.thread
+    archstate.pstateIO.commit.tag := transplantU.trans2cpu.start.bits
     archstate.pstateIO.commit.pstate.next := transplantU.trans2cpu.pstate.bits
     archstate.pstateIO.commit.isTransplantUnit := true.B
     archstate.pstateIO.commit.isCommitUnit := false.B
@@ -146,8 +146,8 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
 
   transplantU.cpu2trans.rfile_wr <> pipeline.archstate.commit.wr
   transplantU.cpu2trans.doneCPU := pipeline.transplantIO.done
-  pipeline.transplantIO.start.valid := transplantU.trans2cpu.start
-  pipeline.transplantIO.start.tag := transplantU.trans2cpu.thread
+  pipeline.transplantIO.start.valid := transplantU.trans2cpu.start.valid
+  pipeline.transplantIO.start.tag := transplantU.trans2cpu.start.bits
   pipeline.transplantIO.start.bits.get := transplantU.trans2cpu.pstate.bits.PC
   // Transplant from Host
   transplantU.S_CSR <> hostIO.S_CSR
@@ -197,8 +197,8 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
     dbg.bits.get.commit.tag := RegNext(pipeline.archstate.commit.tag)
     dbg.bits.get.commit.valid := RegNext(pipeline.archstate.commit.fire)
     dbg.bits.get.commitIsTransplant := RegNext(pipeline.transplantIO.done.valid)
-    dbg.bits.get.transplant.valid := transplantU.trans2cpu.start
-    dbg.bits.get.transplant.tag := transplantU.trans2cpu.thread
+    dbg.bits.get.transplant.valid := transplantU.trans2cpu.start.valid
+    dbg.bits.get.transplant.tag := transplantU.trans2cpu.start.bits
   }
   // */
 }

@@ -16,15 +16,19 @@ object CSRDrivers {
       target.write.poke(false.B)
     }
     def readReg(addr: BigInt): BigInt = {
-      target.addr.poke(addr.U)
-      target.dataOut.poke(0.U)
-      target.read.poke(true.B)
-      target.write.poke(false.B)
-      clock.step()
-      target.dataIn.peek().litValue
+      var resp: BigInt = 0
+      timescope {
+        target.addr.poke(addr.U)
+        target.dataOut.poke(0.U)
+        target.read.poke(true.B)
+        target.write.poke(false.B)
+        clock.step()
+        resp = target.dataIn.peek().litValue
+      }
+      resp
     }
 
-    def writeReg(addr: BigInt, value: BigInt): Unit = {
+    def writeReg(addr: BigInt, value: BigInt): Unit = timescope {
       target.addr.poke(addr.U)
       target.dataOut.poke(value.U)
       target.read.poke(false.B)
