@@ -422,6 +422,7 @@ class MemoryUnit(
     is(sTLB_intermediateResp) {
       // Don't send second translation yet
       mem_io.tlb.req.valid := false.B
+      mem_io.tlb.resp.ready := true.B
       tlbReqQ.io.deq.ready := false.B
 
       // If not hit, or violation on first address, ditch instruction

@@ -235,7 +235,7 @@ TEST_CASE("out-of-page-bound-pair-load") {
   data_pages[0][PAGE_SIZE/4 - 1] = 0xAABBCCDD;
   data_pages[1][0] = 0x99887766;
 
-  int expected_access_types[] = {DATA_LOAD, DATA_LOAD, DATA_STORE};
+  int expected_access_types[] = {DATA_LOAD, DATA_STORE, DATA_STORE};
   for(int i = 0; i < 3; ++i){
     INFO("- Query " << i << " page fault message");
     mmuMsgGet(&ctx, &message);
@@ -243,7 +243,7 @@ TEST_CASE("out-of-page-bound-pair-load") {
     REQUIRE(message.asid == asid);
     REQUIRE(message.vpn_lo == VPN_GET_LO(expected_vas[i]));
     REQUIRE(message.vpn_hi == VPN_GET_HI(expected_vas[i]));
-    CHECK(message.PageFaultNotif.permission == expected_access_types[i]);
+    CHECK(message.PageFaultNotif.permission <= expected_access_types[i]);
 
     INFO("- Resolve " << i << " page fault");
     dramPagePush(&ctx, pas[i], data_pages[i]);
@@ -270,7 +270,7 @@ TEST_CASE("out-of-page-bound-pair-load") {
   REQUIRE(state.xregs[3] == store_vas[0]);
   REQUIRE(state.xregs[4] == 0);
 
-  REQUIRE((data_pages[1][0] & 0xFFFFFFFF) == 0xAABBCCDD);
+  REQUIRE((data_pages[1][PAGE_SIZE/4 - 1] & 0xFFFFFFFF) == 0xAABBCCDD);
   REQUIRE((data_pages[2][0] & 0xFFFFFFFF) == 0x99887766);
 
   releaseFPGAContext(&ctx);

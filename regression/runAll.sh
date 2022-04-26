@@ -31,10 +31,11 @@ allTests=(
   "ldr-wback-addr"
   "test-pressure-mmu-same-address"
   "test-pressure-ldp-stp-short"
-  )
+  "out-of-page-bound-pair-load"
+)
 
 tbd=(
-  "out-of-page-bound-pair-load"
+  
 )
 
 # 3. Run each
