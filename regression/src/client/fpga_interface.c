@@ -14,20 +14,6 @@
  */
 
 /**
- * Bind a thread id with process id.
- * @param thid the given thread id.
- * @param asid the process id. 
- * @returns 0 if successful.
- *
- * @note associate with S_AXIL_TT
- * @note pairing a thread id with 0 asid means translanting back since no asid in a system will be zero.
- */
-int mmuRegisterTHID2ASID(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state) {
-  assert(thid < 128 && "The maximum number of supported thread is 128.");
-  return writeAXIL(c, BASE_ADDR_BIND_ASID_THID + thid * 4, state->asid);
-}
-
-/**
  * Push the context of specific thread to the FPGA.
  * 
  * @param thid the thread if that this thread will be bind to.
@@ -39,39 +25,20 @@ int mmuRegisterTHID2ASID(const FPGAContext *c, uint32_t thid, DevteroflexArchSta
  * @note this function will not start the transplant but only bind.
  */
 int transplantPushAndWait(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state) {
-  // 1. register thread id.
-  int res = mmuRegisterTHID2ASID(c, thid, state->asid);
-  if(res != 0) return res;
-  // 2. push the state.
-  res = transplantPushState(c, thid, state);
+  FLAGS_SET_EXEC_MODE(state->flags, PSTATE_FLAGS_EXECUTE_WAIT);
+  int res = transplantPushState(c, thid, state);
   return res;
 }
 
-/**
- * Transplant a thread back from the FPGA and load its context.
- * 
- * @param thid the thread that should be transplanted.
- * @param state the state registers of the thread.
- * 
- * @returns 0 if successful.
- * 
- * @note Please make sure that target thread must be ready to be transplanted back. Unknown case will be happened if thread is still working.
- * FIXME: Add mechanism to stop the execution of that thread on FPGA
- */
-int transplantUnregisterAndPull(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state) {
-  // 1. unregister thread id.
-  int res = mmuRegisterTHID2ASID(c, thid, 0);
-  if(res != 0) return res;
-  // 2. Read staste.
-  res = transplantGetState(c, thid, state);
+int transplantPushAndStart(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state) {
+  FLAGS_SET_EXEC_MODE(state->flags, PSTATE_FLAGS_EXECUTE_NORMAL);
+  int res = transplantPushState(c, thid, state);
   return res;
 }
 
-int transplantSinglestep(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state) {
-  int res = 0;
-  res |= transplantPushAndWait(c, thid, asid, state);
-  res |= transplantStopCPU(c, thid);
-  res |= transplantStart(c, thid);
+int transplantPushAndSinglestep(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state) {
+  FLAGS_SET_EXEC_MODE(state->flags, PSTATE_FLAGS_EXECUTE_SINGLESTEP);
+  int res = transplantPushState(c, thid, state);
   return res;
 }
 
@@ -94,7 +61,6 @@ int transplantWaitTillPending(const FPGAContext *c, uint32_t *pending_threads) {
     if(transplantPending(c, &pending)) return -1;
     usleep(1e5);
   }
-  transplantFreePending(c, pending);
   *pending_threads = pending;
 #ifndef AWS_FPGA
   printf("Pending Threads[%x]\n", pending);
@@ -107,11 +73,19 @@ int transplantPending(const FPGAContext *c, uint32_t *pending_threads) {
   return readAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRANS_REG_OFFST_PENDING, pending_threads);
 }
 
-int transplantFreePending(const FPGAContext *c, uint32_t pending_threads) {
-  return writeAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRANS_REG_OFFST_FREE_PENDING, pending_threads);
+int transplantFreePending(const FPGAContext *c, uint32_t free_pending_threads) {
+  // We made it such as the AXI transaction frees the Pending bit instead of the HOST
+  uint32_t pending_threads;
+  int ret = readAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRANS_REG_OFFST_PENDING, &pending_threads);
+  assert((pending_threads & free_pending_threads) == 0);
+  return 0;
 }
 
 int transplantStart(const FPGAContext *c, uint32_t thid) {
+  uint32_t waiting_threads = 0;
+  do {
+    readAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRANS_REG_OFFST_WAITING, &waiting_threads);
+  } while(!(waiting_threads & (1 << thid)));
   return writeAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRANS_REG_OFFST_START, 1 << thid);
 }
 

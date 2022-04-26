@@ -13,6 +13,7 @@ import antmicro.CSR._
 
 object TransplantIO extends Bundle {
   class Trans2CPU(val thidN: Int) extends Bundle { // Push state back to CPU
+    val thid = Output(UInt(log2Ceil(thidN).W))
     // This port is used for state synchronization.
     val rfile_wr = Flipped(new RFileIO.WRPort(thidN))
     // This port is used to commit pstate. (Using this.thread to index thread.)
@@ -67,10 +68,10 @@ class TransplantUnit(thidN: Int) extends Module {
   private val uTransBram2HostUnit = Module(new TransBram2HostUnit(thidN))
   uCpu2TransBRAM.transBram2Cpu <> uTransBram2HostUnit.transBram2Cpu
 
-  val S_CSR = IO(Flipped(uCpu2TransBRAM.S_CSR))
+  val S_CSR = IO(Flipped(uCpu2TransBRAM.S_CSR.cloneType))
   S_CSR <> uCpu2TransBRAM.S_CSR
-  val cpu2trans = IO(uCpu2TransBRAM.cpu2trans)
-  val trans2cpu = IO(uCpu2TransBRAM.trans2cpu)
+  val cpu2trans = IO(uCpu2TransBRAM.cpu2trans.cloneType)
+  val trans2cpu = IO(uCpu2TransBRAM.trans2cpu.cloneType)
   cpu2trans <> uCpu2TransBRAM.cpu2trans
   trans2cpu <> uCpu2TransBRAM.trans2cpu
 
@@ -123,45 +124,48 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
 
 
   private val startThread = WireInit(0.U(log2Ceil(thidN).W))
-  private val sendStart = WireInit(false.B)
+  private val startSend = WireInit(false.B)
+  private val startingFromWaiting = WireInit(false.B)
   // uCSR[4]: Transplant waiting for start signal
   val (rStartingCpu, setStartingCpu, clearStartingCpu) = SetClearReg(thidN)
   val (rWaitStartCpu, setWaitStartCpu, clearWaitStartCpu) = SetClearReg(thidN)
   StatusCSR(rWaitStartCpu, uCSR.io.csr(TRANS_REG_OFFST_WAITING), thidN)
   // uCSR[0]: Start a waiting thread
-  setStartingCpu := PulseCSR(uCSR.io.csr(TRANS_REG_OFFST_START), thidN) & rWaitStartCpu
+  setStartingCpu := PulseCSR(uCSR.io.csr(TRANS_REG_OFFST_START), thidN) & rWaitStartCpu // It must be waiting to be started by host
 
   // The state machine of copying data.
   // BRAM to CPU (B2C): Copy all registers, and then copy the PState
   // CPU to BRAM (C2B): Just copy the PState
-  val sTIdle :: sTSyncingB2CXReg :: sTSyncingB2CPState :: sTSyncingC2BPState :: Nil = Enum(4)
+  val sTIdle :: sTSyncingB2CXReg :: sTSyncingB2CPState :: sTDoneB2C :: sTSyncingC2BPState :: sTDoneC2B :: Nil = Enum(6)
 
   val rSyncState = RegInit(sTIdle)
   val rCurrentSyncReg = RegInit(0.U(5.W)) // 64 places most for each thread.
   val rSyncThread = RegInit(0.U(log2Ceil(thidN).W))
 
   // Control starting of thread
-  private val doneTransplantNextCycle = WireInit(false.B)
-  private val doneTransplant = RegNext(doneTransplantNextCycle)
-  when(doneTransplant) {
+  // State has been fully written to ArchState module one cycle -> RegNext
+  private val doneB2C = RegNext(rSyncState === sTDoneB2C)
+  private val execModeB2C = RegEnable(trans2cpu.pstate.bits.flags.execMode, trans2cpu.pstate.valid)
+  when(doneB2C) {
     startThread := rSyncThread
-    when(trans2cpu.pstate.bits.flags.execMode === PSTATE_FLAGS_EXECUTE_WAIT.U) {
+    when(execModeB2C === PSTATE_FLAGS_EXECUTE_WAIT.U) {
       setWaitStartCpu := 1.U << startThread
-    }.elsewhen(trans2cpu.pstate.bits.flags.execMode === PSTATE_FLAGS_EXECUTE_NORMAL.U) {
-      sendStart := true.B
+    }.elsewhen(execModeB2C === PSTATE_FLAGS_EXECUTE_NORMAL.U) {
+      startSend := true.B
       clearStartingCpu := 1.U << startThread
       clearWaitStartCpu := 1.U << startThread
-    }.elsewhen(trans2cpu.pstate.bits.flags.execMode === PSTATE_FLAGS_EXECUTE_SINGLESTEP.U) {
-      sendStart := true.B
+    }.elsewhen(execModeB2C === PSTATE_FLAGS_EXECUTE_SINGLESTEP.U) {
+      startSend := true.B
       setStopCpuTrans := 1.U << startThread
       clearStartingCpu := 1.U << startThread
       clearWaitStartCpu := 1.U << startThread
     }
   }.elsewhen(rStartingCpu.orR) {
     startThread := PriorityEncoder(rStartingCpu)
+    startSend := true.B
+    startingFromWaiting := true.B
     clearStartingCpu := 1.U << startThread
     clearWaitStartCpu := 1.U << startThread
-    sendStart := true.B
   }
 
   switch(rSyncState){
@@ -178,6 +182,7 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
       }
     }
 
+    // ---- B2C -----
     // Can only write a single register at a time
     is(sTSyncingB2CXReg){
       rCurrentSyncReg := rCurrentSyncReg + 1.U
@@ -188,13 +193,21 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
 
     // PState fits in a single 512-bit block transaction 
     is(sTSyncingB2CPState) { 
+      rSyncState := sTDoneB2C
+    }
+
+    is(sTDoneB2C) {
       // Clear Trans2Cpu
       clearTrans2Cpu := 1.U << rSyncThread
-      doneTransplantNextCycle := true.B
       rSyncState := sTIdle 
     }
 
+    // ---- C2B -----
     is(sTSyncingC2BPState) { 
+      rSyncState := sTDoneC2B
+    }
+
+    is(sTDoneC2B) {
       // Clear Cpu2Trans, Set Trans2Host
       clearCpu2Trans := 1.U << rSyncThread
       setTrans2Host := 1.U << rSyncThread
@@ -244,9 +257,10 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
   trans2cpu.busyTrans2Cpu := rSyncState === sTSyncingB2CXReg || rSyncState === sTSyncingB2CPState
 
   // Restart a thread after transfer is done.
+  trans2cpu.thid := Mux(startingFromWaiting, startThread, rSyncThread)
+  // Send the start signal once the trans2cpu has completed
   trans2cpu.start.bits := startThread
-  trans2cpu.start.valid := sendStart
-
+  trans2cpu.start.valid := startSend
 
   if (true) { // TODO Conditional assertions
     when(rSyncState === sTSyncingB2CXReg) {
@@ -255,11 +269,8 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
     when(rSyncState === sTSyncingB2CPState) {
       assert(transBram2Cpu.rd.pstate.req.ready, "BRAM must be ready to receive transactions when interacting with it: pushing PState")
     }
-    when(rSyncState ===sTSyncingC2BPState) {
+    when(rSyncState === sTSyncingC2BPState) {
       assert(transBram2Cpu.wr.pstate.req.ready, "BRAM must be ready to receive transactions when interacting with it: pulling PState")
-    }
-    when(doneTransplant) {
-      assert(trans2cpu.pstate.valid, "Pushing PState should be the cycle that starts executing")
     }
   }
 }

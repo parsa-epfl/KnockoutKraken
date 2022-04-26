@@ -67,7 +67,7 @@ class Cpu2TransUnitTest extends AnyFreeSpec with ChiselScalatestTester {
   }
     "Send start without state available" in {
     test(new Cpu2TransBramUnitTestDriver(32)).withAnnotations(Seq(
-      VerilatorBackendAnnotation, TargetDirAnnotation("test/transplant/Cpu2TransTest/Wait"), 
+      VerilatorBackendAnnotation, TargetDirAnnotation("test/transplant/Cpu2TransTest/WaitNotEnabled"), 
       WriteVcdAnnotation)) {
         dut => 
           dut.init()
@@ -173,7 +173,11 @@ object TransplantUnitDrivers {
       target.transBram2Cpu.rd.pstate.req.ready.poke(true.B)
       target.transBram2Cpu.rd.pstate.req.valid.expect(true.B)
       clock.step()
+      target.trans2cpu.thid.expect(thid)
       target.trans2cpu.pstate.valid.expect(true.B)
+      clock.step()
+      target.trans2cpu.thid.expect(thid)
+      // Done state now
     }
 
     def startTransBram2Cpu(thid: Int, xregs: Seq[BigInt], pstate: PStateRegs) = {
@@ -181,7 +185,7 @@ object TransplantUnitDrivers {
       prepareTransResp(thid, xregs, pstate)
       setTrans2CpuStart(thid)
       expectTrans2CpuState(thid, xregs, pstate)
-      target.trans2cpu.start.bits.expect(thid.U)
+      target.trans2cpu.thid.expect(thid.U)
       if (pstate.flags.execMode.litValue == PSTATE_FLAGS_EXECUTE_WAIT) {
         clock.step()
         assert(target.S_CSR.readReg(TRANS_REG_OFFST_WAITING) == 1 << thid)

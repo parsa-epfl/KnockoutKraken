@@ -47,7 +47,8 @@ TEST_CASE("transplant-transplants") {
 
   // ---- Push thread state
   INFO("Push state and register asid")
-  transplantPushAndWait(&c, th, asid, &state);
+  state.asid = asid;
+  transplantPushAndWait(&c, th, &state);
 
   // ---- Assert that correct state is was pushed
   INFO("Assert state is identical after pushing")
@@ -77,7 +78,7 @@ TEST_CASE("transplant-transplants") {
   // ---- Assert that state was not modified
   // ---- Now assert no instruction was executed
   INFO("Bring back state")
-  transplantUnregisterAndPull(&c, th, &stateTransplant);
+  transplantGetState(&c, th, &stateTransplant);
   INFO("Assert state hasn't changed")
   requireStateIsIdentical(state, stateTransplant);
  

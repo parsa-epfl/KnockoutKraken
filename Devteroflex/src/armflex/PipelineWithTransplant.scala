@@ -79,15 +79,15 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   mem_io <> pipeline.mem_io
   mmu_io <> pipeline.mmu_io
   val archstate = Module(new ArchState(params.thidN, params.DebugSignals))
-  archstate.pstateIO.mem(0).thread := mem_io.inst.tlb.req.bits.asid
-  archstate.pstateIO.mem(1).thread := mem_io.data.tlb.req.bits.asid
+  archstate.pstateIO.mem(0).thid := mem_io.inst.tlb.req.bits.thid
+  archstate.pstateIO.mem(1).thid := mem_io.data.tlb.req.bits.thid
   mem_io.inst.tlb.req.bits.asid := archstate.pstateIO.mem(0).asid
   mem_io.data.tlb.req.bits.asid := archstate.pstateIO.mem(1).asid
 
   // -------- Pipeline ---------
   // Get state from Issue
   pipeline.archstate.issue.ready := true.B
-  pipeline.archstate.issue.sel.tag <> archstate.pstateIO.issue.thread
+  pipeline.archstate.issue.sel.tag <> archstate.pstateIO.issue.thid
   pipeline.archstate.issue.regs.curr <> archstate.pstateIO.issue.pstate
   pipeline.archstate.issue.rd <> archstate.rfile_rd
 
@@ -111,7 +111,6 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   archstate.pstateIO.commit <> pipeline.archstate.commit
 
   // Update State - Highjack commit ports from pipeline
-  archstate.pstateIO.transplant.thread := transplantU.trans2cpu.start.bits
   
   pipeline.archstate.commit.ready := archstate.pstateIO.commit.ready && 
                                     !transplantU.trans2cpu.stallPipeline && 
@@ -133,7 +132,7 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   when(transplantU.trans2cpu.pstate.valid) {
     // PState is from the pipeline.
     archstate.pstateIO.commit.fire := true.B
-    archstate.pstateIO.commit.tag := transplantU.trans2cpu.start.bits
+    archstate.pstateIO.commit.tag := transplantU.trans2cpu.thid
     archstate.pstateIO.commit.pstate.next := transplantU.trans2cpu.pstate.bits
     archstate.pstateIO.commit.isTransplantUnit := true.B
     archstate.pstateIO.commit.isCommitUnit := false.B
@@ -146,9 +145,13 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
 
   transplantU.cpu2trans.rfile_wr <> pipeline.archstate.commit.wr
   transplantU.cpu2trans.doneCPU := pipeline.transplantIO.done
+
+  archstate.pstateIO.transplant.thid := transplantU.trans2cpu.thid
+  // Wait for the PC to be available in archstate
   pipeline.transplantIO.start.valid := transplantU.trans2cpu.start.valid
   pipeline.transplantIO.start.tag := transplantU.trans2cpu.start.bits
-  pipeline.transplantIO.start.bits.get := transplantU.trans2cpu.pstate.bits.PC
+  pipeline.transplantIO.start.bits.get := archstate.pstateIO.transplant.pstate.PC
+
   // Transplant from Host
   transplantU.S_CSR <> hostIO.S_CSR
   transplantU.S_AXI <> hostIO.S_AXI

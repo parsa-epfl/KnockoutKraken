@@ -74,7 +74,8 @@ static int test_stress_memory(
       curr_ld_page_vaddr[thid], 
       curr_st_page_vaddr[thid]);
     state[thid].pc = safeCheckTransplants ? pc : pc+4;
-    transplantPushAndWait(ctx, thid, asid[thid], &state[thid]);
+    state[thid].asid = asid[thid];
+    transplantPushAndWait(ctx, thid, &state[thid]);
   }
 
   INFO("- Push Instruction Pages to each thread");
@@ -84,6 +85,9 @@ static int test_stress_memory(
     makeMissReply(INST_FETCH, -1, asid[thid], pc, page_inst_paddr, &pf_reply);
     mmuMsgSend(ctx, &pf_reply);
   }
+
+  INFO("Wait for Page Faults to complete");
+  advanceTicks(ctx, 200);
 
   uint32_t completed = 0;
   uint32_t pending_threads = 0;
@@ -98,7 +102,6 @@ static int test_stress_memory(
     while(completed != threadsMask) {
       transplantPending(ctx, &pending_threads);
       if(pending_threads)  {
-        transplantFreePending(ctx, pending_threads);
         completed |= pending_threads;
       }
       advanceTicks(ctx, 1000);
@@ -106,17 +109,20 @@ static int test_stress_memory(
     }
     INFO("Verify state and push back programs to start benchmark");
     for(uint32_t thid = 0; thid < thidN; thid++) {
-      transplantUnregisterAndPull(ctx, thid, &fetchedState);
+      transplantGetState(ctx, thid, &fetchedState);
       requireStateIsIdentical(fetchedState, state[thid]);
       state[thid].pc += 4;
+      transplantFreePending(ctx, 1 << thid);
     }
+
   } else {
     INFO("Skipped");
   }
 
   INFO("- Start programs");
   for(uint32_t thid = 0; thid < thidN; thid++) {
-   transplantPushAndWait(ctx, thid, asid[thid], &state[thid]);
+   state[thid].asid = asid[thid];
+   transplantPushAndWait(ctx, thid,  &state[thid]);
    REQUIRE(transplantStart(ctx, thid) == 0);
   }
 
@@ -129,7 +135,6 @@ static int test_stress_memory(
     transplantPending(ctx, &pending_threads);
     if(pending_threads)  {
       INFO("Detected pending transplants");
-      transplantFreePending(ctx, pending_threads);
       completed |= pending_threads;
       printf("Detected pending transplants: 0x%x, curr completed: 0x%x\n", pending_threads, completed);
     }

@@ -133,17 +133,17 @@ class RFileBRAM[T <: UInt](thidN: Int) extends Module {
 class PStateIO(val thidN: Int) extends Bundle {
   val commit = Flipped(new CommitArchStateIO(thidN))
   val transplant = new Bundle {
-    val thread = Input(UInt(log2Ceil(thidN).W))
+    val thid = Input(UInt(log2Ceil(thidN).W))
     val pstate = Output(new PStateRegs)
   }
   val forceTransplant = Input(UInt(thidN.W))
   val issue = new Bundle {
-    val thread = Input(UInt(log2Ceil(thidN).W))
+    val thid = Input(UInt(log2Ceil(thidN).W))
     val pstate = Output(new PStateRegs)
   }
   val mem = Vec(2, new Bundle {
-    val thread = Input(UInt(log2Ceil(thidN).W))
-    val asid = Output(new PStateRegs)
+    val thid = Input(UInt(log2Ceil(thidN).W))
+    val asid = Output(UInt(32.W))
   })
 }
 
@@ -159,11 +159,11 @@ class ArchState(thidN: Int, withDbg: Boolean) extends Module {
   private val pstateMem = Mem(thidN, new PStateRegs)
 
   // This could be further optimized by using 2 BRAMs instead
-  private val pstateMem_rd1 = pstateMem(pstateIO.issue.thread)    // Both of these can be optimized 
+  private val pstateMem_rd1 = pstateMem(pstateIO.issue.thid)    // Both of these can be optimized 
   private val pstateMem_rd2 = pstateMem(pstateIO.commit.tag) // by carring in the pipeline on fetch
-  private val pstateMem_rd3 = pstateMem(pstateIO.transplant.thread)
-  private val pstateMem_rd4_asid = pstateMem(pstateIO.mem(0).thread).asid
-  private val pstateMem_rd5_asid = pstateMem(pstateIO.mem(1).thread).asid
+  private val pstateMem_rd3 = pstateMem(pstateIO.transplant.thid)
+  private val pstateMem_rd4_asid = pstateMem(pstateIO.mem(0).thid).asid
+  private val pstateMem_rd5_asid = pstateMem(pstateIO.mem(1).thid).asid
   // pcMem_wr
   pstateIO.issue.pstate := pstateMem_rd1
   pstateIO.commit.pstate.curr := pstateMem_rd2
@@ -208,14 +208,14 @@ class ArchState(thidN: Int, withDbg: Boolean) extends Module {
     when(rfile.wr.en) {
       dbgRFile(wrAddr) := rfile.wr.data
     }
-    for(thread <- 0 until thidN) {
+    for(thid <- 0 until thidN) {
       for(reg <- 0 until REG_N) {
         // RegNext because BRAM has rd delay of 1
-        dbg.vecState.get(thread).rfile(reg) := dbgRFile(((thread << log2Ceil(REG_N))+reg).U)
+        dbg.vecState.get(thid).rfile(reg) := dbgRFile(((thid << log2Ceil(REG_N))+reg).U)
       }
-      pstateVec(thread) := pstateMem(thread)
-      dbg.vecState.get(thread).pc := pstateVec(thread).PC
-      dbg.vecState.get(thread).flags := pstateVec(thread).flags.asUInt
+      pstateVec(thid) := pstateMem(thid)
+      dbg.vecState.get(thid).pc := pstateVec(thid).PC
+      dbg.vecState.get(thid).flags := pstateVec(thid).flags.asUInt
     }
   }
 }
