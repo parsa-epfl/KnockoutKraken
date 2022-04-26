@@ -7,7 +7,7 @@ object Devteroflex extends ScalaPBModule {
   def scalaVersion = "2.13.8"
 
   override def ivyDeps = super.ivyDeps() ++ Agg(
-    ivy"edu.berkeley.cs::chisel3:3.5.1"
+    ivy"edu.berkeley.cs::chisel3:3.5.3"
   )
 
   override def scalacOptions = Seq(
@@ -18,7 +18,7 @@ object Devteroflex extends ScalaPBModule {
   )
 
   override def scalacPluginIvyDeps = Agg(
-    ivy"edu.berkeley.cs:::chisel3-plugin:3.5.1",
+    ivy"edu.berkeley.cs:::chisel3-plugin:3.5.3",
   )
 
   object test extends Tests {

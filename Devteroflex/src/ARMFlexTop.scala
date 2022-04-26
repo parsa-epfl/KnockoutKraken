@@ -253,6 +253,7 @@ object ARMFlexTopVerilogEmitter extends App {
   
   
   // renaming AXI wires
+  // TODO: With Chisel 3.5.3, I can change the AXI channels to FlatIO, and their name will disappear. 
   val processed_v = v.replaceAll("""([MS]_AXI[A-Z_]*_)(aw|w|b|r|ar)_""", "$1")
 
   val fr = new FileWriter(new File("fpga/ARMFlexTop.v"))
