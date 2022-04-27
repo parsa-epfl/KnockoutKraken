@@ -30,13 +30,8 @@ TEST_CASE("host-cmd-stop-cpu") {
     mmuMsgSend(&ctx, &pf_reply);
 
     INFO("Push state");
-    transplantRegisterAndPush(&ctx, 0, asid, &state);
-
-    INFO("Advance");
-    advanceTicks(&ctx, 100);
-
-    INFO("Start Execution");
-    transplantStart(&ctx, 0);
+    state.asid = asid;
+    transplantPushAndStart(&ctx, 0, &state);
 
     INFO("Advance");
     advanceTicks(&ctx, 100);
@@ -77,7 +72,8 @@ TEST_CASE("host-cmd-force-transplant") {
     fclose(f);
 
     INFO("Push state");
-    transplantRegisterAndPush(&ctx, 0, asid, &state);
+    state.asid = asid;
+    transplantPushAndStart(&ctx, 0, &state);
 
     INFO("Advance");
     advanceTicks(&ctx, 100);
@@ -101,7 +97,7 @@ TEST_CASE("host-cmd-force-transplant") {
     assert(pending_threads);
 
     INFO("Check flag")
-    transplantUnregisterAndPull(&ctx, 0, &state);
+    transplantGetState(&ctx, 0, &state);
     assert(FLAGS_GET_IS_EXCEPTION(state.flags));
  
     releaseFPGAContext(&ctx);
@@ -114,6 +110,7 @@ TEST_CASE("host-cmd-singlestep") {
     REQUIRE(initFPGAContext(&ctx) == 0);
     initArchState(&state, 0xABCDABCD0000);
     initState_simple_inst(&state, 0x10, 0x33);
+    state.asid = asid;
     int paddr = ctx.ppage_base_addr;
 
     INFO("Get binary")
@@ -129,45 +126,33 @@ TEST_CASE("host-cmd-singlestep") {
     mmuMsgSend(&ctx, &pf_reply);
 
     INFO("Push state");
-    transplantRegisterAndPush(&ctx, 0, asid, &state);
+    transplantPushAndSinglestep(&ctx, 0, &state);
     INFO("Push state");
-    transplantRegisterAndPush(&ctx, 1, asid, &state);
-
-    INFO("Setup stop CPU");
-    transplantStopCPU(&ctx, 0);
-    transplantStopCPU(&ctx, 1);
-
-    INFO("Advance");
-    advanceTicks(&ctx, 100);
-
-    INFO("Check transplants");
-    uint32_t pending_threads;
-    transplantPending(&ctx, &pending_threads);
-    assert(!pending_threads);
-
-    INFO("Start Execution");
-    transplantStart(&ctx, 0); 
-    transplantStart(&ctx, 1); 
+    transplantPushAndSinglestep(&ctx, 1, &state);
 
     INFO("Advance");
     advanceTicks(&ctx, 1000);
 
     INFO("Check now execution stopped");
+    uint32_t pending_threads;
     transplantPending(&ctx, &pending_threads);
     assert(pending_threads & 0b11);
 
     INFO("Check state 0");
-    transplantUnregisterAndPull(&ctx, 0, &state);
+    transplantGetState(&ctx, 0, &state);
     assert(state.xregs[2] = state.xregs[0] + state.xregs[1]);
     assert(state.xregs[2] = state.xregs[0] + state.xregs[1]);
     INFO("Check icount 0");
     assert(state.icount == 1);
     INFO("Check state 1");
-    transplantUnregisterAndPull(&ctx, 1, &state);
+    transplantGetState(&ctx, 1, &state);
     assert(state.xregs[2] = state.xregs[0] + state.xregs[1]);
     assert(state.xregs[2] = state.xregs[0] + state.xregs[1]);
     INFO("Check icount 1");
     assert(state.icount == 1);
+
+    transplantPending(&ctx, &pending_threads);
+    assert(pending_threads == 0);
  
     releaseFPGAContext(&ctx);
 }
@@ -194,7 +179,8 @@ TEST_CASE("check-flag-undef") {
     mmuMsgSend(&ctx, &pf_reply);
 
     INFO("Push state");
-    transplantRegisterAndPush(&ctx, 0, asid, &state);
+    state.asid = asid;
+    transplantPushAndWait(&ctx, 0, &state);
 
     INFO("Start Execution");
     transplantStart(&ctx, 0); 
@@ -208,7 +194,7 @@ TEST_CASE("check-flag-undef") {
     assert(pending_threads);
 
     INFO("Check transplant");
-    transplantUnregisterAndPull(&ctx, 0, &state);
+    transplantGetState(&ctx, 0, &state);
     printf("flags: %lx\n", state.flags);
     assert(FLAGS_GET_IS_UNDEF(state.flags));
     INFO("Check icount");
@@ -239,7 +225,8 @@ TEST_CASE("check-flag-transplant") {
     mmuMsgSend(&ctx, &pf_reply);
 
     INFO("Push state");
-    transplantRegisterAndPush(&ctx, 0, asid, &state);
+    state.asid = asid;
+    transplantPushAndWait(&ctx, 0, &state);
 
     INFO("Start Execution");
     transplantStart(&ctx, 0); 
@@ -253,7 +240,7 @@ TEST_CASE("check-flag-transplant") {
     assert(pending_threads);
 
     INFO("Check transplant");
-    transplantUnregisterAndPull(&ctx, 0, &state);
+    transplantGetState(&ctx, 0, &state);
     printf("flags: %lx\n", state.flags);
     assert(FLAGS_GET_IS_EXCEPTION(state.flags));
     INFO("Check icount");
@@ -284,7 +271,8 @@ TEST_CASE("check-icount-budget") {
 
     INFO("Push state");
     state.icountBudget = 100;
-    transplantRegisterAndPush(&ctx, 0, asid, &state);
+    state.asid = asid;
+    transplantPushAndWait(&ctx, 0, &state);
 
     INFO("Advance");
     advanceTicks(&ctx, 100);
@@ -308,7 +296,7 @@ TEST_CASE("check-icount-budget") {
     assert(pending_threads);
 
     INFO("Check transplant");
-    transplantUnregisterAndPull(&ctx, 0, &state);
+    transplantGetState(&ctx, 0, &state);
     printf("flags: %lx\n", state.flags);
 
     INFO("Check icount depletion");

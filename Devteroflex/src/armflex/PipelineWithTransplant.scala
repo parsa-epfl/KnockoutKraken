@@ -40,9 +40,11 @@ class PipelineParams(
 import antmicro.Bus.AXI4Lite
 
 class PipelineWithCSR(params: PipelineParams) extends Module {
-  private val uCSRthid2asid = Module(new CSR_thid2asid(params.thidN, params.asidW, thid2asidPortsN = 2))
-  val S_CSR_TreadTable = IO(Flipped(uCSRthid2asid.bus.cloneType))
-  S_CSR_TreadTable <> uCSRthid2asid.bus
+  // TODO: Not used anyways as we rely on another mechanism, we could remove this
+  private val uCSRVecAsid = Module(new StatusVecCSR(params.thidN, params.axiDataW))
+  val S_CSR_ThreadTable = IO(Flipped(uCSRVecAsid.io.bus.cloneType))
+  S_CSR_ThreadTable <> uCSRVecAsid.io.bus
+  uCSRVecAsid.io.vec := 0.U.asTypeOf(uCSRVecAsid.io.vec.cloneType)
 
   val pipeline = Module(new PipelineWithTransplant(params))
   val S_CSR_Pipeline = IO(Flipped(pipeline.hostIO.S_CSR.cloneType))
@@ -58,28 +60,12 @@ class PipelineWithCSR(params: PipelineParams) extends Module {
   pipeline.mem_io <> mem_io
   pipeline.mmu_io <> mmu_io
 
-  // mem.inst.req
-  uCSRthid2asid.thid_i(0) := pipeline.mem_io.inst.tlb.req.bits.thid
-  mem_io.inst.tlb.req.bits.asid := uCSRthid2asid.asid_o(0).bits
-
-  uCSRthid2asid.thid_i(1) := pipeline.mem_io.data.tlb.req.bits.thid
-  mem_io.data.tlb.req.bits.asid := uCSRthid2asid.asid_o(1).bits
-
   // Instrumentation Interface
   val instrument = IO(pipeline.instrument.cloneType)
   instrument <> pipeline.instrument
 
   val dbg = IO(pipeline.dbg.cloneType)
   dbg <> pipeline.dbg
-
-  if(true) {// TODO conditional assertions
-    when(pipeline.mem_io.data.tlb.req.valid){
-      assert(uCSRthid2asid.asid_o(1).valid, "No memory request is allowed if the hardware thread is not registed.")
-    }
-    when(pipeline.mem_io.inst.tlb.req.valid) {
-      assert(uCSRthid2asid.asid_o(0).valid, "No memory request is allowed if the hardware thread is not registed.")
-    }
-  }
 }
 
 class PipelineWithTransplant(params: PipelineParams) extends Module {
@@ -93,11 +79,15 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   mem_io <> pipeline.mem_io
   mmu_io <> pipeline.mmu_io
   val archstate = Module(new ArchState(params.thidN, params.DebugSignals))
+  archstate.pstateIO.mem(0).thid := mem_io.inst.tlb.req.bits.thid
+  archstate.pstateIO.mem(1).thid := mem_io.data.tlb.req.bits.thid
+  mem_io.inst.tlb.req.bits.asid := archstate.pstateIO.mem(0).asid
+  mem_io.data.tlb.req.bits.asid := archstate.pstateIO.mem(1).asid
 
   // -------- Pipeline ---------
   // Get state from Issue
   pipeline.archstate.issue.ready := true.B
-  pipeline.archstate.issue.sel.tag <> archstate.pstateIO.issue.thread
+  pipeline.archstate.issue.sel.tag <> archstate.pstateIO.issue.thid
   pipeline.archstate.issue.regs.curr <> archstate.pstateIO.issue.pstate
   pipeline.archstate.issue.rd <> archstate.rfile_rd
 
@@ -121,7 +111,6 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   archstate.pstateIO.commit <> pipeline.archstate.commit
 
   // Update State - Highjack commit ports from pipeline
-  archstate.pstateIO.transplant.thread := transplantU.trans2cpu.thread
   
   pipeline.archstate.commit.ready := archstate.pstateIO.commit.ready && 
                                     !transplantU.trans2cpu.stallPipeline && 
@@ -143,7 +132,7 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   when(transplantU.trans2cpu.pstate.valid) {
     // PState is from the pipeline.
     archstate.pstateIO.commit.fire := true.B
-    archstate.pstateIO.commit.tag := transplantU.trans2cpu.thread
+    archstate.pstateIO.commit.tag := transplantU.trans2cpu.thid
     archstate.pstateIO.commit.pstate.next := transplantU.trans2cpu.pstate.bits
     archstate.pstateIO.commit.isTransplantUnit := true.B
     archstate.pstateIO.commit.isCommitUnit := false.B
@@ -156,9 +145,13 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
 
   transplantU.cpu2trans.rfile_wr <> pipeline.archstate.commit.wr
   transplantU.cpu2trans.doneCPU := pipeline.transplantIO.done
-  pipeline.transplantIO.start.valid := transplantU.trans2cpu.start
-  pipeline.transplantIO.start.tag := transplantU.trans2cpu.thread
-  pipeline.transplantIO.start.bits.get := transplantU.trans2cpu.pstate.bits.PC
+
+  archstate.pstateIO.transplant.thid := transplantU.trans2cpu.thid
+  // Wait for the PC to be available in archstate
+  pipeline.transplantIO.start.valid := transplantU.trans2cpu.start.valid
+  pipeline.transplantIO.start.tag := transplantU.trans2cpu.start.bits
+  pipeline.transplantIO.start.bits.get := archstate.pstateIO.transplant.pstate.PC
+
   // Transplant from Host
   transplantU.S_CSR <> hostIO.S_CSR
   transplantU.S_AXI <> hostIO.S_AXI
@@ -207,8 +200,8 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
     dbg.bits.get.commit.tag := RegNext(pipeline.archstate.commit.tag)
     dbg.bits.get.commit.valid := RegNext(pipeline.archstate.commit.fire)
     dbg.bits.get.commitIsTransplant := RegNext(pipeline.transplantIO.done.valid)
-    dbg.bits.get.transplant.valid := transplantU.trans2cpu.start
-    dbg.bits.get.transplant.tag := transplantU.trans2cpu.thread
+    dbg.bits.get.transplant.valid := transplantU.trans2cpu.start.valid
+    dbg.bits.get.transplant.tag := transplantU.trans2cpu.start.bits
   }
   // */
 }

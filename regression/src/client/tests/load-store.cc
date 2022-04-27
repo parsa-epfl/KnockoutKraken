@@ -55,12 +55,13 @@ static void step_ldst_all_sizes_pair_load(FPGAContext *ctx,
                                           uint64_t exp1, uint64_t exp2) {
   uint32_t pending_threads;
   INFO("Push thread and start");
-  transplantRegisterAndPush(ctx, thid, asid, state);
+  state->asid = asid;
+  transplantPushAndWait(ctx, thid, state);
   REQUIRE(transplantStart(ctx, thid) == 0);
   INFO("Wait for transplant and fetch")
   transplantWaitTillPending(ctx, &pending_threads);
   REQUIRE(pending_threads & (1 << thid));
-  transplantUnregisterAndPull(ctx, thid, state);
+  transplantGetState(ctx, thid, state);
   check_ldst_all_sizes_pair_load(state, exp1, exp2);
   state->pc += 4; // Get next instruction
 }
@@ -118,9 +119,6 @@ static int test_ldst_all_sizes_pair(FPGAContext *ctx) {
   dramPagePush(ctx, page_data_st_paddr, page);
   makeMissReply(DATA_STORE, -1, asid, vaddr_st, page_data_st_paddr, &pf_reply);
   mmuMsgSend(ctx, &pf_reply);
-
-  INFO("- Register thread")
-  mmuRegisterTHID2ASID(ctx, thid, asid);
 
   // INFO("Verify load pair byte");
   // step_ldst_all_sizes_loads(ctx, &state, 0xAB, 0xBA);
@@ -204,7 +202,8 @@ TEST_CASE("out-of-page-bound-pair-load") {
   fclose(f);
 
   INFO("- Start execution");
-  REQUIRE(transplantRegisterAndPush(&ctx, thid, asid, &state) == 0);
+  state.asid = asid;
+  REQUIRE(transplantPushAndWait(&ctx, thid, &state) == 0);
   REQUIRE(transplantStart(&ctx, thid) == 0);
 
   // FPGA requires instruction page.
@@ -258,7 +257,7 @@ TEST_CASE("out-of-page-bound-pair-load") {
     usleep(1e5);
   }
   REQUIRE((pending_threads & (1 << thid)) != 0);
-  transplantUnregisterAndPull(&ctx, thid, &state);
+  transplantGetState(&ctx, thid, &state);
 
   synchronizePage(&ctx, asid, (uint8_t *)data_pages[1], expected_vas[1], pas[1], true);
   synchronizePage(&ctx, asid, (uint8_t *)data_pages[2], expected_vas[2], pas[2], true);
@@ -307,7 +306,8 @@ TEST_CASE("ldr-wback-addr") {
     mmuMsgSend(&ctx, &pf_reply);
 
     INFO("Push state");
-    transplantRegisterAndPush(&ctx, 0, asid, &state);
+    state.asid = asid;
+    transplantPushAndWait(&ctx, 0, &state);
 
     INFO("Start Execution");
     transplantStart(&ctx, 0); 
@@ -321,7 +321,7 @@ TEST_CASE("ldr-wback-addr") {
     assert(pending_threads);
 
     INFO("Check transplant");
-    transplantUnregisterAndPull(&ctx, 0, &state);
+    transplantGetState(&ctx, 0, &state);
     INFO("Check address");
     assert(state.xregs[0] == addr);
     INFO("Check data");

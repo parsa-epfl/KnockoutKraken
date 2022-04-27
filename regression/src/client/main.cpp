@@ -120,10 +120,10 @@ TEST_CASE("basic-transplant-with-initial-page-fault"){
 
   int th = 3;
   uint32_t asid = GET_asid(th);
+  state.asid = asid;
 
   // initialization.
-  transplantRegisterAndPush(&c, th, asid, &state);
-  mmuRegisterTHID2ASID(&c, th, asid);
+  transplantPushAndWait(&c, th, &state);
   transplantStart(&c, th);
 
   // Let's query message. It should be a page fault.
@@ -196,7 +196,8 @@ TEST_CASE("execute-instruction-with-context-in-dram"){
 
   // prepare for transplant.
   INFO("Transplant state to FPGA");
-  REQUIRE(transplantRegisterAndPush(&c, thid, asid, &state) == 0);
+  state.asid = asid;
+  REQUIRE(transplantPushAndWait(&c, thid, &state) == 0);
 
   // start execution
   INFO("Start execution");
@@ -215,7 +216,7 @@ TEST_CASE("execute-instruction-with-context-in-dram"){
 
   // make it back
   INFO("Transplant thread back");
-  transplantUnregisterAndPull(&c, thid, &state);
+  transplantGetState(&c, thid, &state);
 
   // check context
   INFO("Check context");
@@ -282,7 +283,8 @@ TEST_CASE("execute-instruction") {
   INFO("Transplant state to FPGA");
   uint32_t thid = 3;
   uint32_t asid = GET_asid(thid);
-  REQUIRE(transplantRegisterAndPush(&c, thid, asid, &state) == 0);
+  state.asid = asid;
+  REQUIRE(transplantPushAndWait(&c, thid, &state) == 0);
 
   // start execution
   INFO("Start execution");
@@ -344,14 +346,16 @@ TEST_CASE("execute-instruction") {
 
   // make it back
   INFO("Transplant thread back");
-  transplantUnregisterAndPull(&c, thid, &state);
+  transplantGetState(&c, thid, &state);
 
   // check context
-  INFO("Check context");
+  INFO("Check context regs");
   REQUIRE(state.xregs[0] == 10);
   REQUIRE(state.xregs[1] == 0);
+  INFO("Check context PC");
   REQUIRE(state.pc == pc + 4 * 6);
 
+  INFO("Get back page");
   uint8_t data_buffer[4096];
   synchronizePage(&c, asid, data_buffer, 0, page_data_paddr, true);
   // CHECK its value

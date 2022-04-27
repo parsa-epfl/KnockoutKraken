@@ -128,11 +128,11 @@ class ARMFlexTop(
   S_AXIL <> uAXIL2CSR.io.ctl
   val uCSRMux = Module(new CSRBusMasterToNSlaves(32, Seq(
     new CSRBusSlaveConfig(0, 0x100),
-    new CSRBusSlaveConfig(0x100, 4),
+    new CSRBusSlaveConfig(0x100, TransplantConsts.TRANS_REG_TOTAL_REGS),
     new CSRBusSlaveConfig(0x200, 4)
   ), (0, 0x300)))
   uCSRMux.masterBus <> uAXIL2CSR.io.bus
-  uCSRMux.slavesBus(0) <> u_pipeline.S_CSR_TreadTable
+  uCSRMux.slavesBus(0) <> u_pipeline.S_CSR_ThreadTable
   uCSRMux.slavesBus(1) <> u_pipeline.S_CSR_Pipeline
   uCSRMux.slavesBus(2) <> memory.S_CSR
 

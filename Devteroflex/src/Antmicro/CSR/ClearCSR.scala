@@ -57,6 +57,16 @@ object ClearCSR {
   }
 }
 
+object PulseCSR {
+  def apply(csrCtl: CSRRegBundle, dataWidth: Int): UInt = {
+    val csr = Module(new ClearCSR(dataWidth))
+
+    csr.io.clear := chisel3.util.Fill(dataWidth, 1.U)
+    csr.io.csr <> csrCtl
+    csr.io.value
+  }
+}
+
 import chisel3.util.{Valid, log2Ceil}
 class ClearReg(dataWidth: Int) extends Module{
   val io = IO(new Bundle{

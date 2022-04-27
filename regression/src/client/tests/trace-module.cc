@@ -27,7 +27,8 @@ TEST_CASE("trace-pcs-then-stop-single") {
     MessageFPGA pf_reply;
     makeMissReply(INST_FETCH, -1, thread, state.pc, paddr, &pf_reply);
     mmuMsgSend(&ctx, &pf_reply);
-    transplantRegisterAndPush(&ctx, thread, thread, &state);
+    state.asid = thread;
+    transplantPushAndWait(&ctx, thread, &state);
 
     INFO("Advance");
     advanceTicks(&ctx, 100);
