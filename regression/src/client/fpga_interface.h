@@ -201,7 +201,6 @@ int transplantPushAndWait(const FPGAContext *c, uint32_t thid, DevteroflexArchSt
 int transplantPushAndStart(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state);
 int transplantPushAndSinglestep(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state);
 int transplantGetState(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state);
-int transplantPushState(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state);
 int transplantPending(const FPGAContext *c, uint32_t *pending_threads);
 int transplantFreePending(const FPGAContext *c, uint32_t pending_threads);
 int transplantWaitTillPending(const FPGAContext *c, uint32_t *pending_threads);

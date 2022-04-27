@@ -14,7 +14,7 @@ TEST_CASE("transplant-in") {
   int ret = 0;
   const int th = 0;
 
-  REQUIRE(transplantPushState(&c, th, &state) == 0);
+  REQUIRE(transplantPushAndWait(&c, th, &state) == 0);
 
   // ---- Assert that correct state is was pushed
   DevteroflexArchState stateTransplant;

@@ -24,6 +24,11 @@
  * 
  * @note this function will not start the transplant but only bind.
  */
+static int transplantPushState(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state) {
+  assert(thid < 128 && "The maximum number of supported thread is 128.");
+  return writeAXI(c, BASE_ADDR_TRANSPLANT_DATA + thid * TRANS_STATE_THID_MAX_BYTES, state, TRANS_STATE_SIZE_BYTES);
+}
+
 int transplantPushAndWait(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state) {
   FLAGS_SET_EXEC_MODE(state->flags, PSTATE_FLAGS_EXECUTE_WAIT);
   int res = transplantPushState(c, thid, state);
@@ -47,10 +52,7 @@ int transplantGetState(const FPGAContext *c, uint32_t thid, DevteroflexArchState
   return readAXI(c, BASE_ADDR_TRANSPLANT_DATA + thid * TRANS_STATE_THID_MAX_BYTES, state, TRANS_STATE_SIZE_BYTES);
 }
 
-int transplantPushState(const FPGAContext *c, uint32_t thid, DevteroflexArchState *state) {
-  assert(thid < 128 && "The maximum number of supported thread is 128.");
-  return writeAXI(c, BASE_ADDR_TRANSPLANT_DATA + thid * TRANS_STATE_THID_MAX_BYTES, state, TRANS_STATE_SIZE_BYTES);
-}
+
 
 int transplantWaitTillPending(const FPGAContext *c, uint32_t *pending_threads) {
   uint32_t pending = 0;

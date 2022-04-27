@@ -15,15 +15,14 @@ TEST_CASE("transplant-data-and-request-order") {
   initArchState(&differentState, 0x4000);
   MessageFPGA msg;
 
-  mmuRegisterTHID2ASID(&c, 7, 0x10);
-  transplantPushState(&c, 0, &state);
-  transplantPushState(&c, 1, &state);
-  transplantPushState(&c, 2, &state);
-  transplantPushState(&c, 3, &state);
-  transplantPushState(&c, 4, &state);
-  transplantPushState(&c, 5, &state);
-  transplantPushState(&c, 6, &state);
-  transplantPushState(&c, 7, &differentState);
+  transplantPushAndWait(&c, 0, &state);
+  transplantPushAndWait(&c, 1, &state);
+  transplantPushAndWait(&c, 2, &state);
+  transplantPushAndWait(&c, 3, &state);
+  transplantPushAndWait(&c, 4, &state);
+  transplantPushAndWait(&c, 5, &state);
+  transplantPushAndWait(&c, 6, &state);
+  transplantPushAndWait(&c, 7, &differentState);
   transplantStart(&c, 7);
 
   mmuMsgGet(&c, &msg);
