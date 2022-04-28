@@ -47,26 +47,26 @@ class AXIReadMultiplexer(
   val index_r = RegEnable(u_arb.io.chosen, 0.U, selected_req.fire)
   val index_vr = RegInit(false.B)
 
-  val u_axi_reader = Module(new AXI4Reader(addrW, dataW))
+  val axiMulti_R = Module(new AXI4Reader(addrW, dataW))
 
-  u_axi_reader.io.xfer.address := selected_req.bits.address
-  u_axi_reader.io.xfer.length := selected_req.bits.length
+  axiMulti_R.io.xfer.address := selected_req.bits.address
+  axiMulti_R.io.xfer.length := selected_req.bits.length
 
-  u_axi_reader.io.xfer.valid := selected_req.valid
-  selected_req.ready := u_axi_reader.io.xfer.ready
+  axiMulti_R.io.xfer.valid := selected_req.valid
+  selected_req.ready := axiMulti_R.io.xfer.ready
 
   for(i <- 0 until wayNumber){
-    S_IF(i).data.bits := u_axi_reader.io.dataOut.bits
-    S_IF(i).data.valid := u_axi_reader.io.dataOut.valid && index_r === i.U
-    S_IF(i).done := u_axi_reader.io.xfer.done && index_r === i.U
+    S_IF(i).data.bits := axiMulti_R.io.dataOut.bits
+    S_IF(i).data.valid := axiMulti_R.io.dataOut.valid && index_r === i.U
+    S_IF(i).done := axiMulti_R.io.xfer.done && index_r === i.U
   }
   
-  u_axi_reader.io.dataOut.ready := S_IF(index_r).data.ready
+  axiMulti_R.io.dataOut.ready := S_IF(index_r).data.ready
 
-  val M_AXI = IO(u_axi_reader.io.bus.cloneType)
-  M_AXI <> u_axi_reader.io.bus
+  val M_AXI = IO(axiMulti_R.io.bus.cloneType)
+  M_AXI <> axiMulti_R.io.bus
 
-  when(u_axi_reader.io.xfer.done){
+  when(axiMulti_R.io.xfer.done){
     index_vr := false.B
   }.elsewhen(selected_req.fire){
     index_vr := true.B
@@ -104,26 +104,26 @@ class AXIWriteMultiplexer(
   val index_r = RegEnable(u_arb.io.chosen, 0.U, selected_req.fire)
   val index_vr = RegInit(false.B)
 
-  val u_axi_writer = Module(new AXI4Writer(addrW, dataW))
-  u_axi_writer.io.xfer.address := selected_req.bits.address
-  u_axi_writer.io.xfer.length := selected_req.bits.length
+  val axiMulti_Wr = Module(new AXI4Writer(addrW, dataW))
+  axiMulti_Wr.io.xfer.address := selected_req.bits.address
+  axiMulti_Wr.io.xfer.length := selected_req.bits.length
 
-  u_axi_writer.io.xfer.valid := selected_req.valid
-  selected_req.ready := u_axi_writer.io.xfer.ready
+  axiMulti_Wr.io.xfer.valid := selected_req.valid
+  selected_req.ready := axiMulti_Wr.io.xfer.ready
 
-  u_axi_writer.io.dataIn.bits := S_IF(index_r).data.bits
-  u_axi_writer.io.dataIn.valid := S_IF(index_r).data.valid
+  axiMulti_Wr.io.dataIn.bits := S_IF(index_r).data.bits
+  axiMulti_Wr.io.dataIn.valid := S_IF(index_r).data.valid
 
 
   for(i <- 0 until wayNumber){
-    S_IF(i).data.ready := u_axi_writer.io.dataIn.ready && index_r === i.U
-    S_IF(i).done := u_axi_writer.io.xfer.done && index_r === i.U
+    S_IF(i).data.ready := axiMulti_Wr.io.dataIn.ready && index_r === i.U
+    S_IF(i).done := axiMulti_Wr.io.xfer.done && index_r === i.U
   }
 
-  val M_AXI = IO(u_axi_writer.io.bus.cloneType)
-  M_AXI <> u_axi_writer.io.bus
+  val M_AXI = IO(axiMulti_Wr.io.bus.cloneType)
+  M_AXI <> axiMulti_Wr.io.bus
 
-  when(u_axi_writer.io.xfer.done){
+  when(axiMulti_Wr.io.xfer.done){
     index_vr := false.B
   }.elsewhen(selected_req.fire){
     index_vr := true.B

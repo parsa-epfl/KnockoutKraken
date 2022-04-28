@@ -5,6 +5,8 @@ import chisel3.experimental._
 import chisel3.util._
 import chiseltest._
 
+import antmicro.Bus.AXI4
+
 object AXIDrivers {
   implicit class AXI4LiteDriver(target: antmicro.Bus.AXI4Lite)(implicit clock: Clock) {
     def initSlave(): Unit = {

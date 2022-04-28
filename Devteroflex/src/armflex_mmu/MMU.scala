@@ -114,7 +114,7 @@ class MMU(
   // QEMU Message receiver/decoder
   private val u_qemuMsgDecoder = Module(new QEMUMessageDecoder(params))
   private val u_qemuMsgEncoder = Module(new QEMUMessageEncoder(params, messageFIFODepth))
-  private val u_qemuMsgQueue = Module(new AXIControlledMessageQueue)
+  private val u_qemuMsgQueue = Module(new AXIControlledMessageQueue(params.cacheBlockSize, 32, 1))
   private val u_qemuMissHandler = Module(new QEMUMissReplyHandler(params))
   private val u_qemuPageEvictHandler = Module(new QEMUPageEvictHandler(params))
   u_qemuMsgDecoder.qemu_evict_reply_o.ready := true.B // always ignore this message
@@ -145,6 +145,12 @@ class MMU(
     val inst = Flipped(new CacheMMUIO(params.getCacheParams))
     val data = Flipped(new CacheMMUIO(params.getCacheParams))
   })
+
+  // Bus to the host
+  val S_CSR = IO(Flipped(u_qemuMsgQueue.S_CSR.cloneType)) // Control registers for MMU.
+  val S_AXI = IO(Flipped(u_qemuMsgQueue.S_AXI.cloneType)) // F1 AWS exposed 512-bit AXI bus. For message transferring only.
+  S_CSR <> u_qemuMsgQueue.S_CSR
+  S_AXI <> u_qemuMsgQueue.S_AXI
 
   // DRAM Access Modules
   // Page Walker DRAM Accesses
@@ -180,11 +186,6 @@ class MMU(
     assert(u_qemuPageEvictHandler.M_DMA_W.req.bits.address < (1 << (params.pAddrW - 8)).U, "Page eviction handler should not write the page region.\"")
   }
 
-  // Bus to the host
-  val S_AXI = IO(Flipped(new AXI4(log2Ceil(128), 512))) // F1 AWS exposed 512-bit AXI bus. For message transferring only.
-  val S_CSR = IO(Flipped(new CSRBusBundle(32, 4))) // Control registers for MMU.
-  S_CSR <> u_qemuMsgQueue.S_CSR
-  S_AXI <> u_qemuMsgQueue.S_AXI
 
   // Host interrupt TODO: We use polling at the moment, not interrupts
   axiShell_io.msgPendingInt := u_qemuMsgEncoder.o.valid
@@ -279,8 +280,10 @@ class MMU(
   u_qemuMsgEncoder.page_fault_req_i <> u_page_walker.page_fault_req_o
 
   // QEMU Message FIFO
-  u_qemuMsgQueue.fifo_i <> u_qemuMsgEncoder.o
-  u_qemuMsgDecoder.message_i <> Queue(u_qemuMsgQueue.fifo_o, 1)
+  u_qemuMsgQueue.rdFifo.deq <> u_qemuMsgEncoder.o
+  u_qemuMsgQueue.rdFifo.msgCnt := u_qemuMsgEncoder.o.valid.asUInt
+  u_qemuMsgDecoder.message_i <> Queue(u_qemuMsgQueue.wrFifo.enq, 1)
+  u_qemuMsgQueue.wrFifo.freeCnt := Mux(u_qemuMsgDecoder.message_i.ready, 1.U, 0.U)
 
   if(true) { // TODO Conditional printing 
     // Page Walker DRAM Accesses
