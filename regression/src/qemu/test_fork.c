@@ -16,6 +16,9 @@
 
 #include <stdio.h>
 #include <assert.h>
+#include <unistd.h>
+
+int argx = 100;
 
 int main() {
 	DO_DEVTEROFLEX_OP(DEVTEROFLEX_FLOW_START);
@@ -25,6 +28,6 @@ int main() {
 		argx += 2;
 	}
 	DO_DEVTEROFLEX_OP(DEVTEROFLEX_FLOW_STOP);
-	return 0;
+	return argx;
 }
 
