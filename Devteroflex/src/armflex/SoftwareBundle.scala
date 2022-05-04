@@ -192,7 +192,7 @@ class QEMUMissReply(params: PageTableParams) extends SerializableToRaw(new RxMes
   val thid_v = Bool()
   val ppn = UInt(params.pPageW.W)
 
-  def asVec: Vec[UInt] = VecInit(tag.asVec ++ Seq(perm, ppn))
+  def asVec: Vec[UInt] = VecInit(tag.asVec ++ Seq(perm, thid, ppn))
 
   def parseFromVec(f: Vec[UInt]): this.type = {
     val res = Wire(this.cloneType)
