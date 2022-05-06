@@ -145,7 +145,9 @@ typedef struct DevteroflexArchState {
 #define ARCH_PSTATE_ASID_OFFST   (35)
 #define ARCH_PSTATE_TOT_REGS     (36)
 
-#define FLAGS_GET_NZCV(flags)               (flags & 0xF)
+#define FLAGS_NZCV_MASK                     (0xF)
+#define FLAGS_GET_NZCV(flags)               (flags & FLAGS_NZCV_MASK)
+#define FLAGS_SET_NZCV(flags, set)          (flags = (flags & ~FLAGS_NZCV_MASK) | set)
 #define FLAGS_GET_IS_EXCEPTION(flags)       (flags & (1 << 4))
 #define FLAGS_GET_IS_UNDEF(flags)           (flags & (1 << 5))
 #define FLAGS_GET_IS_ICOUNT_DEPLETED(flags) (flags & (1 << 6))
