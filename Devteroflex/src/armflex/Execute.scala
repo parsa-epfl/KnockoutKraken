@@ -282,7 +282,6 @@ class DecodeBitMasks extends Module
   val OnesTable = VecInit.tabulate(DATA_SZ + 1) { i => BigInt("0"*(DATA_SZ-i) ++ "1"*i, 2).U }
 
   val welem = Wire(DATA_T)
-  val welemROR = Wire(DATA_T)
   val telem = Wire(DATA_T)
   val wmask = Wire(DATA_T)
   val tmask = Wire(DATA_T)
@@ -299,9 +298,11 @@ class DecodeBitMasks extends Module
   val onesS = WireInit(s +& 1.U)
   val onesD = WireInit(d +& 1.U)
 
+  val esize = 1.U << len
+
   welem := OnesTable(onesS)
-  welemROR := ALU.rotateRight(VecInit(welem.asBools), r).asUInt // ROR(welem, R) and truncate esize
-  val wmaskSeq = for(length <- 0 until 7) yield replicate(welemROR, 64, 1 << length)
+  val welemRORSeq = for(length <- 0 until 7) yield ALU.rotateRight(VecInit(welem((1 << length) - 1, 0).asBools), r)
+  val wmaskSeq = for(length <- 0 until 7) yield replicate(welemRORSeq(length).asUInt, 64, 1 << length)
   val wmaskVec = VecInit(wmaskSeq)
   wmask := wmaskVec(len)
 
@@ -312,10 +313,6 @@ class DecodeBitMasks extends Module
 
   io.wmask := wmask
   io.tmask := tmask
-
-  when(io.is32bit) {
-    welemROR := ALU.rotateRight(VecInit(welem(31,0).asBools), r(4,0)).asUInt.pad(64)
-  }
 }
 
 class DataProcessing extends Module

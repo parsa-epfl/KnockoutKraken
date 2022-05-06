@@ -15,7 +15,8 @@ class DecodeBitMasksUnitTest extends AnyFreeSpec with ChiselScalatestTester {
   // Plan: Just print the iteration value and see the maximum period.
   def decodeBitMasksPokeExpect(
       dut: DecodeBitMasks,
-      inst: BigInt
+      inst: BigInt,
+      reg: BigInt
   ): Unit = {
     val immn = (inst >> 22) & 0x1
     val imms = (inst >> 10) & 0x3f
@@ -37,13 +38,19 @@ class DecodeBitMasksUnitTest extends AnyFreeSpec with ChiselScalatestTester {
 
   "b200c3e8:orr     x8, xzr, #0x101010101010101" in {
     test(new DecodeBitMasks).withAnnotations(anno) { dut =>
-      decodeBitMasksPokeExpect(dut, BigInt("b200c3e8", 16))
+      decodeBitMasksPokeExpect(dut, BigInt("b200c3e8", 16), 0)
+    }
+  }
+
+  "b202e7e0:orr     x0, xzr, #0xcccccccccccccccc" in {
+    test(new DecodeBitMasks).withAnnotations(Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/execute/DecodeBitMask/orr2"), WriteVcdAnnotation)) { dut =>
+      decodeBitMasksPokeExpect(dut, BigInt("b202e7e0", 16), 0)
     }
   }
 
   "92402c04:and     x4, x0,  #0xfff" in {
     test(new DecodeBitMasks).withAnnotations(anno) { dut =>
-      decodeBitMasksPokeExpect(dut, BigInt("92402c04", 16))
+      decodeBitMasksPokeExpect(dut, BigInt("92402c04", 16), 0)
     }
   }
 }
@@ -98,6 +105,10 @@ class DataProcessingUnitTest extends AnyFreeSpec with ChiselScalatestTester {
 }
 
 object ExecuteModels {
+  def toBigInt(binary: String, bitsize: Int) = BigInt(binary.padTo(bitsize, '0'), 2)
+ 
+  def ROR(bits: BigInt, shift: Int, size: Int): BigInt = ((bits >> shift) | (bits << (size - shift)) & Ones(size))
+
   def Ones(len: BigInt) = BigInt(Seq.fill(len.toInt)('1').mkString, 2)
 
   def HighestBitSet(bits: BigInt): Int = {
@@ -112,9 +123,9 @@ object ExecuteModels {
 
   def ReverseBit(bits: BigInt, is32bit: Boolean): BigInt = {
     if(is32bit) {
-      BigInt(bits.toString(2).reverse.padTo(32, '0'), 2)
+      toBigInt(bits.toString(2).reverse, 32)
     } else {                         
-      BigInt(bits.toString(2).reverse.padTo(64, '0'), 2)
+      toBigInt(bits.toString(2).reverse, 64)
     }
   }
 
@@ -151,7 +162,7 @@ object ExecuteModels {
     val d = diff & ((1 << len) - 1);
     val welem = Ones(S + 1)
     val telem = Ones(d + 1)
-    val wmask = Replicate(welem >> R.toInt, 64, esize)
+    val wmask = Replicate(ROR(welem, R.toInt, esize), 64, esize)
     val tmask = Replicate(telem, 64, esize)
     return (wmask, tmask);
   }
