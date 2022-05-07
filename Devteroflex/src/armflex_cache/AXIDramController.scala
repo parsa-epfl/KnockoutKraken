@@ -4,6 +4,8 @@ import armflex.util.{AXIReadMasterIF, AXIWriteMasterIF}
 import chisel3._
 import chisel3.util._
 
+import armflex_pmu.CycleCountingPort
+
 class Cache2AXIAdaptor(params: DatabankParams, queueSize: Int) extends Module {
   assert(params.blockSize == 512, "Only 512bit AXI transactions is supported.")
   //assert(params.pAddressWidth == 36, "Only 36bit memory addres is supported.")
@@ -40,5 +42,12 @@ class Cache2AXIAdaptor(params: DatabankParams, queueSize: Int) extends Module {
     q_cache_backend_request.bits.w_v,
     M_DMA_W.done,
     M_DMA_R.done
-    )
+  )
+
+  // The port to start a counter to record the latency to resolve a cache miss.
+  val oPMUReq = IO(Output(new CycleCountingPort(params.thidN)))
+  oPMUReq.start.bits := q_cache_backend_request.bits.thid
+  oPMUReq.start.valid := q_cache_backend_request.valid
+  oPMUReq.stop.valid := q_cache_backend_request.fire
+  oPMUReq.stop.bits := q_cache_backend_request.bits.thid
 }
