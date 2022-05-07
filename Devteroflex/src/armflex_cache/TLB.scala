@@ -273,6 +273,6 @@ class TLB(
   oPMUCountingReq.start.bits := mmu_io.missReq.bits.thid
   oPMUCountingReq.start.valid := mmu_io.missReq.fire
   oPMUCountingReq.stop.bits := mmu_io.refillResp.bits.thid
-  oPMUCountingReq.stop.bits := mmu_io.refillResp.fire
+  oPMUCountingReq.stop.valid := mmu_io.refillResp.fire
 }
 

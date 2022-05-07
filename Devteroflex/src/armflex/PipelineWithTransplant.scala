@@ -67,6 +67,12 @@ class PipelineWithCSR(params: PipelineParams) extends Module {
 
   val dbg = IO(pipeline.dbg.cloneType)
   dbg <> pipeline.dbg
+
+  // To PerformanceMonitor
+  val oPMUCountingCommit = IO(Output(Bool()))
+  oPMUCountingCommit := pipeline.oPMUCountingCommit
+  val oPMUTransplantCycleCountingReq = IO(Output(new CycleCountingPort(params.thidN)))
+  oPMUTransplantCycleCountingReq := pipeline.oPMUTransplantCycleCountingReq
 }
 
 class PipelineWithTransplant(params: PipelineParams) extends Module {
@@ -208,13 +214,13 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   // */
 
   // PMU Event
-  val oPMUCountingCommit = Output(Bool())
+  val oPMUCountingCommit = IO(Output(Bool()))
   oPMUCountingCommit := archstate.pstateIO.commit.fire && 
     archstate.pstateIO.commit.ready && 
     archstate.pstateIO.commit.last && 
     archstate.pstateIO.commit.isCommitUnit
   
-  val oPMUTransplantCycleCountingReq = Output(new CycleCountingPort(params.thidN))
+  val oPMUTransplantCycleCountingReq = IO(Output(new CycleCountingPort(params.thidN)))
   oPMUTransplantCycleCountingReq.start.bits := transplantU.cpu2trans.doneCPU.bits
   oPMUTransplantCycleCountingReq.start.valid := transplantU.cpu2trans.doneCPU.valid
   oPMUTransplantCycleCountingReq.stop.bits := transplantU.trans2cpu.start.bits
