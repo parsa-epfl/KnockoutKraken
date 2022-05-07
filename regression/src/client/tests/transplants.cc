@@ -9,7 +9,10 @@ TEST_CASE("transplant-in") {
   FPGAContext c;
   DevteroflexArchState state;
   initFPGAContextAndPage(1, &c);
-  initArchState(&state, rand());
+  initArchState(&state, 0xB00B5);
+  FLAGS_SET_NZCV(state.flags, 0xC);
+  state.icountBudget = 0xBEEF;
+  REQUIRE(FLAGS_GET_NZCV(state.flags) == 0xC);
 
   int ret = 0;
   const int th = 0;
@@ -19,6 +22,8 @@ TEST_CASE("transplant-in") {
   // ---- Assert that correct state is was pushed
   DevteroflexArchState stateTransplant;
   REQUIRE(transplantGetState(&c, th, &stateTransplant) == 0);
+  REQUIRE(FLAGS_GET_NZCV(state.flags) == 0xC);
+  REQUIRE(FLAGS_GET_NZCV(stateTransplant.flags) == 0xC);
   requireStateIsIdentical(state, stateTransplant);
 
   releaseFPGAContext(&c);
