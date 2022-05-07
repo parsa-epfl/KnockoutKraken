@@ -32,7 +32,7 @@ object TransplantIO extends Bundle {
     // This port can be used to fetch the pstate. Whose pstate???
     val pstate = Input(new PStateRegs)
     // This port indicates that which thread is requesting transplant.
-    val doneCPU = Input(ValidTag(thidN))
+    val doneCPU = Input(Valid(UInt(log2Ceil(thidN).W)))
     // This port transfer the singlestep command to the CPU.
     val stopCPU = Output(UInt(thidN.W))
 
@@ -91,7 +91,7 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
   val S_CSR = IO(Flipped(uCSR.io.bus.cloneType))
   S_CSR <> uCSR.io.bus
 
-  val cpuDoneMask = WireInit(Mux(cpu2trans.doneCPU.valid, 1.U << cpu2trans.doneCPU.tag, 0.U))
+  val cpuDoneMask = WireInit(Mux(cpu2trans.doneCPU.valid, 1.U << cpu2trans.doneCPU.bits, 0.U))
 
   // uCSR[0]: Check whether a thread has its state in the TBRAM and requiring a transplant back.
   val (rTrans2HostPending, setTrans2Host, clearTrans2Host) = SetClearReg(thidN)

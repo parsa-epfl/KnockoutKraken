@@ -8,6 +8,7 @@ import arm.PROCESSOR_TYPES._
 import armflex.util._
 import antmicro.CSR._
 import chisel3.aop.Select
+import armflex_pmu.CycleCountingPort
 
 class PipelineParams(
   val asidW:    Int = 15,
@@ -144,7 +145,8 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   }
 
   transplantU.cpu2trans.rfile_wr <> pipeline.archstate.commit.wr
-  transplantU.cpu2trans.doneCPU := pipeline.transplantIO.done
+  transplantU.cpu2trans.doneCPU.bits := pipeline.transplantIO.done.tag
+  transplantU.cpu2trans.doneCPU.valid := pipeline.transplantIO.done.valid
 
   archstate.pstateIO.transplant.thid := transplantU.trans2cpu.thid
   // Wait for the PC to be available in archstate
@@ -204,4 +206,17 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
     dbg.bits.get.transplant.tag := transplantU.trans2cpu.start.bits
   }
   // */
+
+  // PMU Event
+  val oPMUCountingCommit = Output(Bool())
+  oPMUCountingCommit := archstate.pstateIO.commit.fire && 
+    archstate.pstateIO.commit.ready && 
+    archstate.pstateIO.commit.last && 
+    archstate.pstateIO.commit.isCommitUnit
+  
+  val oPMUTransplantCycleCountingReq = Output(new CycleCountingPort(params.thidN))
+  oPMUTransplantCycleCountingReq.start.bits := transplantU.cpu2trans.doneCPU.bits
+  oPMUTransplantCycleCountingReq.start.valid := transplantU.cpu2trans.doneCPU.valid
+  oPMUTransplantCycleCountingReq.stop.bits := transplantU.trans2cpu.start.bits
+  oPMUTransplantCycleCountingReq.stop.valid := transplantU.trans2cpu.start.valid
 }

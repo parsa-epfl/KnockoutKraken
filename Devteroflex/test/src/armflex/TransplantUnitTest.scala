@@ -85,13 +85,13 @@ object TransplantUnitDrivers {
   implicit class CPU2TransDriver(target: TransplantIO.CPU2Trans)(implicit clock: Clock) {
     def init() = {
       target.doneCPU.valid.poke(false.B)
-      target.doneCPU.tag.poke(0.U)
+      target.doneCPU.bits.poke(0.U)
       target.rfile_wr.init()
       target.pstate.poke(ArmflexStructsLits.PStateRegs.makeLit())
     }
     def sendCpu2Trans(thid: Int): Unit = {
       target.doneCPU.valid.poke(true.B)
-      target.doneCPU.tag.poke(thid.U)
+      target.doneCPU.bits.poke(thid.U)
       clock.step()
     }
   }
