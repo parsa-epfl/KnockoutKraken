@@ -6,7 +6,7 @@ import chisel3.experimental._
 import antmicro.CSR.CSR
 
 
-class PerformanceUnit(threadNumber: Int = 128) extends Module {
+class PerformanceMonitor(threadNumber: Int = 128) extends Module {
   // 6 counters:
   //  1. Time to resolve a single data cache miss.
   //  2. Time to resolve a data TLB miss
@@ -47,6 +47,7 @@ class PerformanceUnit(threadNumber: Int = 128) extends Module {
   private val registerNumberPerCycleCounter = (counterBits * counterNumber) / 32
   val uCSR = Module(new CSR(32, 8 + registerNumberPerCycleCounter * 4))
   val S_CSR = IO(Flipped(uCSR.io.bus.cloneType))
+  S_CSR <> uCSR.io.bus
 
   // The CSR port:
   // - CSR[1]:CSR[0]: The number of cycles passed
@@ -56,7 +57,7 @@ class PerformanceUnit(threadNumber: Int = 128) extends Module {
   // - CSR[2]: Whether to start or stop the cycles.
   uCSR.io.csr(2).dataIn := rCycleCounterRunning
   when(uCSR.io.csr(2).dataWrite){
-    rCycleCounterRunning := uCSR.io.csr(2).dataIn
+    rCycleCounterRunning := uCSR.io.csr(2).dataOut
   }
   // - CSR[4]:CSR[3]: The number of instructions committed.
   uCSR.io.csr(3).dataIn := rInstructionCommitted(31, 0)
@@ -78,9 +79,9 @@ class PerformanceUnit(threadNumber: Int = 128) extends Module {
   // - CSR[08] ~ CSR[15]: counters of uDCachePenaltyCnt
   connectCountersToCSR(uDCachePenaltyCnt.oCounters, 8)
   // - CSR[16] ~ CSR[23]: counters of uTLBPenaltyCnt
-  connectCountersToCSR(uDCachePenaltyCnt.oCounters, 8 + registerNumberPerCycleCounter)
+  connectCountersToCSR(uTLBPenaltyCnt.oCounters, 8 + registerNumberPerCycleCounter)
   // - CSR[24] ~ CSR[31]: counters of uTransplantPenaltyCnt
-  connectCountersToCSR(uDCachePenaltyCnt.oCounters, 8 + registerNumberPerCycleCounter * 2)
+  connectCountersToCSR(uTransplantPenaltyCnt.oCounters, 8 + registerNumberPerCycleCounter * 2)
   // - CSR[32] ~ CSR[39]: counters of uPageFaultPenaltyCnt
-  connectCountersToCSR(uDCachePenaltyCnt.oCounters, 8 + registerNumberPerCycleCounter * 3)
+  connectCountersToCSR(uPageFaultPenaltyCnt.oCounters, 8 + registerNumberPerCycleCounter * 3)
 }

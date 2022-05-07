@@ -11,7 +11,7 @@ class CycleCountingPort(threadNumber: Int = 128) extends Bundle {
 }
 
 class CycleCounters(counterCount: Int = 8, counterSize: Int = 32, threadNumber: Int = 128) extends Module {
-  val rCounters = Vec(counterCount, UInt(counterSize.W))
+  val rCounters = RegInit(0.U.asTypeOf(Vec(counterCount, UInt(counterSize.W))))
   val rCurrent = RegInit(0.U(log2Ceil(counterCount).W))
 
   val iReq = IO(Input(new CycleCountingPort(threadNumber)))
@@ -41,7 +41,6 @@ class CycleCounters(counterCount: Int = 8, counterSize: Int = 32, threadNumber: 
     rTargetThreadID := iReq.start.bits
   }
 
-  rCounters := 0.U
   when(rState === sIdle && iReq.start.valid){
     rCounters(rCurrent) := 0.U // clear
   }.elsewhen(rState === sCounting){
