@@ -135,7 +135,7 @@ class ARMFlexTop(
 
   
   // Wrap S_CSR bus with an AXIL
-  val uAXIL2CSR = Module(new AXI4LiteCSR(32, 0x300))
+  val uAXIL2CSR = Module(new AXI4LiteCSR(32, 0x400))
   val S_AXIL = IO(Flipped(uAXIL2CSR.io.ctl.cloneType))
   S_AXIL <> uAXIL2CSR.io.ctl
   val uCSRMux = Module(new CSRBusMasterToNSlaves(32, Seq(

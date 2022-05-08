@@ -183,6 +183,56 @@ int dramPagePush(const FPGAContext *c, uint64_t paddr, void *page){
   return writeAXI(c, BASE_ADDR_DRAM + paddr, page, PAGE_SIZE);
 }
 
+/**
+ * @brief start the cycle counters inside PMU
+ * 
+ * @param c the FPGA context
+ * @return 0 if successful
+ */
+int pmuStartCounting(const FPGAContext *c){
+  return writeAXIL(c, (0x300 + 2) * 4, 1);
+}
+
+int pmuStopCounting(const FPGAContext *c){
+  return writeAXIL(c, (0x300 + 2) * 4, 0);
+}
+
+uint64_t pmuTotalCycles(const FPGAContext *c){
+  uint64_t res = 0;
+  uint32_t half = 0;
+  assert(readAXIL(c, (0x300 + 1) * 4, &half) == 0);
+  res = half;
+  res <<= 32;
+  assert(readAXIL(c, (0x300) * 4, &half) == 0);
+  res |= half;
+  return res;
+}
+
+uint64_t pmuTotalCommitInstructions(const FPGAContext *c){
+  uint64_t res = 0;
+  uint32_t half = 0;
+  assert(readAXIL(c, (0x300 + 4) * 4, &half) == 0);
+  res = half;
+  res <<= 32;
+  assert(readAXIL(c, (0x300 + 3) * 4, &half) == 0);
+  res |= half;
+  return res;
+}
+
+int pmuReadCycleCounters(const FPGAContext *c, int index, uint16_t counters[16]){
+  assert(index < 4 && "At present, we only have 4 counters.");
+  for(int i = 0; i < 8; ++i){
+    uint32_t data;
+    int err = readAXIL(c, (0x300 + 8 + index * 8 + i) * 4, &data);
+    if(err){
+      return err; 
+    } else {
+      counters[2*i] = data & 0xFFFF;
+      counters[2*i + 1] = data >> 16;
+    }
+  }
+  return 0;
+}
 
 /**
  * fetch a page from FPGA DRAM.
