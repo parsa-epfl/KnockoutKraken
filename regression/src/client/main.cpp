@@ -278,6 +278,7 @@ TEST_CASE("execute-instruction") {
   DevteroflexArchState state;
   uint64_t pc = 0x40000000;
   initArchState(&state, pc);
+  pmuStartCounting(&c);
 
   // prepare for transplant.
   INFO("Transplant state to FPGA");
@@ -347,6 +348,9 @@ TEST_CASE("execute-instruction") {
   // make it back
   INFO("Transplant thread back");
   transplantGetState(&c, thid, &state);
+
+  pmuStopCounting(&c);
+  printPMUCounters(&c);
 
   // check context
   INFO("Check context regs");

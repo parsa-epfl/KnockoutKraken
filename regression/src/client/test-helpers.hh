@@ -24,3 +24,8 @@ void initFPGAContextAndPage(int num_threads, FPGAContext *c);
 
 static uint8_t zero_page[PAGE_SIZE] = {0};
 static uint8_t page[PAGE_SIZE] = {0};
+
+/**
+ * @brief print the counters from PMU.
+ */
+void printPMUCounters(const FPGAContext *ctx);

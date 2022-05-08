@@ -217,7 +217,6 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   val oPMUCountingCommit = IO(Output(Bool()))
   oPMUCountingCommit := archstate.pstateIO.commit.fire && 
     archstate.pstateIO.commit.ready && 
-    archstate.pstateIO.commit.last && 
     archstate.pstateIO.commit.isCommitUnit
   
   val oPMUTransplantCycleCountingReq = IO(Output(new CycleCountingPort(params.thidN)))
