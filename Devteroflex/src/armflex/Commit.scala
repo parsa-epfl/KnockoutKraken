@@ -46,7 +46,7 @@ class CommitArchStateIO(thidN: Int) extends Bundle {
   }
   val wr = Flipped(new RFileIO.WRPort(thidN))
   val ready = Input(Bool())
-  val last = Input(Bool())
+  val icountLastInst = Input(Bool())
   val isTransplantUnit = Output(Bool())
   val isCommitUnit = Output(Bool())
 }

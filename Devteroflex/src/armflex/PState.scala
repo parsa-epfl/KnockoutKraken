@@ -183,15 +183,15 @@ class ArchState(thidN: Int, withDbg: Boolean) extends Module {
         && !pstateIO.commit.pstate.next.flags.isException 
         && !pstateIO.commit.pstate.next.flags.isUndef) {
     pstateMem(pstateIO.commit.tag).icount := pstateMem(pstateIO.commit.tag).icount + 1.U
-    when(pstateIO.commit.last) {
+    when(pstateIO.commit.icountLastInst) {
       pstateMem(pstateIO.commit.tag).flags.isICountDepleted := true.B
     }
   }
 
   when(pstateMem(pstateIO.commit.tag).icountBudget === 0.U) {
-    pstateIO.commit.last := false.B // Just execute normally, no icount
+    pstateIO.commit.icountLastInst := false.B // Just execute normally, no icount
   }.otherwise {
-    pstateIO.commit.last := (pstateMem(pstateIO.commit.tag).icount + 1.U) === pstateMem(pstateIO.commit.tag).icountBudget // See PipelineWithTransplant
+    pstateIO.commit.icountLastInst := (pstateMem(pstateIO.commit.tag).icount + 1.U) === pstateMem(pstateIO.commit.tag).icountBudget // See PipelineWithTransplant
     
   }
 

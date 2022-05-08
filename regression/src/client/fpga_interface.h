@@ -145,18 +145,20 @@ typedef struct DevteroflexArchState {
 #define ARCH_PSTATE_ASID_OFFST   (35)
 #define ARCH_PSTATE_TOT_REGS     (36)
 
-#define FLAGS_GET_NZCV(flags)               (flags & 0xF)
+#define FLAGS_NZCV_MASK                     (0xF)
+#define FLAGS_GET_NZCV(flags)               (flags & FLAGS_NZCV_MASK)
+#define FLAGS_SET_NZCV(flags, set)          (flags = (flags & ~FLAGS_NZCV_MASK) | set)
 #define FLAGS_GET_IS_EXCEPTION(flags)       (flags & (1 << 4))
 #define FLAGS_GET_IS_UNDEF(flags)           (flags & (1 << 5))
 #define FLAGS_GET_IS_ICOUNT_DEPLETED(flags) (flags & (1 << 6))
 #define FLAGS_GET_EXEC_MODE(flags)          ((flags >> 7) & 0b11)
 
-#define PSTATE_FLAGS_EXECUTE_SINGLESTEP   (2)
-#define PSTATE_FLAGS_EXECUTE_NORMAL       (1)
-#define PSTATE_FLAGS_EXECUTE_WAIT         (0)
+#define PSTATE_FLAGS_EXECUTE_SINGLESTEP     (2)
+#define PSTATE_FLAGS_EXECUTE_NORMAL         (1)
+#define PSTATE_FLAGS_EXECUTE_WAIT           (0)
 #define FLAGS_MASK_EXEC_MODE(mode)          ((mode & 0b11) << 7)
-#define FLAGS_MASK_EXEC_MODE_CLEAR          ~(0b11 << 7)
-#define FLAGS_SET_EXEC_MODE(flags, mode)    (flags = (flags & ~FLAGS_MASK_EXEC_MODE_CLEAR) | FLAGS_MASK_EXEC_MODE(mode))
+#define FLAGS_MASK_EXEC_MODE_MASK           (0b11 << 7)
+#define FLAGS_SET_EXEC_MODE(flags, mode)    (flags = ((flags & ~FLAGS_MASK_EXEC_MODE_MASK) | FLAGS_MASK_EXEC_MODE(mode)))
 
 
 

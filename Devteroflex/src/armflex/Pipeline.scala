@@ -40,7 +40,7 @@ class Pipeline(params: PipelineParams) extends Module {
   val transplantIO = IO(new Bundle {
     val stopCPU = Input(UInt(params.thidN.W))
     val start = Input(ValidTag(params.thidT, DATA_T))
-    val done = Output(ValidTag(params.thidT, INST_T))
+    val done = Output(ValidTag(params.thidT))
   })
   // ISA State
   val archstate = IO(new PipeArchStateIO(params.thidN))
@@ -80,7 +80,7 @@ class Pipeline(params: PipelineParams) extends Module {
     commitU.commit.commited.valid && 
     !commitU.commit.transplant.valid && 
     !transplantIO.stopCPU(commitU.commit.commited.tag).asBool && 
-    !commitU.commit.archstate.last
+    !commitU.commit.archstate.icountLastInst
   fetch.ctrl_i.commit.tag := commitU.commit.commited.tag
   fetch.ctrl_i.commit.bits.get := commitU.commit.archstate.pstate.next.PC
 
@@ -230,11 +230,11 @@ class Pipeline(params: PipelineParams) extends Module {
   // Commit State
   archstate.commit <> commitU.commit.archstate
   transplantIO.done.tag := commitU.commit.commited.tag
-  transplantIO.done.bits.get := commitU.commit.transplant.bits.get
+  //transplantIO.done.bits.get := commitU.commit.transplant.bits.get
   when(transplantIO.stopCPU(commitU.commit.commited.tag).asBool) {
     transplantIO.done.valid := commitU.commit.commited.valid
   }.otherwise {
-    transplantIO.done.valid := commitU.commit.transplant.valid || (commitU.commit.archstate.fire && commitU.commit.archstate.last)
+    transplantIO.done.valid := commitU.commit.transplant.valid || (commitU.commit.archstate.fire && commitU.commit.archstate.icountLastInst)
   }
 
   // Flushing ----------------------------------------------------------------

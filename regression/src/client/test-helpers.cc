@@ -11,6 +11,7 @@ void requireStateIsIdentical(const DevteroflexArchState &state1,
   for (int i = 0; i < 32; ++i) {
     REQUIRE(state1.xregs[i] == state2.xregs[i]);
   }
+  REQUIRE(state1.icountBudget == state2.icountBudget);
 }
 
 void synchronizePage(FPGAContext *ctx, int asid, uint8_t *page, uint64_t vaddr,

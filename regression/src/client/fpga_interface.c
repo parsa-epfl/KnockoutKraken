@@ -78,7 +78,7 @@ int transplantPending(const FPGAContext *c, uint32_t *pending_threads) {
 int transplantFreePending(const FPGAContext *c, uint32_t free_pending_threads) {
   // We made it such as the AXI transaction frees the Pending bit instead of the HOST
   uint32_t pending_threads;
-  int ret = readAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRANS_REG_OFFST_PENDING, &pending_threads);
+  readAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRANS_REG_OFFST_PENDING, &pending_threads);
   assert((pending_threads & free_pending_threads) == 0);
   return 0;
 }
