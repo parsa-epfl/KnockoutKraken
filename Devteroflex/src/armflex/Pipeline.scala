@@ -40,7 +40,7 @@ class Pipeline(params: PipelineParams) extends Module {
   val transplantIO = IO(new Bundle {
     val stopCPU = Input(UInt(params.thidN.W))
     val start = Input(ValidTag(params.thidT, DATA_T))
-    val done = Output(ValidTag(params.thidT, INST_T))
+    val done = Output(ValidTag(params.thidT))
   })
   // ISA State
   val archstate = IO(new PipeArchStateIO(params.thidN))
@@ -230,7 +230,7 @@ class Pipeline(params: PipelineParams) extends Module {
   // Commit State
   archstate.commit <> commitU.commit.archstate
   transplantIO.done.tag := commitU.commit.commited.tag
-  transplantIO.done.bits.get := commitU.commit.transplant.bits.get
+  //transplantIO.done.bits.get := commitU.commit.transplant.bits.get
   when(transplantIO.stopCPU(commitU.commit.commited.tag).asBool) {
     transplantIO.done.valid := commitU.commit.commited.valid
   }.otherwise {
