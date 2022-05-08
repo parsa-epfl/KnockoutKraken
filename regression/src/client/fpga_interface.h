@@ -175,6 +175,13 @@ int  mmuMsgSend(const FPGAContext *c,  MessageFPGA *msg);
 int dramPagePush(const FPGAContext *c, uint64_t paddr, void *page);
 int dramPagePull(const FPGAContext *c, uint64_t paddr, void *page);
 
+// PMU
+int pmuStartCounting(const FPGAContext *c);
+int pmuStopCounting(const FPGAContext *c);
+uint64_t pmuTotalCycles(const FPGAContext *c);
+uint64_t pmuTotalCommitInstructions(const FPGAContext *c);
+int pmuReadCycleCounters(const FPGAContext *c, int index, uint16_t counters[16]);
+
 
 #define BASE_ADDR_MMU_MSG_QUEUE          (BASE_ADDR_AXIL + 0x200 * 4)
 #define MMU_MSG_QUEUE_REG_OFST_FREE      (0x0)

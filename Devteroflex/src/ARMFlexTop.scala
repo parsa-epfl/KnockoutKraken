@@ -11,6 +11,7 @@ import scala.collection.DebugUtils
 import antmicro.CSR.AXI4LiteCSR
 import antmicro.CSR.CSRBusMasterToNSlaves
 import antmicro.CSR.CSRBusSlaveConfig
+import armflex_pmu.PerformanceMonitor
 
 class MemorySystemPipelinePortIO(params: MemoryHierarchyParams) extends Bundle {
   val cache = Flipped(new PipeCache.PipeCacheIO(params.getCacheParams.pAddrWidth, params.getCacheParams.blockSize))
@@ -78,6 +79,17 @@ class MemorySystem(params: MemoryHierarchyParams) extends Module {
   when(dcacheAdaptor.M_DMA_W.req.fire) {
     assert(dcacheAdaptor.M_DMA_W.req.bits.address >= (1 << (params.pAddrW - 8)).U, "dCache should not write the page table region.")
   }
+
+  // PMU
+  val oPMUEventTriggers = IO(Output(new Bundle {
+    val tlb = dtlb.oPMUCountingReq.cloneType
+    val dcache = dcacheAdaptor.oPMUReq.cloneType
+    val mm = mmu.oPMUCountingReq.cloneType
+  }))
+
+  oPMUEventTriggers.tlb := dtlb.oPMUCountingReq
+  oPMUEventTriggers.dcache := dcacheAdaptor.oPMUReq
+  oPMUEventTriggers.mm := mmu.oPMUCountingReq
 }
 
 object MemorySystemVerilogEmitter extends App {
@@ -123,14 +135,15 @@ class ARMFlexTop(
 
   
   // Wrap S_CSR bus with an AXIL
-  val uAXIL2CSR = Module(new AXI4LiteCSR(32, 0x300))
+  val uAXIL2CSR = Module(new AXI4LiteCSR(32, 0x400))
   val S_AXIL = IO(Flipped(uAXIL2CSR.io.ctl.cloneType))
   S_AXIL <> uAXIL2CSR.io.ctl
   val uCSRMux = Module(new CSRBusMasterToNSlaves(32, Seq(
     new CSRBusSlaveConfig(0, 0x100),
     new CSRBusSlaveConfig(0x100, TransplantConsts.TRANS_REG_TOTAL_REGS),
-    new CSRBusSlaveConfig(0x200, 4)
-  ), (0, 0x300)))
+    new CSRBusSlaveConfig(0x200, 4),
+    new CSRBusSlaveConfig(0x300, 0x100)
+  ), (0, 0x400)))
   uCSRMux.masterBus <> uAXIL2CSR.io.bus
   uCSRMux.slavesBus(0) <> u_pipeline.S_CSR_ThreadTable
   uCSRMux.slavesBus(1) <> u_pipeline.S_CSR_Pipeline
@@ -168,6 +181,17 @@ class ARMFlexTop(
 
   val dbg = IO(u_pipeline.dbg.cloneType)
   dbg <> u_pipeline.dbg
+
+  // Performance Unit
+  val uPMU = Module(new PerformanceMonitor(paramsPipeline.thidN))
+  uPMU.iCommittedValid := u_pipeline.oPMUCountingCommit
+
+  uPMU.iCycleCountingReq(0) := memory.oPMUEventTriggers.dcache
+  uPMU.iCycleCountingReq(1) := memory.oPMUEventTriggers.tlb
+  uPMU.iCycleCountingReq(2) := u_pipeline.oPMUTransplantCycleCountingReq
+  uPMU.iCycleCountingReq(3) := memory.oPMUEventTriggers.mm
+
+  uCSRMux.slavesBus(3) <> uPMU.S_CSR
 }
 
 class ARMFlexTopSimulator(

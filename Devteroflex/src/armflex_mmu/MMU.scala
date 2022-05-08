@@ -8,6 +8,7 @@ import armflex_mmu.peripheral._
 import chisel3._
 import chisel3.util._
 import antmicro.CSR.CSRBusBundle
+import armflex_pmu.CycleCountingPort
 
 /**
  * Parameter structure for the whole memory system
@@ -308,6 +309,13 @@ class MMU(
       printf(p"MMU:AXI DRAM:Evict entry from PT\n")
     }
   }
+
+  // MMU counting port to measure the page fault latency.
+  val oPMUCountingReq = IO(Output(new CycleCountingPort(params.thidN)))
+  oPMUCountingReq.start.bits := u_qemuMsgEncoder.page_fault_req_i.bits.thid
+  oPMUCountingReq.start.valid := u_qemuMsgEncoder.page_fault_req_i.fire
+  oPMUCountingReq.stop.bits := u_qemuMsgDecoder.qemu_miss_reply_o.bits.thid
+  oPMUCountingReq.stop.valid := u_qemuMsgDecoder.qemu_miss_reply_o.bits.thid_v && u_qemuMsgDecoder.qemu_miss_reply_o.fire
 }
 
 object PageDemanderVerilogEmitter extends App{

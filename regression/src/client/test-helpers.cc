@@ -60,3 +60,45 @@ void initFPGAContextAndPage(int num_threads, FPGAContext *c) {
   memset(page, 0xAB, PAGE_SIZE);
 }
 
+void printPMUCounters(const FPGAContext *ctx){
+  uint64_t cyc = pmuTotalCycles(ctx);
+  printf("Total cycles: %ld \n", cyc);
+  uint64_t cmt = pmuTotalCommitInstructions(ctx);
+  printf("Total committed instructions: %ld \n", cmt);
+  printf("IPC: %lf CPI: %lf \n", double(cmt) / cyc, double(cyc) / double(cmt));
+  puts("----------");
+
+  const char *names[4] = {
+    "DCachePenalty:",
+    "TLBPenalty:",
+    "TransplantPenalty:",
+    "PageFaultPenalty:"
+  };
+
+  for(int idx = 0; idx < 4; ++idx){
+    uint16_t penalties[16];
+    REQUIRE(pmuReadCycleCounters(ctx, idx, penalties) == 0);
+    puts(names[idx]);
+    printf("Raw: ");
+    for(int i = 0; i < 16; ++i){
+      printf("%d ", penalties[i]);
+    }
+    puts("");
+    uint32_t cnt_sum = 0;
+    uint32_t cnt_non_zero = 0;
+
+    if(idx == 2) {
+      // for the trapsplant back penalty, we should clear the one that is caused by the last transplant back. 
+      penalties[0] = 0;
+    }
+
+    for(int i = 0; i < 16; ++i){
+      if(penalties[i] != 0){
+        cnt_sum += penalties[i];
+        cnt_non_zero += 1;
+      }
+    }
+    if(cnt_non_zero != 0) printf("Average: %lf \n", double(cnt_sum) / cnt_non_zero);
+    puts("----------");
+  }
+}

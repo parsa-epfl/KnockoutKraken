@@ -3,6 +3,7 @@ package armflex_cache
 import armflex._
 import chisel3._
 import chisel3.util._
+import armflex_pmu.CycleCountingPort
 
 case class PageTableParams(
   pageW: Int = 4096,
@@ -266,5 +267,12 @@ class TLB(
 //      }
 //    }
   }
+
+  // Port to PMU to measure the penalty of the TLB miss.
+  val oPMUCountingReq = IO(Output(new CycleCountingPort(params.thidN)))
+  oPMUCountingReq.start.bits := mmu_io.missReq.bits.thid
+  oPMUCountingReq.start.valid := mmu_io.missReq.fire
+  oPMUCountingReq.stop.bits := mmu_io.refillResp.bits.thid
+  oPMUCountingReq.stop.valid := mmu_io.refillResp.fire
 }
 

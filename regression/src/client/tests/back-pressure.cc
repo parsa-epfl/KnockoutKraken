@@ -56,6 +56,8 @@ static int test_stress_memory(
   REQUIRE(fread(page, 1, 4096, f) != 0);
   fclose(f);
 
+  pmuStartCounting(ctx);
+
   INFO("- Register all the threads");
   for(uint32_t thid = 0; thid < thidN; thid++) {
     printf("Registering thid:%i --\n", thid);
@@ -182,6 +184,9 @@ static int test_stress_memory(
     }
   }
 
+  pmuStopCounting(ctx);
+  printPMUCounters(ctx);
+
   INFO("- Verify all store pages");
   for(size_t currPage = 0; currPage < nDataPagesPerThread; currPage++) {
     for(uint32_t thid = 0; thid < thidN; thid++) {
@@ -212,6 +217,6 @@ TEST_CASE("test-pressure-ldp-stp-max-thread-short") {
   FPGAContext ctx;
   REQUIRE(initFPGAContext(&ctx) == 0);
   test_stress_memory(&ctx, 32, 1, false);
-
+  
   releaseFPGAContext(&ctx);
 }
