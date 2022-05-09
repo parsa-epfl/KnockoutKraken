@@ -1,9 +1,10 @@
-void selectSort(char data[4096]){
-  for(int i = 0; i < 4095; ++i){
+#define LENGTH 4096
+void selectSort(char data[LENGTH]){
+  for(int i = 0; i < LENGTH - 1; ++i){
     // pick the smallest one.
-    int s = data[i];
+    char s = data[i];
     int index = i;
-    for(int j = i+1; j < 4096; ++j){
+    for(int j = i+1; j < LENGTH; ++j){
       if(data[j] < s){
         index = j;
         s = data[j];

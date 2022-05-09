@@ -78,3 +78,9 @@ void initState_exception_br(DevteroflexArchState *state) {
 void initState_exception_svc(DevteroflexArchState *state) {
   state->pc = 0x4;
 };
+
+void initState_select_sort(DevteroflexArchState *state, uint32_t asid, uint64_t pc, uint64_t addr) {
+    state->asid = asid;
+    state->xregs[0] = addr;
+    state->pc = pc;
+}
