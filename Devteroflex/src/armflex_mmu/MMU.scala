@@ -26,7 +26,7 @@ case class MemoryHierarchyParams(
   cacheSetNumber: Int = 1024,
   cacheWayNumber: Int = 4,
 
-  tlbSetNumber:   Int = 16,
+  tlbSetNumber:   Int = 1024,
   tlbWayNumber:   Int = 4
 ) {
   val permW: Int = 2 // 0: Data_Load, 1: Data_Store, 2: Inst_Fetch

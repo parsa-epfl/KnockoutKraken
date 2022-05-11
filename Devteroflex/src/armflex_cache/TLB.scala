@@ -21,8 +21,9 @@ case class PageTableParams(
     pPageW + permW + 1, // PPN + perm + dirty
     vPageW + asidW,
     asidW,
-    thidN
-    )
+    thidN,
+    false
+  )
 }
 
 /**
