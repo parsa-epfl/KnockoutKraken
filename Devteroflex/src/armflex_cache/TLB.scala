@@ -16,6 +16,7 @@ case class PageTableParams(
   tlbSetNumber: Int = 1,
   tlbAssociativity: Int = 32,
   thidN: Int = 32,
+  ptAssociativity: Int= 16,
 ){
   def getDatabankParams: DatabankParams = DatabankParams(
     tlbSetNumber,

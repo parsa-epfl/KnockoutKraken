@@ -52,12 +52,12 @@ class TLBWritebackHandler(
   u_buffer.lookup_request_i := request_r.tag
 
   // sMoveIn
-  M_DMA_R.req.bits.address := params.vpn2ptSetPA(request_r.tag.asid, request_r.tag.vpn, u_buffer.entryNumber)
+  M_DMA_R.req.bits.address := params.vpn2ptSetPA(request_r.tag.asid, request_r.tag.vpn, params.getPageTableParams.ptAssociativity)
   M_DMA_R.req.bits.length := u_buffer.requestPacketNumber.U
   M_DMA_R.req.valid := state_r === sMoveIn
 
   // sPick
-  val victim_index_r = RegInit(0.U(u_buffer.entryNumber.W))
+  val victim_index_r = RegInit(0.U(params.getPageTableParams.ptAssociativity.W))
   when(state_r === sPick){
     victim_index_r := u_buffer.lookup_reply_o.index
   }

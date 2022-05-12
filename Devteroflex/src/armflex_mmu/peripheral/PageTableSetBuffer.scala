@@ -14,35 +14,25 @@ import armflex_cache.{PseudoTreeLRUCore, PageTableParams}
 /**
  * One Set in the Page Table. It should contains more than one PTEs.
  * 
- * @note the size of this bundle is 96 * entryNumber
+ * @note the size of this bundle is 96 * params.ptAssociativity
  */ 
-class PageTableSetPacket(
-  params: PageTableParams,
-  val entryNumber: Int = 16
-) extends Bundle {
-  val entries = Vec(entryNumber, new PageTableItem(params))
-  val valids = UInt(entryNumber.W)
-  val lru_bits = UInt(entryNumber.W)
+class PageTableSetPacket(val params: PageTableParams) extends Bundle {
+  val entries = Vec(params.ptAssociativity, new PageTableItem(params))
+  val valids = UInt(params.ptAssociativity.W)
+  val lru_bits = UInt(params.ptAssociativity.W)
 }
 
-class PageSetBufferWriteRequestPacket(
-  params: PageTableParams,
-  entryNumber: Int = 16
-) extends Bundle {
+class PageSetBufferWriteRequestPacket(val params: PageTableParams) extends Bundle {
   val item = new PageTableItem(params)
   val flush_v = Bool()
-  val index = UInt(log2Ceil(entryNumber).W)
+  val index = UInt(log2Ceil(params.ptAssociativity).W)
 
 }
 
-class PageSetBufferLookupReplyPacket(
-  params: PageTableParams,
-  entryNumber: Int = 16
-) extends Bundle {
+class PageSetBufferLookupReplyPacket(val params: PageTableParams) extends Bundle {
   val item = new PageTableItem(params)
-  val index = UInt(log2Ceil(entryNumber).W)
+  val index = UInt(log2Ceil(params.ptAssociativity).W)
   val hit_v = Bool()
-
 }
 
 /**
@@ -55,8 +45,7 @@ class PageTableSetBuffer(
   t: PageTableSetPacket,
 ) extends Module {
   val dma_data_i = IO(Flipped(Decoupled(UInt(512.W))))
-  val entryNumber = t.entryNumber
-  val requestPacketNumber = (entryNumber / 16) * 3
+  val requestPacketNumber = (params.ptAssociativity / 16) * 3
   val buffer_r = Reg(Vec(requestPacketNumber, UInt(512.W)))
 
   // Load logic.
@@ -86,8 +75,8 @@ class PageTableSetBuffer(
   val pt_set_r = buffer_r.asTypeOf(t.cloneType)
   // Get LRU Element (Maybe available element)
   val space_index = PriorityEncoder(~pt_set_r.valids)
-  val u_lru_core = Module(new PseudoTreeLRUCore(t.entryNumber))
-  u_lru_core.io.encoding_i := pt_set_r.lru_bits(t.entryNumber-2, 0)
+  val u_lru_core = Module(new PseudoTreeLRUCore(params.ptAssociativity))
+  u_lru_core.io.encoding_i := pt_set_r.lru_bits(params.ptAssociativity-2, 0)
   val lru_index = u_lru_core.io.lru_o
   val lru_item = Wire(new PageTableItem(params))
   lru_item.entry := pt_set_r.entries(lru_index).entry
@@ -96,7 +85,7 @@ class PageTableSetBuffer(
   class get_lru_element_response_t extends Bundle {
     val item = new PageTableItem(params)
     val lru_v = Bool()
-    val index = UInt(log2Ceil(t.entryNumber).W)
+    val index = UInt(log2Ceil(params.ptAssociativity).W)
     // That lru_v is true means the item is valid.
     // False means this set is not full and there is a available place.
   }
@@ -110,7 +99,7 @@ class PageTableSetBuffer(
   val updated_pt_set = WireInit(pt_set_r)
 
   // val lru_element_i = IO(Flipped(Decoupled(new software_bundle.PageTableItem)))
-  val write_request_i = IO(Flipped(Decoupled(new PageSetBufferWriteRequestPacket(params, t.entryNumber))))
+  val write_request_i = IO(Flipped(Decoupled(new PageSetBufferWriteRequestPacket(params))))
 
   updated_pt_set.entries(write_request_i.bits.index).entry := write_request_i.bits.item.entry
   updated_pt_set.entries(write_request_i.bits.index).tag := write_request_i.bits.item.tag

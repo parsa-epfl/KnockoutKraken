@@ -87,7 +87,7 @@ class PageWalker(
   u_buffer.write_request_i.bits := DontCare
 
   // IO assignment of AXI Read DMA
-  M_DMA_R.req.bits.address := params.vpn2ptSetPA(request_r.asid, request_r.vpn, u_buffer.entryNumber)
+  M_DMA_R.req.bits.address := params.vpn2ptSetPA(request_r.asid, request_r.vpn, params.getPageTableParams.ptAssociativity)
   M_DMA_R.req.bits.length := u_buffer.requestPacketNumber.U
   M_DMA_R.req.valid := state_r === sMove
 
