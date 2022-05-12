@@ -13,17 +13,18 @@ import chiseltest.simulator.VerilatorBackendAnnotation
 import chiseltest.simulator.WriteVcdAnnotation
 import firrtl.options.TargetDirAnnotation
 
-import armflex.MemoryAccessType._
+import armflex_cache._
 import MMUBundleDrivers._
 
 import org.scalatest.freespec.AnyFreeSpec
 import armflex.QEMUMessagesType
-import armflex.MemoryAccessType
+import armflex.MemoryAccessType._
+import armflex_cache.LRU
+import armflex_cache.LRUCorePseudo
 
 class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
   val (thid, asid, vpn, ppn) = (0x5, 0x1A, 0xABCD, 0x789D)
 
-  /*
   "QEMU miss resp with no synonym" in {
     import MMUDriver._
     val anno = Seq(TargetDirAnnotation("test/demander/pagefault_resolution/no_synonym"), VerilatorBackendAnnotation, PrintFullStackTraceAnnotation)
@@ -37,69 +38,120 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
 
       val msg = QEMUMissReply(tag, perm.U, thid.U, ppn.U)
       val msgPacked = dut.encodeMsgMissReply(QEMUMessagesType.sMissReply.U, msg)
+
+      println("0. Send a Miss Request response")
       dut.sendMMUMsg(msgPacked)
+      println("1. Read Page Table from DRAM")
       dut.respEmptyPageTableSet(asid.U, vpn.U)
+      println("2. Write updated page table")
       dut.expectWrPageTableSet(Seq((0, pageTableSet)), lru)
+      println("3. Expect TLB fill response")
       dut.expectMissResp(perm, thid.U, pageTableSet)
     }
   }
-  // */
 
-  "QEMU miss resp with entry eviction from set" in {
+  "QEMU force entry eviction" in {
+    import MMUDriver._
+    val anno = Seq(TargetDirAnnotation("test/demander/PageFaultEviction"), VerilatorBackendAnnotation, WriteVcdAnnotation)
+    test(new MMUDUT(new MemoryHierarchyParams(pAddrW = 36))).withAnnotations(anno){ dut => dut.init()
+      implicit val ptparams = (dut.params.getPageTableParams)
+      val perm = DATA_STORE
+
+      // Prepare evicted entry
+      val evictedTag = PTTagPacket((vpn + 1).U, asid.U)
+      val evictedEntry = PTEntryPacket((ppn + 1).U, perm.U, false.B)
+      val evictedItem = PageTableItem(evictedTag, evictedEntry)
+
+      // Prepare PageTableSet with LRU conflict
+      val evictedEntryIdx = 13
+      val lruPath = LRUCorePseudo.getLRUEncodedPath(evictedEntryIdx, dut.params.getPageTableParams.ptAssociativity/2, 0, 0, Seq())
+      val randomString = BigInt(scala.util.Random.nextLong(Math.pow(2, dut.params.getPageTableParams.ptAssociativity-1).toLong)).toString(2).padTo(dut.params.getPageTableParams.ptAssociativity-1, '0')
+      val lruBits = BigInt(randomString.reverse, 2)
+      val sets = Seq((evictedEntryIdx -> evictedItem))
+
+      // Prepare Evict Request
+      val qemuEvictRequest = QEMUPageEvictRequest(evictedTag)
+      val qemuEvictRequestMsg = dut.encodeMsgPageEvictReq(QEMUMessagesType.sPageEvict.U, qemuEvictRequest)
+
+      // Send miss reply
+      println("0. Send a Miss Request response")
+      dut.sendMMUMsg(qemuEvictRequestMsg)
+
+      val flushes = fork { 
+        dut.expectFlushReqTLB(perm, thid.U, evictedItem) 
+      }.fork {
+        dut.expectFlushReqCache(perm, thid.U, evictedItem)
+      }
+
+      println("1. Read Page Table from DRAM")
+      dut.expectRdPageTableSet(sets, lruBits.U)
+
+      println("2. Expect TLB's and Cache flush requests")
+      flushes.join()
+
+      println("3.4 Send Eviction Start")
+      dut.expectMsgPageEvictNotif(dut.getMMUMsg(), PageEvictNotif(evictedItem))
+
+      println("3.5 Send eviction done")
+      dut.expectMsgPageEvictNotif(dut.getMMUMsg(), PageEvictNotifDone(evictedItem))
+
+      // Expect set with evicted entry
+      println("4.1 Write updated page table set to DRAM")
+      val newLruBitsString = lruPath.foldLeft(randomString) { 
+        (currEncode, step) => currEncode.updated(step._1, step._2 match {
+          case '0' => '1'
+          case '1' => '0'
+        })}
+      val newLruBits = BigInt(newLruBitsString.reverse, 2)
+
+      val packet = PageTableSetPacket(0, PageTableSetPacket(PageTableSetPacket.makeEmptySet, newLruBits.U))
+      dut.expectWrPageTableSet(packet, dut.vpn2ptSetPA(evictedTag).U)
+    }
+  }
+
+  "QEMU miss resp with entry eviction from set because of conflict" in {
     import MMUDriver._
     val anno = Seq(TargetDirAnnotation("test/demander/pagefault_resolution/trigger_page_eviction"), VerilatorBackendAnnotation)
     test(new MMUDUT(new MemoryHierarchyParams(pAddrW = 36))).withAnnotations(anno){ dut => dut.init()
       implicit val ptparams = (dut.params.getPageTableParams)
       val perm = DATA_STORE
+
+      // Prepare evicted entry
       val evictedTag = PTTagPacket((vpn + 1).U, asid.U)
       val evictedEntry = PTEntryPacket((ppn + 1).U, perm.U, false.B)
+      val evictedItem = PageTableItem(evictedTag, evictedEntry)
+
+      // Prpeare inserting entry
       val insertedTag = PTTagPacket(vpn.U, asid.U)
       val insertedEntry = PTEntryPacket(ppn.U, perm.U, false.B)
-      val insertedItem  = PageTableItem(PTTagPacket(vpn.U, asid.U), PTEntryPacket(ppn.U, perm.U, false.B))
-      val evictedItem = PageTableItem(PTTagPacket((vpn + 1).U, asid.U), PTEntryPacket((ppn + 1).U, perm.U, false.B))
-      val makeMsg = QEMUMissReply(PTTagPacket(vpn.U, asid.U), perm.U, thid.U, insertedItem.entry.ppn)
-      val insertMsg = dut.encodeMsgMissReply(QEMUMessagesType.sMissReply.U, makeMsg)
+      val insertedItem  = PageTableItem(insertedTag, insertedEntry)
 
-      val emptySet = PageTableSetPacket.makeEmptySet
+      // Prepare PageTableSet with LRU conflict
       val lru = 13
-      val lruBits = BigInt("1000000010000100".reverse, 2)
-      val sets = emptySet.updated[(Int, armflex.PageTableItem)](lru, (lru -> evictedItem))
-      sets foreach (set => println(s"VPN[${set._2.tag.vpn.litValue}]:ASID[${set._2.tag.asid.litValue}]"))
+      val lruPath = LRUCorePseudo.getLRUEncodedPath(lru, dut.params.getPageTableParams.ptAssociativity/2, 0, 0, Seq())
+      val randomString = BigInt(scala.util.Random.nextLong(Math.pow(2, dut.params.getPageTableParams.ptAssociativity-1).toLong)).toString(2).padTo(dut.params.getPageTableParams.ptAssociativity-1, '0')
+      val lruBitsString = lruPath.foldLeft(randomString) { (currEncode, step) => currEncode.updated(step._1, step._2) }
+      val lruBits = BigInt(lruBitsString.reverse, 2)
+      val sets = PageTableSetPacket.makeEmptySet.updated[(Int, armflex.PageTableItem)](lru, (lru -> evictedItem))
 
-      dut.sendMMUMsg(insertMsg)
-      fork {
-        dut.expectFlushReq(perm, thid.U, evictedItem) 
+      // Prepare Miss Request
+      val qemuMissReplyReq = QEMUMissReply(insertedTag, perm.U, thid.U, insertedItem.entry.ppn)
+      val pageFaultMissReply = dut.encodeMsgMissReply(QEMUMessagesType.sMissReply.U, qemuMissReplyReq)
+
+      // Send miss reply
+      println("0. Send a Miss Request response")
+      dut.sendMMUMsg(pageFaultMissReply)
+
+      val flushes = fork { 
+        dut.expectFlushReqTLB(perm, thid.U, evictedItem) 
+      }.fork {
+        dut.expectFlushReqCache(perm, thid.U, evictedItem)
       }
+
+      println("1. Read Page Table from DRAM")
       dut.expectRdPageTableSet(sets, lruBits.U, lru)
-      dut.expectWrPageTableSet(sets, lruBits.U)
-      dut.expectFlushReq(perm, thid.U, evictedItem)
-
-    /*
-      // 3.2 Send eviction start
-      fork {
-        dut.expectQEMUMessage(
-          5,
-          Seq(0x10, 0x20, 0x0, 0x10, 1, 1)
-        )
-      }
-      // 3.3 Cache Eviction (At the same time with eviction message.)
-      timescope {
-        dut.dcache_flush_request_o.ready.poke(true.B)
-        for(i <- 0 until 64){
-          dut.waitForSignalToBe(dut.dcache_flush_request_o.valid)
-          dut.dcache_flush_request_o.bits.addr.expect((0x10 * 4096 + i * 64).U)
-          dut.tk()
-        }
-      }
-      
-      // 3.4 Wait Cache to be empty
-      dut.mmu_cache_io.data.wbEmpty.poke(true.B)
-
-      // 3.5 Send eviction done
-      dut.expectQEMUMessage(
-        6,
-        Seq(0x10, 0x20, 0x0, 0x10, 1, 1)
-      )
+      println("2. Expect TLB's and Cache flush requests")
+      flushes.join()
 
       println("3.4 Send Eviction Start")
       dut.expectMsgPageEvictNotif(dut.getMMUMsg(), PageEvictNotif(evictedItem))

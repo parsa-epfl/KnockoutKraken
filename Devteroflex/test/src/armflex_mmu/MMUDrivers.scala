@@ -106,9 +106,13 @@ object MMUHelpers {
 }
 
 object MMUBundleDrivers {
+  object CacheFlushRequest {
+    def apply(addr: UInt)(implicit params: CacheParams) = 
+      new CacheFlushRequest(params).Lit(_.addr -> addr)
+  }
   object TLBPipelineResp {
     def apply(entry : PTEntryPacket, hit : Bool, violation : Bool, thid: UInt)(implicit params: PageTableParams) = {
-      new TLBPipelineResp(params).Lit(_.entry -> entry, _.hit -> hit, _.violation -> violation, _.thid -> thid)
+      new TLBPipelineResp(params).Lit(_.entry -> PTEntryPacket(entry.ppn, entry.perm, entry.modified), _.hit -> hit, _.violation -> violation, _.thid -> thid)
     }
   }
 
@@ -143,12 +147,12 @@ object MMUBundleDrivers {
 
   object QEMUMissReply {
     def apply(tag: PTTagPacket, perm: UInt, thid: UInt, ppn: UInt)(implicit params: PageTableParams): QEMUMissReply = 
-      new QEMUMissReply(params).Lit( _.tag -> tag, _.perm -> perm, _.thid -> thid, _.thid_v -> (thid.litValue != BigInt("FFFFFFFF", 16)).B, _.ppn -> ppn)
+      new QEMUMissReply(params).Lit( _.tag -> PTTagPacket(tag.vpn, tag.asid), _.perm -> perm, _.thid -> thid, _.thid_v -> (thid.litValue != BigInt("FFFFFFFF", 16)).B, _.ppn -> ppn)
   }
 
   object QEMUEvictReply { 
     def apply(tag: PTTagPacket, old_ppn: UInt)(implicit params: PageTableParams): QEMUEvictReply = 
-      new QEMUEvictReply(params).Lit(_.tag -> tag, _.old_ppn -> old_ppn)
+      new QEMUEvictReply(params).Lit(_.tag -> PTTagPacket(tag.vpn, tag.asid), _.old_ppn -> old_ppn)
   }
 
   object PageEvictNotif {
@@ -163,17 +167,26 @@ object MMUBundleDrivers {
 
   object PageFaultNotification {
     def apply(tag: PTTagPacket, perm: UInt, thid: UInt)(implicit params: PageTableParams): PageFaultNotification = 
-      new PageFaultNotification(params).Lit(_.tag -> tag, _.perm -> perm, _.thid -> thid)
+      new PageFaultNotification(params).Lit(_.tag -> PTTagPacket(tag.vpn, tag.asid), _.perm -> perm, _.thid -> thid)
   }
 
   object PageTableItem {
     def apply(tag: PTTagPacket, entry: PTEntryPacket)(implicit params: PageTableParams): PageTableItem = 
-      new PageTableItem(params).Lit(_.tag -> tag, _.entry -> entry)
+      new PageTableItem(params).Lit(_.tag -> PTTagPacket(tag.vpn, tag.asid), _.entry -> PTEntryPacket(entry.ppn, entry.perm, entry.modified))
     def apply(implicit params: PageTableParams): PageTableItem = 
       new PageTableItem(params).Lit(_.tag -> PTTagPacket(params), _.entry -> PTEntryPacket(params))
   }
  
   object PageTableSetPacket {
+    def apply(validVec: BigInt, packet: PageTableSetPacket)(implicit params: PageTableParams): PageTableSetPacket = {
+      new PageTableSetPacket(params).Lit(
+        _.entries -> TestUtils.vecLitMake(params.ptAssociativity, packet.entries.zipWithIndex.map {
+          case (set, idx) => (idx,
+          () => PageTableItem(set.tag, set.entry)(params))},
+          () => PageTableItem(params)), 
+        _.lru_bits -> packet.lru_bits, _.valids -> validVec.U)
+    }
+
     def apply(entries: Seq[(Int, PageTableItem)], lru: UInt)(implicit params: PageTableParams): PageTableSetPacket = {
       val valids =  entries.map(_._1).foldLeft(0)((bitvec, idx) => bitvec | 1 << idx)
       new PageTableSetPacket(params).Lit(
@@ -203,6 +216,7 @@ class MMUDUT(
 ) extends Module {
   val uMMU = Module(new MMU(params, 2))
   implicit val ptParams = params.getPageTableParams
+  implicit val cacheParams = params.getCacheParams
 
   // Load Store Unit: Page deleting acknowledgement
   uMMU.mmu_pipe_io.data.flushPermReq.ready := true.B
@@ -276,6 +290,7 @@ object MMUDriver {
   implicit class MMUDriver(target: MMUDUT){
     implicit val clock: Clock = target.clock
     implicit val ptparams = target.params.getPageTableParams
+    implicit val cacheparams = target.params.getCacheParams
 
     def init() = {
       target.M_AXI.initMaster()
@@ -299,6 +314,14 @@ object MMUDriver {
       target.mmu_tlb_io.data.flushResp.initSource()
       target.mmu_tlb_io.inst.flushResp.setSourceClock(clock)
       target.mmu_tlb_io.data.flushResp.setSourceClock(clock)
+
+      target.mmu_cache_io.data.flushReq.initSink()
+      target.mmu_cache_io.inst.flushReq.initSink()
+      target.mmu_cache_io.data.flushReq.setSinkClock(clock)
+      target.mmu_cache_io.inst.flushReq.setSinkClock(clock)
+
+      target.mmu_cache_io.inst.wbEmpty.poke(true.B) 
+      target.mmu_cache_io.data.wbEmpty.poke(true.B) 
     }
 
     /**
@@ -387,6 +410,11 @@ object MMUDriver {
       target.encode.vector.peek()
     }
 
+    def encodePageTableSet(validVec: BigInt, pageTableSet: PageTableSetPacket) = {
+      target.encode.packet.poke(MMUBundleDrivers.PageTableSetPacket(validVec, pageTableSet))
+      target.encode.vector.peek()
+    }
+
     def encodePageTableSet(sets: Seq[(Int, PageTableItem)]): Vec[UInt] = encodePageTableSet(sets, 0.U)
     def encodePageTableSet(sets: Seq[(Int, PageTableItem)], lru: UInt): Vec[UInt] = {
       target.encode.packet.poke(MMUBundleDrivers.PageTableSetPacket(sets, lru))
@@ -414,18 +442,46 @@ object MMUDriver {
       }
     }
 
-    def expectFlushReq(accessType: Int, thid: UInt, set: PageTableItem) = {
+    def expectFlushReqCache(accessType: Int, thid: UInt, set: PageTableItem) = {
+      val cacheBlockBytes = target.params.cacheBlockSize/8
+      val ppageAddr = set.entry.ppn.litValue << log2Ceil(target.params.pageSize)
       if(accessType == MemoryAccessType.INST_FETCH) {
-        target.mmu_tlb_io.inst.flushReq.expectDequeue(set.tag)
-        target.mmu_tlb_io.inst.flushResp.enqueueNow(TLBPipelineResp(set.entry, true.B, false.B, thid))
+        for (block <- 0 until target.params.pageSize/cacheBlockBytes) {
+          val addr = ppageAddr + (block << log2Ceil(cacheBlockBytes))
+          target.mmu_cache_io.inst.flushReq.expectDequeue(CacheFlushRequest(addr.U))
+        }
       } else {
-        target.mmu_tlb_io.data.flushReq.expectDequeue(set.tag)
-        target.mmu_tlb_io.data.flushResp.enqueueNow(TLBPipelineResp(set.entry, true.B, false.B, thid))
+        target.mmu_cache_io.data.wbEmpty.poke(false.B) 
+        for (block <- 0 until target.params.pageSize/cacheBlockBytes) {
+          val addr = ppageAddr + (block << log2Ceil(cacheBlockBytes))
+          target.mmu_cache_io.data.flushReq.expectDequeue(CacheFlushRequest(addr.U))
+        }
+        clock.step(4)
+        target.mmu_cache_io.data.wbEmpty.poke(true.B) 
       }
+      clock.step()
     }
 
-    def expectWrPageTableSet(sets: Seq[(Int, PageTableItem)], lru: UInt) = {
-      val expectAddr = vpn2ptSetPA(sets(0)._2.tag.asid.litValue, sets(0)._2.tag.vpn.litValue)
+    def expectFlushReqTLB(accessType: Int, thid: UInt, set: PageTableItem) = {
+      fork {
+        target.mmu_tlb_io.inst.flushReq.expectDequeue(set.tag)
+        target.mmu_tlb_io.inst.flushResp.enqueueNow(TLBPipelineResp(set.entry, (accessType == MemoryAccessType.INST_FETCH).B, false.B, thid))
+      }.fork {
+        target.mmu_tlb_io.data.flushReq.expectDequeue(set.tag)
+        target.mmu_tlb_io.data.flushResp.enqueueNow(TLBPipelineResp(set.entry, (accessType != MemoryAccessType.INST_FETCH).B, false.B, thid))
+      }.join()
+    }
+
+    def vpn2ptSetPA(tag: PTTagPacket): BigInt = vpn2ptSetPA(tag.asid.litValue, tag.vpn.litValue)
+    def expectWrPageTableSet(packet: PageTableSetPacket, expectAddr: UInt): Unit = {
+      target.encode.packet.poke(packet)
+      val vectorPacket = target.encode.vector.peek()
+      target.M_AXI.expectWr(vectorPacket, expectAddr)
+    }
+
+    def expectWrPageTableSet(sets: Seq[(Int, PageTableItem)], lru: UInt): Unit = expectWrPageTableSet(sets, lru, 0)
+    def expectWrPageTableSet(sets: Seq[(Int, PageTableItem)], lru: UInt, pickSetForAddr: Int): Unit = {
+      val expectAddr = vpn2ptSetPA(sets(pickSetForAddr)._2.tag.asid.litValue, sets(pickSetForAddr)._2.tag.vpn.litValue)
       val vectorPacket = encodePageTableSet(sets, lru)
       target.M_AXI.expectWr(vectorPacket, expectAddr.U)
     }
