@@ -101,20 +101,22 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
         dut.tk()
       }
       // 3.2 Send eviction start
-      dut.expectQEMUMessage(
-        5,
-        Seq(0x10, 0x20, 0x0, 0x10, 1, 1)
-      )
-      // 3.3 Cache Eviction
-      for(i <- 0 until 64){
-        dut.waitForSignalToBe(dut.dcache_flush_request_o.valid)
-        dut.dcache_flush_request_o.bits.addr.expect((0x10 * 4096 + i * 64).U)
-        timescope {
-          dut.dcache_flush_request_o.ready.poke(true.B)
+      fork {
+        dut.expectQEMUMessage(
+          5,
+          Seq(0x10, 0x20, 0x0, 0x10, 1, 1)
+        )
+      }
+      // 3.3 Cache Eviction (At the same time with eviction message.)
+      timescope {
+        dut.dcache_flush_request_o.ready.poke(true.B)
+        for(i <- 0 until 64){
+          dut.waitForSignalToBe(dut.dcache_flush_request_o.valid)
+          dut.dcache_flush_request_o.bits.addr.expect((0x10 * 4096 + i * 64).U)
           dut.tk()
         }
       }
-
+      
       // 3.4 Wait Cache to be empty
       dut.dcache_wb_queue_empty_i.poke(true.B)
 

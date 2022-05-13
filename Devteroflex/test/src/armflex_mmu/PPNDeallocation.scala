@@ -82,17 +82,20 @@ class PPNDeallocationTester extends AnyFreeSpec with ChiselScalatestTester {
       }
       
       // 4. send start message
-      dut.expectQEMUMessage(
-        5,
-        Seq(0x10, 0xABC, 0x0, 0x10000, 1, 0)
-      )
+      fork {
+        dut.expectQEMUMessage(
+          5,
+          Seq(0x10, 0xABC, 0x0, 0x10000, 1, 0)
+        )
+      }
+      
 
       // 5. flush cache
-      for(i <- 0 until 64){
-        dut.waitForSignalToBe(dut.dcache_flush_request_o.valid)
-        dut.dcache_flush_request_o.bits.addr.expect((0x10000 * 4096 + i * 64).U)
-        timescope {
-          dut.dcache_flush_request_o.ready.poke(true.B)
+      timescope {
+        dut.dcache_flush_request_o.ready.poke(true.B)
+        for(i <- 0 until 64){
+          dut.waitForSignalToBe(dut.dcache_flush_request_o.valid)
+          dut.dcache_flush_request_o.bits.addr.expect((0x10000 * 4096 + i * 64).U)
           dut.tk()
         }
       }
