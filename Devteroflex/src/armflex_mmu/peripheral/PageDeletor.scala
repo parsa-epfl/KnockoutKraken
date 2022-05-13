@@ -70,23 +70,28 @@ class PageDeletor(
 
   // Counter to monitor the flush process
   val flush_cnt_r = RegInit(0.U(6.W))
-  val flush_which = Mux(item_r.entry.perm =/= 2.U, true.B, false.B) // true: D Cache, false: I Cache
-  val flush_fired = Mux(flush_which, dcache_flush_request_o.fire, icache_flush_request_o.fire)
+  // val flush_which = Mux(item_r.entry.perm =/= 2.U, true.B, false.B) // true: D Cache, false: I Cache
+  // It will be flushed at the same time!
+  val flush_fired = dcache_flush_request_o.fire && icache_flush_request_o.fire
   when(page_delete_req_i.fire){
     flush_cnt_r := 0.U
   }.elsewhen(state_r === sFlushPage){
-    flush_cnt_r := Mux(
-     flush_fired,
-      flush_cnt_r + 1.U,
-      flush_cnt_r
-    )
+    flush_cnt_r := flush_cnt_r + 1.U
   }
 
   icache_flush_request_o.bits.addr := Cat(Cat(item_r.entry.ppn, flush_cnt_r), 0.U(log2Ceil(params.cacheBlockSize/8).W))
   dcache_flush_request_o.bits.addr := Cat(Cat(item_r.entry.ppn, flush_cnt_r), 0.U(log2Ceil(params.cacheBlockSize/8).W))
 
   icache_flush_request_o.valid := state_r === sFlushPage && item_r.entry.perm === 2.U
-  dcache_flush_request_o.valid := state_r === sFlushPage && item_r.entry.perm =/= 2.U
+  dcache_flush_request_o.valid := state_r === sFlushPage
+
+  when(icache_flush_request_o.valid){
+    assert(icache_flush_request_o.fire, "Flushing request should be accepted with the highest priority.")
+  }
+
+  when(dcache_flush_request_o.valid){
+    assert(dcache_flush_request_o.fire, "Flushing request should be accepted with the highest priority.")
+  }
 
   // sPipe
   // Wait 4 cycles so that the request has been piped.
