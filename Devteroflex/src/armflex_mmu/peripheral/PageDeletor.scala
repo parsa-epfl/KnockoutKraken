@@ -72,7 +72,6 @@ class PageDeletor(
   val flush_cnt_r = RegInit(0.U(6.W))
   // val flush_which = Mux(item_r.entry.perm =/= 2.U, true.B, false.B) // true: D Cache, false: I Cache
   // It will be flushed at the same time!
-  val flush_fired = dcache_flush_request_o.fire && icache_flush_request_o.fire
   when(page_delete_req_i.fire){
     flush_cnt_r := 0.U
   }.elsewhen(state_r === sFlushPage){
@@ -96,7 +95,7 @@ class PageDeletor(
   // sPipe
   // Wait 4 cycles so that the request has been piped.
   val pipe_cnt_r = RegInit(0.U(2.W))
-  when(state_r === sFlushPage && flush_cnt_r === 63.U && flush_fired){
+  when(state_r === sFlushPage && flush_cnt_r === 63.U){
     pipe_cnt_r := 0.U
   }.elsewhen(state_r === sPipe){
     pipe_cnt_r := pipe_cnt_r + 1.U
@@ -165,7 +164,7 @@ class PageDeletor(
       }
     }
     is(sFlushPage){
-      when(flush_cnt_r === 63.U && flush_fired) {
+      when(flush_cnt_r === 63.U) {
         state_r := sPipe
       }
     }
