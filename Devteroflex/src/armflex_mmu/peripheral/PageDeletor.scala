@@ -20,7 +20,7 @@ import chisel3.util._
  * 5. Send notification signal to the LSU so that LSU knows the flush is complete.
  * 6. Send message to QEMU that the eviction is complete
  * 
- * @params params the parameter of the MemorySystem
+ * @param params the parameter of the MemorySystem
  */ 
 class PageDeletor(
   params: MemoryHierarchyParams
@@ -69,33 +69,42 @@ class PageDeletor(
   val dcache_flush_request_o = IO(Decoupled(new CacheFlushRequest(params.getCacheParams)))
 
   // Counter to monitor the flush process
-  val flush_cnt_r = RegInit(0.U(6.W))
+  val icache_flush_cnt_r = RegInit(0.U(6.W))
+  val icache_flush_done_r = RegInit(false.B)
+  val dcache_flush_cnt_r = RegInit(0.U(6.W))
+  val dcache_flush_done_r = RegInit(false.B)
   // val flush_which = Mux(item_r.entry.perm =/= 2.U, true.B, false.B) // true: D Cache, false: I Cache
   // It will be flushed at the same time!
   when(page_delete_req_i.fire){
-    flush_cnt_r := 0.U
+    icache_flush_cnt_r := 0.U
+    icache_flush_done_r := page_delete_req_i.bits.entry.perm =/= 2.U
   }.elsewhen(state_r === sFlushPage){
-    flush_cnt_r := flush_cnt_r + 1.U
+    when(icache_flush_request_o.fire){
+      icache_flush_cnt_r := icache_flush_cnt_r + 1.U
+      icache_flush_done_r := icache_flush_cnt_r === 63.U
+    }
   }
 
-  icache_flush_request_o.bits.addr := Cat(Cat(item_r.entry.ppn, flush_cnt_r), 0.U(log2Ceil(params.cacheBlockSize/8).W))
-  dcache_flush_request_o.bits.addr := Cat(Cat(item_r.entry.ppn, flush_cnt_r), 0.U(log2Ceil(params.cacheBlockSize/8).W))
-
-  icache_flush_request_o.valid := state_r === sFlushPage && item_r.entry.perm === 2.U
-  dcache_flush_request_o.valid := state_r === sFlushPage
-
-  when(icache_flush_request_o.valid){
-    assert(icache_flush_request_o.fire, "Flushing request should be accepted with the highest priority.")
+  when(page_delete_req_i.fire){
+    dcache_flush_cnt_r := 0.U
+    dcache_flush_done_r := false.B
+  }.elsewhen(state_r === sFlushPage){
+    when(dcache_flush_request_o.fire){
+      dcache_flush_cnt_r := dcache_flush_cnt_r + 1.U
+      dcache_flush_done_r := dcache_flush_cnt_r === 63.U
+    }
   }
 
-  when(dcache_flush_request_o.valid){
-    assert(dcache_flush_request_o.fire, "Flushing request should be accepted with the highest priority.")
-  }
+  icache_flush_request_o.bits.addr := Cat(Cat(item_r.entry.ppn, icache_flush_cnt_r), 0.U(log2Ceil(params.cacheBlockSize/8).W))
+  dcache_flush_request_o.bits.addr := Cat(Cat(item_r.entry.ppn, dcache_flush_cnt_r), 0.U(log2Ceil(params.cacheBlockSize/8).W))
+
+  icache_flush_request_o.valid := state_r === sFlushPage && item_r.entry.perm === 2.U && !icache_flush_done_r
+  dcache_flush_request_o.valid := state_r === sFlushPage && !dcache_flush_done_r
 
   // sPipe
   // Wait 4 cycles so that the request has been piped.
   val pipe_cnt_r = RegInit(0.U(2.W))
-  when(state_r === sFlushPage && flush_cnt_r === 63.U){
+  when(page_delete_req_i.fire){
     pipe_cnt_r := 0.U
   }.elsewhen(state_r === sPipe){
     pipe_cnt_r := pipe_cnt_r + 1.U
@@ -117,7 +126,7 @@ class PageDeletor(
   val done_message_o = IO(Decoupled(new PageEvictNotification(
     QEMUMessagesType.sEvictDone,
     params.getPageTableParams
-    )))
+  )))
   done_message_o.bits.item := item_r
   done_message_o.valid := state_r === sSend
 
@@ -164,7 +173,7 @@ class PageDeletor(
       }
     }
     is(sFlushPage){
-      when(flush_cnt_r === 63.U) {
+      when(icache_flush_done_r && dcache_flush_done_r) {
         state_r := sPipe
       }
     }
