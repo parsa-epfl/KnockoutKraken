@@ -53,8 +53,7 @@ class LRU[T <: LRUCore](
  *  the interface of LRU updating logic. Pure combinational logic.
  *  @params wayNumber how many ways this LRU could handle.
  */ 
-sealed abstract class LRUCore(wayNumber: Int) extends Module{
-  def encodingWidth: Int  // how many bits are needed to store the encoding bits.
+sealed abstract class LRUCore(wayNumber: Int, val encodingWidth: Int) extends Module{
   val wayWidth = log2Ceil(wayNumber)
   final val io = IO(new Bundle{
     // the request
@@ -73,7 +72,12 @@ object PseudoTreeLRU {
   def apply(currEncodingBits: UInt, access: UInt): (UInt, UInt) = {
     val encodingSize = currEncodingBits.getWidth
     val accessSize = access.getWidth
-    assert(log2Ceil(encodingSize) == accessSize)
+    if(accessSize == 1){
+      // only one bit is enough to distinguish two elements.
+      assert(encodingSize == 1)
+    } else {
+      assert(log2Ceil(encodingSize) == accessSize)
+    }
 
     val currEnconding = WireInit(VecInit(currEncodingBits.asBools))
     val nextEncoding = WireInit(currEnconding)
@@ -119,9 +123,8 @@ object PseudoTreeLRU {
  * 
  *  Tree LRU is appreciated when the tlbAssociativity greater than 4, sel can be normal in L1 TLB.
  */ 
-class PseudoTreeLRUCore(wayNumber: Int) extends LRUCore(wayNumber){
+class PseudoTreeLRUCore(wayNumber: Int) extends LRUCore(wayNumber, wayNumber - 1){
   //assert(isPow2(wayNumber))
-  override def encodingWidth: Int = wayNumber - 1
   val (lru, encoded) = PseudoTreeLRU(io.encoding_i, io.lru_i)
   io.lru_o := lru
   io.encoding_o := encoded
@@ -130,8 +133,7 @@ class PseudoTreeLRUCore(wayNumber: Int) extends LRUCore(wayNumber){
 /**
  *  Real LRU updating logic implemented by matrix. 
  */ 
-class MatrixLRUCore(wayNumber: Int) extends LRUCore(wayNumber){
-  override def encodingWidth: Int = wayNumber * (wayNumber - 1)
+class MatrixLRUCore(wayNumber: Int) extends LRUCore(wayNumber, wayNumber * (wayNumber - 1)){
   // 1. recover the matrix structure.
   val matrix = WireInit(VecInit(Seq.fill(wayNumber)(VecInit(Seq.fill(wayNumber)(false.B)))))
   var encodingCnt = 0
