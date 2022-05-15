@@ -23,7 +23,7 @@ object InstrumentationDrivers {
     extends DriverBase(target) {
       private val csrParams = target.params.csrParams
       def init() = {
-        target.S_AXIL.init()
+        target.S_AXIL.initSlave()
         target.dram_io.read.init()
         target.dram_io.write.init()
       }
