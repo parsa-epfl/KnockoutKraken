@@ -37,7 +37,7 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
       val pageTableSet = PageTableItem(tag, entry)
 
       val msg = QEMUMissReply(tag, perm.U, thid.U, ppn.U)
-      val msgPacked = dut.encodeMsgMissReply(QEMUMessagesType.sMissReply.U, msg)
+      val msgPacked = dut.rawMessageHelper.encodeMsgMissReply(msg)
 
       println("0. Send a Miss Request response")
       dut.sendMMUMsg(msgPacked)
@@ -71,7 +71,7 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
 
       // Prepare Evict Request
       val qemuEvictRequest = QEMUPageEvictRequest(evictedTag)
-      val qemuEvictRequestMsg = dut.encodeMsgPageEvictReq(QEMUMessagesType.sPageEvict.U, qemuEvictRequest)
+      val qemuEvictRequestMsg = dut.rawMessageHelper.encodeMsgPageEvictReq(qemuEvictRequest)
 
       // Send miss reply
       println("0. Send a Miss Request response")
@@ -90,10 +90,10 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
       flushes.join()
 
       println("3.4 Send Eviction Start")
-      dut.expectMsgPageEvictNotif(dut.getMMUMsg(), PageEvictNotif(evictedItem))
+      dut.rawMessageHelper.expectMsgPageEvictNotifStart(dut.getMMUMsg(), PageEvictNotif(evictedItem))
 
       println("3.5 Send eviction done")
-      dut.expectMsgPageEvictNotif(dut.getMMUMsg(), PageEvictNotifDone(evictedItem))
+      dut.rawMessageHelper.expectMsgPageEvictNotifDone(dut.getMMUMsg(), PageEvictNotifDone(evictedItem))
 
       // Expect set with evicted entry
       println("4.1 Write updated page table set to DRAM")
@@ -136,7 +136,7 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
 
       // Prepare Miss Request
       val qemuMissReplyReq = QEMUMissReply(insertedTag, perm.U, thid.U, insertedItem.entry.ppn)
-      val pageFaultMissReply = dut.encodeMsgMissReply(QEMUMessagesType.sMissReply.U, qemuMissReplyReq)
+      val pageFaultMissReply = dut.rawMessageHelper.encodeMsgMissReply(qemuMissReplyReq)
 
       // Send miss reply
       println("0. Send a Miss Request response")
@@ -154,9 +154,9 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
       flushes.join()
 
       println("3.4 Send Eviction Start")
-      dut.expectMsgPageEvictNotif(dut.getMMUMsg(), PageEvictNotif(evictedItem))
+      dut.rawMessageHelper.expectMsgPageEvictNotifStart(dut.getMMUMsg(), PageEvictNotif(evictedItem))
       println("3.5 Send eviction done")
-      dut.expectMsgPageEvictNotif(dut.getMMUMsg(), PageEvictNotifDone(evictedItem))
+      dut.rawMessageHelper.expectMsgPageEvictNotifDone(dut.getMMUMsg(), PageEvictNotifDone(evictedItem))
 
       // Expect set with inserted entry
       println("4.0 Calculate the new LRU vector")

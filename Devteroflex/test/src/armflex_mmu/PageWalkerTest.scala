@@ -48,7 +48,7 @@ class PageWalkTester extends AnyFreeSpec with ChiselScalatestTester {
       dut.respEmptyPageTableSet(asid.U, vpn.U)
       dut.waitTillPendingMMUMsg()
       val msg = dut.getMMUMsg()
-      dut.expectMsgPageFaultNotif(msg, msgPageFaultNotif)
+      dut.rawMessageHelper.expectMsgPageFaultNotif(msg, msgPageFaultNotif)
       dut.clock.step()
     }
   }

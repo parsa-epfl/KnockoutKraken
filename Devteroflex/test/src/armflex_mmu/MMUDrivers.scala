@@ -43,65 +43,98 @@ object MMUHelpers {
     decode.packet := decode.vector.asUInt.asTypeOf(decode.packet.cloneType)
   }
 
-  class RawMessageEncoder(implicit params: PageTableParams) extends Module {
-    val decode = IO(new Bundle {
-      val pack = Input(UInt(512.W))
-      val msgPageEvictReq = Output(new QEMUPageEvictRequest(params))
-      val msgMissReply = Output(new QEMUMissReply(params))
-      val msgEvictReply = Output(new QEMUEvictReply(params))
-      val msgPageEvictNotif = Output(new PageEvictNotification(QEMUMessagesType.sEvictNotify, params))
-      val msgPageEvictDone = Output(new PageEvictNotification(QEMUMessagesType.sEvictDone, params))
-      val msgPageFaultNotif = Output(new PageFaultNotification(params))
-    })
+  class RawMessageHelperIO(implicit params: PageTableParams) extends Bundle {
+    val decode = new RawMessageHelperDecodeIO
+    val encode = new RawMessageHelperEncodeIO
+    val getType = new RawMessageHelperGetTypeIO
+  }
 
-    val vectorized = (new TxMessage).parseFromVec(VecInit(decode.pack.asBools().grouped(32).map{x=> Cat(x.reverse)}.toSeq))
-    decode.msgPageEvictReq   := decode.msgPageEvictReq.parseFromVec(vectorized.data)
-    decode.msgMissReply      := decode.msgMissReply.parseFromVec(vectorized.data)
-    decode.msgEvictReply     := decode.msgEvictReply.parseFromVec(vectorized.data)
-    decode.msgPageEvictNotif := decode.msgPageEvictNotif.parseFromVec(vectorized.data)
-    decode.msgPageEvictDone  := decode.msgPageEvictDone.parseFromVec(vectorized.data)
-    decode.msgPageFaultNotif := decode.msgPageFaultNotif.parseFromVec(vectorized.data)
+  class RawMessageHelperDecodeIO(implicit params: PageTableParams) extends Bundle {
+    val pack = Input(UInt(512.W))
+    val msgPageEvictReq = Output(new QEMUPageEvictRequest(params))
+    val msgMissReply = Output(new QEMUMissReply(params))
+    val msgEvictReply = Output(new QEMUEvictReply(params))
+    val msgPageEvictNotif = Output(new PageEvictNotification(QEMUMessagesType.sEvictNotify, params))
+    val msgPageEvictDone = Output(new PageEvictNotification(QEMUMessagesType.sEvictDone, params))
+    val msgPageFaultNotif = Output(new PageFaultNotification(params))
+  }
 
-    val encode = IO(new Bundle {
-      val message_type = Input(UInt(QEMUMessagesType.encodingW.W))
-      val msgPageEvictReq = Input(new QEMUPageEvictRequest(params))
-      val msgMissReply = Input(new QEMUMissReply(params))
-      val msgEvictReply = Input(new QEMUEvictReply(params))
-      val msgPageEvictNotif = Input(new PageEvictNotification(QEMUMessagesType.sEvictNotify, params))
-      val msgPageEvictDone = Input(new PageEvictNotification(QEMUMessagesType.sEvictDone, params))
-      val msgPageFaultNotif = Input(new PageFaultNotification(params))
-      val unpack = Output(UInt(512.W))
-    })
- 
+  class RawMessageHelperGetTypeIO(implicit params: PageTableParams) extends Bundle {
+    val msg = Input(UInt(512.W))
+    val msgType = Output(UInt(QEMUMessagesType.encodingW.W))
+  }
+
+  class RawMessageHelperEncodeIO(implicit params: PageTableParams) extends Bundle {
+    val message_type = Input(UInt(QEMUMessagesType.encodingW.W))
+    val msgPageEvictReq = Input(new QEMUPageEvictRequest(params))
+    val msgMissReply = Input(new QEMUMissReply(params))
+    val msgEvictReply = Input(new QEMUEvictReply(params))
+    val msgPageEvictNotif = Input(new PageEvictNotification(QEMUMessagesType.sEvictNotify, params))
+    val msgPageEvictDone = Input(new PageEvictNotification(QEMUMessagesType.sEvictDone, params))
+    val msgPageFaultNotif = Input(new PageFaultNotification(params))
+    val unpack = Output(UInt(512.W))
+  }
+
+  class RawMessageHelper(implicit params: PageTableParams) extends Module {
+    val io = IO(new RawMessageHelperIO)
+
+    val vectorized = (new TxMessage).parseFromVec(VecInit(io.decode.pack.asBools().grouped(32).map{x=> Cat(x.reverse)}.toSeq))
+    io.decode.msgPageEvictReq   := io.decode.msgPageEvictReq.parseFromVec(vectorized.data)
+    io.decode.msgMissReply      := io.decode.msgMissReply.parseFromVec(vectorized.data)
+    io.decode.msgEvictReply     := io.decode.msgEvictReply.parseFromVec(vectorized.data)
+    io.decode.msgPageEvictNotif := io.decode.msgPageEvictNotif.parseFromVec(vectorized.data)
+    io.decode.msgPageEvictDone  := io.decode.msgPageEvictDone.parseFromVec(vectorized.data)
+    io.decode.msgPageFaultNotif := io.decode.msgPageFaultNotif.parseFromVec(vectorized.data)
+
     val isRx = WireInit(false.B)
     val txMessage = Wire(Vec(16, UInt(32.W)))
     val rxMessage = Wire(Vec(9, UInt(32.W)))
     txMessage.foreach(x => x := 0xDEADBEEF.S.asUInt)
     rxMessage.foreach(x => x := 0xDEADBEEF.S.asUInt)
-    when(encode.message_type === QEMUMessagesType.sPageFaultNotify.U) {
-      txMessage := encode.msgPageFaultNotif.getRawMessage.asVec
-    }.elsewhen(encode.message_type === QEMUMessagesType.sEvictNotify.U) {
-      txMessage := encode.msgPageEvictNotif.getRawMessage.asVec
-    }.elsewhen(encode.message_type === QEMUMessagesType.sEvictDone.U) {
-      txMessage := encode.msgPageEvictDone.getRawMessage.asVec
-    }.elsewhen(encode.message_type === QEMUMessagesType.sPageEvict.U) {
-      rxMessage := encode.msgPageEvictReq.getRawMessage.asVec
+    when(io.encode.message_type === QEMUMessagesType.sPageFaultNotify.U) {
+      txMessage := io.encode.msgPageFaultNotif.getRawMessage.asVec
+    }.elsewhen(io.encode.message_type === QEMUMessagesType.sEvictNotify.U) {
+      txMessage := io.encode.msgPageEvictNotif.getRawMessage.asVec
+    }.elsewhen(io.encode.message_type === QEMUMessagesType.sEvictDone.U) {
+      txMessage := io.encode.msgPageEvictDone.getRawMessage.asVec
+    }.elsewhen(io.encode.message_type === QEMUMessagesType.sPageEvict.U) {
+      rxMessage := io.encode.msgPageEvictReq.getRawMessage.asVec
       isRx := true.B
-    }.elsewhen(encode.message_type === QEMUMessagesType.sMissReply.U) {
-      rxMessage := encode.msgMissReply.getRawMessage.asVec
+    }.elsewhen(io.encode.message_type === QEMUMessagesType.sMissReply.U) {
+      rxMessage := io.encode.msgMissReply.getRawMessage.asVec
       isRx := true.B
-    }.elsewhen(encode.message_type === QEMUMessagesType.sEvictReply.U) {
-      rxMessage := encode.msgEvictReply.getRawMessage.asVec
+    }.elsewhen(io.encode.message_type === QEMUMessagesType.sEvictReply.U) {
+      rxMessage := io.encode.msgEvictReply.getRawMessage.asVec
       isRx := true.B
     }
-    encode.unpack := Mux(isRx, rxMessage.asUInt, txMessage.asUInt)
+    io.encode.unpack := Mux(isRx, rxMessage.asUInt, txMessage.asUInt)
 
-    val getType = IO(new Bundle {
-      val msg = Input(UInt(512.W))
-      val msgType = Output(UInt(QEMUMessagesType.encodingW.W))
-    })
-    val raw_message = (new TxMessage).parseFromVec(VecInit(getType.msg.asBools().grouped(32).map{x=> Cat(x.reverse)}.toSeq))
-    getType.msgType := raw_message.message_type
+    val raw_message = (new TxMessage).parseFromVec(VecInit(io.getType.msg.asBools().grouped(32).map{x=> Cat(x.reverse)}.toSeq))
+    io.getType.msgType := raw_message.message_type
+  }
+
+  implicit class RawHelperIOFunctions(target: RawMessageHelperIO) {
+    def getMsgMMUType(msg: UInt) = { target.getType.msg.poke(msg); target.getType.msgType.peek().litValue }
+    def encodeMsgPageEvictReq(msg: QEMUPageEvictRequest): UInt = { target.encode.message_type.poke(QEMUMessagesType.sPageEvict.U); target.encode.msgPageEvictReq.poke(msg); target.encode.unpack.peek() }
+    def encodeMsgMissReply(msg: QEMUMissReply): UInt = { target.encode.message_type.poke(QEMUMessagesType.sMissReply.U); target.encode.msgMissReply.poke(msg); target.encode.unpack.peek() }
+    def encodeMsgEvictReply(msg: QEMUEvictReply): UInt = { target.encode.message_type.poke(QEMUMessagesType.sEvictReply.U); target.encode.msgEvictReply.poke(msg); target.encode.unpack.peek() }
+    def encodeMsgPageEvictNotifStart(msg: PageEvictNotification): UInt = { target.encode.message_type.poke(QEMUMessagesType.sEvictNotify.U);  target.encode.msgPageEvictNotif.poke(msg); target.encode.unpack.peek() }
+    def encodeMsgPageEvictNotifDone(msg: PageEvictNotification): UInt = { target.encode.message_type.poke(QEMUMessagesType.sEvictDone.U);  target.encode.msgPageEvictDone.poke(msg); target.encode.unpack.peek() }
+    def encodeMsgPageFaultNotif(msg: PageFaultNotification): UInt = { target.encode.message_type.poke(QEMUMessagesType.sPageFaultNotify.U); target.encode.msgPageFaultNotif.poke(msg); target.encode.unpack.peek() }
+ 
+    def expectMsgPageEvictReq(msg: UInt, expect: QEMUPageEvictRequest) = { target.decode.pack.poke(msg); target.decode.msgPageEvictReq.expect(expect) }
+    def expectMsgMissReply(msg: UInt, expect: QEMUMissReply) = { target.decode.pack.poke(msg); target.decode.msgMissReply.expect(expect) }
+    def expectMsgEvictReply(msg: UInt, expect: QEMUEvictReply) = { target.decode.pack.poke(msg); target.decode.msgEvictReply.expect(expect) }
+    def expectMsgPageEvictNotifStart(msg: UInt, expect: PageEvictNotification) = { target.decode.pack.poke(msg); target.decode.msgPageEvictNotif.expect(expect) }
+    def expectMsgPageEvictNotifDone(msg: UInt, expect: PageEvictNotification) = { target.decode.pack.poke(msg); target.decode.msgPageEvictDone.expect(expect) }
+    def expectMsgPageFaultNotif(msg: UInt, expect: PageFaultNotification) = { target.decode.pack.poke(msg); target.decode.msgPageFaultNotif.expect(expect) }
+ 
+    def decodeMsgPageEvictReq(msg: UInt) : QEMUPageEvictRequest  = { target.decode.pack.poke(msg); target.decode.msgPageEvictReq.peek() }
+    def decodeMsgMissReply(msg: UInt) : QEMUMissReply  = { target.decode.pack.poke(msg); target.decode.msgMissReply.peek() }
+    def decodeMsgEvictReply(msg: UInt) : QEMUEvictReply  = { target.decode.pack.poke(msg); target.decode.msgEvictReply.peek() }
+    def decodeMsgPageEvictNotifStart(msg: UInt) : PageEvictNotification  = { target.decode.pack.poke(msg); target.decode.msgPageEvictNotif.peek() }
+    def decodeMsgPageEvictNotifDone(msg: UInt) : PageEvictNotification  = { target.decode.pack.poke(msg); target.decode.msgPageEvictDone.peek() }
+    def decodeMsgPageFaultNotif(msg: UInt) : PageFaultNotification  = { target.decode.pack.poke(msg); target.decode.msgPageFaultNotif.peek() }
   }
 }
 
@@ -115,7 +148,6 @@ object MMUBundleDrivers {
       new TLBPipelineResp(params).Lit(_.entry -> PTEntryPacket(entry.ppn, entry.perm, entry.modified), _.hit -> hit, _.violation -> violation, _.thid -> thid)
     }
   }
-
 
   object TLBMissRequestMessage {
     def apply(thid: UInt, asid: UInt, vpn: UInt, perm: UInt)(implicit params: PageTableParams): TLBMissRequestMessage = 
@@ -142,7 +174,7 @@ object MMUBundleDrivers {
 
   object QEMUPageEvictRequest {
     def apply(tag: PTTagPacket)(implicit params: PageTableParams): QEMUPageEvictRequest = 
-      new QEMUPageEvictRequest(params).Lit(_.tag -> tag)
+      new QEMUPageEvictRequest(params).Lit(_.tag -> PTTagPacket(tag.vpn, tag.asid))
   }
 
   object QEMUMissReply {
@@ -157,12 +189,12 @@ object MMUBundleDrivers {
 
   object PageEvictNotif {
     def apply(item: PageTableItem)(implicit params: PageTableParams): PageEvictNotification = 
-      new PageEvictNotification(QEMUMessagesType.sEvictNotify, params).Lit(_.item -> item)
+      new PageEvictNotification(QEMUMessagesType.sEvictNotify, params).Lit(_.item -> PageTableItem(item.tag, item.entry))
   }
 
   object PageEvictNotifDone {
     def apply(item: PageTableItem)(implicit params: PageTableParams): PageEvictNotification = 
-      new PageEvictNotification(QEMUMessagesType.sEvictDone, params).Lit(_.item -> item)
+      new PageEvictNotification(QEMUMessagesType.sEvictDone, params).Lit(_.item -> PageTableItem(item.tag, item.entry))
   }
 
   object PageFaultNotification {
@@ -171,7 +203,7 @@ object MMUBundleDrivers {
   }
 
   object PageTableItem {
-    def apply(tag: PTTagPacket, entry: PTEntryPacket)(implicit params: PageTableParams): PageTableItem = 
+    def apply(tag: PTTagPacket, entry: PTEntryPacket)(implicit params: PageTableParams): PageTableItem =
       new PageTableItem(params).Lit(_.tag -> PTTagPacket(tag.vpn, tag.asid), _.entry -> PTEntryPacket(entry.ppn, entry.perm, entry.modified))
     def apply(implicit params: PageTableParams): PageTableItem = 
       new PageTableItem(params).Lit(_.tag -> PTTagPacket(params), _.entry -> PTEntryPacket(params))
@@ -275,13 +307,9 @@ class MMUDUT(
   encode <> uHelperEncodeDecodePageSet.encode
   decode <> uHelperEncodeDecodePageSet.decode
 
-  val uHelperEncodeRawMessage = Module(new MMUHelpers.RawMessageEncoder()(params.getPageTableParams))
-  val rawMessage_decode = IO(uHelperEncodeRawMessage.decode.cloneType)
-  val rawMessage_encode = IO(uHelperEncodeRawMessage.encode.cloneType)
-  val rawMessage_getType = IO(uHelperEncodeRawMessage.getType.cloneType)
-  rawMessage_decode <> uHelperEncodeRawMessage.decode
-  rawMessage_encode <> uHelperEncodeRawMessage.encode
-  rawMessage_getType <> uHelperEncodeRawMessage.getType
+  val uHelperEncodeRawMessage = Module(new MMUHelpers.RawMessageHelper()(params.getPageTableParams))
+  val rawMessageHelper = IO(uHelperEncodeRawMessage.io.cloneType)
+  rawMessageHelper <> uHelperEncodeRawMessage.io
 }
 
 
@@ -363,35 +391,10 @@ object MMUDriver {
       assert(ret.size == 1); 
       ret(0) 
     }
-
-
-    def getMsgMMUType(msg: UInt) = {
-      target.rawMessage_getType.msg.poke(msg)
-      target.rawMessage_getType.msgType.peek().litValue
-    }
-
     def sendMMUMsg(msg: UInt) = {
       assert(target.S_CSR.readReg(1) != 0)
       target.S_AXI.wr((512/8).U, Seq(msg))
     }
-
-    def encodeMsgPageEvictReq(message_type: UInt,msg: QEMUPageEvictRequest): UInt = { target.rawMessage_encode.message_type.poke(message_type); target.rawMessage_encode.msgPageEvictReq.poke(msg); target.rawMessage_encode.unpack.peek() }
-    def encodeMsgMissReply(message_type: UInt,msg: QEMUMissReply): UInt = { target.rawMessage_encode.message_type.poke(message_type); target.rawMessage_encode.msgMissReply.poke(msg); target.rawMessage_encode.unpack.peek() }
-    def encodeMsgEvictReply(message_type: UInt,msg: QEMUEvictReply): UInt = { target.rawMessage_encode.message_type.poke(message_type); target.rawMessage_encode.msgEvictReply.poke(msg); target.rawMessage_encode.unpack.peek() }
-    def encodeMsgPageEvictNotif(message_type: UInt,msg: PageEvictNotification): UInt = { target.rawMessage_encode.message_type.poke(message_type);  target.rawMessage_encode.msgPageEvictNotif.poke(msg); target.rawMessage_encode.unpack.peek() }
-    def encodeMsgPageFaultNotif(message_type: UInt,msg: PageFaultNotification): UInt = { target.rawMessage_encode.message_type.poke(message_type); target.rawMessage_encode.msgPageFaultNotif.poke(msg); target.rawMessage_encode.unpack.peek() }
- 
-    def expectMsgPageEvictReq(msg: UInt, expect: QEMUPageEvictRequest) = { target.rawMessage_decode.pack.poke(msg); target.rawMessage_decode.msgPageEvictReq.expect(expect) }
-    def expectMsgMissReply(msg: UInt, expect: QEMUMissReply) = { target.rawMessage_decode.pack.poke(msg); target.rawMessage_decode.msgMissReply.expect(expect) }
-    def expectMsgEvictReply(msg: UInt, expect: QEMUEvictReply) = { target.rawMessage_decode.pack.poke(msg); target.rawMessage_decode.msgEvictReply.expect(expect) }
-    def expectMsgPageEvictNotif(msg: UInt, expect: PageEvictNotification) = { target.rawMessage_decode.pack.poke(msg); target.rawMessage_decode.msgPageEvictNotif.expect(expect) }
-    def expectMsgPageFaultNotif(msg: UInt, expect: PageFaultNotification) = { target.rawMessage_decode.pack.poke(msg); target.rawMessage_decode.msgPageFaultNotif.expect(expect) }
- 
-    def decodeMsgPageEvictReq(msg: UInt) : QEMUPageEvictRequest  = { target.rawMessage_decode.pack.poke(msg); target.rawMessage_decode.msgPageEvictReq.peek() }
-    def decodeMsgMissReply(msg: UInt) : QEMUMissReply  = { target.rawMessage_decode.pack.poke(msg); target.rawMessage_decode.msgMissReply.peek() }
-    def decodeMsgEvictReply(msg: UInt) : QEMUEvictReply  = { target.rawMessage_decode.pack.poke(msg); target.rawMessage_decode.msgEvictReply.peek() }
-    def decodeMsgPageEvictNotif(msg: UInt) : PageEvictNotification  = { target.rawMessage_decode.pack.poke(msg); target.rawMessage_decode.msgPageEvictNotif.peek() }
-    def decodeMsgPageFaultNotif(msg: UInt) : PageFaultNotification  = { target.rawMessage_decode.pack.poke(msg); target.rawMessage_decode.msgPageFaultNotif.peek() }
  
     // -------------- Page Table (M_AXI) -----------------
     def encodePageTableSet(set: PageTableSetPacket): Vec[UInt] = {
