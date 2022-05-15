@@ -8,6 +8,8 @@ import chiseltest.experimental._
 import org.scalatest.freespec.AnyFreeSpec
 import chisel3.util.experimental.loadMemoryFromFile
 
+import armflex.MemoryAccessType._
+
 object TLBTestUtility {
 
 class DelayChain[T <: Data](in: T, level: Integer) extends Module {
@@ -77,7 +79,7 @@ implicit class BaseTLBDriver(target: DUTTLB){
     target.frontendRequest_i.bits.tag.vpn.poke(vpage)
     target.frontendRequest_i.bits.thid.poke(asid)
     target.frontendRequest_i.bits.tag.asid.poke(asid)
-    target.frontendRequest_i.bits.perm.poke(0.U)
+    target.frontendRequest_i.bits.perm.poke(DATA_LOAD.U)
     target.frontendRequest_i.valid.poke(true.B)
     target.frontendRequest_i.ready.expect(true.B)
   }
@@ -86,7 +88,7 @@ implicit class BaseTLBDriver(target: DUTTLB){
     target.frontendRequest_i.bits.tag.vpn.poke(vpage)
     target.frontendRequest_i.bits.thid.poke(vpage)
     target.frontendRequest_i.bits.tag.asid.poke(asid)
-    target.frontendRequest_i.bits.perm.poke(1.U)
+    target.frontendRequest_i.bits.perm.poke(DATA_STORE.U)
     target.frontendRequest_i.valid.poke(true.B)
     target.frontendRequest_i.ready.expect(true.B)
   }

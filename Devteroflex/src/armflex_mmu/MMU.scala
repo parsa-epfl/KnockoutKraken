@@ -10,6 +10,8 @@ import chisel3.util._
 import antmicro.CSR.CSRBusBundle
 import armflex_pmu.CycleCountingPort
 
+import armflex.MemoryAccessType._
+
 /**
  * Parameter structure for the whole memory system
  */
@@ -35,6 +37,8 @@ case class MemoryHierarchyParams(
   val blockBiasW: Int = log2Ceil(cacheBlockSize / 8)
   val dramAddrW: Int = pAddrW
   val dramdataW: Int = cacheBlockSize
+
+  val cacheBlocksPerPage = pageSize/(cacheBlockSize/8)
 
   def getPageTableParams: PageTableParams = new PageTableParams(
     log2Ceil(pageSize),
@@ -63,17 +67,10 @@ case class MemoryHierarchyParams(
    * @param vpn the virtual page number
    * @return physical address of the page table set containing the `vpn` PTE
    *
-   * @note sync this function with PageDemanderDriver.vpn2ptSetPA
+   * @note sync this function with MMUDriver.vpn2ptSetPA
    */
   def vpn2ptSetPA(asid: UInt, vpn: UInt, PTEsPerLine: Int) = {
     def lineNumberInLog2 = pAddrW - log2Ceil(pageSize) - log2Ceil(PTEsPerLine)
-    //val reducedAsid: Iterator[Seq[Bool]] = asid.asBools.sliding(asid.getWidth/4, asid.getWidth/4)
-    //val resAsidReduced = reducedAsid.map { case boolSeq: Seq[Bool] => 
-    //    val vecBool: Vec[Bool] = VecInit(boolSeq)
-    //    val res: Bool = vecBool.asUInt.xorR
-    //    res.asUInt
-    //}
-    //resAsidReduced.reduce(Cat(_,_))
     val pageset_number = Cat(vpn(vpn.getWidth-1, 6), asid)
     Cat(pageset_number(lineNumberInLog2-1, 0) * 3.U(2.W), 0.U(6.W)) // Zero pad 6
   }
@@ -126,22 +123,17 @@ class MMU(
   val axiShell_io = IO(new MMU2ShellIO(params))
 
   // Cache-AXI controller
-  val cacheAxiCtrl_io = IO(new Bundle {
-    val icacheWbEmpty = Input(Bool())
-    val dcacheWbEmpty = Input(Bool())
-  })
-
   // Pipeline IO:
-  val pipeline_io = IO(Flipped(new PipeMMUIO))
+  val mmu_pipe_io = IO(Flipped(new PipeMMUIO))
 
   // TLB IO
-  val tlb_io = IO(new Bundle {
+  val mmu_tlb_io = IO(new Bundle {
     val inst = Flipped(new TLB2MMUIO(params.getPageTableParams))
     val data = Flipped(new TLB2MMUIO(params.getPageTableParams))
   })
 
   // Cache IO
-  val cache_io = IO(new Bundle {
+  val mmu_cache_io = IO(new Bundle {
     val inst = Flipped(new CacheMMUIO(params.getCacheParams))
     val data = Flipped(new CacheMMUIO(params.getCacheParams))
   })
@@ -191,11 +183,11 @@ class MMU(
   axiShell_io.msgPendingInt := u_qemuMsgEncoder.o.valid
 
   // TLB Miss requests for Page Walking
-  tlb_io.inst.missReq <> u_page_walker.tlb_miss_req_i(0)
-  tlb_io.data.missReq <> u_page_walker.tlb_miss_req_i(1)
+  mmu_tlb_io.inst.missReq <> u_page_walker.tlb_miss_req_i(0)
+  mmu_tlb_io.data.missReq <> u_page_walker.tlb_miss_req_i(1)
   // TLB Eviction request for memory writeback
-  tlb_io.inst.writebackReq <> u_tlbEntryWbHandler.tlb_evict_req_i(0)
-  tlb_io.data.writebackReq <> u_tlbEntryWbHandler.tlb_evict_req_i(1)
+  mmu_tlb_io.inst.writebackReq <> u_tlbEntryWbHandler.tlb_evict_req_i(0)
+  mmu_tlb_io.data.writebackReq <> u_tlbEntryWbHandler.tlb_evict_req_i(1)
 
   u_qemuPageEvictHandler.evict_request_i <> u_qemuMsgDecoder.qemu_evict_page_req_o
 
@@ -206,37 +198,31 @@ class MMU(
   // FIXME: Here I cannot use RRArbiter and I don't know why.
   private val u_itlbPortArb = Module(new Arbiter(new TLBMMURespPacket(params.getPageTableParams), 2))
   private val u_dtlbPortArb = Module(new Arbiter(new TLBMMURespPacket(params.getPageTableParams), 2))
-  tlb_io.inst.refillResp <> u_itlbPortArb.io.out
-  tlb_io.data.refillResp <> u_dtlbPortArb.io.out
+  mmu_tlb_io.inst.refillResp <> u_itlbPortArb.io.out
+  mmu_tlb_io.data.refillResp <> u_dtlbPortArb.io.out
   // 0: reply from the page walker
   u_itlbPortArb.io.in(0) <> u_page_walker.tlb_backend_reply_o(0)
   u_dtlbPortArb.io.in(0) <> u_page_walker.tlb_backend_reply_o(1)
   // 1: reply from the page fault resolver
   u_itlbPortArb.io.in(1).bits := u_qemuMissHandler.tlb_backend_reply_o.bits
   u_dtlbPortArb.io.in(1).bits := u_qemuMissHandler.tlb_backend_reply_o.bits
-  u_itlbPortArb.io.in(1).valid := u_qemuMissHandler.tlb_backend_reply_o.valid && u_qemuMissHandler.tlb_backend_reply_o.bits.data.perm === 2.U
-  u_dtlbPortArb.io.in(1).valid := u_qemuMissHandler.tlb_backend_reply_o.valid && u_qemuMissHandler.tlb_backend_reply_o.bits.data.perm =/= 2.U
+  u_itlbPortArb.io.in(1).valid := u_qemuMissHandler.tlb_backend_reply_o.valid && u_qemuMissHandler.tlb_backend_reply_o.bits.data.perm === INST_FETCH.U
+  u_dtlbPortArb.io.in(1).valid := u_qemuMissHandler.tlb_backend_reply_o.valid && u_qemuMissHandler.tlb_backend_reply_o.bits.data.perm =/= INST_FETCH.U
   // ready signal of page fault resolver
   u_qemuMissHandler.tlb_backend_reply_o.ready := Mux(
-    u_qemuMissHandler.tlb_backend_reply_o.bits.data.perm === 2.U,
+    u_qemuMissHandler.tlb_backend_reply_o.bits.data.perm === INST_FETCH.U,
     u_itlbPortArb.io.in(1).ready,
     u_dtlbPortArb.io.in(1).ready)
 
   // Page Eviction --------
   // clears TLB entry and Cache blocks
-  pipeline_io <> u_page_deleter.lsu_handshake_o
+  mmu_pipe_io <> u_page_deleter.mmu_pipe_io
 
   u_qemuMissHandler.qemu_miss_reply_i <> u_qemuMsgDecoder.qemu_miss_reply_o
   u_qemuMissHandler.page_delete_done_i := u_page_deleter.done_o
   u_qemuPageEvictHandler.page_delete_done_i := u_page_deleter.done_o
 
-  cache_io.inst.flushReq <> u_page_deleter.icache_flush_request_o
-  cache_io.data.flushReq <> u_page_deleter.dcache_flush_request_o
-  cache_io.inst.stallReq <> u_page_deleter.stall_icache_vo
-  cache_io.data.stallReq <> u_page_deleter.stall_dcache_vo
-
-  u_page_deleter.icache_wb_queue_empty_i <> cacheAxiCtrl_io.icacheWbEmpty
-  u_page_deleter.dcache_wb_queue_empty_i <> cacheAxiCtrl_io.dcacheWbEmpty
+  mmu_cache_io <> u_page_deleter.mmu_cache_io
 
   /* FIXME: Here I cannot even use Arbiter and I don't know why. Temporary I use a manual Arbiter to solve the problem...
   val u_arb_page_delete_req = Module(new Arbiter(new PageTableItem(params.mem.getPageTableParams()), 2))
@@ -254,24 +240,24 @@ class MMU(
   u_qemuPageEvictHandler.page_delete_req_o.ready := u_page_deleter.page_delete_req_i.ready && !u_qemuMissHandler.page_delete_req_o.valid
 
   // Evict TLB Entry. Now the flush request will be sent to all TLBs.
-  tlb_io.inst.flushReq.bits := u_page_deleter.tlb_flush_request_o.bits
-  tlb_io.inst.flushReq.valid := u_page_deleter.tlb_flush_request_o.valid
+  mmu_tlb_io.inst.flushReq.bits := u_page_deleter.mmu_tlb_flush_io.req.bits
+  mmu_tlb_io.inst.flushReq.valid := u_page_deleter.mmu_tlb_flush_io.req.valid
 
-  tlb_io.data.flushReq.bits := u_page_deleter.tlb_flush_request_o.bits
-  tlb_io.data.flushReq.valid := u_page_deleter.tlb_flush_request_o.valid
-  u_page_deleter.tlb_flush_request_o.ready := tlb_io.inst.flushReq.ready && tlb_io.data.flushReq.ready
+  mmu_tlb_io.data.flushReq.bits := u_page_deleter.mmu_tlb_flush_io.req.bits
+  mmu_tlb_io.data.flushReq.valid := u_page_deleter.mmu_tlb_flush_io.req.valid
+  u_page_deleter.mmu_tlb_flush_io.req.ready := mmu_tlb_io.inst.flushReq.ready && mmu_tlb_io.data.flushReq.ready
 
-  when(u_page_deleter.tlb_flush_request_o.valid){
-    assert(tlb_io.inst.flushReq.ready, "iTLB flush port should be always ready when receiving flush request.")
-    assert(tlb_io.data.flushReq.ready, "dTLB flush port should be always ready when receiving flush request.")
-    assert(u_page_deleter.tlb_flush_request_o.ready)
+  when(u_page_deleter.mmu_tlb_flush_io.req.valid){
+    assert(mmu_tlb_io.inst.flushReq.ready, "iTLB flush port should be always ready when receiving flush request.")
+    assert(mmu_tlb_io.data.flushReq.ready, "dTLB flush port should be always ready when receiving flush request.")
+    assert(u_page_deleter.mmu_tlb_flush_io.req.ready)
   }
 
   // Pick the one that cause a flush hit. But the dTLB has a higher priority, because the entry can be dirty.
-  u_page_deleter.tlb_frontend_reply_i := Mux(
-    tlb_io.data.flushResp.bits.hit,
-    tlb_io.data.flushResp,
-    tlb_io.inst.flushResp
+  u_page_deleter.mmu_tlb_flush_io.resp := Mux(
+    mmu_tlb_io.data.flushResp.bits.hit,
+    mmu_tlb_io.data.flushResp,
+    mmu_tlb_io.inst.flushResp
   )
 
   // QEMU message encoder

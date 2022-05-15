@@ -178,6 +178,7 @@ class RefillQueue (
 class CacheMMUIO(params: CacheParams) extends Bundle {
   val flushReq = Flipped(Decoupled(new CacheFlushRequest(params)))
   val stallReq = Input(Bool()) // When this signal is raised, no new requests will be accepted.
+  val wbEmpty = Output(Bool())
 }
 
 class CacheAxiMemoryIO(params: DatabankParams) extends Bundle {

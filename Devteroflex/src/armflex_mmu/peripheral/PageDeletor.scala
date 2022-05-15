@@ -1,11 +1,12 @@
 package armflex_mmu.peripheral
 
 import armflex.{PTTagPacket, PageEvictNotification, PageTableItem, PipeMMUIO, QEMUMessagesType}
-import armflex_cache.{CacheFlushRequest, CacheParams, DatabankParams, TLBPipelineResp, PageTableParams}
+import armflex_cache._
 import armflex_mmu._
 import chisel3._
 import chisel3.util._
 
+import armflex.MemoryAccessType._
 
 /**
  * Delete a page according to the given PTE.
@@ -33,25 +34,27 @@ class PageDeletor(
   val item_r = Reg(new PageTableItem(params.getPageTableParams))
 
   // sAck
-  val lsu_handshake_o = IO(Flipped(new PipeMMUIO))
+  val mmu_pipe_io = IO(Flipped(new PipeMMUIO))
 
   // TODO: Consider the case for multiple pipelines
-  lsu_handshake_o.inst.flushPermReq.valid := state_r === sReqLSU && item_r.entry.perm === 2.U
-  lsu_handshake_o.data.flushPermReq.valid := state_r === sReqLSU && item_r.entry.perm =/= 2.U
+  mmu_pipe_io.inst.flushPermReq.valid := state_r === sReqLSU && item_r.entry.perm === INST_FETCH.U
+  mmu_pipe_io.data.flushPermReq.valid := state_r === sReqLSU && item_r.entry.perm =/= INST_FETCH.U
 
   // sFlushTLB
-  val tlb_flush_request_o = IO(Decoupled(new PTTagPacket(params.getPageTableParams)))
-  // TODO: Let tlb_flush_request_o.bits.req and item_r.tag has the same type.
-  tlb_flush_request_o.bits.asid := item_r.tag.asid
-  tlb_flush_request_o.bits.vpn := item_r.tag.vpn
-  tlb_flush_request_o.valid := state_r === sFlushTLBReq
-  val tlb_frontend_reply_i = IO(Flipped(Valid(new TLBPipelineResp(params.getPageTableParams))))
+  val mmu_tlb_flush_io = IO(new Bundle {
+    val req = Decoupled(new PTTagPacket(params.getPageTableParams))
+    val resp = Flipped(Valid(new TLBPipelineResp(params.getPageTableParams)))
+  })
+  // TODO: Let mmu_tlb_flush_io.req.bits.req and item_r.tag has the same type.
+  mmu_tlb_flush_io.req.bits.asid := item_r.tag.asid
+  mmu_tlb_flush_io.req.bits.vpn := item_r.tag.vpn
+  mmu_tlb_flush_io.req.valid := state_r === sFlushTLBReq
 
   // update the modified bit
   when(page_delete_req_i.fire){
     item_r := page_delete_req_i.bits
-  }.elsewhen(state_r === sFlushTLBReply && tlb_frontend_reply_i.valid && tlb_frontend_reply_i.bits.hit){
-    item_r.entry.modified := tlb_frontend_reply_i.bits.entry.modified
+  }.elsewhen(state_r === sFlushTLBReply && mmu_tlb_flush_io.resp.valid && mmu_tlb_flush_io.resp.bits.hit){
+    item_r.entry.modified := mmu_tlb_flush_io.resp.bits.entry.modified
   }
 
   // sNotify
@@ -65,23 +68,25 @@ class PageDeletor(
 
   // sFlush
   // Ports for flushing cache
-  val icache_flush_request_o = IO(Decoupled(new CacheFlushRequest(params.getCacheParams)))
-  val dcache_flush_request_o = IO(Decoupled(new CacheFlushRequest(params.getCacheParams)))
+  val mmu_cache_io = IO(new Bundle {
+    val inst = Flipped(new CacheMMUIO(params.getCacheParams))
+    val data = Flipped(new CacheMMUIO(params.getCacheParams))
+  })
 
   // Counter to monitor the flush process
   val icache_flush_cnt_r = RegInit(0.U(6.W))
   val icache_flush_done_r = RegInit(false.B)
   val dcache_flush_cnt_r = RegInit(0.U(6.W))
   val dcache_flush_done_r = RegInit(false.B)
-  // val flush_which = Mux(item_r.entry.perm =/= 2.U, true.B, false.B) // true: D Cache, false: I Cache
+  // val flush_which = Mux(item_r.entry.perm =/= INST_FETCH.U, true.B, false.B) // true: D Cache, false: I Cache
   // It will be flushed at the same time!
   when(page_delete_req_i.fire){
     icache_flush_cnt_r := 0.U
-    icache_flush_done_r := page_delete_req_i.bits.entry.perm =/= 2.U
+    icache_flush_done_r := page_delete_req_i.bits.entry.perm =/= INST_FETCH.U
   }.elsewhen(state_r === sFlushPage){
-    when(icache_flush_request_o.fire){
+    when(mmu_cache_io.inst.flushReq.fire){
       icache_flush_cnt_r := icache_flush_cnt_r + 1.U
-      icache_flush_done_r := icache_flush_cnt_r === 63.U
+      icache_flush_done_r := icache_flush_cnt_r === (params.cacheBlocksPerPage - 1).U
     }
   }
 
@@ -89,17 +94,17 @@ class PageDeletor(
     dcache_flush_cnt_r := 0.U
     dcache_flush_done_r := false.B
   }.elsewhen(state_r === sFlushPage){
-    when(dcache_flush_request_o.fire){
+    when(mmu_cache_io.data.flushReq.fire){
       dcache_flush_cnt_r := dcache_flush_cnt_r + 1.U
-      dcache_flush_done_r := dcache_flush_cnt_r === 63.U
+      dcache_flush_done_r := dcache_flush_cnt_r === (params.cacheBlocksPerPage - 1).U
     }
   }
 
-  icache_flush_request_o.bits.addr := Cat(Cat(item_r.entry.ppn, icache_flush_cnt_r), 0.U(log2Ceil(params.cacheBlockSize/8).W))
-  dcache_flush_request_o.bits.addr := Cat(Cat(item_r.entry.ppn, dcache_flush_cnt_r), 0.U(log2Ceil(params.cacheBlockSize/8).W))
-
-  icache_flush_request_o.valid := state_r === sFlushPage && item_r.entry.perm === 2.U && !icache_flush_done_r
-  dcache_flush_request_o.valid := state_r === sFlushPage && !dcache_flush_done_r
+  mmu_cache_io.inst.flushReq.bits.addr := Cat(Cat(item_r.entry.ppn, icache_flush_cnt_r), 0.U(log2Ceil(params.cacheBlockSize/8).W))
+  mmu_cache_io.data.flushReq.bits.addr := Cat(Cat(item_r.entry.ppn, dcache_flush_cnt_r), 0.U(log2Ceil(params.cacheBlockSize/8).W))
+               
+  mmu_cache_io.inst.flushReq.valid := state_r === sFlushPage && item_r.entry.perm === INST_FETCH.U && !icache_flush_done_r
+  mmu_cache_io.data.flushReq.valid := state_r === sFlushPage && !dcache_flush_done_r
 
   // sPipe
   // Wait 4 cycles so that the request has been piped.
@@ -112,14 +117,10 @@ class PageDeletor(
 
   // sWait
   // Eviction done? (You have to wait for like two / three cycles to get the correct result.)
-  val icache_wb_queue_empty_i = IO(Input(Bool()))
-  val stall_icache_vo = IO(Output(Bool()))
-  stall_icache_vo := state_r === sWait && item_r.entry.perm === 2.U || state_r === sPipe
-  val dcache_wb_queue_empty_i = IO(Input(Bool()))
-  val stall_dcache_vo = IO(Output(Bool()))
-  stall_dcache_vo := state_r === sWait && item_r.entry.perm =/= 2.U || state_r === sPipe
+  mmu_cache_io.inst.stallReq := state_r === sWait && item_r.entry.perm === INST_FETCH.U || state_r === sPipe
+  mmu_cache_io.data.stallReq := state_r === sWait && item_r.entry.perm =/= INST_FETCH.U || state_r === sPipe
 
-  val queue_empty = Mux(item_r.entry.perm =/= 2.U, dcache_wb_queue_empty_i, icache_wb_queue_empty_i)
+  val queue_empty = Mux(item_r.entry.perm =/= INST_FETCH.U, mmu_cache_io.data.wbEmpty, mmu_cache_io.inst.wbEmpty)
 
   // sSend
   // Port to send message to QEMU
@@ -131,19 +132,19 @@ class PageDeletor(
   done_message_o.valid := state_r === sSend
 
   // sNotifyLSU
-  lsu_handshake_o.inst.flushCompled.valid := state_r === sNotifyLSU && item_r.entry.perm === 2.U
-  lsu_handshake_o.data.flushCompled.valid := state_r === sNotifyLSU && item_r.entry.perm =/= 2.U
+  mmu_pipe_io.inst.flushCompled.valid := state_r === sNotifyLSU && item_r.entry.perm === INST_FETCH.U
+  mmu_pipe_io.data.flushCompled.valid := state_r === sNotifyLSU && item_r.entry.perm =/= INST_FETCH.U
 
   // Update logic of the state machine
   val flushPermissionRequestFire = Mux(
     item_r.entry.perm === 2.U,
-    lsu_handshake_o.inst.flushPermReq.fire,
-    lsu_handshake_o.data.flushPermReq.fire
+    mmu_pipe_io.inst.flushPermReq.fire,
+    mmu_pipe_io.data.flushPermReq.fire
   )
   val flushCompleteRequestFire = Mux(
     item_r.entry.perm === 2.U,
-    lsu_handshake_o.inst.flushCompled.fire,
-    lsu_handshake_o.data.flushCompled.fire
+    mmu_pipe_io.inst.flushCompled.fire,
+    mmu_pipe_io.data.flushCompled.fire
   )
 
   switch(state_r){
@@ -158,12 +159,12 @@ class PageDeletor(
       }
     }
     is(sFlushTLBReq){
-      when(tlb_flush_request_o.fire) {
+      when(mmu_tlb_flush_io.req.fire) {
         state_r := sFlushTLBReply
       }
     }
     is(sFlushTLBReply){
-      when(tlb_frontend_reply_i.valid){
+      when(mmu_tlb_flush_io.resp.valid){
         state_r := sNotify
       }
     }

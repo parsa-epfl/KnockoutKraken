@@ -42,7 +42,7 @@ class QEMUMessageDecoder(
   ))
 
   when(message_i.valid && !(qemu_miss_reply_q.valid || qemu_evict_reply_q.valid || qemu_evict_page_req_q.valid)){
-    printf("Warning[QEMUMessageDecoder]: A message has been dropped due to its uncleared type.\n")
+    assert(false.B, "Warning[QEMUMessageDecoder]: A message has been dropped due to its uncleared type.\n")
   }
 }
 

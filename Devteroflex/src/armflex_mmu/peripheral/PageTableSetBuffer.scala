@@ -20,12 +20,9 @@ class PageTableSetPacket(
   params: PageTableParams,
   val entryNumber: Int = 16
 ) extends Bundle {
-  val tags = Vec(entryNumber, new PTTagPacket(params))
-  val ptes = Vec(entryNumber, new PTEntryPacket(params))
-
+  val entries = Vec(entryNumber, new PageTableItem(params))
   val valids = UInt(entryNumber.W)
   val lru_bits = UInt(entryNumber.W)
-
 }
 
 class PageSetBufferWriteRequestPacket(
@@ -93,8 +90,8 @@ class PageTableSetBuffer(
   u_lru_core.io.encoding_i := pt_set_r.lru_bits(t.entryNumber-2, 0)
   val lru_index = u_lru_core.io.lru_o
   val lru_item = Wire(new PageTableItem(params))
-  lru_item.entry := pt_set_r.ptes(lru_index)
-  lru_item.tag := pt_set_r.tags(lru_index)
+  lru_item.entry := pt_set_r.entries(lru_index).entry
+  lru_item.tag := pt_set_r.entries(lru_index).tag
 
   class get_lru_element_response_t extends Bundle {
     val item = new PageTableItem(params)
@@ -115,8 +112,8 @@ class PageTableSetBuffer(
   // val lru_element_i = IO(Flipped(Decoupled(new software_bundle.PageTableItem)))
   val write_request_i = IO(Flipped(Decoupled(new PageSetBufferWriteRequestPacket(params, t.entryNumber))))
 
-  updated_pt_set.ptes(write_request_i.bits.index) := write_request_i.bits.item.entry
-  updated_pt_set.tags(write_request_i.bits.index) := write_request_i.bits.item.tag
+  updated_pt_set.entries(write_request_i.bits.index).entry := write_request_i.bits.item.entry
+  updated_pt_set.entries(write_request_i.bits.index).tag := write_request_i.bits.item.tag
 
   val oh = Cat(0.U(1.W), UIntToOH(write_request_i.bits.index))
   val updated_valids = oh | pt_set_r.valids
@@ -131,10 +128,10 @@ class PageTableSetBuffer(
   )
 
   val lookup_request_i = IO(Input(new PTTagPacket(params)))
-  val hit_vector = pt_set_r.tags.zip(pt_set_r.valids.asBools()).map({
-    case (tag, valid) =>
-      tag.asid === lookup_request_i.asid && 
-      tag.vpn === lookup_request_i.vpn && 
+  val hit_vector = pt_set_r.entries.zip(pt_set_r.valids.asBools()).map({
+    case (entry, valid) =>
+      entry.tag.asid === lookup_request_i.asid && 
+      entry.tag.vpn === lookup_request_i.vpn && 
       valid
   })
 
@@ -143,7 +140,7 @@ class PageTableSetBuffer(
   val hit_index = OHToUInt(hit_vector)
   val lookup_reply_o = IO(Output(new PageSetBufferLookupReplyPacket(params)))
   lookup_reply_o.hit_v := hit_v
-  lookup_reply_o.item.entry := pt_set_r.ptes(hit_index)
+  lookup_reply_o.item.entry := pt_set_r.entries(hit_index).entry
   lookup_reply_o.item.tag := lookup_request_i
   lookup_reply_o.index := hit_index
 
@@ -181,7 +178,7 @@ class PageTableSetBuffer(
   if(true) { // TODO Conditional asserts
     val multiple_hit = (PopCount(hit_vector) === 1.U || PopCount(hit_vector) === 0.U)
     when(!multiple_hit && state_r === sIdle) {
-      printf(p"Multiple set hits detected:v[${Hexadecimal(pt_set_r.valids)}]:${pt_set_r.tags}\n")
+      printf(p"Multiple set hits detected:v[${Hexadecimal(pt_set_r.valids)}]:${pt_set_r.entries.map(_.tag)}\n")
       assert(multiple_hit, "There should be only one hit at most!!!")
     }
   }

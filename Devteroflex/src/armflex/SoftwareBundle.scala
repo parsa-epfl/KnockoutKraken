@@ -15,6 +15,13 @@ object QEMUMessagesType {
   val sEvictReply = 3
 }
 
+// See cpu.h to match MMUAccessType
+object MemoryAccessType {
+  val DATA_LOAD  = 0
+  val DATA_STORE = 1
+  val INST_FETCH = 2
+} 
+
 trait VectorSerializable {
   /**
    * Width of vector elements
@@ -96,17 +103,15 @@ class PageTableItem(params: PageTableParams) extends Bundle
 }
 
 
-class TLBMissRequestMessage(params: PageTableParams) extends Bundle {
+class TLBMissRequestMessage(val params: PageTableParams) extends Bundle {
   val tag = new PTTagPacket(params)
   val perm = UInt(params.permW.W)
   val thid = UInt(log2Ceil(params.thidN).W)
-
 }
 
-class TLBEvictionMessage(param: PageTableParams) extends Bundle {
-  val tag = new PTTagPacket(param)
-  val entry = new PTEntryPacket(param)
-
+class TLBEvictionMessage(val params: PageTableParams) extends Bundle {
+  val tag = new PTTagPacket(params)
+  val entry = new PTEntryPacket(params)
 }
 
 trait RawMessage extends Bundle

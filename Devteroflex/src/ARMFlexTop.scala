@@ -33,12 +33,12 @@ class MemorySystem(params: MemoryHierarchyParams) extends Module {
   private val dcache = Module(BaseCache(params.getCacheParams, () => new MatrixLRUCore(params.cacheWayNumber)))
   private val icacheAdaptor = Module(new Cache2AXIAdaptor(params.getCacheParams.databankParameter, params.thidN + 1))
   private val dcacheAdaptor = Module(new Cache2AXIAdaptor(params.getCacheParams.databankParameter, params.thidN + 1))
-  mmu.tlb_io.inst <> itlb.mmu_io
-  mmu.tlb_io.data <> dtlb.mmu_io
-  mmu.cache_io.inst <> icache.mmu_i
-  mmu.cache_io.data <> dcache.mmu_i
-  mmu.cacheAxiCtrl_io.icacheWbEmpty := icacheAdaptor.mmu_io_pendingQueueEmpty
-  mmu.cacheAxiCtrl_io.dcacheWbEmpty := dcacheAdaptor.mmu_io_pendingQueueEmpty
+  mmu.mmu_tlb_io.inst <> itlb.mmu_io
+  mmu.mmu_tlb_io.data <> dtlb.mmu_io
+  mmu.mmu_cache_io.inst <> icache.mmu_i
+  mmu.mmu_cache_io.data <> dcache.mmu_i
+  mmu.mmu_cache_io.inst.wbEmpty := icacheAdaptor.mmu_io_pendingQueueEmpty
+  mmu.mmu_cache_io.data.wbEmpty := dcacheAdaptor.mmu_io_pendingQueueEmpty
   icache.axiMem_io <> icacheAdaptor.cache_io
   dcache.axiMem_io <> dcacheAdaptor.cache_io
 
@@ -61,7 +61,7 @@ class MemorySystem(params: MemoryHierarchyParams) extends Module {
   pipeline_io.data.cache <> dcache.pipeline_io
   pipeline_io.inst.tlb <> itlb.pipeline_io
   pipeline_io.data.tlb <> dtlb.pipeline_io
-  pipeline_io.mmu <> mmu.pipeline_io
+  pipeline_io.mmu <> mmu.mmu_pipe_io
   axiShell_io.AXI_MMU <> mmu.axiShell_io
   axiShell_io.M_AXI_DMA_icacheR <> icacheAdaptor.M_DMA_R
   when(icacheAdaptor.M_DMA_R.req.fire) {
