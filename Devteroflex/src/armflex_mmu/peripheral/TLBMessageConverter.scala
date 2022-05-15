@@ -5,6 +5,7 @@ import armflex.{TLBEvictionMessage, TLBMissRequestMessage}
 import chisel3._
 import chisel3.util._
 import armflex_cache.{TLBMMURequestPacket, PageTableParams}
+import armflex.MemoryAccessType._
 
 /**
  * This module converts a TLB backend request (evict or just flush) to a message.
@@ -51,7 +52,7 @@ class TLBMessageConverter(
 
   if(true) { // TODO Conditional asserts
     when(ev_request.valid){
-      assert(ev_request.bits.entry.perm === 1.U, "Eviction only occurs in dirty and perm-granted TLB entry.")
+      assert(ev_request.bits.entry.perm === DATA_STORE.U, "Eviction only occurs in dirty and perm-granted TLB entry.")
     }
   }
 }

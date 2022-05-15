@@ -122,28 +122,10 @@ bool mmuMsgHasPending(const FPGAContext *c) {
  * @note this will block the routine until it get message.
  */
 int mmuMsgGet(const FPGAContext *c, MessageFPGA *msg) {
-  uint32_t res = -1;
   bool hasMessage = false;
   do {
     hasMessage = mmuMsgHasPending(c);
   } while (!hasMessage);
-  res = readAXI(c, BASE_ADDR_AXI_MMU_MSG, msg, sizeof(MessageFPGA));
-  if(res == 0){
-    return writeAXIL(c, BASE_ADDR_MMU_MSG_QUEUE + MMU_MSG_QUEUE_REG_OFST_POP, 1);
-  }
-  return res;
-}
-
-
-
-/**
- * @brief Peek the MMU message queue, without popping the message.
- * @param message the buffer for the message.
- * @returns 0 if successful.
- *
- * @note may return invalid value if there is no message in the queue.
- */
-int mmuMsgPeek(const FPGAContext *c, MessageFPGA *msg) {
   return readAXI(c, BASE_ADDR_AXI_MMU_MSG, msg, sizeof(MessageFPGA));
 }
 
@@ -160,10 +142,7 @@ int mmuMsgSend(const FPGAContext *c, MessageFPGA *msg) {
   do {
     readAXIL(c, BASE_ADDR_MMU_MSG_QUEUE + MMU_MSG_QUEUE_REG_OFST_FREE, &res);
   } while (res == 0); // wait for the message to be 1.
-  res = writeAXI(c, BASE_ADDR_AXI_MMU_MSG + 64, msg, sizeof(MessageFPGA));
-  if (res != 0) return res;
-  // send the message out
-  return writeAXIL(c, BASE_ADDR_MMU_MSG_QUEUE + MMU_MSG_QUEUE_REG_OFST_PUSH, 1);
+  return writeAXI(c, BASE_ADDR_AXI_MMU_MSG + 64, msg, sizeof(MessageFPGA));
 }
 
 /**

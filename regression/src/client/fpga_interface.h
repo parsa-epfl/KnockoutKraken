@@ -186,8 +186,8 @@ int pmuReadCycleCounters(const FPGAContext *c, int index, uint16_t counters[16])
 
 
 #define BASE_ADDR_MMU_MSG_QUEUE          (BASE_ADDR_AXIL + 0x200 * 4)
-#define MMU_MSG_QUEUE_REG_OFST_FREE      (0x0)
-#define MMU_MSG_QUEUE_REG_OFST_PENDING   (0x4)
+#define MMU_MSG_QUEUE_REG_OFST_PENDING   (0x0)
+#define MMU_MSG_QUEUE_REG_OFST_FREE      (0x4)
 #define MMU_MSG_QUEUE_REG_OFST_PUSH      (0x8)
 #define MMU_MSG_QUEUE_REG_OFST_POP       (0xC)
 

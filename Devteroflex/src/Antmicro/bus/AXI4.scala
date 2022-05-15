@@ -248,4 +248,8 @@ object AXI4 {
   val protWidth = 0
   val qosWidth = 0
   val respWidth = 2
+  val OKAY   = 0
+  val EXOKAY = 1
+  val SLVERR = 2
+  val DECERR = 3
 }

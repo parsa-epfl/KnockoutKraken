@@ -11,11 +11,12 @@ import chiseltest.simulator.VerilatorBackendAnnotation
 import chiseltest.simulator.WriteVcdAnnotation
 import firrtl.options.TargetDirAnnotation
 
+import armflex.MemoryAccessType._
 
 import org.scalatest.freespec.AnyFreeSpec
 
 class TLBWritebackTester extends AnyFreeSpec with ChiselScalatestTester {
-  import PageDemanderDriver._
+  import MMUDriver._
   "Normal" in {
     val anno = Seq(TargetDirAnnotation("test/demander/tlbwriteback/normal"), VerilatorBackendAnnotation, WriteVcdAnnotation)
     test(new MMUDUT(new MemoryHierarchyParams())).withAnnotations(anno){ dut =>
@@ -24,31 +25,31 @@ class TLBWritebackTester extends AnyFreeSpec with ChiselScalatestTester {
       // dut.registerThreadTable(0, 10)
       // set TLB eviction up.
       timescope {
-        dut.dtlb_wb_request_i.bits.tag.asid.poke(10.U)
-        dut.dtlb_wb_request_i.bits.tag.vpn.poke(0xABC.U)
-        dut.dtlb_wb_request_i.bits.entry.perm.poke(1.U)
-        dut.dtlb_wb_request_i.bits.entry.ppn.poke(0xCBA.U)
-        dut.dtlb_wb_request_i.bits.entry.modified.poke(true.B)
-        dut.dtlb_wb_request_i.valid.poke(true.B)
-        dut.dtlb_wb_request_i.ready.expect(true.B)
-        dut.tk()
+        dut.mmu_tlb_io.data.writebackReq.bits.tag.asid.poke(10.U)
+        dut.mmu_tlb_io.data.writebackReq.bits.tag.vpn.poke(0xABC.U)
+        dut.mmu_tlb_io.data.writebackReq.bits.entry.perm.poke(DATA_STORE.U)
+        dut.mmu_tlb_io.data.writebackReq.bits.entry.ppn.poke(0xCBA.U)
+        dut.mmu_tlb_io.data.writebackReq.bits.entry.modified.poke(true.B)
+        dut.mmu_tlb_io.data.writebackReq.valid.poke(true.B)
+        dut.mmu_tlb_io.data.writebackReq.ready.expect(true.B)
+        dut.clock.step()
       }
       // prepare for the data
-      dut.pageset_packet_i.lru_bits.poke(1.U)
-      dut.pageset_packet_i.valids.poke(1.U)
-      dut.pageset_packet_i.tags(0).vpn.poke(0xABC.U)
-      dut.pageset_packet_i.tags(0).asid.poke(10.U)
-      dut.pageset_packet_i.ptes(0).ppn.poke(0xCBA.U)
-      dut.pageset_packet_i.ptes(0).modified.poke(false.B)
-      dut.pageset_packet_i.ptes(0).perm.poke(1.U)
+      dut.encode.packet.lru_bits.poke(1.U)
+      dut.encode.packet.valids.poke(1.U)
+      dut.encode.packet.entries(0).tag.vpn.poke(0xABC.U)
+      dut.encode.packet.entries(0).tag.asid.poke(10.U)
+      dut.encode.packet.entries(0).entry.ppn.poke(0xCBA.U)
+      dut.encode.packet.entries(0).entry.modified.poke(false.B)
+      dut.encode.packet.entries(0).entry.perm.poke(DATA_STORE.U)
       dut.sendPageTableSet(dut.M_AXI, dut.vpn2ptSetPA(10, 0xABC).U)
       
       dut.receivePageTableSet(dut.M_AXI, dut.vpn2ptSetPA(10, 0xABC).U)
       // verify the update
-      dut.pageset_packet_o.tags(0).vpn.expect(0xABC.U)
-      dut.pageset_packet_o.tags(0).asid.expect(10.U)
-      dut.pageset_packet_o.ptes(0).ppn.expect(0xCBA.U)
-      dut.pageset_packet_o.ptes(0).modified.expect(true.B)
+      dut.decode.packet.entries(0).tag.vpn.expect(0xABC.U)
+      dut.decode.packet.entries(0).tag.asid.expect(10.U)
+      dut.decode.packet.entries(0).entry.ppn.expect(0xCBA.U)
+      dut.decode.packet.entries(0).entry.modified.expect(true.B)
     }
   }
 }

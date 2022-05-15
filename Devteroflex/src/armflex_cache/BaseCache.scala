@@ -178,6 +178,7 @@ class RefillQueue (
 class CacheMMUIO(params: CacheParams) extends Bundle {
   val flushReq = Flipped(Decoupled(new CacheFlushRequest(params)))
   val stallReq = Input(Bool()) // When this signal is raised, no new requests will be accepted.
+  val wbEmpty = Output(Bool())
 }
 
 class CacheAxiMemoryIO(params: DatabankParams) extends Bundle {
@@ -285,6 +286,8 @@ class BaseCache(
   u_dataBankManager.miss_request_o.ready := u_refillQueue.missRequest_i.ready && u_backendMerger.read_request_i.ready
   u_refillQueue.missRequest_i.valid := u_dataBankManager.miss_request_o.valid && u_backendMerger.read_request_i.ready
   u_backendMerger.read_request_i.valid := u_dataBankManager.miss_request_o.valid && u_refillQueue.missRequest_i.ready
+
+  mmu_i.wbEmpty := DontCare // Used somewhere else
 
   if(false) { // TODO Conditional printing
     val location = "Cache"

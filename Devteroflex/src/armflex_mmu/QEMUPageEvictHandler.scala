@@ -36,7 +36,7 @@ class QEMUPageEvictHandler(
   }
 
   // sLoadSet
-  M_DMA_R.req.bits.address := params.vpn2ptSetPA(request_r.tag.asid, request_r.tag.vpn, u_buffer.entryNumber)
+  M_DMA_R.req.bits.address := params.vpn2ptSetPA(request_r.tag.asid, request_r.tag.vpn, params.getPageTableParams.ptAssociativity)
   M_DMA_R.req.bits.length := u_buffer.requestPacketNumber.U
   M_DMA_R.req.valid := state_r === sLoadSet
 
@@ -63,7 +63,7 @@ class QEMUPageEvictHandler(
   u_buffer.write_request_i.bits.item := DontCare
 
   // sUpdatePT
-  M_DMA_W.req.bits.address := params.vpn2ptSetPA(request_r.tag.asid, request_r.tag.vpn, u_buffer.entryNumber)
+  M_DMA_W.req.bits.address := params.vpn2ptSetPA(request_r.tag.asid, request_r.tag.vpn, params.getPageTableParams.ptAssociativity)
   M_DMA_W.req.bits.length := u_buffer.requestPacketNumber.U
   M_DMA_W.req.valid := state_r === sUpdatePT
 

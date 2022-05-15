@@ -23,16 +23,17 @@ class PageWalker(
     tlbNumber, Flipped(Decoupled(new TLBMissRequestMessage(params.getPageTableParams)))
   ))
 
+  // AXI DMA Read Channels
+  val M_DMA_R = IO(new AXIReadMasterIF(params.dramAddrW, params.dramdataW))
+
+  // Reply to TLB
+  val tlb_backend_reply_o = IO(Vec(tlbNumber, Decoupled(new TLBMMURespPacket(params.getPageTableParams))))
+
   val u_miss_arb = Module(new RRArbiter(new TLBMissRequestMessage(params.getPageTableParams), tlbNumber))
   u_miss_arb.io.in <> tlb_miss_req_i
 
   // val selected_miss_req = u_miss_arb.io.out
 
-  // AXI DMA Read Channels
-  val M_DMA_R = IO(new AXIReadMasterIF(
-    params.dramAddrW,
-    params.dramdataW
-    ))
 
   // The Page table set buffer.
   val u_buffer = Module(new PageTableSetBuffer(
@@ -44,8 +45,6 @@ class PageWalker(
   // u_buffer.lru_element_i.valid := false.B
   // u_buffer.lru_element_i.bits := DontCare
 
-  // Reply to TLB
-  val tlb_backend_reply_o = IO(Vec(tlbNumber, Decoupled(new TLBMMURespPacket(params.getPageTableParams))))
 
   // Message sent to QEMU
   val page_fault_req_o = IO(Decoupled(new PageFaultNotification(params.getPageTableParams)))
@@ -88,7 +87,7 @@ class PageWalker(
   u_buffer.write_request_i.bits := DontCare
 
   // IO assignment of AXI Read DMA
-  M_DMA_R.req.bits.address := params.vpn2ptSetPA(request_r.asid, request_r.vpn, u_buffer.entryNumber)
+  M_DMA_R.req.bits.address := params.vpn2ptSetPA(request_r.asid, request_r.vpn, params.getPageTableParams.ptAssociativity)
   M_DMA_R.req.bits.length := u_buffer.requestPacketNumber.U
   M_DMA_R.req.valid := state_r === sMove
 

@@ -5,6 +5,8 @@ import chisel3._
 import chisel3.util._
 import armflex_pmu.CycleCountingPort
 
+import armflex.MemoryAccessType._
+
 case class PageTableParams(
   pageW: Int = 4096,
   vPageW: Int = 52,
@@ -14,6 +16,7 @@ case class PageTableParams(
   tlbSetNumber: Int = 1,
   tlbAssociativity: Int = 32,
   thidN: Int = 32,
+  ptAssociativity: Int= 16,
 ){
   def getDatabankParams: DatabankParams = DatabankParams(
     tlbSetNumber,
@@ -181,7 +184,7 @@ class TLB(
   modified_pte.ppn := 0.U
   arbPipelinePort.bits.wData := modified_pte.asUInt
   arbPipelinePort.bits.flush_v := false.B
-  arbPipelinePort.bits.wMask := Mux(pipeline_io.translationReq.bits.perm === 1.U, modified_pte.asUInt, 0.U)
+  arbPipelinePort.bits.wMask := Mux(pipeline_io.translationReq.bits.perm === DATA_STORE.U, modified_pte.asUInt, 0.U)
   arbPipelinePort.bits.perm := pipeline_io.translationReq.bits.perm
   arbPipelinePort.bits.refill_v := false.B
   arbPipelinePort.bits.refillData := DontCare
