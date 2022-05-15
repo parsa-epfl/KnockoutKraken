@@ -68,6 +68,52 @@ sealed abstract class LRUCore(wayNumber: Int) extends Module{
   })
 }
 
+
+object PseudoTreeLRU {
+  def apply(currEncodingBits: UInt, access: UInt): (UInt, UInt) = {
+    val encodingSize = currEncodingBits.getWidth
+    val accessSize = access.getWidth
+    assert(log2Ceil(encodingSize) == accessSize)
+
+    val currEnconding = WireInit(VecInit(currEncodingBits.asBools))
+    val nextEncoding = WireInit(currEnconding)
+    val lruBits = Wire(access.cloneType)
+
+    def getNextEncoded(half: Int, currIdx: Int, lru: Int, currPath: Seq[(Int, Boolean)]): Unit = {
+      if(half == 1) {
+        when(access === (lru + half).U) {
+          (currPath :+ (currIdx, true)).foreach { case (idx, dir) => nextEncoding(idx) := (!dir).B }
+        }.elsewhen(access === lru.U) {
+          (currPath :+ (currIdx, false)).foreach { case (idx, dir) => nextEncoding(idx) := (!dir).B }
+        }
+      } else {
+        getNextEncoded(half/2, currIdx + half, lru + half, currPath :+ (currIdx, true))
+        getNextEncoded(half/2, currIdx + 1, lru, currPath :+ (currIdx, false))
+      }
+    }
+
+    def getLRU(half: Int, currIdx: Int, lru: Int): Unit = {
+      if(half == 1) {
+        when(currEnconding(currIdx)) {
+          lruBits := (lru + half).U
+        }.otherwise {
+          lruBits := lru.U
+        }
+      } else {
+        when(currEnconding(currIdx)) {
+          getLRU(half/2, currIdx + half, lru + half)
+        }.otherwise {
+          getLRU(half/2, currIdx + 1, lru)
+        }
+      }
+    }
+    getLRU((encodingSize+1)/2, 0, 0)
+    getNextEncoded((encodingSize+1)/2, 0, 0, Seq())
+
+    (lruBits, nextEncoding.asUInt)
+  }
+}
+
 /**
  *  Pseudo tree LRU updating logic. Implemented in recursive function instead of module.
  * 
@@ -76,37 +122,9 @@ sealed abstract class LRUCore(wayNumber: Int) extends Module{
 class PseudoTreeLRUCore(wayNumber: Int) extends LRUCore(wayNumber){
   //assert(isPow2(wayNumber))
   override def encodingWidth: Int = wayNumber - 1
-  // lru_o, encoding_o
-  def getLRU(startIndex: Int, wayNumber: Int): UInt = {
-    val startBit = io.encoding_i(startIndex)
-    if(wayNumber == 2){
-      return startBit
-    } else {
-      val sub_encoding = Mux(startBit, getLRU(startIndex + wayNumber/2, wayNumber/2), getLRU(startIndex + 1, wayNumber/2))
-      return Cat(startBit, sub_encoding)
-    }
-  }
-
-  io.lru_o := getLRU(0, wayNumber)
-
-  val updatedEncoding = WireInit(VecInit(io.encoding_i.asBools()))
-  def updateEncoding(startIndex: Int, wayNumber: Int): Unit = {
-    val wayWidth = log2Ceil(wayNumber)
-    val startBit = io.encoding_i(startIndex)
-    val judgeBit = io.lru_i(wayWidth-1)
-    updatedEncoding(startIndex) := Mux(startBit === judgeBit, ~startBit, startBit)
-    if(wayNumber > 2){
-      when(judgeBit){
-        updateEncoding(startIndex + wayNumber / 2, wayNumber / 2)
-      }.otherwise{
-        updateEncoding(startIndex + 1, wayNumber / 2)
-      }
-    }
-  }
-
-  updateEncoding(0, wayNumber)
-
-  io.encoding_o := updatedEncoding.asUInt
+  val (lru, encoded) = PseudoTreeLRU(io.encoding_i, io.lru_i)
+  io.lru_o := lru
+  io.encoding_o := encoded
 }
 
 /**
