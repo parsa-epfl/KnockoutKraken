@@ -37,3 +37,4 @@ void initState_simple_inst(
 
 void initState_exception_br(DevteroflexArchState *state);
 void initState_exception_svc(DevteroflexArchState *state);
+void initState_select_sort(DevteroflexArchState *state, uint32_t asid, uint64_t pc, uint64_t addr);

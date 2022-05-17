@@ -3,7 +3,7 @@
 .section .text
 .global _start
 _start:
-selectsort:
+selectSort:
   mov     x4, x0
   mov     x5, 0
 .L4:
@@ -11,18 +11,18 @@ selectsort:
   mov     w3, w5
   mov     x7, x5
   add     x5, x5, 1
-  mov     w1, w6
   mov     x0, x5
+  mov     w1, w6
 .L3:
   ldrb    w2, [x4, x0]
   cmp     w1, w2
-  csel    w3, w0, w3, gt
+  csel    w3, w0, w3, hi
   add     x0, x0, 1
-  csel    w1, w1, w2, le
-  cmp     w0, 4096
+  csel    w1, w1, w2, ls
+  cmp     w0, 16
   bne     .L3
   strb    w6, [x4, w3, sxtw]
   strb    w1, [x4, x7]
-  cmp     x5, 255
+  cmp     x5, 15
   bne     .L4
   svc     #0

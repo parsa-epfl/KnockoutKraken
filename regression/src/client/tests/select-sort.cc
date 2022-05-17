@@ -8,94 +8,123 @@ extern "C" {
 
 #include "../test-helpers.hh"
 
-TEST_CASE("select-sort-32-threads"){
-  // 1. load the binary
+static void select_sort_x_threads(size_t THREAD_COUNT) {
+  // 1. Run the experiment
+  FPGAContext c;
+  initFPGAContextAndPage(THREAD_COUNT, &c);
+ 
+  // 2. load the binary
+  uint8_t instruction_page[PAGE_SIZE];
+  makeDeadbeefPage(instruction_page, PAGE_SIZE);
   INFO("Prepare the binary");
-  FILE *f = fopen("../src/client/tests/asm/executables/select_sort.bin", "rb");
-  uint8_t instruction_page[4096];
+  FILE *f = fopen("../src/client/tests/asm/executables/select-sort.bin", "rb");
   REQUIRE(f != nullptr);
-  fread(instruction_page, 1, 4096, f);
+  fread(instruction_page, 1, PAGE_SIZE, f);
   fclose(f);
-  // 2. prepare the map table: each instruction has 1 pages.
-  uint8_t a[32][4096];
+
+  // 3. Prepare the map table: each instruction has 1 page
+  uint8_t dataPages[THREAD_COUNT][PAGE_SIZE];
 
   // they are randomly initialized.
-  for(int thread_idx = 0; thread_idx < 32; ++thread_idx){
-    for (int pe = 0; pe < 4096; ++pe){
-      a[thread_idx][pe] = rand();
+  for(int thread_idx = 0; thread_idx < THREAD_COUNT; ++thread_idx){
+    for (int pe = 0; pe < PAGE_SIZE; ++pe) {
+      dataPages[thread_idx][pe] = rand() % 128;
     }
   }
   
-  // 3. prepare the architecture state.
-  DevteroflexArchState state;
-  initArchState(&state, 0);
+  // 3. prepare the architecture state
+  DevteroflexArchState state[THREAD_COUNT];
+  uint64_t data_page_pa[THREAD_COUNT] = {0};
+  uint64_t data_page_va[THREAD_COUNT] = {0};
+  uint64_t inst_page_pa[THREAD_COUNT] = {0};
 
-  // 4. Run the experiment
-  FPGAContext c;
-  initFPGAContextAndPage(32, &c);
-  pmuStartCounting(&c);
-  for(int i = 0; i < 32; ++i){
-    state.asid = i;
-    state.xregs[0] = (i+1) * 0x1000;
-    REQUIRE(transplantPushAndStart(&c, i, &state) == 0);
+  for(int thid = 0; thid < THREAD_COUNT; thid++) {
+    initArchState(&state[thid], 0);
+    data_page_va[thid] = (2*thid) * PAGE_SIZE;
+    uint64_t pc = (2*thid+1) * PAGE_SIZE;
+    data_page_pa[thid] = c.ppage_base_addr + (2*thid) * PAGE_SIZE;
+    inst_page_pa[thid] = c.ppage_base_addr + (2*thid + 1) * PAGE_SIZE;
+    initState_select_sort(&state[thid], thid, pc, data_page_va[thid]);
+    REQUIRE(transplantPushAndStart(&c, thid, &state[thid]) == 0);
   }
+  
+  // 5. Setup PME counters
+  pmuStartCounting(&c);
 
   // handle the page fault. In theory, there should be 64 page faults.
-  uint64_t data_page_pa[32];
-  for(int i = 0; i < 64; ++i){
-    MessageFPGA msg;
-    MessageFPGA reply;
+  MessageFPGA msg;
+  MessageFPGA reply;
+  
+  INFO("Handling Page Faults");
+  uint32_t pageFaults = 0;
+  while(pageFaults < THREAD_COUNT * 2) {
     mmuMsgGet(&c, &msg);
     REQUIRE(msg.type == sPageFaultNotify);
+    uint32_t thid = msg.PageFaultNotif.thid;
     if(msg.PageFaultNotif.permission == INST_FETCH){
-      // They share the same page, but here I just make copies.
-      REQUIRE(msg.PageFaultNotif.vpn_hi == 0);
-      REQUIRE(msg.PageFaultNotif.vpn_lo == 0);
-      dramPagePush(&c, c.ppage_base_addr + i * PAGE_SIZE, instruction_page);
-      makeMissReply(
-        INST_FETCH, 
-        msg.PageFaultNotif.thid, 
-        msg.PageFaultNotif.asid, 
-        0,
-        c.ppage_base_addr + i * PAGE_SIZE, 
-        &reply
-      );
+      INFO("Received instruction page fault");
+      uint64_t paddr = inst_page_pa[thid];
+      REQUIRE(msg.vpn == VPN_ALIGN(state[thid].pc));
+      dramPagePush(&c, paddr, instruction_page);
+      makeMissReply(INST_FETCH, thid, msg.asid, state[thid].pc, paddr, &reply);
       mmuMsgSend(&c, &reply);
     } else {
-      // It's the data page.
-      REQUIRE(msg.PageFaultNotif.vpn_hi == 0);
-      REQUIRE(msg.PageFaultNotif.vpn_lo == (msg.PageFaultNotif.asid + 1));
-      dramPagePush(&c, c.ppage_base_addr + i * PAGE_SIZE, a[msg.PageFaultNotif.asid]);
-      makeMissReply(
-        DATA_STORE,
-        msg.PageFaultNotif.thid,
-        msg.PageFaultNotif.asid,
-        (msg.PageFaultNotif.asid + 1) * 0x1000,
-        c.ppage_base_addr + i * PAGE_SIZE,
-        &reply
-      );
+      INFO("Received data page fault");
+      uint64_t paddr = data_page_pa[thid];
+      REQUIRE(msg.vpn == VPN_ALIGN(data_page_va[thid]));
+      dramPagePush(&c, paddr, dataPages[thid]);
+      makeMissReply(DATA_STORE, thid, msg.asid, data_page_va[thid], paddr, &reply);
       mmuMsgSend(&c, &reply);
-      data_page_pa[msg.PageFaultNotif.asid] = c.ppage_base_addr + i * PAGE_SIZE;
     }
+    pageFaults++;
   }
 
+  printf("Total page faults: %u\n", pageFaults);
+
   // 5. wait for the program to be finished.
+  size_t iterations = 0;
   uint32_t finished = 0;
-  while(finished != 0xFFFFFFFF){
-    uint32_t pd = 0;
-    transplantWaitTillPending(&c, &pd);
-    finished |= pd;
+  uint32_t pendingThreads = 0;
+  while(finished != ((1UL << THREAD_COUNT) - 1)){
+    pendingThreads = 0;
+    REQUIRE(!mmuMsgHasPending(&c));
+    transplantPending(&c, &pendingThreads);
+    finished |= pendingThreads;
+    printf("Threads completed: %x \n", finished);
+    advanceTicks(&c, 1000);
+    REQUIRE(iterations++ < 30);
   }
+
   pmuStopCounting(&c);
   printPMUCounters(&c);
 
   // 6. check the result.
-  for(int asid = 0; asid < 32; ++ asid){
-    char p[4096];
-    synchronizePage(&c, asid, (uint8_t *)p, (asid+1) * 0x1000, data_page_pa[asid], true);
+  char pageFPGA[PAGE_SIZE];
+  for(int thid = 0; thid < THREAD_COUNT; ++thid){
+    synchronizePage(&c, state[thid].asid, (uint8_t *) pageFPGA, data_page_va[thid], data_page_pa[thid], true);
     // make sure that p is ordered.
-    for(int i = 0; i < 4095; ++i){
-      REQUIRE(p[i] <= p[i+1]);
+    for(int i = 0; i < 15; ++i) {
+      //printf("page[%i] <= page[%i]\n", i, i+1);
+      REQUIRE(int (pageFPGA[i]) <= int (pageFPGA[i+1]));
     }
   }
 }
+
+TEST_CASE("select-sort-1-threads") {
+  select_sort_x_threads(2);
+}
+
+TEST_CASE("select-sort-2-threads") {
+  select_sort_x_threads(2);
+}
+
+TEST_CASE("select-sort-15-threads") {
+  select_sort_x_threads(15);
+}
+
+TEST_CASE("select-sort-16-threads") {
+  // TODO: Fails
+  select_sort_x_threads(16);
+}
+
+// TODO TEST_CASE("select-sort-32-threads")
