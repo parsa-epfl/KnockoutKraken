@@ -34,7 +34,7 @@ class PageWalkTester extends AnyFreeSpec with ChiselScalatestTester {
       val entry = PTEntryPacket(ppn.U, perm.U, false.B)
       val tag = PTTagPacket(vpn.U, asid.U)
       val pageTableSet = PageTableItem(tag, entry)
-      dut.expectRdPageTableSet(Seq((0, pageTableSet)), 0.U)
+      dut.expectRdPageTablePacket(PageTableSetPacket(Seq((0, pageTableSet)), 0.U), dut.vpn2ptSetPA(tag).U)
       dut.expectMissResp(perm, thid.U, pageTableSet)
     }
   }

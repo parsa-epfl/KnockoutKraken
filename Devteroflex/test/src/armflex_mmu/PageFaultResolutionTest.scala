@@ -44,7 +44,7 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
       println("1. Read Page Table from DRAM")
       dut.respEmptyPageTableSet(asid.U, vpn.U)
       println("2. Write updated page table")
-      dut.expectWrPageTableSet(Seq((0, pageTableSet)), lru)
+      dut.expectWrPageTableSetPacket(PageTableSetPacket(Seq((0, pageTableSet)), lru), dut.vpn2ptSetPA(tag).U)
       println("3. Expect TLB fill response")
       dut.expectMissResp(perm, thid.U, pageTableSet)
     }
@@ -84,7 +84,7 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
       }
 
       println("1. Read Page Table from DRAM")
-      dut.expectRdPageTableSet(sets, lruBits.U)
+      dut.expectRdPageTablePacket(PageTableSetPacket(sets, lruBits.U), dut.vpn2ptSetPA(evictedTag).U)
 
       println("2. Expect TLB's and Cache flush requests")
       flushes.join()
@@ -105,7 +105,7 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
       val newLruBits = BigInt(newLruBitsString.reverse, 2)
 
       val packet = PageTableSetPacket(0, PageTableSetPacket(PageTableSetPacket.makeEmptySet, newLruBits.U))
-      dut.expectWrPageTableSet(packet, dut.vpn2ptSetPA(evictedTag).U)
+      dut.expectWrPageTableSetPacket(packet, dut.vpn2ptSetPA(evictedTag).U)
     }
   }
 
@@ -149,7 +149,8 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
       }
 
       println("1. Read Page Table from DRAM")
-      dut.expectRdPageTableSet(sets, lruBits.U, lru)
+      dut.expectRdPageTablePacket(PageTableSetPacket(sets, lruBits.U), dut.vpn2ptSetPA(insertedTag).U)
+
       println("2. Expect TLB's and Cache flush requests")
       flushes.join()
 
@@ -168,7 +169,7 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
       val newLruBits = BigInt(newLruBitsString.reverse, 2)
 
       println("4.1 Write updated page table set to DRAM")
-      dut.expectWrPageTableSet(sets.updated[(Int, armflex.PageTableItem)](lru, (lru -> insertedItem)), newLruBits.U, lru)
+      dut.expectWrPageTableSetPacket(PageTableSetPacket(sets.updated[(Int, armflex.PageTableItem)](lru, (lru -> insertedItem)), newLruBits.U), dut.vpn2ptSetPA(insertedTag).U)
 
       println("5. Refill TLB with inserted translation")
       dut.expectMissResp(perm, thid.U, insertedItem)
