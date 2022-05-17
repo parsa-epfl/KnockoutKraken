@@ -107,7 +107,7 @@ class TLB2MMUIO(params: PageTableParams) extends Bundle {
   val flushReq = Flipped(Decoupled(new PTTagPacket(params)))
   val flushResp = Valid(new TLBPipelineResp(params))
   val missReq = Decoupled(new TLBMissRequestMessage(params))
-  val writebackReq = Decoupled(new TLBEvictionMessage(params))
+  val writebackReq = Decoupled(new PageTableItem(params))
   val refillResp = Flipped(Decoupled(new TLBMMURespPacket(params)))
 
 }

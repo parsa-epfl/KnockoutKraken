@@ -109,11 +109,6 @@ class TLBMissRequestMessage(val params: PageTableParams) extends Bundle {
   val thid = UInt(log2Ceil(params.thidN).W)
 }
 
-class TLBEvictionMessage(val params: PageTableParams) extends Bundle {
-  val tag = new PTTagPacket(params)
-  val entry = new PTEntryPacket(params)
-}
-
 trait RawMessage extends Bundle
   with VectorSerializable {
   val message_type: UInt

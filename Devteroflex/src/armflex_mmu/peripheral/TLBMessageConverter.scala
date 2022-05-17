@@ -1,7 +1,7 @@
 package armflex_mmu.peripheral
 
 import armflex_mmu.MemoryHierarchyParams
-import armflex.{TLBEvictionMessage, TLBMissRequestMessage}
+import armflex.{PageTableItem, TLBMissRequestMessage}
 import chisel3._
 import chisel3.util._
 import armflex_cache.{TLBMMURequestPacket, PageTableParams}
@@ -28,7 +28,7 @@ class TLBMessageConverter(
   miss_request.bits.thid := tlb_backend_request_i.bits.thid
   miss_request.valid := tlb_backend_request_i.valid && !tlb_backend_request_i.bits.w_v
 
-  val ev_request = Wire(Decoupled(new TLBEvictionMessage(param.getPageTableParams)))
+  val ev_request = Wire(Decoupled(new PageTableItem(param.getPageTableParams)))
   ev_request.bits.tag := tlb_backend_request_i.bits.tag
   ev_request.bits.entry := tlb_backend_request_i.bits.entry
   // Why not flush: Flushed element is handled by the module TLBWrapper.
@@ -41,7 +41,7 @@ class TLBMessageConverter(
   miss_request_o <> miss_request
 
   // val ev_request_qo = Queue(ev_request, 4)
-  val eviction_request_o = IO(Decoupled(new TLBEvictionMessage(param.getPageTableParams)))
+  val eviction_request_o = IO(Decoupled(new PageTableItem(param.getPageTableParams)))
   eviction_request_o <> ev_request
 
   tlb_backend_request_i.ready := Mux(
