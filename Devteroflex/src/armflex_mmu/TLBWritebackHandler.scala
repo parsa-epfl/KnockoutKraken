@@ -102,10 +102,7 @@ class TLBWritebackHandler(
 
   if(true) { // TODO Conditional asserts
     when(state_r === sPick){
-      when(u_buffer.lookup_reply_o.hit_v) {
-        printf("If picking entry, must be a hit")
-        //assert(u_buffer.lookup_reply_o.hit_v, "If picking entry, must be a hit")
-      }
+      assert(u_buffer.lookup_reply_o.hit_v, "If picking entry, must be a hit")
     }
     when(u_arb.io.out.fire){
       assert(u_arb.io.out.bits.entry.modified, "Only modified entry can be written back")
