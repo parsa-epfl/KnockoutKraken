@@ -65,8 +65,9 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
       // Prepare PageTableSet with LRU conflict
       val evictedEntryIdx = 13
       val lruPath = LRUCorePseudo.getLRUEncodedPath(evictedEntryIdx, dut.params.getPageTableParams.ptAssociativity/2, 0, 0, Seq())
-      val randomString = BigInt(scala.util.Random.nextLong(Math.pow(2, dut.params.getPageTableParams.ptAssociativity-1).toLong)).toString(2).padTo(dut.params.getPageTableParams.ptAssociativity-1, '0')
-      val lruBits = BigInt(randomString.reverse, 2)
+
+      val bitVec = LRUCorePseudo.createBitvector(dut.params.getPageTableParams.ptAssociativity - 1)
+      val lruBits = LRUCorePseudo.getBigIntFromVector(bitVec)
       val sets = Seq((evictedEntryIdx -> evictedItem))
 
       // Prepare Evict Request
@@ -97,12 +98,8 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
 
       // Expect set with evicted entry
       println("4.1 Write updated page table set to DRAM")
-      val newLruBitsString = lruPath.foldLeft(randomString) { 
-        (currEncode, step) => currEncode.updated(step._1, step._2 match {
-          case '0' => '1'
-          case '1' => '0'
-        })}
-      val newLruBits = BigInt(newLruBitsString.reverse, 2)
+      val newLruBitVec = LRUCorePseudo.updateBitVector(lruPath, bitVec)
+      val newLruBits = LRUCorePseudo.getBigIntFromVector(newLruBitVec)
 
       val packet = PageTableSetPacket(0, PageTableSetPacket(PageTableSetPacket.makeEmptySet, newLruBits.U))
       dut.expectWrPageTableSetPacket(packet, dut.vpn2ptSetPA(evictedTag).U)
@@ -161,12 +158,8 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
 
       // Expect set with inserted entry
       println("4.0 Calculate the new LRU vector")
-      val newLruBitsString = lruPath.foldLeft(lruBitsString) { 
-        (currEncode, step) => currEncode.updated(step._1, step._2 match {
-          case '0' => '1'
-          case '1' => '0'
-        })}
-      val newLruBits = BigInt(newLruBitsString.reverse, 2)
+      val newLruBitsString = LRUCorePseudo.updateBitVector(lruPath, lruBitsString)
+      val newLruBits = LRUCorePseudo.getBigIntFromVector(newLruBitsString)
 
       println("4.1 Write updated page table set to DRAM")
       dut.expectWrPageTableSetPacket(PageTableSetPacket(sets.updated[(Int, armflex.PageTableItem)](lru, (lru -> insertedItem)), newLruBits.U), dut.vpn2ptSetPA(insertedTag).U)
