@@ -8,10 +8,12 @@ extern "C" {
 
 #include "../test-helpers.hh"
 
-static void select_sort_x_threads(size_t THREAD_COUNT) {
+#define MAX_THREAD_COUNT 32
+
+static void select_sort_x_threads(size_t thidN) {
   // 1. Run the experiment
   FPGAContext c;
-  initFPGAContextAndPage(THREAD_COUNT, &c);
+  initFPGAContextAndPage(thidN, &c);
  
   // 2. load the binary
   uint8_t instruction_page[PAGE_SIZE];
@@ -23,22 +25,22 @@ static void select_sort_x_threads(size_t THREAD_COUNT) {
   fclose(f);
 
   // 3. Prepare the map table: each instruction has 1 page
-  uint8_t dataPages[THREAD_COUNT][PAGE_SIZE];
+  uint8_t dataPages[MAX_THREAD_COUNT][PAGE_SIZE];
 
   // they are randomly initialized.
-  for(int thread_idx = 0; thread_idx < THREAD_COUNT; ++thread_idx){
+  for(int thread_idx = 0; thread_idx < thidN; ++thread_idx){
     for (int pe = 0; pe < PAGE_SIZE; ++pe) {
       dataPages[thread_idx][pe] = rand() % 128;
     }
   }
   
   // 3. prepare the architecture state
-  DevteroflexArchState state[THREAD_COUNT];
-  uint64_t data_page_pa[THREAD_COUNT] = {0};
-  uint64_t data_page_va[THREAD_COUNT] = {0};
-  uint64_t inst_page_pa[THREAD_COUNT] = {0};
+  DevteroflexArchState state[MAX_THREAD_COUNT];
+  uint64_t data_page_pa[MAX_THREAD_COUNT] = {0};
+  uint64_t data_page_va[MAX_THREAD_COUNT] = {0};
+  uint64_t inst_page_pa[MAX_THREAD_COUNT] = {0};
 
-  for(int thid = 0; thid < THREAD_COUNT; thid++) {
+  for(int thid = 0; thid < thidN; thid++) {
     initArchState(&state[thid], 0);
     data_page_va[thid] = (2*thid) * PAGE_SIZE;
     uint64_t pc = (2*thid+1) * PAGE_SIZE;
@@ -57,7 +59,7 @@ static void select_sort_x_threads(size_t THREAD_COUNT) {
   
   INFO("Handling Page Faults");
   uint32_t pageFaults = 0;
-  while(pageFaults < THREAD_COUNT * 2) {
+  while(pageFaults < thidN * 2) {
     mmuMsgGet(&c, &msg);
     REQUIRE(msg.type == sPageFaultNotify);
     uint32_t thid = msg.PageFaultNotif.thid;
@@ -85,7 +87,7 @@ static void select_sort_x_threads(size_t THREAD_COUNT) {
   size_t iterations = 0;
   uint32_t finished = 0;
   uint32_t pendingThreads = 0;
-  while(finished != ((1UL << THREAD_COUNT) - 1)){
+  while(finished != ((1UL << thidN) - 1)){
     pendingThreads = 0;
     REQUIRE(!mmuMsgHasPending(&c));
     transplantPending(&c, &pendingThreads);
@@ -100,7 +102,7 @@ static void select_sort_x_threads(size_t THREAD_COUNT) {
 
   // 6. check the result.
   char pageFPGA[PAGE_SIZE];
-  for(int thid = 0; thid < THREAD_COUNT; ++thid){
+  for(int thid = 0; thid < thidN; ++thid){
     synchronizePage(&c, state[thid].asid, (uint8_t *) pageFPGA, data_page_va[thid], data_page_pa[thid], true);
     // make sure that p is ordered.
     for(int i = 0; i < 15; ++i) {
