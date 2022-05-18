@@ -178,6 +178,8 @@ object MMUBundleDrivers {
   }
 
   object QEMUMissReply {
+    def apply(tag: PTTagPacket, perm: UInt, thid: UInt, ppn: UInt, thid_v: Bool)(implicit params: PageTableParams): QEMUMissReply = 
+      new QEMUMissReply(params).Lit( _.tag -> PTTagPacket(tag.vpn, tag.asid), _.perm -> perm, _.thid -> thid, _.thid_v -> thid_v, _.ppn -> ppn)
     def apply(tag: PTTagPacket, perm: UInt, thid: UInt, ppn: UInt)(implicit params: PageTableParams): QEMUMissReply = 
       new QEMUMissReply(params).Lit( _.tag -> PTTagPacket(tag.vpn, tag.asid), _.perm -> perm, _.thid -> thid, _.thid_v -> (thid.litValue != BigInt("FFFFFFFF", 16)).B, _.ppn -> ppn)
   }
@@ -219,6 +221,15 @@ object MMUBundleDrivers {
         _.lru_bits -> packet.lru_bits, _.valids -> validVec.U)
     }
 
+    def apply(entries: Seq[(Int, PageTableItem)], lru: UInt, validVec: UInt)(implicit params: PageTableParams): PageTableSetPacket = {
+      new PageTableSetPacket(params).Lit(
+        _.entries -> TestUtils.vecLitMake(params.ptAssociativity, entries.map {
+          case (idx, set) => (idx,
+          () => PageTableItem(set.tag, set.entry)(params))},
+          () => PageTableItem(params)), 
+        _.lru_bits -> lru, _.valids -> validVec)
+    }
+
     def apply(entries: Seq[(Int, PageTableItem)], lru: UInt)(implicit params: PageTableParams): PageTableSetPacket = {
       val valids =  entries.map(_._1).foldLeft(0)((bitvec, idx) => bitvec | 1 << idx)
       new PageTableSetPacket(params).Lit(
@@ -230,8 +241,7 @@ object MMUBundleDrivers {
     }
  
     def apply(sets: Seq[(Int, PageTableItem)])(implicit params: PageTableParams): PageTableSetPacket = apply(sets, 0.U)
-    def apply(port: Int, set: PageTableItem)(implicit params: PageTableParams): PageTableSetPacket = apply(Seq((port, set)), 0.U)
-    def makeEmptySet(implicit params: PageTableParams): Seq[(Int, PageTableItem)] = 
+    def makeEmptySet(implicit params: PageTableParams): Seq[(Int, PageTableItem)] =
       for (entryIdx <- 0 until params.ptAssociativity) yield (entryIdx, PageTableItem(PTTagPacket(params), PTEntryPacket(params)))
   }
 }
@@ -389,8 +399,8 @@ object MMUDriver {
     def receivePageTableSet(master_bus: AXI4, expectedAddr: UInt) = {}
     def sendPageTableSet(master_bus: AXI4, expectedAddr: UInt) = {}
     
-    def waitTillPendingMMUMsg() = { var timeout = 0; while(target.S_CSR.readReg(0) == 0 && timeout < 10) { clock.step(5); timeout += 1} }
-    def waitTillFreeMMUMsg() = { var timeout = 0; while(target.S_CSR.readReg(1) == 0 && timeout < 10) { clock.step(5); timeout += 1} }
+    def waitTillPendingMMUMsg() = { var timeout = 0; while(target.S_CSR.readReg(0) == 0 && timeout < 100) { clock.step(5); timeout += 1} }
+    def waitTillFreeMMUMsg() = { var timeout = 0; while(target.S_CSR.readReg(1) == 0 && timeout < 100) { clock.step(5); timeout += 1} }
     def getMMUMsg(): UInt = { 
       val ret = target.S_AXI.rd(0.U, 1); 
       assert(ret.size == 1); 

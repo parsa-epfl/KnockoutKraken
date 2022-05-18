@@ -159,7 +159,7 @@ TEST_CASE("test-ldst-pair-all-sizes") {
 TEST_CASE("test-pressure-mmu-same-address") {
   FPGAContext ctx;
   REQUIRE(initFPGAContext(&ctx) == 0);
-  for (int i = 0; i < 10; i++)
+  for (int i = 0; i < 32; i++)
     test_ldst_all_sizes_pair(&ctx);
 
   releaseFPGAContext(&ctx);

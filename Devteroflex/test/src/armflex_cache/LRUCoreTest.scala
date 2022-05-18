@@ -22,7 +22,7 @@ class TestPseudoTreeLRU extends AnyFreeSpec with ChiselScalatestTester{
         dut.io.encoding_i.poke(pseudoLRU.encode)
         val lru = pseudoLRU.getLRU(access, wayNumber)
         dut.io.lru_o.expect(lru)
-        dut.io.lru_i.poke(access)
+        dut.io.access_i.poke(access)
         dut.io.encoding_o.expect(pseudoLRU.encode)
         dut.clock.step(1)
       }
@@ -39,7 +39,7 @@ class TestPseudoTreeLRU extends AnyFreeSpec with ChiselScalatestTester{
         dut.io.encoding_i.poke(pseudoLRU.encode)
         val lru = pseudoLRU.getLRU(access, wayNumber)
         dut.io.lru_o.expect(lru)
-        dut.io.lru_i.poke(access)
+        dut.io.access_i.poke(access)
         dut.io.encoding_o.expect(pseudoLRU.encode)
         dut.clock.step(1)
       }
@@ -52,8 +52,8 @@ class LRUCorePseudo(wayNumber: Int) {
   
   def getLRU(access: BigInt, size: Int): Int = {
     val encodeBits = LRUCorePseudo.getBitVector(encode, size)
-    val lru = LRUCorePseudo.getLRU(encodeBits, size/2, 0, 0)
-    val accessPath = LRUCorePseudo.getLRUEncodedPath(access, size/2, 0, 0, Seq())
+    val lru = LRUCorePseudo.getLRU(encodeBits, size)
+    val accessPath = LRUCorePseudo.getLRUEncodedPath(access, size)
     val nextEncodeBits = LRUCorePseudo.updateBitVector(accessPath, encodeBits)
     encode = LRUCorePseudo.getBigIntFromVector(nextEncodeBits)
     println(s"0x${encodeBits} -> encoded[${nextEncodeBits}]:lru[${lru}]")
@@ -72,6 +72,8 @@ object LRUCorePseudo {
   * @param pathSeq
   * @return
   */
+  def getLRUEncodedPath(access: BigInt, size: Int): Seq[(Int, Char)] = getLRUEncodedPath(access, size/2, 0, 0, Seq())
+ 
   def getLRUEncodedPath(access: BigInt, half: Int, currIdx: Int, target: Int, pathSeq: Seq[(Int, Char)]): Seq[(Int, Char)] = {
     if(half == 1) {
       if(access == target + 1) {
@@ -90,7 +92,8 @@ object LRUCorePseudo {
       }
     }
   }
-  
+
+  def getLRU(bits: String, size: Int): Int = getLRU(bits, size/2, 0, 0)
   def getLRU(bits: String, half: Int, currIdx: Int, lru: Int): Int = {
     if(half == 1) {
       if(bits(0) == '1') {

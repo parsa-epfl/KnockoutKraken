@@ -108,7 +108,7 @@ class PageTableSetBuffer(
   val updated_valids = oh | pt_set_r.valids
   val flushed_valids = (~oh).asUInt & pt_set_r.valids
 
-  u_lru_core.io.lru_i := write_request_i.bits.index
+  u_lru_core.io.access_i := write_request_i.bits.index
   updated_pt_set.lru_bits := u_lru_core.io.encoding_o
   updated_pt_set.valids := Mux(
     write_request_i.bits.flush_v,

@@ -235,6 +235,7 @@ static inline void makeEvictRequest(int asid, uint64_t va, MessageFPGA *evict_re
     evict_request->vpn_lo = VPN_GET_LO(va);
 }
 
+/* sEvictReply not used anymore
 static inline void makeEvictReply(MessageFPGA *notif, MessageFPGA *evict_reply)
 {
     evict_reply->type = sEvictReply;
@@ -244,6 +245,7 @@ static inline void makeEvictReply(MessageFPGA *notif, MessageFPGA *evict_reply)
 
     evict_reply->EvictReply.old_ppn = notif->EvictNotif.ppn;
 }
+// */
 
 static inline void makeMissReply(int type, int thid, int asid, uint64_t va, uint64_t paddr,
                                  MessageFPGA *miss_reply)

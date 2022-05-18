@@ -296,7 +296,6 @@ object AXIDrivers {
       expectWrAddr(expectAddr, data.size)
       wrExpectData(data)
       wrRespB()
-      println("Done writing")
     }
   }
 }
