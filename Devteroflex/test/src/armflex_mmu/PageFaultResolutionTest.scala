@@ -44,7 +44,7 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
       println("1. Read Page Table from DRAM")
       dut.respEmptyPageTableSet(asid.U, vpn.U)
       println("2. Write updated page table")
-      dut.expectWrPageTableSet(Seq((0, pageTableSet)), lru)
+      dut.expectWrPageTableSetPacket(PageTableSetPacket(Seq((0, pageTableSet)), lru), dut.vpn2ptSetPA(tag).U)
       println("3. Expect TLB fill response")
       dut.expectMissResp(perm, thid.U, pageTableSet)
     }
@@ -65,8 +65,9 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
       // Prepare PageTableSet with LRU conflict
       val evictedEntryIdx = 13
       val lruPath = LRUCorePseudo.getLRUEncodedPath(evictedEntryIdx, dut.params.getPageTableParams.ptAssociativity/2, 0, 0, Seq())
-      val randomString = BigInt(scala.util.Random.nextLong(Math.pow(2, dut.params.getPageTableParams.ptAssociativity-1).toLong)).toString(2).padTo(dut.params.getPageTableParams.ptAssociativity-1, '0')
-      val lruBits = BigInt(randomString.reverse, 2)
+
+      val bitVec = LRUCorePseudo.createBitvector(dut.params.getPageTableParams.ptAssociativity - 1)
+      val lruBits = LRUCorePseudo.getBigIntFromVector(bitVec)
       val sets = Seq((evictedEntryIdx -> evictedItem))
 
       // Prepare Evict Request
@@ -84,7 +85,7 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
       }
 
       println("1. Read Page Table from DRAM")
-      dut.expectRdPageTableSet(sets, lruBits.U)
+      dut.expectRdPageTablePacket(PageTableSetPacket(sets, lruBits.U), dut.vpn2ptSetPA(evictedTag).U)
 
       println("2. Expect TLB's and Cache flush requests")
       flushes.join()
@@ -97,15 +98,11 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
 
       // Expect set with evicted entry
       println("4.1 Write updated page table set to DRAM")
-      val newLruBitsString = lruPath.foldLeft(randomString) { 
-        (currEncode, step) => currEncode.updated(step._1, step._2 match {
-          case '0' => '1'
-          case '1' => '0'
-        })}
-      val newLruBits = BigInt(newLruBitsString.reverse, 2)
+      val newLruBitVec = LRUCorePseudo.updateBitVector(lruPath, bitVec)
+      val newLruBits = LRUCorePseudo.getBigIntFromVector(newLruBitVec)
 
       val packet = PageTableSetPacket(0, PageTableSetPacket(PageTableSetPacket.makeEmptySet, newLruBits.U))
-      dut.expectWrPageTableSet(packet, dut.vpn2ptSetPA(evictedTag).U)
+      dut.expectWrPageTableSetPacket(packet, dut.vpn2ptSetPA(evictedTag).U)
     }
   }
 
@@ -149,7 +146,8 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
       }
 
       println("1. Read Page Table from DRAM")
-      dut.expectRdPageTableSet(sets, lruBits.U, lru)
+      dut.expectRdPageTablePacket(PageTableSetPacket(sets, lruBits.U), dut.vpn2ptSetPA(insertedTag).U)
+
       println("2. Expect TLB's and Cache flush requests")
       flushes.join()
 
@@ -160,15 +158,11 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
 
       // Expect set with inserted entry
       println("4.0 Calculate the new LRU vector")
-      val newLruBitsString = lruPath.foldLeft(lruBitsString) { 
-        (currEncode, step) => currEncode.updated(step._1, step._2 match {
-          case '0' => '1'
-          case '1' => '0'
-        })}
-      val newLruBits = BigInt(newLruBitsString.reverse, 2)
+      val newLruBitsString = LRUCorePseudo.updateBitVector(lruPath, lruBitsString)
+      val newLruBits = LRUCorePseudo.getBigIntFromVector(newLruBitsString)
 
       println("4.1 Write updated page table set to DRAM")
-      dut.expectWrPageTableSet(sets.updated[(Int, armflex.PageTableItem)](lru, (lru -> insertedItem)), newLruBits.U, lru)
+      dut.expectWrPageTableSetPacket(PageTableSetPacket(sets.updated[(Int, armflex.PageTableItem)](lru, (lru -> insertedItem)), newLruBits.U), dut.vpn2ptSetPA(insertedTag).U)
 
       println("5. Refill TLB with inserted translation")
       dut.expectMissResp(perm, thid.U, insertedItem)

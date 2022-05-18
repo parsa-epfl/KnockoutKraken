@@ -9,14 +9,14 @@ class TLBWritebackHandler(
   params: MemoryHierarchyParams,
   tlbNumber: Int = 2
 ) extends Module {
-  import armflex.{PTEntryPacket, PTTagPacket, TLBEvictionMessage}
+  import armflex.{PTEntryPacket, PTTagPacket, PageTableItem}
 
   // the eviction request of the TLB
   val tlb_evict_req_i = IO(Vec(
-    tlbNumber, Flipped(Decoupled(new TLBEvictionMessage(params.getPageTableParams)))
+    tlbNumber, Flipped(Decoupled(new PageTableItem(params.getPageTableParams)))
   ))
   // arbiter to select the evict request
-  val u_arb = Module(new RRArbiter(new TLBEvictionMessage(params.getPageTableParams), tlbNumber))
+  val u_arb = Module(new RRArbiter(new PageTableItem(params.getPageTableParams), tlbNumber))
   u_arb.io.in <> tlb_evict_req_i
 
   // Add page table set buffer and axi dma
@@ -102,10 +102,7 @@ class TLBWritebackHandler(
 
   if(true) { // TODO Conditional asserts
     when(state_r === sPick){
-      when(u_buffer.lookup_reply_o.hit_v) {
-        printf("If picking entry, must be a hit")
-        //assert(u_buffer.lookup_reply_o.hit_v, "If picking entry, must be a hit")
-      }
+      assert(u_buffer.lookup_reply_o.hit_v, "If picking entry, must be a hit")
     }
     when(u_arb.io.out.fire){
       assert(u_arb.io.out.bits.entry.modified, "Only modified entry can be written back")

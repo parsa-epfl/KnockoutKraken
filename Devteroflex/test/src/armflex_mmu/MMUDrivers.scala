@@ -348,6 +348,11 @@ object MMUDriver {
       target.mmu_cache_io.data.flushReq.setSinkClock(clock)
       target.mmu_cache_io.inst.flushReq.setSinkClock(clock)
 
+      target.mmu_tlb_io.inst.writebackReq.initSource()
+      target.mmu_tlb_io.inst.writebackReq.setSourceClock(clock)
+      target.mmu_tlb_io.data.writebackReq.initSource()
+      target.mmu_tlb_io.data.writebackReq.setSourceClock(clock)
+
       target.mmu_cache_io.inst.wbEmpty.poke(true.B) 
       target.mmu_cache_io.data.wbEmpty.poke(true.B) 
     }
@@ -476,24 +481,17 @@ object MMUDriver {
     }
 
     def vpn2ptSetPA(tag: PTTagPacket): BigInt = vpn2ptSetPA(tag.asid.litValue, tag.vpn.litValue)
-    def expectWrPageTableSet(packet: PageTableSetPacket, expectAddr: UInt): Unit = {
+
+    def expectWrPageTableSetPacket(packet: PageTableSetPacket, expectAddr: UInt): Unit = {
       target.encode.packet.poke(packet)
       val vectorPacket = target.encode.vector.peek()
       target.M_AXI.expectWr(vectorPacket, expectAddr)
     }
 
-    def expectWrPageTableSet(sets: Seq[(Int, PageTableItem)], lru: UInt): Unit = expectWrPageTableSet(sets, lru, 0)
-    def expectWrPageTableSet(sets: Seq[(Int, PageTableItem)], lru: UInt, pickSetForAddr: Int): Unit = {
-      val expectAddr = vpn2ptSetPA(sets(pickSetForAddr)._2.tag.asid.litValue, sets(pickSetForAddr)._2.tag.vpn.litValue)
-      val vectorPacket = encodePageTableSet(sets, lru)
-      target.M_AXI.expectWr(vectorPacket, expectAddr.U)
-    }
- 
-    def expectRdPageTableSet(sets: Seq[(Int, PageTableItem)], lru: UInt): Unit = expectRdPageTableSet(sets, lru, 0)
-    def expectRdPageTableSet(sets: Seq[(Int, PageTableItem)], lru: UInt, pickSetForAddr: Int): Unit = {
-      val expectAddr = vpn2ptSetPA(sets(pickSetForAddr)._2.tag.asid.litValue, sets(pickSetForAddr)._2.tag.vpn.litValue)
-      val vectorPacket = encodePageTableSet(sets, lru)
-      target.M_AXI.expectRd(vectorPacket, expectAddr.U)
+    def expectRdPageTablePacket(packet: PageTableSetPacket, expectAddr: UInt) = {
+      target.encode.packet.poke(packet)
+      val vectorPacket = target.encode.vector.peek()
+      target.M_AXI.expectRd(vectorPacket, expectAddr)
     }
 
     def respEmptyPageTableSet(asid: UInt, vpn: UInt) = {

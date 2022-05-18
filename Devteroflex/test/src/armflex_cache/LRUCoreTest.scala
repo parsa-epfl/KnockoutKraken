@@ -28,7 +28,7 @@ class TestPseudoTreeLRU extends AnyFreeSpec with ChiselScalatestTester{
       }
     }
   }
-
+  
   "TestPseudoLRU 2" in {
     val wayNumber = 16
     val verbose = false
@@ -49,18 +49,13 @@ class TestPseudoTreeLRU extends AnyFreeSpec with ChiselScalatestTester{
 
 class LRUCorePseudo(wayNumber: Int) {
   var encode: BigInt = 0
-
+  
   def getLRU(access: BigInt, size: Int): Int = {
-    val encodeBits = encode.toString(2).reverse.padTo(size, '0')
+    val encodeBits = LRUCorePseudo.getBitVector(encode, size)
     val lru = LRUCorePseudo.getLRU(encodeBits, size/2, 0, 0)
-    val accessPath = LRUCorePseudo.getLRUEncodedPath(access, size/2, 0, 0, Seq()).map {
-      case (i,'0') => (i,'1')
-      case (i,'1') => (i,'0')
-    }
-    val nextEncodeBits = accessPath.foldLeft(encodeBits) {
-      (currEncode, step) => currEncode.updated(step._1, step._2)
-    }
-    encode = BigInt(nextEncodeBits.reverse, 2)
+    val accessPath = LRUCorePseudo.getLRUEncodedPath(access, size/2, 0, 0, Seq())
+    val nextEncodeBits = LRUCorePseudo.updateBitVector(accessPath, encodeBits)
+    encode = LRUCorePseudo.getBigIntFromVector(nextEncodeBits)
     println(s"0x${encodeBits} -> encoded[${nextEncodeBits}]:lru[${lru}]")
     lru
   }
@@ -68,25 +63,25 @@ class LRUCorePseudo(wayNumber: Int) {
 
 object LRUCorePseudo {
   /**
-    * Returns path corrections: inverse of the action taken
-    *
-    * @param access
-    * @param half
-    * @param currIdx
-    * @param target
-    * @param pathSeq
-    * @return
-    */
+  * Returns path corrections: inverse of the action taken
+  *
+  * @param access
+  * @param half
+  * @param currIdx
+  * @param target
+  * @param pathSeq
+  * @return
+  */
   def getLRUEncodedPath(access: BigInt, half: Int, currIdx: Int, target: Int, pathSeq: Seq[(Int, Char)]): Seq[(Int, Char)] = {
     if(half == 1) {
-        if(access == target + 1) {
-          return pathSeq :+ (currIdx, '1')
-        } else if (access == target) {
-          return pathSeq :+ (currIdx, '0')
-        } else {
-          assert(false)
-          return Nil
-        }
+      if(access == target + 1) {
+        return pathSeq :+ (currIdx, '1')
+      } else if (access == target) {
+        return pathSeq :+ (currIdx, '0')
+      } else {
+        assert(false)
+        return Nil
+      }
     } else {
       if(target + half <= access) {
         getLRUEncodedPath(access, half/2, currIdx + half, target + half, pathSeq :+ (currIdx, '1'))
@@ -95,7 +90,7 @@ object LRUCorePseudo {
       }
     }
   }
-
+  
   def getLRU(bits: String, half: Int, currIdx: Int, lru: Int): Int = {
     if(half == 1) {
       if(bits(0) == '1') {
@@ -107,6 +102,20 @@ object LRUCorePseudo {
       getLRU(bits.drop(half), half/2, currIdx + half, lru + half)
     } else {
       getLRU(bits.drop(1), half/2, currIdx + 1, lru)
+    }
+  }
+  
+  
+  def createBitvector(len: Int): String = BigInt(scala.util.Random.nextLong(Math.pow(2, len).toLong)).toString(2).padTo(len, '0')
+  def getBitVector(value: BigInt, len: Int): String = value.toString(2).reverse.padTo(len, '0')
+  
+  def getBigIntFromVector(bitvector: String): BigInt = BigInt(bitvector.reverse, 2)
+  def updateBitVector(path: Seq[(Int, Char)], bitvector: String): String = {
+    path.foldLeft(bitvector) { 
+      (currEncode, step) => currEncode.updated(step._1, step._2 match {
+        case '0' => '1'
+        case '1' => '0'
+      })
     }
   }
 }
