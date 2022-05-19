@@ -48,6 +48,7 @@ static void select_sort_x_threads(size_t thidN) {
     inst_page_pa[thid] = c.ppage_base_addr + (2*thid + 1) * PAGE_SIZE;
     initState_select_sort(&state[thid], thid, pc, data_page_va[thid]);
     REQUIRE(transplantPushAndStart(&c, thid, &state[thid]) == 0);
+    printf("Dispatch thread %d \n", thid);
   }
   
   // 5. Setup PME counters
@@ -57,21 +58,28 @@ static void select_sort_x_threads(size_t thidN) {
   MessageFPGA msg;
   MessageFPGA reply;
   
-  INFO("Handling Page Faults");
+  puts("Handling Page Faults");
   uint32_t pageFaults = 0;
   while(pageFaults < thidN * 2) {
+    if (!mmuMsgHasPending(&c)){
+      // there should be no instruction pending.
+      uint32_t pendingThreads = 0;
+      transplantPending(&c, &pendingThreads);
+      REQUIRE(pendingThreads == 0);
+      continue;
+    }
     mmuMsgGet(&c, &msg);
     REQUIRE(msg.type == sPageFaultNotify);
     uint32_t thid = msg.PageFaultNotif.thid;
     if(msg.PageFaultNotif.permission == INST_FETCH){
-      INFO("Received instruction page fault");
+      puts("Received instruction page fault");
       uint64_t paddr = inst_page_pa[thid];
       REQUIRE(msg.vpn == VPN_ALIGN(state[thid].pc));
       dramPagePush(&c, paddr, instruction_page);
       makeMissReply(INST_FETCH, thid, msg.asid, state[thid].pc, paddr, &reply);
       mmuMsgSend(&c, &reply);
     } else {
-      INFO("Received data page fault");
+      puts("Received data page fault");
       uint64_t paddr = data_page_pa[thid];
       REQUIRE(msg.vpn == VPN_ALIGN(data_page_va[thid]));
       dramPagePush(&c, paddr, dataPages[thid]);
