@@ -61,6 +61,7 @@ static void select_sort_x_threads(size_t thidN) {
   puts("Handling Page Faults");
   uint32_t pageFaults = 0;
   while(pageFaults < thidN * 2) {
+    // mmuMsgGet(&c, &msg);
     if (!mmuMsgHasPending(&c)){
       // there should be no instruction pending.
       uint32_t pendingThreads = 0;
