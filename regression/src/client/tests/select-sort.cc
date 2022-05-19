@@ -121,7 +121,7 @@ static void select_sort_x_threads(size_t thidN) {
 }
 
 TEST_CASE("select-sort-1-threads") {
-  select_sort_x_threads(2);
+  select_sort_x_threads(1);
 }
 
 TEST_CASE("select-sort-2-threads") {
