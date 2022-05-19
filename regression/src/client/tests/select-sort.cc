@@ -65,7 +65,20 @@ static void select_sort_x_threads(size_t thidN) {
       // there should be no instruction pending.
       uint32_t pendingThreads = 0;
       transplantPending(&c, &pendingThreads);
-      REQUIRE(pendingThreads == 0);
+      if(pendingThreads != 0){
+        uint32_t thid = 0;
+        while((pendingThreads & 0x1) == 0){
+          thid += 1;
+          pendingThreads = pendingThreads >> 1;
+        }
+        // print the transplant PC
+        // I force the transplant.
+        DevteroflexArchState state;
+        transplantGetState(&c, thid, &state);
+        // print what happens.
+        printf("Transplant Detected. PC=%lu \n", state.pc);
+        REQUIRE(false);
+      }
       continue;
     }
     mmuMsgGet(&c, &msg);
