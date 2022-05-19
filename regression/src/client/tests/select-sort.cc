@@ -47,7 +47,7 @@ static void select_sort_x_threads(size_t thidN) {
     data_page_pa[thid] = c.ppage_base_addr + (2*thid) * PAGE_SIZE;
     inst_page_pa[thid] = c.ppage_base_addr + (2*thid + 1) * PAGE_SIZE;
     initState_select_sort(&state[thid], thid, pc, data_page_va[thid]);
-    REQUIRE(transplantPushAndStart(&c, thid, &state[thid]) == 0);
+    REQUIRE(transplantPushAndSinglestep(&c, thid, &state[thid]) == 0);
     printf("Dispatch thread %d \n", thid);
   }
   
@@ -64,7 +64,7 @@ static void select_sort_x_threads(size_t thidN) {
     if (!mmuMsgHasPending(&c)){
       // there should be no instruction pending.
       uint32_t pendingThreads = 0;
-      transplantPending(&c, &pendingThreads);
+      REQUIRE(transplantPending(&c, &pendingThreads) == 0);
       if(pendingThreads != 0){
         uint32_t thid = 0;
         while((pendingThreads & 0x1) == 0){
@@ -73,31 +73,31 @@ static void select_sort_x_threads(size_t thidN) {
         }
         // print the transplant PC
         // I force the transplant.
-        DevteroflexArchState state;
-        transplantGetState(&c, thid, &state);
+        DevteroflexArchState local_state;
+        REQUIRE(transplantGetState(&c, thid, &local_state) == 0);
         // print what happens.
-        printf("Transplant Detected. PC=%lu \n", state.pc);
-        REQUIRE(false);
+        printf("Transplant Detected. PC=%lu \n", local_state.pc);
+        REQUIRE(transplantPushAndSinglestep(&c, thid, &local_state) == 0);
       }
       continue;
     }
-    mmuMsgGet(&c, &msg);
+    REQUIRE(mmuMsgGet(&c, &msg) == 0);
     REQUIRE(msg.type == sPageFaultNotify);
     uint32_t thid = msg.PageFaultNotif.thid;
     if(msg.PageFaultNotif.permission == INST_FETCH){
       puts("Received instruction page fault");
       uint64_t paddr = inst_page_pa[thid];
       REQUIRE(msg.vpn == VPN_ALIGN(state[thid].pc));
-      dramPagePush(&c, paddr, instruction_page);
+      REQUIRE(dramPagePush(&c, paddr, instruction_page) == 0);
       makeMissReply(INST_FETCH, thid, msg.asid, state[thid].pc, paddr, &reply);
-      mmuMsgSend(&c, &reply);
+      REQUIRE(mmuMsgSend(&c, &reply) == 0);
     } else {
       puts("Received data page fault");
       uint64_t paddr = data_page_pa[thid];
       REQUIRE(msg.vpn == VPN_ALIGN(data_page_va[thid]));
-      dramPagePush(&c, paddr, dataPages[thid]);
+      REQUIRE(dramPagePush(&c, paddr, dataPages[thid]) == 0);
       makeMissReply(DATA_STORE, thid, msg.asid, data_page_va[thid], paddr, &reply);
-      mmuMsgSend(&c, &reply);
+      REQUIRE(mmuMsgSend(&c, &reply) == 0);
     }
     pageFaults++;
   }
