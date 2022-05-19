@@ -76,7 +76,7 @@ static void select_sort_x_threads(size_t thidN) {
         DevteroflexArchState local_state;
         REQUIRE(transplantGetState(&c, thid, &local_state) == 0);
         // print what happens.
-        printf("Transplant Detected. PC=%lu \n", local_state.pc);
+        printf("Transplant Detected. PC=%lu; transplantType[%lu] \n", local_state.pc, local_state.flags);
         REQUIRE(transplantPushAndSinglestep(&c, thid, &local_state) == 0);
       }
       continue;
