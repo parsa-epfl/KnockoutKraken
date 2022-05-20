@@ -32,7 +32,7 @@ class Cpu2TransUnitTest extends AnyFreeSpec with ChiselScalatestTester {
         dut => 
           dut.init()
           val xregs = for(reg <- 0 until 32) yield BigInt(reg * 15)
-          val pstate = PStateRegs.makeLit(0x100.U, 0x10.U, PSTATE_FLAGS_EXECUTE_NORMAL.U)
+          val pstate = PStateRegs(0x100.U, 0x10.U, PSTATE_FLAGS_EXECUTE_NORMAL.U)
           dut.startTransBram2Cpu(thid, xregs, pstate)
       }
     }
@@ -43,7 +43,7 @@ class Cpu2TransUnitTest extends AnyFreeSpec with ChiselScalatestTester {
           dut => 
             dut.init()
             val xregs = for(reg <- 0 until 32) yield BigInt(reg * 15)
-            val pstate = PStateRegs.makeLit(0x100.U, 0x10.U, PSTATE_FLAGS_EXECUTE_WAIT.U)
+            val pstate = PStateRegs(0x100.U, 0x10.U, PSTATE_FLAGS_EXECUTE_WAIT.U)
             dut.startTransBram2Cpu(thid, xregs, pstate)
       }
     }
@@ -55,7 +55,7 @@ class Cpu2TransUnitTest extends AnyFreeSpec with ChiselScalatestTester {
         dut => 
           dut.init()
           val xregs = for(reg <- 0 until 32) yield BigInt(reg * 15)
-          val pstate = PStateRegs.makeLit(0x100.U, 0x10.U, PSTATE_FLAGS_EXECUTE_WAIT.U)
+          val pstate = PStateRegs(0x100.U, 0x10.U, PSTATE_FLAGS_EXECUTE_WAIT.U)
           dut.startTransBram2Cpu(thid, xregs, pstate)
           dut.wrCSRCmd(TRANS_REG_OFFST_START, 1 << thid)
           dut.clock.step()
@@ -87,7 +87,7 @@ object TransplantUnitDrivers {
       target.doneCPU.valid.poke(false.B)
       target.doneCPU.bits.poke(0.U)
       target.rfile_wr.init()
-      target.pstate.poke(ArmflexStructsLits.PStateRegs.makeLit())
+      target.pstate.poke(ArmflexStructsLits.PStateRegs())
     }
     def sendCpu2Trans(thid: Int): Unit = {
       target.doneCPU.valid.poke(true.B)
