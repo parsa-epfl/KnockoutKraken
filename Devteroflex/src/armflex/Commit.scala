@@ -55,7 +55,7 @@ class CommitInstrument(thidN: Int) extends Bundle {
   val pc = DATA_T
 }
 
-class CommitUnit(thidN: Int) extends Module {
+class CommitUnit(val thidN: Int) extends Module {
   val enq = IO(Flipped(Decoupled(new CommitInst(thidN))))
   val commit = IO(new Bundle {
     val archstate = new CommitArchStateIO(thidN)
@@ -116,7 +116,9 @@ class CommitUnit(thidN: Int) extends Module {
 
   switch(wbState) {
     is(s_WB) {
-      when(canWB) {
+      when(transplant) {
+         wbState_next := s_WB
+      }.elsewhen(canWB) {
         commit.archstate.wr.en := rd(0).valid
         wbState_next := Mux(rd(1).valid, s_WB1, Mux(rd(2).valid, s_WB2, s_WB))
       }
