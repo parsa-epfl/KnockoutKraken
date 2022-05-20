@@ -144,6 +144,19 @@ class MMU(
   S_CSR <> u_qemuMsgQueue.S_CSR
   S_AXI <> u_qemuMsgQueue.S_AXI
 
+  // Debug ports
+  val oDebug = IO(new Bundle {
+    val pageFaultReq = Output(u_qemuMsgEncoder.oDebug.pageFaultReq.cloneType)
+    val pageFaultReply = Output(u_qemuMsgDecoder.oDebug.pageFaultReply.cloneType)
+    val inFIFOHandshake = Output(u_qemuMsgQueue.oDebug.inFIFOHandshake.cloneType)
+    val outFIFOHandshake = Output(u_qemuMsgQueue.oDebug.outFIFOHandshake.cloneType)
+  })
+
+  oDebug.pageFaultReq := u_qemuMsgEncoder.oDebug.pageFaultReq
+  oDebug.pageFaultReply := u_qemuMsgDecoder.oDebug.pageFaultReply
+  oDebug.inFIFOHandshake := u_qemuMsgQueue.oDebug.inFIFOHandshake
+  oDebug.outFIFOHandshake := u_qemuMsgQueue.oDebug.outFIFOHandshake
+
   // DRAM Access Modules
   // Page Walker DRAM Accesses
   axiShell_io.M_DMA_R(0) <> u_page_walker.M_DMA_R

@@ -90,6 +90,26 @@ class MemorySystem(params: MemoryHierarchyParams) extends Module {
   oPMUEventTriggers.tlb := dtlb.oPMUCountingReq
   oPMUEventTriggers.dcache := dcacheAdaptor.oPMUReq
   oPMUEventTriggers.mm := mmu.oPMUCountingReq
+
+  val oDebug = IO(new Bundle {
+    val dTLBTranslateReq = Output(dtlb.oDebug.translateReq.cloneType)
+    val dTLBTranslateResp = Output(dtlb.oDebug.translateResp.cloneType)
+    val dTLBRefillResp = Output(dtlb.oDebug.refillResp.cloneType)
+
+    val pageFaultReq = Output(mmu.oDebug.pageFaultReq.cloneType)
+    val pageFaultReply = Output(mmu.oDebug.pageFaultReply.cloneType)
+    val inFIFOHandshake = Output(mmu.oDebug.inFIFOHandshake.cloneType)
+    val outFIFOHandshake = Output(mmu.oDebug.outFIFOHandshake.cloneType)
+  })
+
+  oDebug.dTLBRefillResp := dtlb.oDebug.refillResp
+  oDebug.dTLBTranslateReq := dtlb.oDebug.translateReq
+  oDebug.dTLBTranslateResp := dtlb.oDebug.translateResp
+
+  oDebug.pageFaultReq := mmu.oDebug.pageFaultReq
+  oDebug.pageFaultReply := mmu.oDebug.pageFaultReply
+  oDebug.inFIFOHandshake := mmu.oDebug.inFIFOHandshake
+  oDebug.outFIFOHandshake := mmu.oDebug.outFIFOHandshake
 }
 
 object MemorySystemVerilogEmitter extends App {
@@ -192,6 +212,10 @@ class ARMFlexTop(
   uPMU.iCycleCountingReq(3) := memory.oPMUEventTriggers.mm
 
   uCSRMux.slavesBus(3) <> uPMU.S_CSR
+
+  // This debug signal is different from dbg: It's directly connected to the ILA.
+  val oDebug = IO(Output(memory.oDebug.cloneType))
+  oDebug := memory.oDebug
 }
 
 class ARMFlexTopSimulator(
@@ -239,6 +263,10 @@ class ARMFlexTopSimulator(
   devteroFlexTop.instrument.commit.ready := true.B
   val dbg = IO(devteroFlexTop.dbg.cloneType)
   dbg <> devteroFlexTop.dbg
+
+  // The signals observed by ILA
+  val oILA = IO(Output(devteroFlexTop.oDebug.cloneType))
+  oILA := devteroFlexTop.oDebug
 }
 
 object ARMFlexTopSimulatorVerilogEmitter extends App {
