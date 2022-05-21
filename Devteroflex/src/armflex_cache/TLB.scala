@@ -8,7 +8,7 @@ import armflex_pmu.CycleCountingPort
 import armflex.MemoryAccessType._
 
 case class PageTableParams(
-  pageW: Int = 4096,
+  pageW: Int = 12,
   vPageW: Int = 52,
   pPageW: Int = 24,
   permW: Int = 2,

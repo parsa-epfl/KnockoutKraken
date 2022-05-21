@@ -171,6 +171,16 @@ class PageTableSetBuffer(
       assert(multiple_hit, "There should be only one hit at most!!!")
     }
   }
+
+  val oILA = IO(new Bundle {
+    val ptes = Output(pt_set_r.cloneType)
+    val state = Output(UInt(2.W))
+    val hitVec = Output(UInt(16.W))
+  })
+
+  oILA.ptes := pt_set_r
+  oILA.state := state_r
+  oILA.hitVec := VecInit(hit_vector).asUInt
 }
 
 object PageTableSetBufferVerilogEmitter extends App {

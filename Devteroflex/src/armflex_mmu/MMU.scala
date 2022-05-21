@@ -145,17 +145,30 @@ class MMU(
   S_AXI <> u_qemuMsgQueue.S_AXI
 
   // Debug ports
-  val oDebug = IO(new Bundle {
+  val oILA = IO(new Bundle {
     val pageFaultReq = Output(u_qemuMsgEncoder.oDebug.pageFaultReq.cloneType)
     val pageFaultReply = Output(u_qemuMsgDecoder.oDebug.pageFaultReply.cloneType)
     val inFIFOHandshake = Output(u_qemuMsgQueue.oDebug.inFIFOHandshake.cloneType)
     val outFIFOHandshake = Output(u_qemuMsgQueue.oDebug.outFIFOHandshake.cloneType)
+    // Page Walker debug signals
+    val pwState = Output(UInt(2.W))
+    val ptAccessReq = Output(u_page_walker.oILA.ptAccessReq.cloneType)
+    val ptes = Output(u_page_walker.oILA.ptes.cloneType)
+    val pteBufferState = Output(u_page_walker.oILA.pteBufferState.cloneType)
+    val pteHitVec = Output(u_page_walker.oILA.pteHitVec.cloneType)
   })
 
-  oDebug.pageFaultReq := u_qemuMsgEncoder.oDebug.pageFaultReq
-  oDebug.pageFaultReply := u_qemuMsgDecoder.oDebug.pageFaultReply
-  oDebug.inFIFOHandshake := u_qemuMsgQueue.oDebug.inFIFOHandshake
-  oDebug.outFIFOHandshake := u_qemuMsgQueue.oDebug.outFIFOHandshake
+  oILA.pageFaultReq := u_qemuMsgEncoder.oDebug.pageFaultReq
+  oILA.pageFaultReply := u_qemuMsgDecoder.oDebug.pageFaultReply
+  oILA.inFIFOHandshake := u_qemuMsgQueue.oDebug.inFIFOHandshake
+  oILA.outFIFOHandshake := u_qemuMsgQueue.oDebug.outFIFOHandshake
+
+  oILA.pwState := u_page_walker.oILA.pwState
+  oILA.ptAccessReq := u_page_walker.oILA.ptAccessReq
+  oILA.ptes := u_page_walker.oILA.ptes
+  oILA.pteBufferState := u_page_walker.oILA.pteBufferState
+  oILA.pteHitVec := u_page_walker.oILA.pteHitVec
+
 
   // DRAM Access Modules
   // Page Walker DRAM Accesses
