@@ -277,8 +277,8 @@ class ARMFlexTopSimulator(
   dbg <> devteroFlexTop.dbg
 
   // The signals observed by ILA
-  val oILA = IO(Output(devteroFlexTop.oILA.cloneType))
-  oILA := devteroFlexTop.oILA
+  // val oILA = IO(Output(devteroFlexTop.oILA.cloneType))
+  // oILA := devteroFlexTop.oILA
 }
 
 object ARMFlexTopSimulatorVerilogEmitter extends App {
