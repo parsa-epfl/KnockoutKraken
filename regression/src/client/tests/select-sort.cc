@@ -42,12 +42,12 @@ static void select_sort_x_threads(size_t thidN) {
 
   for(int thid = 0; thid < thidN; thid++) {
     initArchState(&state[thid], 0);
-    data_page_va[thid] = (2*thid) * PAGE_SIZE;
-    uint64_t pc = (2*thid+1) * PAGE_SIZE;
-    data_page_pa[thid] = c.ppage_base_addr + (2*thid) * PAGE_SIZE;
-    inst_page_pa[thid] = c.ppage_base_addr + (2*thid + 1) * PAGE_SIZE;
+    data_page_va[thid] = (4 * thid + 2) * PAGE_SIZE;
+    uint64_t pc = (4 * thid + 1) * PAGE_SIZE;
+    data_page_pa[thid] = c.ppage_base_addr + (4 * thid + 2) * PAGE_SIZE;
+    inst_page_pa[thid] = c.ppage_base_addr + (4 * thid + 1) * PAGE_SIZE;
     initState_select_sort(&state[thid], thid, pc, data_page_va[thid]);
-    REQUIRE(transplantPushAndSinglestep(&c, thid, &state[thid]) == 0);
+    REQUIRE(transplantPushAndStart(&c, thid, &state[thid]) == 0);
     printf("Dispatch thread %d \n", thid);
   }
   
@@ -78,7 +78,7 @@ static void select_sort_x_threads(size_t thidN) {
         REQUIRE(transplantGetState(&c, thid, &local_state) == 0);
         // print what happens.
         printf("Transplant Detected. PC=%lu; transplantType[%lu] \n", local_state.pc, local_state.flags);
-        REQUIRE(transplantPushAndSinglestep(&c, thid, &local_state) == 0);
+        REQUIRE(transplantPushAndStart(&c, thid, &local_state) == 0);
       }
       continue;
     }
@@ -122,7 +122,9 @@ static void select_sort_x_threads(size_t thidN) {
   pmuStopCounting(&c);
   printPMUCounters(&c);
 
-  // 6. check the result.
+  // 6. check the transplant reason.
+
+  // 7. check the result.
   char pageFPGA[PAGE_SIZE];
   for(int thid = 0; thid < thidN; ++thid){
     synchronizePage(&c, state[thid].asid, (uint8_t *) pageFPGA, data_page_va[thid], data_page_pa[thid], true);
