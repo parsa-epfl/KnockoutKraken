@@ -230,7 +230,6 @@ class Pipeline(params: PipelineParams) extends Module {
   // Commit State
   archstate.commit <> commitU.commit.archstate
   transplantIO.done.tag := commitU.commit.commited.tag
-  //transplantIO.done.bits.get := commitU.commit.transplant.bits.get
   when(transplantIO.stopCPU(commitU.commit.commited.tag).asBool) {
     transplantIO.done.valid := commitU.commit.commited.valid
   }.otherwise {

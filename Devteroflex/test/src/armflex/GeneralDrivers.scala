@@ -10,8 +10,8 @@ import chiseltest.internal._
 
 object ArmflexStructsLits {
     object PStateRegs {
-        def makeLit(): PStateRegs = makeLit(0.U, 0.U, 0.U)
-        def makeLit(pc: UInt, asid: UInt, execMode: UInt): PStateRegs = new PStateRegs().Lit(
+        def apply(): PStateRegs = apply(0.U, 0.U, 0.U)
+        def apply(pc: UInt, asid: UInt, execMode: UInt): PStateRegs = new PStateRegs().Lit(
             _.PC -> pc,
             _.asid -> asid,
             _.asid_unused -> 0.U,
