@@ -8,7 +8,7 @@ import armflex_pmu.CycleCountingPort
 import armflex.MemoryAccessType._
 
 case class PageTableParams(
-  pageW: Int = 4096,
+  pageW: Int = 12,
   vPageW: Int = 52,
   pPageW: Int = 24,
   permW: Int = 2,
@@ -133,6 +133,16 @@ class TLB(
   val pipeline_io = IO(new TLB2PipelineIO(params))
   val mmu_io = IO(new TLB2MMUIO(params))
 
+  val oDebug = IO(new Bundle {
+    val translateReq = Output(pipeline_io.translationReq.cloneType)
+    val translateResp = Output(pipeline_io.translationResp.cloneType)
+    val refillResp = Output(mmu_io.refillResp.cloneType)
+  })
+
+  oDebug.translateReq := pipeline_io.translationReq
+  oDebug.translateResp := pipeline_io.translationResp
+  oDebug.refillResp := mmu_io.refillResp
+  
   private val u_dataBankManager = Module(new DataBankManager(params.getDatabankParams, tlbUpdateFunction))
   private val u_bramPortsAdapter = Module(new BRAMPortAdapter(params.getDatabankParams))
   private val bram = Module(new BRAMorRegister(false)(u_bramPortsAdapter.bramParams))

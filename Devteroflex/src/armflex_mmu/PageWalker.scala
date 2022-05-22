@@ -131,6 +131,20 @@ class PageWalker(
       }
     }
   }
+
+  val oILA = IO(new Bundle {
+    val pwState = Output(UInt(2.W))
+    val ptAccessReq = Output(M_DMA_R.req.cloneType)
+    val ptes = Output(u_buffer.oILA.ptes.cloneType)
+    val pteBufferState = Output(u_buffer.oILA.state.cloneType)
+    val pteHitVec = Output(u_buffer.oILA.hitVec.cloneType)
+  })
+
+  oILA.pwState := state_r
+  oILA.ptAccessReq := M_DMA_R.req
+  oILA.ptes := u_buffer.oILA.ptes
+  oILA.pteBufferState := u_buffer.oILA.state
+  oILA.pteHitVec := u_buffer.oILA.hitVec
 }
 
 

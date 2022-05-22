@@ -90,6 +90,38 @@ class MemorySystem(params: MemoryHierarchyParams) extends Module {
   oPMUEventTriggers.tlb := dtlb.oPMUCountingReq
   oPMUEventTriggers.dcache := dcacheAdaptor.oPMUReq
   oPMUEventTriggers.mm := mmu.oPMUCountingReq
+
+  val oILA = IO(new Bundle {
+    val dTLBTranslateReq = Output(dtlb.oDebug.translateReq.cloneType)
+    val dTLBTranslateResp = Output(dtlb.oDebug.translateResp.cloneType)
+    val dTLBRefillResp = Output(dtlb.oDebug.refillResp.cloneType)
+
+    // val pageFaultReq = Output(mmu.oDebug.pageFaultReq.cloneType)
+    // val pageFaultReply = Output(mmu.oDebug.pageFaultReply.cloneType)
+    // val inFIFOHandshake = Output(mmu.oDebug.inFIFOHandshake.cloneType)
+    // val outFIFOHandshake = Output(mmu.oDebug.outFIFOHandshake.cloneType)
+
+    val pwState = Output(UInt(2.W))
+    val ptAccessReq = Output(mmu.oILA.ptAccessReq.cloneType)
+    val ptes = Output(mmu.oILA.ptes.cloneType)
+    val pteBufferState = Output(mmu.oILA.pteBufferState.cloneType)
+    val pteHitVec = Output(mmu.oILA.pteHitVec.cloneType)
+  })
+
+  oILA.dTLBRefillResp := dtlb.oDebug.refillResp
+  oILA.dTLBTranslateReq := dtlb.oDebug.translateReq
+  oILA.dTLBTranslateResp := dtlb.oDebug.translateResp
+
+  // oILA.pageFaultReq := mmu.oDebug.pageFaultReq
+  // oILA.pageFaultReply := mmu.oDebug.pageFaultReply
+  // oILA.inFIFOHandshake := mmu.oDebug.inFIFOHandshake
+  // oILA.outFIFOHandshake := mmu.oDebug.outFIFOHandshake
+
+  oILA.pwState := mmu.oILA.pwState
+  oILA.ptAccessReq := mmu.oILA.ptAccessReq
+  oILA.ptes := mmu.oILA.ptes
+  oILA.pteBufferState := mmu.oILA.pteBufferState
+  oILA.pteHitVec := mmu.oILA.pteHitVec
 }
 
 object MemorySystemVerilogEmitter extends App {
@@ -192,6 +224,10 @@ class ARMFlexTop(
   uPMU.iCycleCountingReq(3) := memory.oPMUEventTriggers.mm
 
   uCSRMux.slavesBus(3) <> uPMU.S_CSR
+
+  // This debug signal is different from dbg: It's directly connected to the ILA.
+  val oILA = IO(Output(memory.oILA.cloneType))
+  oILA := memory.oILA
 }
 
 class ARMFlexTopSimulator(
@@ -239,6 +275,10 @@ class ARMFlexTopSimulator(
   devteroFlexTop.instrument.commit.ready := true.B
   val dbg = IO(devteroFlexTop.dbg.cloneType)
   dbg <> devteroFlexTop.dbg
+
+  // The signals observed by ILA
+  // val oILA = IO(Output(devteroFlexTop.oILA.cloneType))
+  // oILA := devteroFlexTop.oILA
 }
 
 object ARMFlexTopSimulatorVerilogEmitter extends App {

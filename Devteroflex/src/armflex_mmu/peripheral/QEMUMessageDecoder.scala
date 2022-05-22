@@ -15,6 +15,11 @@ class QEMUMessageDecoder(
   val qemu_evict_reply_o = IO(Decoupled(new QEMUEvictReply(param.getPageTableParams)))
   val qemu_evict_page_req_o = IO(Decoupled(new QEMUPageEvictRequest(param.getPageTableParams)))
 
+  val oDebug = IO(new Bundle {
+    val pageFaultReply = Output(qemu_miss_reply_o.cloneType)
+  })
+  oDebug.pageFaultReply := qemu_miss_reply_o
+
   val raw_message = (new TxMessage).parseFromVec(VecInit(message_i.bits.asBools().grouped(32).map{x=> Cat(x.reverse)}.toSeq))
   
   val qemu_miss_reply_q = Wire(Decoupled(new QEMUMissReply(param.getPageTableParams)))

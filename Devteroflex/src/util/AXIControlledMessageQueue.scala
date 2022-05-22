@@ -18,6 +18,18 @@ class AXIControlledMessageQueue(val axiW: Int, val csrRegSize: Int, val queueS: 
     val freeCnt = Input(UInt(log2Ceil(queueS+1).W))
   })
 
+  val oDebug = IO(new Bundle {
+    val inFIFOHandshake = Output(Decoupled(UInt(1.W)))
+    val outFIFOHandshake = Output(DecoupledIO(UInt(1.W)))
+  })
+
+  oDebug.inFIFOHandshake.valid := rdFifo.deq.valid
+  oDebug.inFIFOHandshake.ready := rdFifo.deq.ready
+  oDebug.inFIFOHandshake.bits := 0.U
+  oDebug.outFIFOHandshake.valid := wrFifo.enq.valid
+  oDebug.outFIFOHandshake.ready := wrFifo.enq.ready
+  oDebug.outFIFOHandshake.bits := 0.U
+
   val S_AXI = IO(Flipped(new AXI4(log2Ceil(axiW/8) + 1, axiW)))
 
   val uCSR = Module(new CSR(csrRegSize, 2))

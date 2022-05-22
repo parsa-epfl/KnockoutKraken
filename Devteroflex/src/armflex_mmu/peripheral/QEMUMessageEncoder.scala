@@ -24,6 +24,12 @@ class QEMUMessageEncoder(
   val o = IO(Decoupled(UInt(512.W)))
   val oq = Wire(Decoupled(UInt(512.W)))
 
+  val oDebug = IO(new Bundle {
+    val pageFaultReq = Output(page_fault_req_i.cloneType)
+  })
+
+  oDebug.pageFaultReq := page_fault_req_i
+
   val messages = Seq(
     evict_done_req_i,
     evict_notify_req_i,
