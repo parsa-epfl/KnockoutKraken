@@ -10,7 +10,7 @@ extern "C" {
 
 #define MAX_THREAD_COUNT 32
 
-static void select_sort_x_threads(size_t thidN) {
+static void select_sort_x_threads(size_t thidN, bool run_1024 = false) {
   // 1. Run the experiment
   FPGAContext c;
   initFPGAContextAndPage(thidN, &c);
@@ -19,7 +19,12 @@ static void select_sort_x_threads(size_t thidN) {
   uint8_t instruction_page[PAGE_SIZE];
   makeDeadbeefPage(instruction_page, PAGE_SIZE);
   INFO("Prepare the binary");
-  FILE *f = fopen("../src/client/tests/asm/executables/select-sort.bin", "rb");
+  FILE *f = nullptr;
+  if (run_1024) {
+    f = fopen("../src/client/tests/asm/executables/select-sort-1024.bin", "rb");
+  } else {
+    f = fopen("../src/client/tests/asm/executables/select-sort.bin", "rb");
+  }
   REQUIRE(f != nullptr);
   fread(instruction_page, 1, PAGE_SIZE, f);
   fclose(f);
@@ -42,6 +47,7 @@ static void select_sort_x_threads(size_t thidN) {
 
   for(int thid = 0; thid < thidN; thid++) {
     initArchState(&state[thid], 0);
+    // this is changed, because the first 512bit of FPGA DRAM is not zero, even if it's reset???
     data_page_va[thid] = (4 * thid + 2) * PAGE_SIZE;
     uint64_t pc = (4 * thid + 1) * PAGE_SIZE;
     data_page_pa[thid] = c.ppage_base_addr + (4 * thid + 2) * PAGE_SIZE;
@@ -78,7 +84,7 @@ static void select_sort_x_threads(size_t thidN) {
         REQUIRE(transplantGetState(&c, thid, &local_state) == 0);
         // print what happens.
         printf("Transplant Detected. PC=%lu; transplantType[%lu] \n", local_state.pc, local_state.flags);
-        REQUIRE(transplantPushAndStart(&c, thid, &local_state) == 0);
+        REQUIRE(false);
       }
       continue;
     }
@@ -86,14 +92,19 @@ static void select_sort_x_threads(size_t thidN) {
     REQUIRE(msg.type == sPageFaultNotify);
     uint32_t thid = msg.PageFaultNotif.thid;
     if(msg.PageFaultNotif.permission == INST_FETCH){
+#ifndef AWS_FPGA
+      // Log is only enabled for the simulator, since puts itself can influence the FPGA performance.
       puts("Received instruction page fault");
+#endif
       uint64_t paddr = inst_page_pa[thid];
       REQUIRE(msg.vpn == VPN_ALIGN(state[thid].pc));
       REQUIRE(dramPagePush(&c, paddr, instruction_page) == 0);
       makeMissReply(INST_FETCH, thid, msg.asid, state[thid].pc, paddr, &reply);
       REQUIRE(mmuMsgSend(&c, &reply) == 0);
     } else {
+#ifndef AWS_FPGA
       puts("Received data page fault");
+#endif
       uint64_t paddr = data_page_pa[thid];
       REQUIRE(msg.vpn == VPN_ALIGN(data_page_va[thid]));
       REQUIRE(dramPagePush(&c, paddr, dataPages[thid]) == 0);
@@ -114,9 +125,10 @@ static void select_sort_x_threads(size_t thidN) {
     REQUIRE(!mmuMsgHasPending(&c));
     transplantPending(&c, &pendingThreads);
     finished |= pendingThreads;
+#ifndef AWS_FPGA
     printf("Threads completed: %x \n", finished);
+#endif
     advanceTicks(&c, 1000);
-    REQUIRE(iterations++ < 30);
   }
 
   pmuStopCounting(&c);
@@ -129,7 +141,7 @@ static void select_sort_x_threads(size_t thidN) {
   for(int thid = 0; thid < thidN; ++thid){
     synchronizePage(&c, state[thid].asid, (uint8_t *) pageFPGA, data_page_va[thid], data_page_pa[thid], true);
     // make sure that p is ordered.
-    for(int i = 0; i < 15; ++i) {
+    for(int i = 0; i < run_1024 ? 1023 : 15; ++i) {
       //printf("page[%i] <= page[%i]\n", i, i+1);
       REQUIRE(int (pageFPGA[i]) <= int (pageFPGA[i+1]));
     }
@@ -140,12 +152,25 @@ TEST_CASE("select-sort-1-threads") {
   select_sort_x_threads(1);
 }
 
+TEST_CASE("select-sort-1024-elements-1-threads") {
+  select_sort_x_threads(1, true);
+}
+
 TEST_CASE("select-sort-2-threads") {
   select_sort_x_threads(2);
 }
 
+TEST_CASE("select-sort-1024-elements-2-threads") {
+  select_sort_x_threads(2, true);
+}
+
+
 TEST_CASE("select-sort-15-threads") {
   select_sort_x_threads(15);
+}
+
+TEST_CASE("select-sort-1024-elements-15-threads") {
+  select_sort_x_threads(15, true);
 }
 
 TEST_CASE("select-sort-16-threads") {
