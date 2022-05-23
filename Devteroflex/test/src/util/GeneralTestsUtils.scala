@@ -48,3 +48,15 @@ object TestUtils {
     */
   def vecLitMake[T <: Data](vecSize: Int, initLit: () => T): Vec[T] = vecLitMake(vecSize, initLit, Nil)
 }
+
+object SimTools {
+  def log(str: String)(verbose: Boolean) = if(verbose) {
+    val withClock = true
+    if(withClock) {
+      val cycle = -1 // Context().backend.getClockCycle() // Need to compile modified chisel-testers2
+      println(s"${"%3d".format((cycle-1)*2)}ns:" + str)
+    } else {
+      println(str)
+    }
+  }
+}
