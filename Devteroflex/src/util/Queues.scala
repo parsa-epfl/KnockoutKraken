@@ -86,17 +86,30 @@ class DoubleLatencyQueue[T <: Data](gen: T, maxElements: Int) extends Module {
  * @params size Max number of elements in receiver Queue
  *
  */
-class CreditQueueController(size: Int) extends Module {
+class CreditQueueController(val size: Int) extends Module {
   val trans = IO(new Bundle {
     val in = Input(Bool())
     val dropped = Input(Bool())
     val out = Input(Bool())
   })
   val ready = IO(Output(Bool()))
+  val inflight = IO(Output(UInt(log2Ceil(size).W)))
 
-  private val cnt = RegInit(0.S(log2Ceil(size).W))
-  private val diff = WireInit(0.S(2.W))
-  diff := trans.in.asSInt - (trans.out.asSInt + trans.dropped.asSInt)
+  val diff = WireInit(0.S(3.W))
+  switch(Cat(trans.in.asUInt, trans.out.asUInt, trans.dropped.asUInt))  {
+    is(BigInt("000", 2).U) { diff :=  0.S }
+    is(BigInt("001", 2).U) { diff := -1.S }
+    is(BigInt("010", 2).U) { diff := -1.S }
+    is(BigInt("011", 2).U) { diff := -2.S }
+    is(BigInt("100", 2).U) { diff :=  1.S }
+    is(BigInt("101", 2).U) { diff :=  0.S }
+    is(BigInt("110", 2).U) { diff :=  0.S }
+    is(BigInt("111", 2).U) { diff := -1.S }
+ }
+
+  private val cnt = RegInit(0.S((log2Ceil(size) + 1).W))
   cnt := cnt + diff
-  ready := cnt < (size-1).S
+
+  ready := cnt <= (size - 1).S
+  inflight := cnt.asUInt
 }
