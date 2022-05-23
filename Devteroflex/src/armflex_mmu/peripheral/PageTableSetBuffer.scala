@@ -1,5 +1,8 @@
 package armflex_mmu.peripheral
 
+import _root_.armflex_mmu._
+
+import armflex.util._
 import armflex.{PTEntryPacket, PTTagPacket, PageTableItem}
 import chisel3._
 import chisel3.util._
@@ -11,22 +14,10 @@ import armflex_cache.{PseudoTreeLRUCore, PageTableParams}
 // - Get the LRU Element
 // - replace the LRU Element with given PTE.
 
-/**
- * One Set in the Page Table. It should contains more than one PTEs.
- * 
- * @note the size of this bundle is 96 * params.ptAssociativity
- */ 
-class PageTableSetPacket(val params: PageTableParams) extends Bundle {
-  val entries = Vec(params.ptAssociativity, new PageTableItem(params))
-  val valids = UInt(params.ptAssociativity.W)
-  val lru_bits = UInt(params.ptAssociativity.W)
-}
-
 class PageSetBufferWriteRequestPacket(val params: PageTableParams) extends Bundle {
   val item = new PageTableItem(params)
   val flush_v = Bool()
   val index = UInt(log2Ceil(params.ptAssociativity).W)
-
 }
 
 class PageSetBufferLookupReplyPacket(val params: PageTableParams) extends Bundle {
