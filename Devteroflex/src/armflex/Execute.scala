@@ -123,10 +123,19 @@ object ALU {
     PriorityMux(seq.reverse, (seq.size-1 to 0 by -1).map(_.asUInt))
   }
 
-  def CountifyLeadingSignBits(bits: UInt, size: Int): UInt = bits(size-1, 1) ^ bits(size-2, 0)
-  def CountLeadingZeroBits(bits: UInt, size: Int): UInt = (size-1).U - HighestBitSet(bits)
-  def CountLeadingSignBits(bits: UInt, size: Int): UInt =
-    CountLeadingZeroBits(CountifyLeadingSignBits(bits,size), size)
+  def CountLeadingZeroBits(bits: UInt, size: Int): UInt = {
+    val zeros = Wire(bits.cloneType)
+    when(bits === 0.U) {
+      zeros := size.U
+    }.otherwise {
+      zeros := (size - 1).U - HighestBitSet(bits)
+    }
+    zeros
+  }
+
+  def CountLeadingSignBits(bits: UInt, size: Int): UInt = {
+    CountLeadingZeroBits(bits(size-1, 1) ^ bits(size-2, 0), size)
+  }
 
   def getByte(bits: UInt, idx: Int): UInt = bits((idx+1)*8-1, idx*8)
 }
@@ -328,9 +337,10 @@ class DataProcessing extends Module
   val res = Wire(DATA_T)
 
   val countLeadingBits = Wire(DATA_T)
-  countLeadingBits :=
-    ALU.CountLeadingZeroBits(Mux(io.op === OP_CLS, ALU.CountifyLeadingSignBits(operand, 64), operand), 64)
-
+  countLeadingBits := Mux(io.op === OP_CLZ,
+    ALU.CountLeadingZeroBits(operand, 64),
+    ALU.CountLeadingSignBits(operand, 64)
+  )
 
   val rev = WireInit(DATA_X)
 
@@ -366,9 +376,10 @@ class DataProcessing extends Module
 
   val rbitVec32 = VecInit(operand(31,0).asBools.reverse)
   when(io.is32bit) {
-    countLeadingBits :=
-    ALU.CountLeadingZeroBits(Mux(io.op === OP_CLS,
-      ALU.CountifyLeadingSignBits(operand(31,0), 32), operand(31,0)), 32)
+    countLeadingBits := Mux(io.op === OP_CLZ,
+      ALU.CountLeadingZeroBits(operand(31,0), 32),
+      ALU.CountLeadingSignBits(operand(31,0), 32)
+    )
     rev := MuxLookup(io.op, operand, Seq(
       OP_REV16 -> Catify(operand, 32, 2),
       OP_REV32 -> Catify(operand, 32, 1)))
