@@ -73,6 +73,9 @@ class DataProcessingUnitTest extends AnyFreeSpec with ChiselScalatestTester {
       case OP_REV   => ExecuteModels.ReverseBytes(reg, 1)
       case OP_REV32 => ExecuteModels.ReverseBytes(reg, 2)
       case OP_REV16 => ExecuteModels.ReverseBytes(reg, 4)
+      case OP_CLZ   => if(!is32bit) ExecuteModels.CountLeadingZeroes(reg, 64) 
+                       else ExecuteModels.CountLeadingZeroes(reg, 32)
+      //case OP_CLS   => ExecuteModels.CountLeadingSing(reg, 64)
     }
     dut.io.res.expect(res.U)
   }
@@ -83,7 +86,7 @@ class DataProcessingUnitTest extends AnyFreeSpec with ChiselScalatestTester {
     WriteVcdAnnotation
   )
 
-  "dac00c84:rev     x4, x4" in {
+  "dac00c84:rev     x4, x4 (0x8080808000000000)" in {
     test(new DataProcessing).withAnnotations(anno) { dut =>
       dataProcessingPokeExpect(
         dut,
@@ -93,7 +96,7 @@ class DataProcessingUnitTest extends AnyFreeSpec with ChiselScalatestTester {
       )
     }
   }
-  "dac00063:rbit    x3,x3" in {
+  "dac00063:rbit    x3,x3 (0x1000000000000)" in {
     test(new DataProcessing).withAnnotations(anno) { dut =>
       dataProcessingPokeExpect(
         dut,
@@ -102,6 +105,27 @@ class DataProcessingUnitTest extends AnyFreeSpec with ChiselScalatestTester {
       )
     }
   }
+
+  "dac010e5:clz     x5, x7 (0x0000000000000000)" in {
+    test(new DataProcessing).withAnnotations(anno) { dut =>
+      dataProcessingPokeExpect(
+        dut,
+        BigInt("dac010e5", 16),
+        BigInt("0000000000000000", 16)
+        )
+    }
+  }
+
+  "dac010e5:clz     x5, x7 (0xFFFFFFFFFFFFFFFF)" in {
+    test(new DataProcessing).withAnnotations(anno) { dut =>
+      dataProcessingPokeExpect(
+        dut,
+        BigInt("dac010e5", 16),
+        BigInt("FFFFFFFFFFFFFFFF", 16)
+        )
+    }
+  }
+
 }
 
 object ExecuteModels {
@@ -127,6 +151,19 @@ object ExecuteModels {
     } else {                         
       toBigInt(bits.toString(2).reverse, 64)
     }
+  }
+
+  def CountLeadingZeroes(bits: BigInt, bitsize: Int): BigInt = {
+    val bitString = bits.toString(2).reverse.padTo(bitsize, '0').reverse
+    val nonZero = bitString.dropWhile(_ == '0')
+    bitString.size - nonZero.size
+  }
+
+  def CountLeadingSing(bits: BigInt, bitsize: Int): BigInt = {
+    // TODO
+    val bitString = bits.toString(2).reverse.padTo(bitsize, '0')
+    val nonZero = bitString.dropWhile(_ == '1')
+    bitString.size - nonZero.size
   }
 
   def Replicate(bits: BigInt, maxM: Int, maxN: Int): BigInt = {
