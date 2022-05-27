@@ -532,7 +532,7 @@ class MemoryUnit(
   cache2doneInst_credits.trans.dropped := false.B
   cache2cacheMisaligned_credits.trans.dropped := false.B
   when(cacheReqQ.io.deq.fire) {
-    when(cacheReqQ.io.deq.bits.blockMisaligned) {
+    when(cacheReqQ.io.deq.bits.blockMisaligned && cacheReqQ.io.deq.bits.inst.isPair) {
       cache2cacheMisaligned_credits.trans.in := true.B
     }.otherwise {
       cache2doneInst_credits.trans.in := true.B
