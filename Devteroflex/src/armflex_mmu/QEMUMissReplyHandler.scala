@@ -3,17 +3,18 @@ package armflex_mmu
 import armflex.util.{AXIReadMasterIF, AXIWriteMasterIF}
 import armflex.{PageTableItem, QEMUMissReply}
 import armflex_cache._
-import armflex_mmu.peripheral.{PageTableSetBuffer, PageTableSetPacket}
+import armflex_mmu.peripheral.{PageTableSetBuffer, PageTableSetPacket, PageTableReq}
 import chisel3._
 import chisel3.util._
+import armflex_mmu.peripheral.PageTableOps
 
 class QEMUMissReplyHandler(
   params: MemoryHierarchyParams
 ) extends Module {
 
   // AXI DMA Read Channels
-  val M_DMA_R = IO(new AXIReadMasterIF(params.dramAddrW, params.dramdataW))
-  val M_DMA_W = IO(new AXIWriteMasterIF(params.dramAddrW, params.dramdataW))
+  val M_DMA_R = IO(new AXIReadMasterIF(params.dramAddrW, params.dramDataW))
+  val M_DMA_W = IO(new AXIWriteMasterIF(params.dramAddrW, params.dramDataW))
 
   // Request received from QEMU
   val qemu_miss_reply_i = IO(Flipped(Decoupled(new QEMUMissReply(params.getPageTableParams))))
@@ -34,7 +35,7 @@ class QEMUMissReplyHandler(
   u_buffer.dma_data_i <> M_DMA_R.data
 
   // AXI DMA Write Channels
-  val move_out_enq = Wire(Decoupled(UInt(params.dramdataW.W)))
+  val move_out_enq = Wire(Decoupled(UInt(params.dramDataW.W)))
   move_out_enq.bits := u_buffer.dma_data_o.bits
   move_out_enq.valid := u_buffer.dma_data_o.valid && state_r === sMoveback
   u_buffer.dma_data_o.ready := move_out_enq.ready && state_r === sMoveback

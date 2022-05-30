@@ -36,7 +36,7 @@ case class MemoryHierarchyParams(
   val pPageW: Int = pAddrW - log2Ceil(pageSize)
   val blockBiasW: Int = log2Ceil(cacheBlockSize / 8)
   val dramAddrW: Int = pAddrW
-  val dramdataW: Int = cacheBlockSize
+  val dramDataW: Int = cacheBlockSize
 
   val cacheBlocksPerPage = pageSize/(cacheBlockSize/8)
 
@@ -48,7 +48,8 @@ case class MemoryHierarchyParams(
     asidW,
     tlbSetNumber,
     tlbWayNumber,
-    thidN
+    thidN,
+    vpn2ptSetPA = (asid: UInt, vpn: UInt, ptePerLine: Int) => this.vpn2ptSetPA(asid, vpn, ptePerLine)
     )
 
   def getCacheParams: CacheParams = new CacheParams(
@@ -78,8 +79,8 @@ case class MemoryHierarchyParams(
 
 class MMU2ShellIO(params: MemoryHierarchyParams) extends Bundle {
   // Page Table DMA ports
-  val M_DMA_R = Vec(4, new AXIReadMasterIF(params.dramAddrW, params.dramdataW))
-  val M_DMA_W = Vec(3, new AXIWriteMasterIF(params.dramAddrW, params.dramdataW))
+  val M_DMA_R = Vec(4, new AXIReadMasterIF(params.dramAddrW, params.dramDataW))
+  val M_DMA_W = Vec(3, new AXIWriteMasterIF(params.dramAddrW, params.dramDataW))
   // Host interrupt
   val msgPendingInt = Output(Bool())
 }

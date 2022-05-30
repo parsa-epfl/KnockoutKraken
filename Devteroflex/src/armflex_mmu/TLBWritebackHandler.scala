@@ -4,12 +4,12 @@ import chisel3._
 import chisel3.util._
 import armflex_cache._
 import armflex.util._
+import armflex.{PTEntryPacket, PTTagPacket, PageTableItem}
 
 class TLBWritebackHandler(
   params: MemoryHierarchyParams,
   tlbNumber: Int = 2
 ) extends Module {
-  import armflex.{PTEntryPacket, PTTagPacket, PageTableItem}
 
   // the eviction request of the TLB
   val tlb_evict_req_i = IO(Vec(
@@ -24,9 +24,9 @@ class TLBWritebackHandler(
                         new peripheral.PageTableSetPacket(params.getPageTableParams)))
 
   // AXI DMA Read channels
-  val M_DMA_R = IO(new AXIReadMasterIF(params.dramAddrW, params.dramdataW))
+  val M_DMA_R = IO(new AXIReadMasterIF(params.dramAddrW, params.dramDataW))
   // AXI DMA Write channels
-  val M_DMA_W = IO(new AXIWriteMasterIF(params.dramAddrW, params.dramdataW))
+  val M_DMA_W = IO(new AXIWriteMasterIF(params.dramAddrW, params.dramDataW))
 
   u_buffer.dma_data_i <> M_DMA_R.data
   M_DMA_W.data <> u_buffer.dma_data_o

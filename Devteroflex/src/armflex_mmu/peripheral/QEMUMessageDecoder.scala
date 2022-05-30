@@ -10,7 +10,7 @@ class QEMUMessageDecoder(
   param: MemoryHierarchyParams,
   fifoDepth: Int = 1
 ) extends Module {
-  val message_i = IO(Flipped(Decoupled(UInt(param.dramdataW.W))))
+  val message_i = IO(Flipped(Decoupled(UInt(param.dramDataW.W))))
   val qemu_miss_reply_o = IO(Decoupled(new QEMUMissReply(param.getPageTableParams)))
   val qemu_evict_reply_o = IO(Decoupled(new QEMUEvictReply(param.getPageTableParams)))
   val qemu_evict_page_req_o = IO(Decoupled(new QEMUPageEvictRequest(param.getPageTableParams)))

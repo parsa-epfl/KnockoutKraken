@@ -274,7 +274,7 @@ class MMUDUT(
  
   // AXI slave of the page buffer
   val S_AXI = IO(Flipped(uMMU.S_AXI.cloneType))
-  val M_AXI = IO(new AXI4(params.dramAddrW, params.dramdataW))
+  val M_AXI = IO(new AXI4(params.dramAddrW, params.dramDataW))
   S_AXI <> uMMU.S_AXI
 
 
@@ -288,8 +288,8 @@ class MMUDUT(
   // Manage M_AXI ports
   val rdPorts = 4
   val wrPorts = 3
-  val axiMulti_R = Module(new AXIReadMultiplexer(params.dramAddrW, params.dramdataW, rdPorts))
-  val axiMulti_W = Module(new AXIWriteMultiplexer(params.dramAddrW, params.dramdataW, wrPorts))
+  val axiMulti_R = Module(new AXIReadMultiplexer(params.dramAddrW, params.dramDataW, rdPorts))
+  val axiMulti_W = Module(new AXIWriteMultiplexer(params.dramAddrW, params.dramDataW, wrPorts))
   for(i <- 0 until 4) axiMulti_R.S_IF(i) <> uMMU.axiShell_io.M_DMA_R(i)
   for(i <- 0 until 3) axiMulti_W.S_IF(i) <> uMMU.axiShell_io.M_DMA_W(i)
 
@@ -304,11 +304,11 @@ class MMUDUT(
 
   // Tie off Write Port
   axiMulti_R.M_AXI.aw <> AXI4AW.stub(params.dramAddrW)
-  axiMulti_R.M_AXI.w <> AXI4W.stub(params.dramdataW)
+  axiMulti_R.M_AXI.w <> AXI4W.stub(params.dramDataW)
   axiMulti_R.M_AXI.b <> AXI4B.stub()
   // Tie off Read Port 
   axiMulti_W.M_AXI.ar <> AXI4AR.stub(params.dramAddrW)
-  axiMulti_W.M_AXI.r <> AXI4R.stub(params.dramdataW)
+  axiMulti_W.M_AXI.r <> AXI4R.stub(params.dramDataW)
   
   // Helper: decode and encode messages from a raw UInt
   val uHelperEncodeDecodePageSet = Module(new MMUHelpers.PageSetConverter)

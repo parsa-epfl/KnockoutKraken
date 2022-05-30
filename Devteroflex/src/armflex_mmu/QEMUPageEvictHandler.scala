@@ -22,8 +22,8 @@ class QEMUPageEvictHandler(
     ))
 
   // AXI DMA read and write channels
-  val M_DMA_R = IO(new AXIReadMasterIF(params.dramAddrW, params.dramdataW))
-  val M_DMA_W = IO(new AXIWriteMasterIF(params.dramAddrW, params.dramdataW))
+  val M_DMA_R = IO(new AXIReadMasterIF(params.dramAddrW, params.dramDataW))
+  val M_DMA_W = IO(new AXIWriteMasterIF(params.dramAddrW, params.dramDataW))
 
   u_buffer.dma_data_i <> M_DMA_R.data
   u_buffer.dma_data_o <> M_DMA_W.data
