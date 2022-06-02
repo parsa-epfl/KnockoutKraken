@@ -42,8 +42,8 @@ class DUTTLB(
   val frontendRequest_i = IO(Flipped(u_tlb.pipeline_io.translationReq.cloneType))
   frontendRequest_i <> u_tlb.pipeline_io.translationReq
 
-  val flushRequest_i = IO(Flipped(u_tlb.mmu_io.flushReq.cloneType))
-  flushRequest_i <> u_tlb.mmu_io.flushReq
+  val flushRequest_i = IO(Flipped(u_tlb.mmu_io.flush.req.cloneType))
+  flushRequest_i <> u_tlb.mmu_io.flush.req
 
   val frontendReply_o = IO(u_tlb.pipeline_io.translationResp.cloneType)
   frontendReply_o <> u_tlb.pipeline_io.translationResp

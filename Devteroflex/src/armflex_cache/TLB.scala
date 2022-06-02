@@ -101,16 +101,18 @@ class TLBMMURespPacket(params: PageTableParams) extends Bundle {
   val tag = new PTTagPacket(params)
   val data = new PTEntryPacket(params)
   val thid = UInt(log2Ceil(params.thidN).W)
+}
 
+class FlushTLBIO(params: PageTableParams) extends Bundle {
+  val req = Decoupled(new PTTagPacket(params))
+  val resp = Flipped(Valid(new TLBPipelineResp(params)))
 }
 
 class TLB2MMUIO(params: PageTableParams) extends Bundle {
-  val flushReq = Flipped(Decoupled(new PTTagPacket(params)))
-  val flushResp = Valid(new TLBPipelineResp(params))
+  val flush = new FlushTLBIO(params)
   val missReq = Decoupled(new TLBMissRequestMessage(params))
   val writebackReq = Decoupled(new PageTableItem(params))
   val refillResp = Flipped(Decoupled(new TLBMMURespPacket(params)))
-
 }
 
 class TLB2PipelineIO(params: PageTableParams) extends Bundle {
@@ -202,17 +204,17 @@ class TLB(
   pipeline_io.translationReq.ready := arbPipelinePort.ready
 
   // The flush request from other place
-  arbFlushPort.valid := mmu_io.flushReq.valid
-  arbFlushPort.bits.addr := Cat(mmu_io.flushReq.bits.asid, mmu_io.flushReq.bits.vpn)
+  arbFlushPort.valid := mmu_io.flush.req.valid
+  arbFlushPort.bits.addr := Cat(mmu_io.flush.req.bits.asid, mmu_io.flush.req.bits.vpn)
   arbFlushPort.bits.thid := DontCare
-  arbFlushPort.bits.asid := mmu_io.flushReq.bits.asid
+  arbFlushPort.bits.asid := mmu_io.flush.req.bits.asid
   arbFlushPort.bits.wData := DontCare
   arbFlushPort.bits.flush_v := true.B
   arbFlushPort.bits.wMask := DontCare
   arbFlushPort.bits.perm := DontCare
   arbFlushPort.bits.refill_v := false.B
   arbFlushPort.bits.refillData := DontCare
-  mmu_io.flushReq.ready := arbFlushPort.ready
+  mmu_io.flush.req.ready := arbFlushPort.ready
 
   // The refilling request from the backend of the cache
   arbRefillPort <> refill2databankReq
@@ -233,13 +235,13 @@ class TLB(
 
   pipeline_io.translationResp.valid := u_dataBankManager.frontend_reply_o.valid && !u_dataBankManager.frontend_reply_o.bits.flush && !u_dataBankManager.frontend_reply_o.bits.refill
 
-  // mmu_i.flushResp
-  mmu_io.flushResp.bits.hit := u_dataBankManager.frontend_reply_o.bits.hit
-  mmu_io.flushResp.bits.entry := replied_pte
-  mmu_io.flushResp.bits.thid := u_dataBankManager.frontend_reply_o.bits.thid
-  // mmu_i.flushResp.bits.dirty := u_dataBankManager.pipeline_io.translationResp.bits.dirty
-  mmu_io.flushResp.bits.violation := false.B // Flush will never cause perm violation.
-  mmu_io.flushResp.valid := u_dataBankManager.frontend_reply_o.valid && u_dataBankManager.frontend_reply_o.bits.flush
+  // mmu_i.flush.resp
+  mmu_io.flush.resp.bits.hit := u_dataBankManager.frontend_reply_o.bits.hit
+  mmu_io.flush.resp.bits.entry := replied_pte
+  mmu_io.flush.resp.bits.thid := u_dataBankManager.frontend_reply_o.bits.thid
+  // mmu_i.flush.resp.bits.dirty := u_dataBankManager.pipeline_io.translationResp.bits.dirty
+  mmu_io.flush.resp.bits.violation := false.B // Flush will never cause perm violation.
+  mmu_io.flush.resp.valid := u_dataBankManager.frontend_reply_o.valid && u_dataBankManager.frontend_reply_o.bits.flush
 
   // miss request
   val uMissReqQueueOut = Queue(u_dataBankManager.miss_request_o, params.thidN + 1) // the extra 1 is for refilling.

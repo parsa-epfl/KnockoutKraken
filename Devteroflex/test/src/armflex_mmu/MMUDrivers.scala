@@ -344,14 +344,14 @@ object MMUDriver {
       target.mmu_tlb_io.data.refillResp.initSink()
       target.mmu_tlb_io.data.refillResp.setSinkClock(clock)
 
-      target.mmu_tlb_io.inst.flushReq.initSink()
-      target.mmu_tlb_io.data.flushReq.initSink()
-      target.mmu_tlb_io.inst.flushReq.setSinkClock(clock)
-      target.mmu_tlb_io.data.flushReq.setSinkClock(clock)
-      target.mmu_tlb_io.inst.flushResp.initSource()
-      target.mmu_tlb_io.data.flushResp.initSource()
-      target.mmu_tlb_io.inst.flushResp.setSourceClock(clock)
-      target.mmu_tlb_io.data.flushResp.setSourceClock(clock)
+      target.mmu_tlb_io.inst.flush.req.initSink()
+      target.mmu_tlb_io.data.flush.req.initSink()
+      target.mmu_tlb_io.inst.flush.req.setSinkClock(clock)
+      target.mmu_tlb_io.data.flush.req.setSinkClock(clock)
+      target.mmu_tlb_io.inst.flush.resp.initSource()
+      target.mmu_tlb_io.data.flush.resp.initSource()
+      target.mmu_tlb_io.inst.flush.resp.setSourceClock(clock)
+      target.mmu_tlb_io.data.flush.resp.setSourceClock(clock)
 
       target.mmu_cache_io.data.flushReq.initSink()
       target.mmu_cache_io.inst.flushReq.initSink()
@@ -482,11 +482,11 @@ object MMUDriver {
 
     def expectFlushReqTLB(accessType: Int, thid: UInt, set: PageTableItem) = {
       fork {
-        target.mmu_tlb_io.inst.flushReq.expectDequeue(set.tag)
-        target.mmu_tlb_io.inst.flushResp.enqueueNow(TLBPipelineResp(set.entry, (accessType == MemoryAccessType.INST_FETCH).B, false.B, thid))
+        target.mmu_tlb_io.inst.flush.req.expectDequeue(set.tag)
+        target.mmu_tlb_io.inst.flush.resp.enqueueNow(TLBPipelineResp(set.entry, (accessType == MemoryAccessType.INST_FETCH).B, false.B, thid))
       }.fork {
-        target.mmu_tlb_io.data.flushReq.expectDequeue(set.tag)
-        target.mmu_tlb_io.data.flushResp.enqueueNow(TLBPipelineResp(set.entry, (accessType != MemoryAccessType.INST_FETCH).B, false.B, thid))
+        target.mmu_tlb_io.data.flush.req.expectDequeue(set.tag)
+        target.mmu_tlb_io.data.flush.resp.enqueueNow(TLBPipelineResp(set.entry, (accessType != MemoryAccessType.INST_FETCH).B, false.B, thid))
       }.join()
     }
 
