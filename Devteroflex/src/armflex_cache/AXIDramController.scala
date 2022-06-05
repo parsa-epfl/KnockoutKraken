@@ -60,8 +60,8 @@ class Cache2DMAAdaptor(params: DatabankParams, queueSize: Int) extends Module {
 
   // AXI AWS Shell DMA
   val M_DMA = IO(new Bundle {
-    val rd = Flipped(new ReadPort(params.addrW + log2Ceil(params.blockSize / 8), params.blockSize))
-    val wr = Flipped(new WritePort(params.addrW + log2Ceil(params.blockSize / 8), params.blockSize))
+    val rd = new ReadPort(params.addrW + log2Ceil(params.blockSize / 8), params.blockSize)
+    val wr = new WritePort(params.addrW + log2Ceil(params.blockSize / 8), params.blockSize)
   })
 
   // Cache

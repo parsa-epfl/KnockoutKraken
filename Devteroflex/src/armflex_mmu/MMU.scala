@@ -79,8 +79,8 @@ case class MemoryHierarchyParams(
 
 class MMU2ShellIO(params: MemoryHierarchyParams) extends Bundle {
   // Page Table DMA ports
-  val M_DMA_RD = Flipped(new ReadPort(params.dramAddrW, params.dramDataW))
-  val M_DMA_WR = Flipped(new WritePort(params.dramAddrW, params.dramDataW))
+  val M_DMA_RD = new ReadPort(params.dramAddrW, params.dramDataW)
+  val M_DMA_WR = new WritePort(params.dramAddrW, params.dramDataW)
   // Host interrupt
   val msgPendingInt = Output(Bool())
 }

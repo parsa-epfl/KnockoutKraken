@@ -25,8 +25,8 @@ class ReadPort(
     val dataW: Int,
     val burstS: Int = 8
 ) extends Bundle {
-    val req = Flipped(Decoupled(new MemReqBurst(addrW, dataW, burstS)))
-    val data = Decoupled(UInt(dataW.W))
+    val req = Decoupled(new MemReqBurst(addrW, dataW, burstS))
+    val data = Flipped(Decoupled(UInt(dataW.W)))
 }
 
 class WritePort(
@@ -34,8 +34,8 @@ class WritePort(
     val dataW: Int,
     val burstS: Int = 8
 ) extends Bundle {
-    val req = Flipped(Decoupled(new MemReqBurst(addrW, dataW, burstS)))
-    val data = Flipped(Decoupled(UInt(dataW.W)))
+    val req = Decoupled(new MemReqBurst(addrW, dataW, burstS))
+    val data =Decoupled(UInt(dataW.W))
 }
 
 class DRAMPortParams(
@@ -69,8 +69,8 @@ class DRAMWrapperRead(val params: DRAMPortParams) extends Module {
 class AXI4MasterDMACtrl(val rdPortsN: Int, val wrPortsN: Int, 
                         val addrW: Int, val dataW: Int) extends Module {
   val req = IO(new Bundle {
-    val wrPorts = Vec(wrPortsN, new ReadPort(addrW, dataW, 32))
-    val rdPorts = Vec(rdPortsN, new WritePort(addrW, dataW, 32))
+    val rdPorts = Vec(rdPortsN, Flipped(new ReadPort(addrW, dataW, 32)))
+    val wrPorts = Vec(wrPortsN, Flipped(new WritePort(addrW, dataW, 32)))
   })
   val M_AXI = IO(new AXI4(addrW, dataW))
 

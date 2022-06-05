@@ -171,8 +171,8 @@ class ComputeExample(val params: ComputeExampleParams, val toPack: BRAMParams) e
 
   // The write port allows for burst data writes
   val dram_io = IO(new Bundle{
-    val read = Flipped(new ReadPort(params.addrW, params.dataW))
-    val write = Flipped(new WritePort(params.addrW, params.dataW))
+    val read = new ReadPort(params.addrW, params.dataW)
+    val write = new WritePort(params.addrW, params.dataW)
   })
 
 
