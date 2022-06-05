@@ -4,7 +4,7 @@ import chisel3.util._
 import armflex._
 import armflex.util._
 import armflex_cache._
-import armflex_mmu.{MMU, MemoryHierarchyParams}
+import armflex_mmu._
 import armflex.util.ExtraUtils._
 import firrtl.options.TargetDirAnnotation
 import scala.collection.DebugUtils
@@ -31,8 +31,8 @@ class MemorySystem(params: MemoryHierarchyParams) extends Module {
   private val dtlb = Module(new TLB(params.getPageTableParams, () => new PseudoTreeLRUCore(params.tlbWayNumber)))
   private val icache = Module(BaseCache(params.getCacheParams, () => new MatrixLRUCore(params.cacheWayNumber)))
   private val dcache = Module(BaseCache(params.getCacheParams, () => new MatrixLRUCore(params.cacheWayNumber)))
-  private val icacheAdaptor = Module(new Cache2AXIAdaptor(params.getCacheParams.databankParameter, params.thidN + 1))
-  private val dcacheAdaptor = Module(new Cache2AXIAdaptor(params.getCacheParams.databankParameter, params.thidN + 1))
+  private val icacheAdaptor = Module(new Cache2DMAAdaptor(params.getCacheParams.databankParameter, params.thidN + 1))
+  private val dcacheAdaptor = Module(new Cache2DMAAdaptor(params.getCacheParams.databankParameter, params.thidN + 1))
   mmu.mmu_tlb_io.inst <> itlb.mmu_io
   mmu.mmu_tlb_io.data <> dtlb.mmu_io
   mmu.mmu_cache_io.inst <> icache.mmu_i
@@ -45,10 +45,8 @@ class MemorySystem(params: MemoryHierarchyParams) extends Module {
   val pipeline_io = IO(new MemorySystemPipelineIO(params))
   val axiShell_io = IO(new Bundle {
     val AXI_MMU = mmu.axiShell_io.cloneType
-    val M_AXI_DMA_icacheR = icacheAdaptor.M_DMA_R.cloneType
-    val M_AXI_DMA_dcacheR = dcacheAdaptor.M_DMA_R.cloneType
-    val M_AXI_DMA_icacheW = icacheAdaptor.M_DMA_W.cloneType
-    val M_AXI_DMA_dcacheW = dcacheAdaptor.M_DMA_W.cloneType
+    val M_AXI_DMA_icache = icacheAdaptor.M_DMA.cloneType
+    val M_AXI_DMA_dcache = dcacheAdaptor.M_DMA.cloneType
   })
 
   val S_CSR = IO(Flipped(mmu.S_CSR.cloneType))
@@ -63,21 +61,13 @@ class MemorySystem(params: MemoryHierarchyParams) extends Module {
   pipeline_io.data.tlb <> dtlb.pipeline_io
   pipeline_io.mmu <> mmu.mmu_pipe_io
   axiShell_io.AXI_MMU <> mmu.axiShell_io
-  axiShell_io.M_AXI_DMA_icacheR <> icacheAdaptor.M_DMA_R
-  when(icacheAdaptor.M_DMA_R.req.fire) {
-    assert(icacheAdaptor.M_DMA_R.req.bits.address >= (1 << (params.pAddrW - 8)).U, "iCache should not read the page table region.")
+  axiShell_io.M_AXI_DMA_icache <> icacheAdaptor.M_DMA
+  axiShell_io.M_AXI_DMA_dcache <> dcacheAdaptor.M_DMA
+  when(icacheAdaptor.M_DMA.rd.req.fire) {
+    assert(icacheAdaptor.M_DMA.rd.req.bits.addr >= (1 << (params.pAddrW - 8)).U, "iCache should not read the page table region.")
   }
-  axiShell_io.M_AXI_DMA_dcacheR <> dcacheAdaptor.M_DMA_R
-  when(dcacheAdaptor.M_DMA_R.req.fire) {
-    assert(dcacheAdaptor.M_DMA_R.req.bits.address >= (1 << (params.pAddrW - 8)).U, "dCache should not read the page table region.")
-  }
-  axiShell_io.M_AXI_DMA_icacheW <> icacheAdaptor.M_DMA_W
-  when(icacheAdaptor.M_DMA_W.req.fire) {
-    assert(icacheAdaptor.M_DMA_W.req.bits.address >= (1 << (params.pAddrW - 8)).U, "iCache should not write the page table region.")
-  }
-  axiShell_io.M_AXI_DMA_dcacheW <> dcacheAdaptor.M_DMA_W
-  when(dcacheAdaptor.M_DMA_W.req.fire) {
-    assert(dcacheAdaptor.M_DMA_W.req.bits.address >= (1 << (params.pAddrW - 8)).U, "dCache should not write the page table region.")
+  when(icacheAdaptor.M_DMA.wr.req.fire) {
+    assert(icacheAdaptor.M_DMA.rd.req.bits.addr >= (1 << (params.pAddrW - 8)).U, "iCache should not read the page table region.")
   }
 
   // PMU
@@ -91,6 +81,7 @@ class MemorySystem(params: MemoryHierarchyParams) extends Module {
   oPMUEventTriggers.dcache := dcacheAdaptor.oPMUReq
   oPMUEventTriggers.mm := mmu.oPMUCountingReq
 
+  // TODO: Rewire ILA
   val oILA = IO(new Bundle {
     val dTLBTranslateReq = Output(dtlb.oDebug.translateReq.cloneType)
     val dTLBTranslateResp = Output(dtlb.oDebug.translateResp.cloneType)
@@ -101,11 +92,11 @@ class MemorySystem(params: MemoryHierarchyParams) extends Module {
     // val inFIFOHandshake = Output(mmu.oDebug.inFIFOHandshake.cloneType)
     // val outFIFOHandshake = Output(mmu.oDebug.outFIFOHandshake.cloneType)
 
-    val pwState = Output(UInt(2.W))
-    val ptAccessReq = Output(mmu.oILA.ptAccessReq.cloneType)
-    val ptes = Output(mmu.oILA.ptes.cloneType)
-    val pteBufferState = Output(mmu.oILA.pteBufferState.cloneType)
-    val pteHitVec = Output(mmu.oILA.pteHitVec.cloneType)
+    // val pwState = Output(UInt(2.W))
+    // val ptAccessReq = Output(mmu.oILA.ptAccessReq.cloneType)
+    // val ptes = Output(mmu.oILA.ptes.cloneType)
+    // val pteBufferState = Output(mmu.oILA.pteBufferState.cloneType)
+    // val pteHitVec = Output(mmu.oILA.pteHitVec.cloneType)
   })
 
   oILA.dTLBRefillResp := dtlb.oDebug.refillResp
@@ -117,11 +108,11 @@ class MemorySystem(params: MemoryHierarchyParams) extends Module {
   // oILA.inFIFOHandshake := mmu.oDebug.inFIFOHandshake
   // oILA.outFIFOHandshake := mmu.oDebug.outFIFOHandshake
 
-  oILA.pwState := mmu.oILA.pwState
-  oILA.ptAccessReq := mmu.oILA.ptAccessReq
-  oILA.ptes := mmu.oILA.ptes
-  oILA.pteBufferState := mmu.oILA.pteBufferState
-  oILA.pteHitVec := mmu.oILA.pteHitVec
+  // oILA.pwState := mmu.oILA.pwState
+  // oILA.ptAccessReq := mmu.oILA.ptAccessReq
+  // oILA.ptes := mmu.oILA.ptes
+  // oILA.pteBufferState := mmu.oILA.pteBufferState
+  // oILA.pteHitVec := mmu.oILA.pteHitVec
 }
 
 object MemorySystemVerilogEmitter extends App {
@@ -191,12 +182,7 @@ class ARMFlexTop(
   }
 
   // Aggregate AXI slaves
-  val uAXIMux = Module(new AXIInterconnector(
-    2,
-    axiAddressMapFunction,
-    17,
-    512
-  ))
+  val uAXIMux = Module(new AXIInterconnector(2, axiAddressMapFunction, 17, 512))
   
   uAXIMux.M_AXI(0) <> u_pipeline.S_AXI_ArchState // 0x00000 to 0x10000
   uAXIMux.M_AXI(1) <> memory.S_AXI // 0x10000 to 0x20000
@@ -237,39 +223,21 @@ class ARMFlexTopSimulator(
   import armflex.util.AXIReadMultiplexer
   import armflex.util.AXIWriteMultiplexer
   val devteroFlexTop = Module(new ARMFlexTop(paramsPipeline, paramsMemoryHierarchy))
-  private val axiMulti_R = Module(new AXIReadMultiplexer(paramsMemoryHierarchy.dramAddrW, 512, 6))
-  private val axiMulti_W = Module(new AXIWriteMultiplexer(paramsMemoryHierarchy.dramAddrW, 512, 5))
+  private val dmaMasterCtrl = Module(new AXI4MasterDMACtrl(3, 3, paramsMemoryHierarchy.dramAddrW, paramsMemoryHierarchy.dramDataW))
   val S_AXI = IO(Flipped(devteroFlexTop.S_AXI.cloneType))
   val S_AXIL = IO(Flipped(devteroFlexTop.S_AXIL.cloneType))
+  val M_AXI = IO(new AXI4(paramsMemoryHierarchy.dramAddrW, paramsMemoryHierarchy.dramDataW))
+
   S_AXI <> devteroFlexTop.S_AXI
   S_AXIL <> devteroFlexTop.S_AXIL
   
-  for(i <- 0 until devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_R.length)
-    axiMulti_R.S_IF(i) <> devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_R(i)
-  for(i <- 0 until devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_W.length)
-    axiMulti_W.S_IF(i) <> devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_W(i)
-  var W_IDX = devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_W.length
-  var R_IDX = devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_R.length
-  axiMulti_W.S_IF(W_IDX+0) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_icacheW
-  axiMulti_W.S_IF(W_IDX+1) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_dcacheW
-  axiMulti_R.S_IF(R_IDX+0) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_icacheR
-  axiMulti_R.S_IF(R_IDX+1) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_dcacheR
-
-  val M_AXI = IO(new AXI4(paramsMemoryHierarchy.dramAddrW, paramsMemoryHierarchy.cacheBlockSize))
-  // Interconnect Read ports
-  M_AXI.ar <> axiMulti_R.M_AXI.ar
-  M_AXI.r <> axiMulti_R.M_AXI.r
-  // Disable Write ports
-  axiMulti_R.M_AXI.aw <> AXI4AW.stub(paramsMemoryHierarchy.dramAddrW)
-  axiMulti_R.M_AXI.w <> AXI4W.stub(paramsMemoryHierarchy.cacheBlockSize)
-  axiMulti_R.M_AXI.b <> AXI4B.stub()
-  // Interconnect Write ports
-  M_AXI.aw <> axiMulti_W.M_AXI.aw
-  M_AXI.w <> axiMulti_W.M_AXI.w
-  M_AXI.b <> axiMulti_W.M_AXI.b
-  // Disable Read ports
-  axiMulti_W.M_AXI.ar <> AXI4AR.stub(paramsMemoryHierarchy.dramAddrW)
-  axiMulti_W.M_AXI.r <> AXI4R.stub(paramsMemoryHierarchy.cacheBlockSize)
+  M_AXI <> dmaMasterCtrl.M_AXI
+  dmaMasterCtrl.req.wrPorts(0) <> devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_WR // PageTableAccess
+  dmaMasterCtrl.req.rdPorts(0) <> devteroFlexTop.AXI_MEM.AXI_MMU.M_DMA_RD // PageTableAccess
+  dmaMasterCtrl.req.wrPorts(1) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_icache.wr
+  dmaMasterCtrl.req.rdPorts(1) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_icache.rd
+  dmaMasterCtrl.req.wrPorts(2) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_dcache.wr
+  dmaMasterCtrl.req.rdPorts(2) <> devteroFlexTop.AXI_MEM.M_AXI_DMA_dcache.rd
 
   // No Instrumentation enabled in this build, make sure it has no impact downstream
   devteroFlexTop.instrument.commit.ready := true.B
