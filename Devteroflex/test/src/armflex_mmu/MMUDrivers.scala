@@ -515,7 +515,6 @@ object MMUDriver {
       target.mmu_tlb_io.data.flush.resp.enqueueNow(TLBPipelineResp(entry.entry, true.B, false.B, 0.U))
       target.clock.step()
       for(block <- 0 until target.params.cacheBlocksPerPage) {
-        target.mmu_cache_io.data.stallReq.expect(true.B)
         val ppn = (entry.entry.ppn.litValue << log2Ceil(target.params.pageSize)) | (block << log2Ceil(target.params.cacheBlockSize/8))
         target.mmu_cache_io.data.flushReq.expectDequeue(CacheFlushRequest(ppn.U))
       }
@@ -531,7 +530,6 @@ object MMUDriver {
       target.mmu_tlb_io.inst.flush.resp.enqueueNow(TLBPipelineResp(entry.entry, true.B, false.B, 0.U))
       target.clock.step()
       for(block <- 0 until target.params.cacheBlocksPerPage) {
-        target.mmu_cache_io.inst.stallReq.expect(true.B)
         val ppn = (entry.entry.ppn.litValue << log2Ceil(target.params.pageSize)) | (block << log2Ceil(target.params.cacheBlockSize/8))
         target.mmu_cache_io.inst.flushReq.expectDequeue(CacheFlushRequest(ppn.U))
       }

@@ -125,10 +125,6 @@ class PageTableEntryDeletor(params: MemoryHierarchyParams) extends Module {
   val cacheFlushLatency = 4
   val cacheFlushLatencyCycle_r = RegInit(0.U(log2Ceil(cacheFlushLatency).W))
 
-  // Eviction done? (You have to wait for like two / three cycles to get the correct result.)
-  MMU_FLUSH_CACHE_IO.inst.stallReq := state_r === sEvictCacheBlocks && workingPageTableEntry.entry.perm === INST_FETCH.U || state_r === sWaitWbEmpty
-  MMU_FLUSH_CACHE_IO.data.stallReq := state_r === sEvictCacheBlocks || state_r === sWaitWbEmpty
-
   switch(state_r) {
     is(sIdle) {
       when(PORT.req.fire) {
@@ -183,6 +179,7 @@ class PageTableEntryDeletor(params: MemoryHierarchyParams) extends Module {
     }
 
     is(sWaitWbLatency) {
+      // Eviction done? (You have to wait for like two / three cycles to get the correct result of wbQueue)
       cacheFlushLatencyCycle_r := cacheFlushLatencyCycle_r + 1.U
       when(cacheFlushLatencyCycle_r === (cacheFlushLatency - 1).U) {
         cacheFlushLatencyCycle_r := 0.U

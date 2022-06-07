@@ -177,7 +177,6 @@ class RefillQueue (
 
 class CacheMMUIO(params: CacheParams) extends Bundle {
   val flushReq = Flipped(Decoupled(new CacheFlushRequest(params)))
-  val stallReq = Input(Bool()) // When this signal is raised, no new requests will be accepted.
   val wbEmpty = Output(Bool())
 }
 
@@ -247,7 +246,7 @@ class BaseCache(
   arbPipelinePort.bits.refill_v := false.B
   arbPipelinePort.bits.wData := pipeline_io.req.bits.data
   arbPipelinePort.bits.wMask := Cat(pipeline_io.req.bits.w_en.asBools().map(Fill(8, _)).reverse)
-  pipeline_io.req.ready := !mmu_i.flushReq.valid && !u_refillQueue.refillRequest_o.valid && !mmu_i.stallReq
+  pipeline_io.req.ready := !mmu_i.flushReq.valid && !u_refillQueue.refillRequest_o.valid
 
   // The flush request from the mmu
   arbFlushPort.valid := mmu_i.flushReq.valid
@@ -257,11 +256,11 @@ class BaseCache(
   // The refilling/new block arrival request from DRAM
   arbRefillPort.valid := u_refillQueue.refillRequest_o.valid
   arbRefillPort.bits := u_refillQueue.refillRequest_o.bits.toInternalRequestPacket
-  u_refillQueue.refillRequest_o.ready := !mmu_i.flushReq.valid && !mmu_i.stallReq
+  u_refillQueue.refillRequest_o.ready := !mmu_i.flushReq.valid
 
   u_dataBankManager.frontend_request_i.bits := u_3wayArbiter.io.out.bits
-  u_dataBankManager.frontend_request_i.valid := !mmu_i.stallReq && u_3wayArbiter.io.out.valid
-  u_3wayArbiter.io.out.ready := !mmu_i.stallReq && u_dataBankManager.frontend_request_i.ready
+  u_dataBankManager.frontend_request_i.valid := u_3wayArbiter.io.out.valid
+  u_3wayArbiter.io.out.ready := u_dataBankManager.frontend_request_i.ready
 
   // Reply to pipeline ------
   pipeline_io.resp.valid := u_dataBankManager.frontend_reply_o.valid && !u_dataBankManager.frontend_reply_o.bits.flush
@@ -287,7 +286,7 @@ class BaseCache(
   u_refillQueue.missRequest_i.valid := u_dataBankManager.miss_request_o.valid && u_backendMerger.read_request_i.ready
   u_backendMerger.read_request_i.valid := u_dataBankManager.miss_request_o.valid && u_refillQueue.missRequest_i.ready
 
-  mmu_i.wbEmpty := DontCare // Used somewhere else
+  mmu_i.wbEmpty := true.B // Used somewhere else
 
   if(false) { // TODO Conditional printing
     val location = "Cache"
