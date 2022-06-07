@@ -53,6 +53,7 @@ class DUTTLB(
 
   if(initialMem.nonEmpty) loadMemoryFromFile(u_mem, initialMem)
 
+  delay_chain_rep.i.bits.dest := Mux(delay_chain_pt_req.o.bits.entry.entry.perm === INST_FETCH.U, PageTableOps.destITLB, PageTableOps.destITLB)
   delay_chain_rep.i.bits.thid := delay_chain_pt_req.o.bits.thid
   delay_chain_rep.i.bits.tag := delay_chain_pt_req.o.bits.entry.tag
   delay_chain_rep.i.bits.data := delay_chain_pt_req.o.bits.entry.entry

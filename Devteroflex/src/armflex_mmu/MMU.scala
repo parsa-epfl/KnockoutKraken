@@ -134,9 +134,10 @@ class MMU(params: MemoryHierarchyParams, messageFIFODepth: Int = 2) extends Modu
   mmu_tlb_io.inst.refillResp.valid := false.B
   mmu_tlb_io.data.refillResp <> DontCare
   mmu_tlb_io.data.refillResp.valid := false.B
-  when(uPageTableReqHandler.PAGE_ENTRY_TLB_IO.refillResp.bits.data.perm === INST_FETCH.U) {
+  uPageTableReqHandler.PAGE_ENTRY_TLB_IO.refillResp.ready := false.B
+  when(uPageTableReqHandler.PAGE_ENTRY_TLB_IO.refillResp.bits.dest === PageTableOps.destITLB) {
     mmu_tlb_io.inst.refillResp <> uPageTableReqHandler.PAGE_ENTRY_TLB_IO.refillResp
-  }.otherwise {
+  }.elsewhen(uPageTableReqHandler.PAGE_ENTRY_TLB_IO.refillResp.bits.dest === PageTableOps.destDTLB) {
     mmu_tlb_io.data.refillResp <> uPageTableReqHandler.PAGE_ENTRY_TLB_IO.refillResp
   }
 

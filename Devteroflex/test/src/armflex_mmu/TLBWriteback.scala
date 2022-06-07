@@ -40,7 +40,7 @@ class TLBWritebackTester extends AnyFreeSpec with ChiselScalatestTester {
 
       val basePageTablePacket = PageTableSetPacket(Seq((0 -> basePageTableSet)), 0.U)
       val modifiedPageTablePacket = PageTableSetPacket(Seq((0 -> modifiedPageTableSet)), 0xF.U)
-      dut.mmu_tlb_io.data.pageTableReq.enqueueNow(PageTableReq(modifiedPageTableSet, PageTableOps.opInsert, thid.U, false.B))
+      dut.mmu_tlb_io.data.pageTableReq.enqueueNow(PageTableReq(modifiedPageTableSet, PageTableOps.opInsert, thid.U, false.B, PageTableOps.destDTLB))
       dut.expectRdPageTablePacket(basePageTablePacket, pageTableAddr.U)
       dut.expectWrPageTableSetPacket(modifiedPageTablePacket, pageTableAddr.U)
     }

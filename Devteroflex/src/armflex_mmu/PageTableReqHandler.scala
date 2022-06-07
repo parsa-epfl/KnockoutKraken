@@ -81,6 +81,7 @@ class PageTableReqHandler(params: MemoryHierarchyParams) extends Module {
   PAGE_ENTRY_TLB_IO.refillResp.bits.data := workingReq_r.entry.entry
   PAGE_ENTRY_TLB_IO.refillResp.bits.tag := workingReq_r.entry.tag
   PAGE_ENTRY_TLB_IO.refillResp.bits.thid := workingReq_r.thid
+  PAGE_ENTRY_TLB_IO.refillResp.bits.dest := workingReq_r.refillDest
   PAGE_ENTRY_TLB_IO.refillResp.valid := state_r === sForwardTLB
 
   when(PAGE_ENTRY_PAGE_WALK.resp.valid) {

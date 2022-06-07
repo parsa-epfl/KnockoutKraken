@@ -35,7 +35,13 @@ class PageTableReqQueue(params: MemoryHierarchyParams) extends Module {
 
   uArbiter.io.in(1) <> TLB_MSG_QUEUE.data
   uArbiter.io.in(2) <> TLB_MSG_QUEUE.inst
-  uArbiter.io.out <> PAGE_TABLE_OPERATOR_QUEUE
+
+  uArbiter.io.in(0).bits.refillDest := Mux(hostReq_w.entry.entry.perm === MemoryAccessType.INST_FETCH.U, PageTableOps.destITLB, PageTableOps.destDTLB)
+  uArbiter.io.in(1).bits.refillDest := PageTableOps.destDTLB
+  uArbiter.io.in(2).bits.refillDest := PageTableOps.destITLB
+
+  // uArbiter.io.out <> PAGE_TABLE_OPERATOR_QUEUE
+  PAGE_TABLE_OPERATOR_QUEUE <> Queue(uArbiter.io.out, params.thidN)
 
   // -------- Extract Request from HOST --------
   val hostReqBits_w = WireInit(UInt(params.dramDataW.W), hostMsgs.bits)

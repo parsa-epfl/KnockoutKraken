@@ -104,6 +104,7 @@ class TLBMMURespPacket(params: PageTableParams) extends Bundle {
   val tag = new PTTagPacket(params)
   val data = new PTEntryPacket(params)
   val thid = UInt(log2Ceil(params.thidN).W)
+  val dest = PageTableOps.destType // Contains destionation of refill
 }
 
 class FlushTLBIO(params: PageTableParams) extends Bundle {

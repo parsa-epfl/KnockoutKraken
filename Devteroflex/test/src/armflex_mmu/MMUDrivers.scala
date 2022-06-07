@@ -159,11 +159,11 @@ object MMUBundleDrivers {
   }
 
   object TLBMMURespPacket {
-    def apply(thid: UInt, asid: UInt, vpn: UInt, ppn: UInt, perm: UInt, modified: Bool)(implicit params: PageTableParams): TLBMMURespPacket =
+    def apply(thid: UInt, asid: UInt, vpn: UInt, ppn: UInt, perm: UInt, modified: Bool, dest: UInt)(implicit params: PageTableParams): TLBMMURespPacket =
       new TLBMMURespPacket(params).Lit(
         _.tag.asid -> asid, _.tag.vpn -> vpn,
         _.data.modified -> modified, _.data.perm -> perm, _.data.ppn -> ppn,
-        _.thid -> thid
+        _.thid -> thid, _.dest -> dest
       )
   }
   object PTTagPacket {
@@ -216,8 +216,8 @@ object MMUBundleDrivers {
   }
 
   object PageTableReq {
-    def apply(entry: PageTableItem, op: UInt, thid: UInt, withForward: Bool)(implicit params: PageTableParams): PageTableReq = 
-      new PageTableReq(params).Lit(_.entry -> PageTableItem(entry.tag, entry.entry), _.op -> op, _.thid -> thid, _.thid_v -> withForward)
+    def apply(entry: PageTableItem, op: UInt, thid: UInt, withForward: Bool, dest: UInt)(implicit params: PageTableParams): PageTableReq = 
+      new PageTableReq(params).Lit(_.entry -> PageTableItem(entry.tag, entry.entry), _.op -> op, _.thid -> thid, _.thid_v -> withForward, _.refillDest -> dest)
   }
  
   object PageTableSetPacket {
@@ -438,17 +438,17 @@ object MMUDriver {
 
     def sendMissReq(accessType: Int, thid: UInt, asid: UInt, vpn: UInt, perm: UInt) = {
       if(accessType == MemoryAccessType.INST_FETCH) {
-        target.mmu_tlb_io.inst.pageTableReq.enqueue(PageTableReq(PageTableItem(PTTagPacket(vpn, asid), PTEntryPacket(0.U, perm, false.B)), PageTableOps.opLookup, thid, false.B))
+        target.mmu_tlb_io.inst.pageTableReq.enqueue(PageTableReq(PageTableItem(PTTagPacket(vpn, asid), PTEntryPacket(0.U, perm, false.B)), PageTableOps.opLookup, thid, false.B, PageTableOps.destITLB))
       } else {
-        target.mmu_tlb_io.inst.pageTableReq.enqueue(PageTableReq(PageTableItem(PTTagPacket(vpn, asid), PTEntryPacket(0.U, perm, false.B)), PageTableOps.opLookup, thid, false.B))
+        target.mmu_tlb_io.data.pageTableReq.enqueue(PageTableReq(PageTableItem(PTTagPacket(vpn, asid), PTEntryPacket(0.U, perm, false.B)), PageTableOps.opLookup, thid, false.B, PageTableOps.destDTLB))
       }
     }
     
     def expectMissResp(accessType: Int, thid: UInt, set: PageTableItem) = {
       if(accessType == MemoryAccessType.INST_FETCH) {
-        target.mmu_tlb_io.inst.refillResp.expectDequeue(TLBMMURespPacket(thid, set.tag.asid, set.tag.vpn, set.entry.ppn, set.entry.perm, set.entry.modified))
+        target.mmu_tlb_io.inst.refillResp.expectDequeue(TLBMMURespPacket(thid, set.tag.asid, set.tag.vpn, set.entry.ppn, set.entry.perm, set.entry.modified, PageTableOps.destITLB))
       } else  {
-        target.mmu_tlb_io.data.refillResp.expectDequeue(TLBMMURespPacket(thid, set.tag.asid, set.tag.vpn, set.entry.ppn, set.entry.perm, set.entry.modified))
+        target.mmu_tlb_io.data.refillResp.expectDequeue(TLBMMURespPacket(thid, set.tag.asid, set.tag.vpn, set.entry.ppn, set.entry.perm, set.entry.modified, PageTableOps.destDTLB))
       }
     }
 

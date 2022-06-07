@@ -24,6 +24,8 @@ class PageTableSetPacket(val params: PageTableParams) extends Bundle {
 object PageTableOps {
   val opInsert :: opLookup :: opEvict :: Nil = Enum(3)
   def opType = opInsert.cloneType
+  val destDTLB :: destITLB :: Nil = Enum(2)
+  def destType = destDTLB.cloneType
 }
 
 class PageTableReq(params: PageTableParams) extends Bundle {
@@ -31,6 +33,7 @@ class PageTableReq(params: PageTableParams) extends Bundle {
   val op = PageTableOps.opType
   val thid = UInt(log2Ceil(params.thidN).W)
   val thid_v = Bool()
+  val refillDest = PageTableOps.destType // Contains source of request
 }
 
 import PageTableOps._
