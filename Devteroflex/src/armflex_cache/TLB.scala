@@ -74,29 +74,6 @@ class TLBPipelineResp(params: PageTableParams) extends Bundle {
 }
 
 /**
- * Request TLB send to the mmu for looking up the miss entry or writing back.
- * @params params the TLB Parameter
- *
- */
-class TLBMMURequestPacket(params: PageTableParams) extends Bundle {
-  val tag = new PTTagPacket(params)
-  val entry = new PTEntryPacket(params)
-  val w_v = Bool()
-  val flush_v = Bool()
-  val perm = UInt(2.W)
-  val thid = UInt(log2Ceil(params.thidN).W)
-
-
-  def toAccessRequestPacket: TLBPipelineReq = {
-    val res = new TLBPipelineReq(params)
-    res.tag := this.tag
-    res.perm := perm
-    res.thid := this.thid
-    res
-  }
-}
-
-/**
  * The reply from the mmu to a TLB. We assume that the backend is stateless.
  * @params params the TLB Parameter
  */
