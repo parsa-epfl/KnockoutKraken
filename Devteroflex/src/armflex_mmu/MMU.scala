@@ -106,6 +106,8 @@ class MMU(params: MemoryHierarchyParams, messageFIFODepth: Int = 2) extends Modu
   private val uPageTableReqHandler = Module(new PageTableReqHandler(params))
   private val uPageTableEntryDeletor = Module(new PageTableEntryDeletor(params))
 
+  private val msgFPGA2HOST = Queue(uPageTableReqHandler.FPGA_MSG_QUEUE.req, 4)
+
   // ---- IO ----
   // Amazon Shell IO
   val axiShell_io = IO(new MMU2ShellIO(params))
@@ -152,8 +154,8 @@ class MMU(params: MemoryHierarchyParams, messageFIFODepth: Int = 2) extends Modu
   S_AXI <> uHostMsgQueue.S_AXI
 
   // ------------- Logic ---------------
-  uHostMsgQueue.rdFifo.deq <> uPageTableReqHandler.FPGA_MSG_QUEUE.req
-  uHostMsgQueue.rdFifo.msgCnt := uPageTableReqHandler.FPGA_MSG_QUEUE.req.valid.asUInt
+  uHostMsgQueue.rdFifo.deq <> msgFPGA2HOST
+  uHostMsgQueue.rdFifo.msgCnt := msgFPGA2HOST.valid.asUInt
   uHostMsgQueue.wrFifo.enq <> uPageTableReqQueue.HOST_MSG_QUEUE.req
   uHostMsgQueue.wrFifo.freeCnt := uPageTableReqQueue.HOST_MSG_QUEUE.req.ready.asUInt
 
