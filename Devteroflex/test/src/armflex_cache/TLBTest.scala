@@ -9,6 +9,7 @@ import org.scalatest.freespec.AnyFreeSpec
 import chisel3.util.experimental.loadMemoryFromFile
 
 import armflex.MemoryAccessType._
+import armflex_mmu.peripheral.PageTableOps
 
 object TLBTestUtility {
 
@@ -29,11 +30,8 @@ class DUTTLB(
 ) extends Module {
   val u_tlb = Module(parent())
 
-  val delay_chain_miss_req = Module(new DelayChain(u_tlb.mmu_io.missReq.bits.cloneType, 4))
-  delay_chain_miss_req.i <> u_tlb.mmu_io.missReq
-
-  val delay_chain_wb_req = Module(new DelayChain(u_tlb.mmu_io.writebackReq.bits.cloneType, 4))
-  delay_chain_wb_req.i <> u_tlb.mmu_io.writebackReq
+  val delay_chain_pt_req = Module(new DelayChain(u_tlb.mmu_io.pageTableReq.bits.cloneType, 4))
+  delay_chain_pt_req.i <> u_tlb.mmu_io.pageTableReq
 
   val delay_chain_rep = Module(new DelayChain(u_tlb.mmu_io.refillResp.bits.cloneType, 4))
   delay_chain_rep.o <> u_tlb.mmu_io.refillResp
@@ -42,8 +40,8 @@ class DUTTLB(
   val frontendRequest_i = IO(Flipped(u_tlb.pipeline_io.translationReq.cloneType))
   frontendRequest_i <> u_tlb.pipeline_io.translationReq
 
-  val flushRequest_i = IO(Flipped(u_tlb.mmu_io.flushReq.cloneType))
-  flushRequest_i <> u_tlb.mmu_io.flushReq
+  val flushRequest_i = IO(Flipped(u_tlb.mmu_io.flush.req.cloneType))
+  flushRequest_i <> u_tlb.mmu_io.flush.req
 
   val frontendReply_o = IO(u_tlb.pipeline_io.translationResp.cloneType)
   frontendReply_o <> u_tlb.pipeline_io.translationResp
@@ -51,27 +49,18 @@ class DUTTLB(
   val packetArrive_o = IO(u_tlb.pipeline_io.wakeAfterMiss.cloneType)
   packetArrive_o <> u_tlb.pipeline_io.wakeAfterMiss
 
-  // TODO: combine two backend ports in the tester.
-
-  delay_chain_rep.i.valid := delay_chain_miss_req.o.valid
-  delay_chain_rep.i.bits.thid := delay_chain_miss_req.o.bits.thid
-  delay_chain_rep.i.bits.tag := delay_chain_miss_req.o.bits.tag
-
-  delay_chain_miss_req.o.ready := delay_chain_rep.i.ready
-
   val u_mem = Mem(1L << (u_tlb.params.vPageW + u_tlb.params.asidW), new PTEntryPacket(u_tlb.params))
 
   if(initialMem.nonEmpty) loadMemoryFromFile(u_mem, initialMem)
 
-  val mem_port_read = u_mem(delay_chain_miss_req.o.bits.tag.asUInt)
-  val mem_port_write = u_mem(delay_chain_wb_req.o.bits.tag.asUInt)
-  val mod_mem_value = WireInit(mem_port_write)
-  mod_mem_value.modified := true.B
-  when(delay_chain_wb_req.o.valid){
-    mem_port_write := mod_mem_value
-  }
-  delay_chain_rep.i.bits.data := mem_port_read
-  delay_chain_wb_req.o.ready := true.B
+  delay_chain_rep.i.bits.dest := Mux(delay_chain_pt_req.o.bits.entry.entry.perm === INST_FETCH.U, PageTableOps.destITLB, PageTableOps.destITLB)
+  delay_chain_rep.i.bits.thid := delay_chain_pt_req.o.bits.thid
+  delay_chain_rep.i.bits.tag := delay_chain_pt_req.o.bits.entry.tag
+  delay_chain_rep.i.bits.data := delay_chain_pt_req.o.bits.entry.entry
+  delay_chain_rep.i.valid := delay_chain_pt_req.o.valid && delay_chain_pt_req.o.bits.op === PageTableOps.opLookup
+  delay_chain_rep.i.ready <> delay_chain_pt_req.o.ready
+
+  // Handle opEvict expected value
 }
 
 implicit class BaseTLBDriver(target: DUTTLB){

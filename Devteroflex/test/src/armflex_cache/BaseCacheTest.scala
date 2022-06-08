@@ -74,7 +74,6 @@ object CacheDrivers {
     
     u_cache.axiMem_io.resp <> u_delayChain.cacheReply_o
     u_cache.axiMem_io.req <> u_delayChain.cacheRequest_i
-    u_cache.mmu_i.stallReq := false.B
     
     u_backend.request_i <> u_delayChain.backendRequest_o
     u_backend.reply_o <> u_delayChain.backendReply_i

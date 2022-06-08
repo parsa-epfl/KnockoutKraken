@@ -6,7 +6,10 @@ import chisel3.util._
 import armflex_pmu.CycleCountingPort
 
 import armflex.MemoryAccessType._
-
+import armflex_mmu.peripheral.PageTableReq
+import scala.annotation.meta.param
+import armflex.util.ExtraUtils.AddMethodsToDecoupled
+import armflex_mmu.peripheral.PageTableOps
 case class PageTableParams(
   pageW: Int = 12,
   vPageW: Int = 52,
@@ -16,7 +19,8 @@ case class PageTableParams(
   tlbSetNumber: Int = 1,
   tlbAssociativity: Int = 32,
   thidN: Int = 32,
-  ptAssociativity: Int= 16,
+  ptAssociativity: Int = 16,
+  vpn2ptSetPA: (UInt, UInt, Int) => UInt = (_,_,_) => 0.U
 ){
   def getDatabankParams: DatabankParams = DatabankParams(
     tlbSetNumber,
@@ -70,29 +74,6 @@ class TLBPipelineResp(params: PageTableParams) extends Bundle {
 }
 
 /**
- * Request TLB send to the mmu for looking up the miss entry or writing back.
- * @params params the TLB Parameter
- *
- */
-class TLBMMURequestPacket(params: PageTableParams) extends Bundle {
-  val tag = new PTTagPacket(params)
-  val entry = new PTEntryPacket(params)
-  val w_v = Bool()
-  val flush_v = Bool()
-  val perm = UInt(2.W)
-  val thid = UInt(log2Ceil(params.thidN).W)
-
-
-  def toAccessRequestPacket: TLBPipelineReq = {
-    val res = new TLBPipelineReq(params)
-    res.tag := this.tag
-    res.perm := perm
-    res.thid := this.thid
-    res
-  }
-}
-
-/**
  * The reply from the mmu to a TLB. We assume that the backend is stateless.
  * @params params the TLB Parameter
  */
@@ -100,16 +81,18 @@ class TLBMMURespPacket(params: PageTableParams) extends Bundle {
   val tag = new PTTagPacket(params)
   val data = new PTEntryPacket(params)
   val thid = UInt(log2Ceil(params.thidN).W)
+  val dest = PageTableOps.destType // Contains destionation of refill
+}
 
+class FlushTLBIO(params: PageTableParams) extends Bundle {
+  val req = Flipped(Decoupled(new PTTagPacket(params)))
+  val resp = Valid(new TLBPipelineResp(params))
 }
 
 class TLB2MMUIO(params: PageTableParams) extends Bundle {
-  val flushReq = Flipped(Decoupled(new PTTagPacket(params)))
-  val flushResp = Valid(new TLBPipelineResp(params))
-  val missReq = Decoupled(new TLBMissRequestMessage(params))
-  val writebackReq = Decoupled(new PageTableItem(params))
+  val pageTableReq = Decoupled(new PageTableReq(params))
+  val flush = new FlushTLBIO(params)
   val refillResp = Flipped(Decoupled(new TLBMMURespPacket(params)))
-
 }
 
 class TLB2PipelineIO(params: PageTableParams) extends Bundle {
@@ -201,17 +184,17 @@ class TLB(
   pipeline_io.translationReq.ready := arbPipelinePort.ready
 
   // The flush request from other place
-  arbFlushPort.valid := mmu_io.flushReq.valid
-  arbFlushPort.bits.addr := Cat(mmu_io.flushReq.bits.asid, mmu_io.flushReq.bits.vpn)
+  arbFlushPort.valid := mmu_io.flush.req.valid
+  arbFlushPort.bits.addr := Cat(mmu_io.flush.req.bits.asid, mmu_io.flush.req.bits.vpn)
   arbFlushPort.bits.thid := DontCare
-  arbFlushPort.bits.asid := mmu_io.flushReq.bits.asid
+  arbFlushPort.bits.asid := mmu_io.flush.req.bits.asid
   arbFlushPort.bits.wData := DontCare
   arbFlushPort.bits.flush_v := true.B
   arbFlushPort.bits.wMask := DontCare
   arbFlushPort.bits.perm := DontCare
   arbFlushPort.bits.refill_v := false.B
   arbFlushPort.bits.refillData := DontCare
-  mmu_io.flushReq.ready := arbFlushPort.ready
+  mmu_io.flush.req.ready := arbFlushPort.ready
 
   // The refilling request from the backend of the cache
   arbRefillPort <> refill2databankReq
@@ -232,34 +215,46 @@ class TLB(
 
   pipeline_io.translationResp.valid := u_dataBankManager.frontend_reply_o.valid && !u_dataBankManager.frontend_reply_o.bits.flush && !u_dataBankManager.frontend_reply_o.bits.refill
 
-  // mmu_i.flushResp
-  mmu_io.flushResp.bits.hit := u_dataBankManager.frontend_reply_o.bits.hit
-  mmu_io.flushResp.bits.entry := replied_pte
-  mmu_io.flushResp.bits.thid := u_dataBankManager.frontend_reply_o.bits.thid
-  // mmu_i.flushResp.bits.dirty := u_dataBankManager.pipeline_io.translationResp.bits.dirty
-  mmu_io.flushResp.bits.violation := false.B // Flush will never cause perm violation.
-  mmu_io.flushResp.valid := u_dataBankManager.frontend_reply_o.valid && u_dataBankManager.frontend_reply_o.bits.flush
+  // mmu_i.flush.resp
+  mmu_io.flush.resp.bits.hit := u_dataBankManager.frontend_reply_o.bits.hit
+  mmu_io.flush.resp.bits.entry := replied_pte
+  mmu_io.flush.resp.bits.thid := u_dataBankManager.frontend_reply_o.bits.thid
+  // mmu_i.flush.resp.bits.dirty := u_dataBankManager.pipeline_io.translationResp.bits.dirty
+  mmu_io.flush.resp.bits.violation := false.B // Flush will never cause perm violation.
+  mmu_io.flush.resp.valid := u_dataBankManager.frontend_reply_o.valid && u_dataBankManager.frontend_reply_o.bits.flush
 
-  // miss request
-  val uMissReqQueueOut = Queue(u_dataBankManager.miss_request_o, params.thidN + 1) // the extra 1 is for refilling.
-  mmu_io.missReq.valid := uMissReqQueueOut.valid
-  mmu_io.missReq.bits.tag.asid := uMissReqQueueOut.bits.asid
-  mmu_io.missReq.bits.tag.vpn := uMissReqQueueOut.bits.addr // only reserve the lower bits.
-  mmu_io.missReq.bits.perm := uMissReqQueueOut.bits.perm
-  mmu_io.missReq.bits.thid := uMissReqQueueOut.bits.thid
-  uMissReqQueueOut.ready := mmu_io.missReq.ready
+  // Request to Page Table (miss or writeback)
+  val uArbMissWriteBack = Module(new Arbiter(new PageTableReq(params), 2))
+  val uReqQueueOut = Queue(uArbMissWriteBack.io.out, params.thidN + 1) // the extra 1 is for refilling.
+  mmu_io.pageTableReq <> uReqQueueOut
 
   // write back request
   // Flush has its own path
-  mmu_io.writebackReq.valid := u_dataBankManager.writeback_request_o.valid && !u_dataBankManager.writeback_request_o.bits.flush_v
-  mmu_io.writebackReq.bits.tag.asid := (u_dataBankManager.writeback_request_o.bits.addr >> params.vPageW)
-  mmu_io.writebackReq.bits.tag.vpn := u_dataBankManager.writeback_request_o.bits.addr
-  mmu_io.writebackReq.bits.entry := u_dataBankManager.writeback_request_o.bits.data.asTypeOf(mmu_io.writebackReq.bits.entry.cloneType)
-  u_dataBankManager.writeback_request_o.ready := Mux(
-    u_dataBankManager.writeback_request_o.bits.flush_v,
-    true.B, // if flush request, ignored directly.
-    mmu_io.writebackReq.ready
-  )
+  uArbMissWriteBack.io.in(0).bits := DontCare
+  uArbMissWriteBack.io.in(0).bits.entry.tag.asid := (u_dataBankManager.writeback_request_o.bits.addr >> params.vPageW)
+  uArbMissWriteBack.io.in(0).bits.entry.tag.vpn := u_dataBankManager.writeback_request_o.bits.addr
+  uArbMissWriteBack.io.in(0).bits.entry.entry := u_dataBankManager.writeback_request_o.bits.data.asTypeOf(new PTEntryPacket(params))
+  uArbMissWriteBack.io.in(0).bits.op := PageTableOps.opInsert
+  //uArbMissWriteBack.io.in(1).handshake(u_dataBankManager.writeback_request_o, u_dataBankManager.writeback_request_o.bits.flush_v)
+  when(u_dataBankManager.writeback_request_o.bits.flush_v) {
+    // Ignore in case it's flush -> flush takes response from mmu_io.flush.resp port
+    uArbMissWriteBack.io.in(0).valid := false.B
+    u_dataBankManager.writeback_request_o.ready := true.B
+  }.otherwise {
+    uArbMissWriteBack.io.in(0).valid := u_dataBankManager.writeback_request_o.valid
+    u_dataBankManager.writeback_request_o.ready := uArbMissWriteBack.io.in(0).ready
+  }
+
+
+  // Miss Request
+  uArbMissWriteBack.io.in(1).bits := DontCare
+  uArbMissWriteBack.io.in(1).bits.entry.tag.asid := u_dataBankManager.miss_request_o.bits.asid
+  uArbMissWriteBack.io.in(1).bits.entry.tag.vpn := u_dataBankManager.miss_request_o.bits.addr // only reserve the lower bits.
+  uArbMissWriteBack.io.in(1).bits.entry.entry.perm := u_dataBankManager.miss_request_o.bits.perm
+  uArbMissWriteBack.io.in(1).bits.thid := u_dataBankManager.miss_request_o.bits.thid
+  uArbMissWriteBack.io.in(1).bits.op := PageTableOps.opLookup
+  uArbMissWriteBack.io.in(1).valid := u_dataBankManager.miss_request_o.valid
+  uArbMissWriteBack.io.in(1).ready <> u_dataBankManager.miss_request_o.ready
 
   if(false) { // TODO Conditional printing
     val location = "TLB"
@@ -284,8 +279,8 @@ class TLB(
 
   // Port to PMU to measure the penalty of the TLB miss.
   val oPMUCountingReq = IO(Output(new CycleCountingPort(params.thidN)))
-  oPMUCountingReq.start.bits := mmu_io.missReq.bits.thid
-  oPMUCountingReq.start.valid := mmu_io.missReq.fire
+  oPMUCountingReq.start.bits := mmu_io.pageTableReq.bits.thid
+  oPMUCountingReq.start.valid := mmu_io.pageTableReq.fire
   oPMUCountingReq.stop.bits := mmu_io.refillResp.bits.thid
   oPMUCountingReq.stop.valid := mmu_io.refillResp.fire
 }

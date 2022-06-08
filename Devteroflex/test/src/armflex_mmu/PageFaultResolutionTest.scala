@@ -64,7 +64,7 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
 
       // Prepare PageTableSet with LRU conflict
       val evictedEntryIdx = 13
-      val lruPath = LRUCorePseudo.getLRUEncodedPath(evictedEntryIdx, dut.params.getPageTableParams.ptAssociativity/2, 0, 0, Seq())
+      val lruPath = LRUCorePseudo.getLRUEncodedPath(evictedEntryIdx, dut.params.getPageTableParams.ptAssociativity)
 
       val bitVec = LRUCorePseudo.createBitvector(dut.params.getPageTableParams.ptAssociativity - 1)
       val lruBits = LRUCorePseudo.getBigIntFromVector(bitVec)
@@ -79,9 +79,8 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
       dut.sendMMUMsg(qemuEvictRequestMsg)
 
       val flushes = fork { 
-        dut.expectFlushReqTLB(perm, thid.U, evictedItem) 
-      }.fork {
-        dut.expectFlushReqCache(perm, thid.U, evictedItem)
+        dut.handlePageEvictionData(evictedItem)
+        // dut.expectFlushReqTLB(perm, thid.U, evictedItem) 
       }
 
       println("1. Read Page Table from DRAM")
@@ -101,7 +100,7 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
       val newLruBitVec = LRUCorePseudo.updateBitVector(lruPath, bitVec)
       val newLruBits = LRUCorePseudo.getBigIntFromVector(newLruBitVec)
 
-      val packet = PageTableSetPacket(0, PageTableSetPacket(PageTableSetPacket.makeEmptySet, newLruBits.U))
+      val packet = PageTableSetPacket(0, PageTableSetPacket(sets, lruBits.U))
       dut.expectWrPageTableSetPacket(packet, dut.vpn2ptSetPA(evictedTag).U)
     }
   }
@@ -125,7 +124,7 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
 
       // Prepare PageTableSet with LRU conflict
       val lru = 13
-      val lruPath = LRUCorePseudo.getLRUEncodedPath(lru, dut.params.getPageTableParams.ptAssociativity/2, 0, 0, Seq())
+      val lruPath = LRUCorePseudo.getLRUEncodedPath(lru, dut.params.getPageTableParams.ptAssociativity)
       val randomString = BigInt(scala.util.Random.nextLong(Math.pow(2, dut.params.getPageTableParams.ptAssociativity-1).toLong)).toString(2).padTo(dut.params.getPageTableParams.ptAssociativity-1, '0')
       val lruBitsString = lruPath.foldLeft(randomString) { (currEncode, step) => currEncode.updated(step._1, step._2) }
       val lruBits = BigInt(lruBitsString.reverse, 2)
@@ -140,9 +139,7 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
       dut.sendMMUMsg(pageFaultMissReply)
 
       val flushes = fork { 
-        dut.expectFlushReqTLB(perm, thid.U, evictedItem) 
-      }.fork {
-        dut.expectFlushReqCache(perm, thid.U, evictedItem)
+        dut.handlePageEviction(evictedItem)
       }
 
       println("1. Read Page Table from DRAM")

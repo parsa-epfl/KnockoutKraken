@@ -23,7 +23,7 @@ class TraceDumpParams(
 class TraceDump(val params: TraceDumpParams) extends Module {
   val init_addr = IO(Flipped(Decoupled(UInt(params.addrW.W))))
   val trace_data = IO(Flipped(Decoupled(UInt(params.traceW.W))))
-  val dram_write_port = IO(Flipped(new WritePort(params.addrW, params.dataW)))
+  val dram_write_port = IO(new WritePort(params.addrW, params.dataW))
 
   private val WORDS_PER_BLOCK = params.dataW / params.traceW
   private val bramBufferData = new BRAMParams(

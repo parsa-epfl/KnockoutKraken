@@ -39,7 +39,7 @@ class LRU[T <: LRUCore](
 
 
   core.io.encoding_i := bram.portA.DO
-  core.io.lru_i := index_i.bits
+  core.io.access_i := index_i.bits
   lru_o := core.io.lru_o
 
   // write back
@@ -57,7 +57,7 @@ sealed abstract class LRUCore(wayNumber: Int, val encodingWidth: Int) extends Mo
   val wayWidth = log2Ceil(wayNumber)
   final val io = IO(new Bundle{
     // the request
-    val lru_i = Input(UInt(wayWidth.W))
+    val access_i = Input(UInt(wayWidth.W))
     // lru out
     val lru_o = Output(UInt(wayWidth.W)) // lru_o should be only determined by encodings_i since it points to the current available place before the request is processed.
 
@@ -125,7 +125,7 @@ object PseudoTreeLRU {
  */ 
 class PseudoTreeLRUCore(wayNumber: Int) extends LRUCore(wayNumber, wayNumber - 1){
   //assert(isPow2(wayNumber))
-  val (lru, encoded) = PseudoTreeLRU(io.encoding_i, io.lru_i)
+  val (lru, encoded) = PseudoTreeLRU(io.encoding_i, io.access_i)
   io.lru_o := lru
   io.encoding_o := encoded
 }
@@ -155,9 +155,9 @@ class MatrixLRUCore(wayNumber: Int) extends LRUCore(wayNumber, wayNumber * (wayN
       if(i == j){
         updatedMatrix(i)(j) := false.B
       } else {
-        when(i.U === io.lru_i) {
+        when(i.U === io.access_i) {
           updatedMatrix(i)(j) := true.B
-        }.elsewhen(j.U === io.lru_i) {
+        }.elsewhen(j.U === io.access_i) {
           updatedMatrix(i)(j) := false.B
         }.otherwise{
           updatedMatrix(i)(j) := matrix(i)(j)

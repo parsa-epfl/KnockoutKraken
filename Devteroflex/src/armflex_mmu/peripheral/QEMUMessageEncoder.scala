@@ -10,15 +10,8 @@ class QEMUMessageEncoder(
   param: MemoryHierarchyParams,
   fifoDepth: Int = 2
 ) extends Module {
-  val evict_notify_req_i = IO(Flipped(Decoupled(new PageEvictNotification(
-    QEMUMessagesType.sEvictNotify,
-    param.getPageTableParams
-  ))))
-  val evict_done_req_i = IO(Flipped(Decoupled(new PageEvictNotification(
-    QEMUMessagesType.sEvictDone,
-    param.getPageTableParams
-  ))))
-
+  val evict_notify_req_i = IO(Flipped(Decoupled(new PageEvictNotification(QEMUMessagesType.sEvictNotify, param.getPageTableParams))))
+  val evict_done_req_i = IO(Flipped(Decoupled(new PageEvictNotification(QEMUMessagesType.sEvictDone, param.getPageTableParams))))
   val page_fault_req_i = IO(Flipped(Decoupled(new PageFaultNotification(param.getPageTableParams))))
 
   val o = IO(Decoupled(UInt(512.W)))

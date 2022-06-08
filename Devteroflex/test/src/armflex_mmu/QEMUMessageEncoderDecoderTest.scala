@@ -92,7 +92,7 @@ class QEMUMessageEncoderDecoderTester extends AnyFreeSpec with ChiselScalatestTe
   val perm = INST_FETCH
 
   "Encode Evict Notify" in {
-    val anno = Seq(TargetDirAnnotation("test/MMU/Messages/evictNotify"), VerilatorBackendAnnotation, WriteVcdAnnotation)
+    val anno = Seq(TargetDirAnnotation("test/MMU/Messages/evictNotify"), VerilatorBackendAnnotation)
     test(new QEMUMessageEncoderDecoderDUT(new MemoryHierarchyParams())).withAnnotations(anno){ dut => dut.init()
       implicit val params = dut.param.getPageTableParams
       val pageSet = PageTableItem(PTTagPacket(vpn.U, asid.U), PTEntryPacket(ppn.U, perm.U, false.B))
@@ -104,7 +104,7 @@ class QEMUMessageEncoderDecoderTester extends AnyFreeSpec with ChiselScalatestTe
   }
 
   "Encode Evict Done" in {
-    val anno = Seq(TargetDirAnnotation("test/MMU/Messages/evictDone"), VerilatorBackendAnnotation, WriteVcdAnnotation)
+    val anno = Seq(TargetDirAnnotation("test/MMU/Messages/evictDone"), VerilatorBackendAnnotation)
     test(new QEMUMessageEncoderDecoderDUT(new MemoryHierarchyParams())).withAnnotations(anno){ dut => dut.init()
       implicit val params = dut.param.getPageTableParams
       val pageSet = PageTableItem(PTTagPacket(vpn.U, asid.U), PTEntryPacket(ppn.U, perm.U, false.B))
@@ -116,7 +116,7 @@ class QEMUMessageEncoderDecoderTester extends AnyFreeSpec with ChiselScalatestTe
   }
 
   "Page Fault" in {
-    val anno = Seq(TargetDirAnnotation("test/MMU/Messages/pageFault"), VerilatorBackendAnnotation, WriteVcdAnnotation)
+    val anno = Seq(TargetDirAnnotation("test/MMU/Messages/pageFault"), VerilatorBackendAnnotation)
     test(new QEMUMessageEncoderDecoderDUT(new MemoryHierarchyParams())).withAnnotations(anno){ 
       dut => dut.init()
       implicit val params = dut.param.getPageTableParams
@@ -129,7 +129,7 @@ class QEMUMessageEncoderDecoderTester extends AnyFreeSpec with ChiselScalatestTe
   }
 
   "QEMU Send Miss Reply" in {
-    val anno = Seq(TargetDirAnnotation("test/MMU/Messages/pageFault"), VerilatorBackendAnnotation, WriteVcdAnnotation)
+    val anno = Seq(TargetDirAnnotation("test/MMU/Messages/missReply"), VerilatorBackendAnnotation)
     test(new QEMUMessageEncoderDecoderDUT(new MemoryHierarchyParams())).withAnnotations(anno){ 
       dut => dut.init()
       implicit val params = dut.param.getPageTableParams
@@ -142,7 +142,7 @@ class QEMUMessageEncoderDecoderTester extends AnyFreeSpec with ChiselScalatestTe
   }
 
   "QEMU Send Page Eviction" in {
-    val anno = Seq(TargetDirAnnotation("test/MMU/Messages/pageFault"), VerilatorBackendAnnotation, WriteVcdAnnotation)
+    val anno = Seq(TargetDirAnnotation("test/MMU/Messages/pageEvictRequest"), VerilatorBackendAnnotation)
     test(new QEMUMessageEncoderDecoderDUT(new MemoryHierarchyParams())).withAnnotations(anno){ 
       dut => dut.init()
       implicit val params = dut.param.getPageTableParams
@@ -155,7 +155,7 @@ class QEMUMessageEncoderDecoderTester extends AnyFreeSpec with ChiselScalatestTe
   }
 
   "QEMU Send Evict Reply" in {
-    val anno = Seq(TargetDirAnnotation("test/MMU/Messages/pageFault"), VerilatorBackendAnnotation, WriteVcdAnnotation)
+    val anno = Seq(TargetDirAnnotation("test/MMU/Messages/evictReply"), VerilatorBackendAnnotation)
     test(new QEMUMessageEncoderDecoderDUT(new MemoryHierarchyParams())).withAnnotations(anno){ 
       dut => dut.init()
       implicit val params = dut.param.getPageTableParams

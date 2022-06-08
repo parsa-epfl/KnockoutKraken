@@ -24,7 +24,7 @@ class PageWalker(
   ))
 
   // AXI DMA Read Channels
-  val M_DMA_R = IO(new AXIReadMasterIF(params.dramAddrW, params.dramdataW))
+  val M_DMA_R = IO(new AXIReadMasterIF(params.dramAddrW, params.dramDataW))
 
   // Reply to TLB
   val tlb_backend_reply_o = IO(Vec(tlbNumber, Decoupled(new TLBMMURespPacket(params.getPageTableParams))))
