@@ -24,6 +24,7 @@ import com.google.protobuf.Extension.MessageType
 import scala.annotation.meta.param
 import armflex_mmu.peripheral.PageTableReq
 import armflex_mmu.peripheral.PageTableOps
+import armflex_mmu.peripheral.PageTableEntryDeletor
 
 // import armflex_mmu.MMUBundleDrivers.PageTableSetPacket._
 
@@ -268,17 +269,13 @@ class MMUDUT(
   implicit val ptParams = params.getPageTableParams
   implicit val cacheParams = params.getCacheParams
 
-  // Load Store Unit: Page deleting acknowledgement
-  uMMU.mmu_pipe_io.data.flushPermReq.ready := true.B
-  uMMU.mmu_pipe_io.inst.flushPermReq.ready := true.B
-  uMMU.mmu_pipe_io.data.flushCompled.ready := true.B
-  uMMU.mmu_pipe_io.inst.flushCompled.ready := true.B
-
   // TLB Requests
   val mmu_tlb_io = IO(uMMU.mmu_tlb_io.cloneType)
   val mmu_cache_io = IO(uMMU.mmu_cache_io.cloneType)
   uMMU.mmu_tlb_io <> mmu_tlb_io
   uMMU.mmu_cache_io <> mmu_cache_io
+  val mmu_pipe_io = IO(Flipped(uMMU.mmu_pipe_io.cloneType))
+  uMMU.mmu_pipe_io <> mmu_pipe_io
  
   // AXI slave of the page buffer
   val S_AXI = IO(Flipped(uMMU.S_AXI.cloneType))
@@ -350,6 +347,16 @@ object MMUDriver {
 
       target.mmu_cache_io.inst.wbEmpty.poke(true.B) 
       target.mmu_cache_io.data.wbEmpty.poke(true.B) 
+
+      target.mmu_pipe_io.data.flushCompled.initSink()
+      target.mmu_pipe_io.inst.flushCompled.initSink()
+      target.mmu_pipe_io.data.flushPermReq.initSink()
+      target.mmu_pipe_io.inst.flushPermReq.initSink()
+
+      target.mmu_pipe_io.data.flushCompled.setSinkClock(clock)
+      target.mmu_pipe_io.inst.flushCompled.setSinkClock(clock)
+      target.mmu_pipe_io.data.flushPermReq.setSinkClock(clock)
+      target.mmu_pipe_io.inst.flushPermReq.setSinkClock(clock)
     }
 
     /**
@@ -502,6 +509,47 @@ object MMUDriver {
       target.M_AXI.expectRd(vectorPacket, expectAddr.U)
     }
 
+    def handlePageEvictionData(entry: PageTableItem) = {
+      target.mmu_pipe_io.data.flushPermReq.expectDequeue(target.mmu_pipe_io.data.flushPermReq.bits.cloneType)
+      target.mmu_tlb_io.data.flush.req.expectDequeue(entry.tag)
+      target.mmu_tlb_io.data.flush.resp.enqueueNow(TLBPipelineResp(entry.entry, true.B, false.B, 0.U))
+      target.clock.step()
+      for(block <- 0 until target.params.cacheBlocksPerPage) {
+        target.mmu_cache_io.data.stallReq.expect(true.B)
+        val ppn = (entry.entry.ppn.litValue << log2Ceil(target.params.pageSize)) | (block << log2Ceil(target.params.cacheBlockSize/8))
+        target.mmu_cache_io.data.flushReq.expectDequeue(CacheFlushRequest(ppn.U))
+      }
+      target.clock.step(12)
+      target.mmu_cache_io.data.wbEmpty.poke(true.B)
+      target.mmu_pipe_io.data.flushCompled.expectDequeue(target.mmu_pipe_io.data.flushCompled.bits.cloneType)
+    }
+
+    def handlePageEvictionInst(entry: PageTableItem) = {
+      target.clock.step()
+      target.mmu_pipe_io.inst.flushPermReq.expectDequeue(target.mmu_pipe_io.inst.flushPermReq.bits.cloneType)
+      target.mmu_tlb_io.inst.flush.req.expectDequeue(entry.tag)
+      target.mmu_tlb_io.inst.flush.resp.enqueueNow(TLBPipelineResp(entry.entry, true.B, false.B, 0.U))
+      target.clock.step()
+      for(block <- 0 until target.params.cacheBlocksPerPage) {
+        target.mmu_cache_io.inst.stallReq.expect(true.B)
+        val ppn = (entry.entry.ppn.litValue << log2Ceil(target.params.pageSize)) | (block << log2Ceil(target.params.cacheBlockSize/8))
+        target.mmu_cache_io.inst.flushReq.expectDequeue(CacheFlushRequest(ppn.U))
+      }
+      target.mmu_pipe_io.inst.flushCompled.expectDequeue(target.mmu_pipe_io.inst.flushCompled.bits.cloneType)
+    }
+
+    def handlePageEviction(entry: PageTableItem) = {
+      fork {
+        if(entry.entry.perm.litValue == MemoryAccessType.DATA_STORE) {
+          target.mmu_cache_io.data.wbEmpty.poke(false.B)
+        }
+        handlePageEvictionData(entry)
+     }.fork {
+        if(entry.entry.perm.litValue == MemoryAccessType.INST_FETCH) {
+          handlePageEvictionInst(entry)
+        }
+      }.join()
+    }
   }
 }
 
