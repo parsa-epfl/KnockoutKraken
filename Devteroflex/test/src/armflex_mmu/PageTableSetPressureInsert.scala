@@ -32,7 +32,6 @@ class PageTableSetPressureInsert extends AnyFreeSpec with ChiselScalatestTester 
     val anno = Seq(TargetDirAnnotation("test/MMU/pagewalk/pressure"), VerilatorBackendAnnotation, WriteVcdAnnotation)
     test(new MMUDUT(new MemoryHierarchyParams())).withAnnotations(anno){ dut => dut.init()
       implicit val ptparams = dut.params.getPageTableParams
-      val lru = 0
       val pageSetPacketAddr = dut.vpn2ptSetPA(asid, vpn)
       val pageSetPacketItems = for (item <- 0 to ptparams.ptAssociativity) yield {
         val tag = PTTagPacket((vpn + item * 2).U, asid.U)
@@ -40,6 +39,14 @@ class PageTableSetPressureInsert extends AnyFreeSpec with ChiselScalatestTester 
         PageTableItem(tag, entry)
       }
 
+      var currSets = PageTableSetPacket.makeEmptySet
+      var validBits = LRUCorePseudo.getBitVector(0, ptparams.ptAssociativity)
+      val lruSize = ptparams.ptAssociativity
+      var lruBits = LRUCorePseudo.createBitvector(lruSize).map{ _ => '0'}
+      var valid = LRUCorePseudo.getBigIntFromVector(validBits)
+      var lru = LRUCorePseudo.getLRU(lruBits, lruSize)
+      var lastLru = LRUCorePseudo.getLRU(lruBits, lruSize)
+      var pageTablePacket = PageTableSetPacket(currSets, LRUCorePseudo.getBigIntFromVector(lruBits).U, valid.U)
       fork {
         for(item <- 0 to ptparams.ptAssociativity) {
           val msg = QEMUMissReply(pageSetPacketItems(item).tag, perm.U, thid.U, pageSetPacketItems(item).entry.ppn, false.B)
@@ -48,14 +55,8 @@ class PageTableSetPressureInsert extends AnyFreeSpec with ChiselScalatestTester 
           dut.sendMMUMsg(msgPacked)
         }
       }.fork {
-        var currSets = PageTableSetPacket.makeEmptySet
-        var validBits = LRUCorePseudo.getBitVector(0, ptparams.ptAssociativity)
-        val lruSize = ptparams.ptAssociativity
-        var lruBits = LRUCorePseudo.createBitvector(lruSize).map{ _ => '0'}
-        var valid = LRUCorePseudo.getBigIntFromVector(validBits)
-        var lru = LRUCorePseudo.getLRU(lruBits, lruSize)
-        var pageTablePacket = PageTableSetPacket(currSets, LRUCorePseudo.getBigIntFromVector(lruBits).U, valid.U)
-        for(item <- 0 to ptparams.ptAssociativity) {
+       for(item <- 0 to ptparams.ptAssociativity) {
+          lastLru = LRUCorePseudo.getLRU(lruBits, lruSize)
           dut.expectRdPageTablePacket(pageTablePacket, pageSetPacketAddr.U)
 
           currSets = currSets.updated(lru.toInt, (lru.toInt, pageSetPacketItems(item)))
@@ -64,11 +65,23 @@ class PageTableSetPressureInsert extends AnyFreeSpec with ChiselScalatestTester 
           val path = LRUCorePseudo.getLRUEncodedPath(lru, lruSize)
           lruBits = LRUCorePseudo.updateBitVector(path, lruBits)
           valid = LRUCorePseudo.getBigIntFromVector(validBits)
+          lru = LRUCorePseudo.getLRU(lruBits, lruSize)
           pageTablePacket = PageTableSetPacket(currSets, LRUCorePseudo.getBigIntFromVector(lruBits).U, valid.U)
 
           dut.expectWrPageTableSetPacket(pageTablePacket, pageSetPacketAddr.U)
         }
       }.join()
+      dut.waitTillPendingMMUMsg()
+      val evictedItem = PageTableItem(pageSetPacketItems(lastLru).tag, pageSetPacketItems(lastLru).entry)
+      val msgEvictStart = PageEvictNotif(evictedItem)
+      var msg = dut.getMMUMsg()
+      dut.rawMessageHelper.expectMsgPageEvictNotifStart(msg, msgEvictStart)
+      dut.handlePageEviction(evictedItem)
+      val msgEvictDone = PageEvictNotifDone(PageTableItem(pageSetPacketItems(lastLru).tag, pageSetPacketItems(lastLru).entry))
+      dut.waitTillPendingMMUMsg()
+      msg = dut.getMMUMsg()
+      dut.rawMessageHelper.expectMsgPageEvictNotifDone(msg, msgEvictDone)
+      dut.clock.step()
     }
   }
 }
