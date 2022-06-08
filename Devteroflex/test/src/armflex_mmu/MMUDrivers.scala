@@ -21,6 +21,9 @@ import armflex.util.TestUtils
 import MMUBundleDrivers._
 import antmicro.util.CSRDrivers._
 import com.google.protobuf.Extension.MessageType
+import scala.annotation.meta.param
+import armflex_mmu.peripheral.PageTableReq
+import armflex_mmu.peripheral.PageTableOps
 
 // import armflex_mmu.MMUBundleDrivers.PageTableSetPacket._
 
@@ -210,6 +213,11 @@ object MMUBundleDrivers {
     def apply(implicit params: PageTableParams): PageTableItem = 
       new PageTableItem(params).Lit(_.tag -> PTTagPacket(params), _.entry -> PTEntryPacket(params))
   }
+
+  object PageTableReq {
+    def apply(entry: PageTableItem, op: UInt, thid: UInt, withForward: Bool)(implicit params: PageTableParams): PageTableReq = 
+      new PageTableReq(params).Lit(_.entry -> PageTableItem(entry.tag, entry.entry), _.op -> op, _.thid -> thid, _.thid_v -> withForward)
+  }
  
   object PageTableSetPacket {
     def apply(validVec: BigInt, packet: PageTableSetPacket)(implicit params: PageTableParams): PageTableSetPacket = {
@@ -286,30 +294,12 @@ class MMUDUT(
   S_CSR <> uMMU.S_CSR
 
   // Manage M_AXI ports
-  val rdPorts = 4
-  val wrPorts = 3
-  val axiMulti_R = Module(new AXIReadMultiplexer(params.dramAddrW, params.dramDataW, rdPorts))
-  val axiMulti_W = Module(new AXIWriteMultiplexer(params.dramAddrW, params.dramDataW, wrPorts))
-  for(i <- 0 until 4) axiMulti_R.S_IF(i) <> uMMU.axiShell_io.M_DMA_R(i)
-  for(i <- 0 until 3) axiMulti_W.S_IF(i) <> uMMU.axiShell_io.M_DMA_W(i)
+  private val dmaMasterCtrl = Module(new AXI4MasterDMACtrl(1, 1, params.dramAddrW, params.dramDataW))
+  dmaMasterCtrl.req.rdPorts(0) <> uMMU.axiShell_io.M_DMA_RD
+  dmaMasterCtrl.req.wrPorts(0) <> uMMU.axiShell_io.M_DMA_WR
 
-  // Tie Read port
-  M_AXI.ar <> axiMulti_R.M_AXI.ar
-  M_AXI.r <> axiMulti_R.M_AXI.r
-
-  // Tie Write port
-  M_AXI.aw <> axiMulti_W.M_AXI.aw
-  M_AXI.w <> axiMulti_W.M_AXI.w
-  M_AXI.b <> axiMulti_W.M_AXI.b
-
-  // Tie off Write Port
-  axiMulti_R.M_AXI.aw <> AXI4AW.stub(params.dramAddrW)
-  axiMulti_R.M_AXI.w <> AXI4W.stub(params.dramDataW)
-  axiMulti_R.M_AXI.b <> AXI4B.stub()
-  // Tie off Read Port 
-  axiMulti_W.M_AXI.ar <> AXI4AR.stub(params.dramAddrW)
-  axiMulti_W.M_AXI.r <> AXI4R.stub(params.dramDataW)
-  
+  M_AXI <> dmaMasterCtrl.M_AXI
+ 
   // Helper: decode and encode messages from a raw UInt
   val uHelperEncodeDecodePageSet = Module(new MMUHelpers.PageSetConverter)
   val encode = IO(uHelperEncodeDecodePageSet.encode.cloneType)
@@ -334,10 +324,10 @@ object MMUDriver {
       target.M_AXI.initMaster()
       target.S_AXI.initSlave()
       target.S_CSR.init()
-      target.mmu_tlb_io.inst.missReq.initSource()
-      target.mmu_tlb_io.inst.missReq.setSourceClock(clock)
-      target.mmu_tlb_io.data.missReq.initSource()
-      target.mmu_tlb_io.data.missReq.setSourceClock(clock)
+      target.mmu_tlb_io.inst.pageTableReq.initSource()
+      target.mmu_tlb_io.inst.pageTableReq.setSourceClock(clock)
+      target.mmu_tlb_io.data.pageTableReq.initSource()
+      target.mmu_tlb_io.data.pageTableReq.setSourceClock(clock)
 
       target.mmu_tlb_io.inst.refillResp.initSink()
       target.mmu_tlb_io.inst.refillResp.setSinkClock(clock)
@@ -357,11 +347,6 @@ object MMUDriver {
       target.mmu_cache_io.inst.flushReq.initSink()
       target.mmu_cache_io.data.flushReq.setSinkClock(clock)
       target.mmu_cache_io.inst.flushReq.setSinkClock(clock)
-
-      target.mmu_tlb_io.inst.writebackReq.initSource()
-      target.mmu_tlb_io.inst.writebackReq.setSourceClock(clock)
-      target.mmu_tlb_io.data.writebackReq.initSource()
-      target.mmu_tlb_io.data.writebackReq.setSourceClock(clock)
 
       target.mmu_cache_io.inst.wbEmpty.poke(true.B) 
       target.mmu_cache_io.data.wbEmpty.poke(true.B) 
@@ -399,8 +384,8 @@ object MMUDriver {
     def receivePageTableSet(master_bus: AXI4, expectedAddr: UInt) = {}
     def sendPageTableSet(master_bus: AXI4, expectedAddr: UInt) = {}
     
-    def waitTillPendingMMUMsg() = { var timeout = 0; while(target.S_CSR.readReg(0) == 0 && timeout < 100) { clock.step(5); timeout += 1} }
-    def waitTillFreeMMUMsg() = { var timeout = 0; while(target.S_CSR.readReg(1) == 0 && timeout < 100) { clock.step(5); timeout += 1} }
+    def waitTillPendingMMUMsg() = { var timeout = 0; while(target.S_CSR.readReg(0) == 0 && timeout < 100) { clock.step(5); timeout += 1}; assert(timeout < 100, "Timeout waiting for free slot in message")}
+    def waitTillFreeMMUMsg() = { var timeout = 0; while(target.S_CSR.readReg(1) == 0 && timeout < 100) { clock.step(5); timeout += 1}; assert(timeout < 100, "Timeout waiting for pending message")}
     def getMMUMsg(): UInt = { 
       val ret = target.S_AXI.rd(0.U, 1); 
       assert(ret.size == 1); 
@@ -445,12 +430,12 @@ object MMUDriver {
     }
 
     def sendMissReq(accessType: Int, thid: UInt, asid: UInt, vpn: UInt, perm: UInt) = {
-      if(accessType == 2) 
-        target.mmu_tlb_io.inst.missReq.enqueue(TLBMissRequestMessage(thid, asid, vpn, perm))
-      else 
-        target.mmu_tlb_io.data.missReq.enqueue(TLBMissRequestMessage(thid, asid, vpn, perm))
+      if(accessType == MemoryAccessType.INST_FETCH) {
+        target.mmu_tlb_io.inst.pageTableReq.enqueue(PageTableReq(PageTableItem(PTTagPacket(vpn, asid), PTEntryPacket(0.U, perm, false.B)), PageTableOps.opLookup, thid, false.B))
+      } else {
+        target.mmu_tlb_io.inst.pageTableReq.enqueue(PageTableReq(PageTableItem(PTTagPacket(vpn, asid), PTEntryPacket(0.U, perm, false.B)), PageTableOps.opLookup, thid, false.B))
+      }
     }
-
     
     def expectMissResp(accessType: Int, thid: UInt, set: PageTableItem) = {
       if(accessType == MemoryAccessType.INST_FETCH) {
@@ -512,7 +497,7 @@ object MMUDriver {
 
     def respFullPageTableSet(asid: UInt, vpn: UInt) = {
       val expectAddr = vpn2ptSetPA(asid.litValue, vpn.litValue)
-      val entries = for (entryIdx <- 0 until ptparams.tlbSetNumber) yield (entryIdx -> PageTableItem(PTTagPacket(ptparams), PTEntryPacket(ptparams)))
+      val entries = for (entryIdx <- 0 until ptparams.ptAssociativity) yield (entryIdx -> PageTableItem(PTTagPacket(ptparams), PTEntryPacket(ptparams)))
       val vectorPacket = encodePageTableSet(entries)
       target.M_AXI.expectRd(vectorPacket, expectAddr.U)
     }

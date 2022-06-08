@@ -79,9 +79,8 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
       dut.sendMMUMsg(qemuEvictRequestMsg)
 
       val flushes = fork { 
-        dut.expectFlushReqTLB(perm, thid.U, evictedItem) 
-      }.fork {
-        dut.expectFlushReqCache(perm, thid.U, evictedItem)
+        dut.handlePageEvictionData(evictedItem)
+        // dut.expectFlushReqTLB(perm, thid.U, evictedItem) 
       }
 
       println("1. Read Page Table from DRAM")
@@ -101,7 +100,7 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
       val newLruBitVec = LRUCorePseudo.updateBitVector(lruPath, bitVec)
       val newLruBits = LRUCorePseudo.getBigIntFromVector(newLruBitVec)
 
-      val packet = PageTableSetPacket(0, PageTableSetPacket(PageTableSetPacket.makeEmptySet, newLruBits.U))
+      val packet = PageTableSetPacket(0, PageTableSetPacket(sets, lruBits.U))
       dut.expectWrPageTableSetPacket(packet, dut.vpn2ptSetPA(evictedTag).U)
     }
   }
@@ -140,9 +139,7 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
       dut.sendMMUMsg(pageFaultMissReply)
 
       val flushes = fork { 
-        dut.expectFlushReqTLB(perm, thid.U, evictedItem) 
-      }.fork {
-        dut.expectFlushReqCache(perm, thid.U, evictedItem)
+        dut.handlePageEviction(evictedItem)
       }
 
       println("1. Read Page Table from DRAM")

@@ -23,7 +23,7 @@ import armflex.QEMUMessagesType
 import armflex_cache.LRUCore
 import armflex_cache.LRUCorePseudo
 
-class PageTableSetOps extends AnyFreeSpec with ChiselScalatestTester {
+class PageTableSetPressureInsert extends AnyFreeSpec with ChiselScalatestTester {
   import MMUDriver._
   val (thid, asid, vpn, ppn) = (0xF, 0x10, 0xABCD, 0xCBA)
   val perm = INST_FETCH

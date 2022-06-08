@@ -20,6 +20,7 @@ import armflex_cache.LRUCorePseudo
 
 
 import org.scalatest.freespec.AnyFreeSpec
+import armflex_mmu.peripheral.PageTableOps
 
 class TLBWritebackTester extends AnyFreeSpec with ChiselScalatestTester {
   import MMUDriver._
@@ -38,8 +39,8 @@ class TLBWritebackTester extends AnyFreeSpec with ChiselScalatestTester {
       val modifiedPageTableSet = PageTableItem(tag, modifiedEntry)
 
       val basePageTablePacket = PageTableSetPacket(Seq((0 -> basePageTableSet)), 0.U)
-      val modifiedPageTablePacket= PageTableSetPacket(Seq((0 -> modifiedPageTableSet)), 0xF.U)
-      dut.mmu_tlb_io.data.writebackReq.enqueueNow(modifiedPageTableSet)
+      val modifiedPageTablePacket = PageTableSetPacket(Seq((0 -> modifiedPageTableSet)), 0xF.U)
+      dut.mmu_tlb_io.data.pageTableReq.enqueueNow(PageTableReq(modifiedPageTableSet, PageTableOps.opInsert, thid.U, false.B))
       dut.expectRdPageTablePacket(basePageTablePacket, pageTableAddr.U)
       dut.expectWrPageTableSetPacket(modifiedPageTablePacket, pageTableAddr.U)
     }
