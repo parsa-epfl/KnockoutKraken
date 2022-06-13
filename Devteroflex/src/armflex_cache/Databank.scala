@@ -9,7 +9,6 @@ import armflex.util.Diverter
 import armflex.util.BRAMParams
 import armflex.util.BRAMPort
 import armflex.util.BRAM
-import armflex.util.FlushQueue
 
 case class DatabankParams(
   setNumber: Int = 1024,
@@ -172,8 +171,8 @@ class DataBankManager(
   else
     s1_frontend_request_n.valid := frontend_request_i.fire
 
-  val s1_frontend_request_r = (if(params.implementedWithRegister) FlushQueue(s1_frontend_request_n, 0, true)
-  else FlushQueue(s1_frontend_request_n, 1, true))
+  val s1_frontend_request_r = (if(params.implementedWithRegister) Queue(s1_frontend_request_n, 0, pipe = true)
+  else Queue(s1_frontend_request_n, 1, pipe = true))
   s1_frontend_request_r.ready := pipeline_state_ready(1)
 
   // pass to the bram
@@ -342,7 +341,7 @@ class DataBankManager(
     !full_writing_v &&  // full writing is not a miss
     !s1_frontend_request_r.bits.flush_v // flush is not a miss
 
-  val s2_miss_request_r = FlushQueue(s2_miss_request_n, 2, pipe = true)
+  val s2_miss_request_r = Queue(s2_miss_request_n, 2, pipe = true)
   miss_request_o <> s2_miss_request_r
 
 
@@ -386,7 +385,7 @@ class DataBankManager(
   eviction_wb_req.ready := s2_writeback_request_n.ready
   flush_wb_req.ready := s2_writeback_request_n.ready
 
-  val s2_writeback_request_r = FlushQueue(s2_writeback_request_n, 2, true)
+  val s2_writeback_request_r = Queue(s2_writeback_request_n, 2, pipe = true)
   writeback_request_o <> s2_writeback_request_r
   
   pipeline_state_ready(1) := true.B && //s2_miss_n.ready &&
