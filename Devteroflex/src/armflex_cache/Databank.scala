@@ -241,13 +241,13 @@ class DataBankManager(
   s2_bank_writing_n.bits.asid := s1_frontend_request_r.bits.asid
   s2_bank_writing_n.bits.flush_v := s1_frontend_request_r.bits.flush_v
   s2_bank_writing_n.valid :=
-    s1_frontend_request_r.valid && // Request is valid
+    s1_frontend_request_r.fire && // Request is accepted
     (s1_frontend_request_r.bits.wMask.orR() || s1_frontend_request_r.bits.flush_v || s1_frontend_request_r.bits.refill_v) && // write, flush, or refill.
     (hit_v || full_writing_v) //! No fire() required here because this register is in a branch instead of the main stream.
 
   lru_index_o.bits := Mux(hit_v, match_which, lru_which_i)
   // Hit, refill, and full writing will update the LRU bits. But flush won't update it.
-  lru_index_o.valid := s1_frontend_request_r.valid && (hit_v || full_writing_v) && !s1_frontend_request_r.bits.flush_v
+  lru_index_o.valid := s1_frontend_request_r.fire && (hit_v || full_writing_v) && !s1_frontend_request_r.bits.flush_v
 
   val frontend_write_to_bank = Wire(Decoupled(new BankWriteRequestPacket(params))) // normal writing (writing & flushing)
   if(params.setWidth > 1)
