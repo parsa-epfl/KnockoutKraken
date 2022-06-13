@@ -9,7 +9,6 @@ import armflex.util.Diverter
 import armflex.util.BRAMParams
 import armflex.util.BRAMPort
 import armflex.util.BRAM
-import armflex.util.FlushQueue
 //import firrtl.PrimOps.Mul
 
 import scala.collection.mutable

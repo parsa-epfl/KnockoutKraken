@@ -129,6 +129,8 @@ class PageTableEntryDeletor(params: MemoryHierarchyParams) extends Module {
     is(sIdle) {
       when(PORT.req.fire) {
         state_r := sReqPipePerm
+        reqDataDone_r := false.B
+        reqInstDone_r := false.B
         when(PORT.req.bits.entry.perm =/= INST_FETCH.U) {
           // No need to flush instructions on Data permissions
           reqInstDone_r := true.B

@@ -37,7 +37,7 @@ static int test_stress_memory(
 
 
   DevteroflexArchState state[32];
-  uint8_t *pages = (uint8_t *) malloc(thidN*nDataPagesPerThread*PAGE_SIZE);
+  uint8_t *src_pages = (uint8_t *) malloc(thidN*nDataPagesPerThread*PAGE_SIZE);
   uint32_t asid[32] = {0};
   uint64_t curr_ld_page_paddr[32] = {0};
   uint64_t curr_ld_page_vaddr[32] = {0};
@@ -46,7 +46,8 @@ static int test_stress_memory(
   uint32_t curr_ld_page_idx[32] = {0};
   uint32_t curr_st_page_idx[32] = {0};
 
-  makeDeadbeefPage((uint8_t *) pages, thidN*nDataPagesPerThread*PAGE_SIZE);
+  INFO("- Trash store destination page");
+  makeDeadbeefPage((uint8_t *) src_pages, thidN * nDataPagesPerThread * PAGE_SIZE);
   makeDeadbeefPage(deadbeefedPage, PAGE_SIZE);
   makeDeadbeefPage(page, PAGE_SIZE);
 
@@ -57,6 +58,7 @@ static int test_stress_memory(
   fclose(f);
 
   pmuStartCounting(ctx);
+
 
   INFO("- Register all the threads");
   for(uint32_t thid = 0; thid < thidN; thid++) {
@@ -69,7 +71,7 @@ static int test_stress_memory(
     curr_st_page_vaddr[thid] = vaddr_st;
     curr_ld_page_idx[thid] = 0;
     curr_st_page_idx[thid] = 0;
-    tagPage(&pages[thid*nDataPagesPerThread*PAGE_SIZE], thid, nDataPagesPerThread);
+    tagPage(&src_pages[thid*nDataPagesPerThread*PAGE_SIZE], thid, nDataPagesPerThread);
     initState_pressure_ldp_stp(
       &state[thid], 
       nDataPagesPerThread*PAGE_SIZE,
@@ -153,7 +155,7 @@ static int test_stress_memory(
         REQUIRE(message.vpn_hi == VPN_GET_HI(vaddr));
         REQUIRE(message.vpn_lo == VPN_GET_LO(vaddr));
         //printf("Thread[%i]:PAGE_FAULT:VA[%lx]\n", thid, vaddr);
-        dramPagePush(ctx, paddr, &pages[thid*nDataPagesPerThread*PAGE_SIZE+pageIdx*PAGE_SIZE]);
+        dramPagePush(ctx, paddr, &src_pages[thid*nDataPagesPerThread*PAGE_SIZE+pageIdx*PAGE_SIZE]);
         makeMissReply(DATA_LOAD, thid, asid[thid], vaddr, paddr, &pf_reply);
         printf("Thread[%i]:MISS_REPLY:VA[0x%016lx]->PA[0x%016lx]\n", thid, vaddr, paddr);
         mmuMsgSend(ctx, &pf_reply);
@@ -169,7 +171,7 @@ static int test_stress_memory(
         REQUIRE(message.asid == asid[thid]);
         REQUIRE(message.vpn_hi == VPN_GET_HI(vaddr));
         REQUIRE(message.vpn_lo == VPN_GET_LO(vaddr));
-        dramPagePush(ctx, paddr, &pages[thid*nDataPagesPerThread*PAGE_SIZE+pageIdx*PAGE_SIZE]);
+        dramPagePush(ctx, paddr, &deadbeefedPage);
         makeMissReply(DATA_STORE, thid, asid[thid], vaddr, paddr, &pf_reply);
         mmuMsgSend(ctx, &pf_reply);
         curr_st_page_paddr[thid]+=PAGE_SIZE;
@@ -197,12 +199,20 @@ static int test_stress_memory(
       INFO("Synchronizing Page");
       synchronizePage(ctx, asid[thid], page, vaddr, paddr, true);
       INFO("Checking Page");
-      checkPagePerWord(&pages[thid*nDataPagesPerThread*PAGE_SIZE + currPage*PAGE_SIZE], page);
+      checkPagePerWord(&src_pages[thid*nDataPagesPerThread*PAGE_SIZE + currPage*PAGE_SIZE], page);
     }
   }
   // */
 
   return 0;
+}
+
+TEST_CASE("test-singlepage-eviction") {
+  FPGAContext ctx;
+  REQUIRE(initFPGAContext(&ctx) == 0);
+  test_stress_memory(&ctx, 1, 1, true);
+
+  releaseFPGAContext(&ctx);
 }
 
 TEST_CASE("test-pressure-ldp-stp-short") {
