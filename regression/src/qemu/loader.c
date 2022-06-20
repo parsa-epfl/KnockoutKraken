@@ -3,19 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/wait.h>
-
-#define STR(x)  #x                                                                                                                               
-#define XSTR(s) STR(s)                                                                                                                           
-#define magic_inst(val) __asm__ __volatile__ ( "hint " XSTR(val) " \n\t"  )                                                                      
-                                                                                                                                                 
-#define DO_QFLEX_OP(op) magic_inst(QFLEX_OP); magic_inst(op)                                                                                     
-                                                                                                                                                 
-#define DEVTEROFLEX_OP    (94)
-
-#define DEVTEROFLEX_FLOW_START (90)
-#define DEVTEROFLEX_FLOW_STOP  (91)
-#define DO_DEVTEROFLEX_OP(op) magic_inst(DEVTEROFLEX_OP); magic_inst(op) 
-
+#include "devteroflex.h"
 
 static void enterDevteroFlex(){
   puts("I enter the system!");
@@ -41,6 +29,10 @@ int main(int argc, char * const argv[], char * const envp[]){
 
   // start forking.
   pid_t pid = fork();
+  int exitStatus = -1;
+  int exited = -1;
+  int signaled = -1;
+  int term = -1;
 
   if(pid == 0) {
     // child progress.
@@ -51,9 +43,24 @@ int main(int argc, char * const argv[], char * const envp[]){
     int stat = 0;
     do {
       waitpid(pid, &stat, 0);
-    } while(!WIFEXITED(stat) && !WIFSIGNALED(stat));
+      exited = WIFEXITED(stat);
+      signaled = WIFSIGNALED(stat);
+      term = WTERMSIG(stat);
+    } while(!exited && !signaled);
     leaveDevteroFlex();
+    exitStatus = WEXITSTATUS(stat);
+    if(!exited) {
+      printf("Child did not terminate with exited[%i]:signaled[%i]:term[%i]:status[%i]\n", exited, signaled, term, exitStatus);
+    }
     free(new_argv);
   }
-  return 0;
+
+  if(exitStatus == 0) {
+    printf("Success %s\n", argv[1]);
+    return 0;
+  } else {
+    printf("Failed %i\n", exitStatus);
+    printf("Failed exited[%i]:signaled[%i]:term[%i]:status[%i]\n", exited, signaled, term, exitStatus);
+    return exitStatus;
+  }
 }

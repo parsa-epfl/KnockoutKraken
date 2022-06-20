@@ -9,7 +9,7 @@ KnockoutSimulator
 CMakeCache.txt
 test.fst
 test.fst.hier
-Makefile
+build/Makefile
 cmake_install.cmake
 cl_dram_dma_refactored
 */*/.Xil
