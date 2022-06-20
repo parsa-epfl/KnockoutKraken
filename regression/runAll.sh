@@ -25,20 +25,20 @@ transplantTests=(
   "host-cmd-stop-cpu"
   "host-cmd-force-transplant"
   "host-cmd-singlestep"
-  "transplant-in" 
-  "transplant-transplants" 
+  "transplant-in"
+  "transplant-transplants"
 )
 
 mmuTests=(
-  "MMU-push-and-evict-pte" 
-  "basic-transplant-with-initial-page-fault" 
-  "multiple-pages-in-a-row" 
+  "MMU-push-and-evict-pte"
+  "basic-transplant-with-initial-page-fault"
+  "multiple-pages-in-a-row"
   "test-pressure-mmu-same-address"
 )
 
 executionTests=(
   "out-of-page-bound-pair-load"
-  "execute-instruction" 
+  "execute-instruction"
   "test-ldst-pair-all-sizes"
   "ldr-wback-addr"
   "test-pressure-ldp-stp-short"
@@ -48,8 +48,8 @@ microBenchTests=(
   "select-sort-1-threads"
   "select-sort-2-threads"
   "select-sort-15-threads"
-  "select-sort-16-threads"
 )
+# TODO "select-sort-16-threads"
 
 allTests=(
   "${fpgaTests[@]}"
