@@ -25,12 +25,13 @@ object TransBram2HostUnitIO {
     val pstate = Wire(new PStateRegs)
     pstate.PC := bramBlockGetReg(block, ARCH_PSTATE_PC_OFFST % regsPerBlock)
     pstate.flags := bramBlockGetReg(block, ARCH_PSTATE_FLAGS_OFFST % regsPerBlock).asTypeOf(new PStateFlags)
-    val icountReg = bramBlockGetReg(block, ARCH_PSTATE_ICOUNT_OFFST % regsPerBlock)
-    pstate.icount := icountReg(31, 0) // 34[31:0] -> icount
-    pstate.icountBudget := icountReg(63, 32) // 34[63:32] -> icount budget
     val asidReg = bramBlockGetReg(block, ARCH_PSTATE_ASID_OFFST % regsPerBlock)
     pstate.asid := asidReg(31, 0)
     pstate.asid_unused := asidReg(63, 32)
+    pstate.icount := bramBlockGetReg(block, ARCH_PSTATE_ICOUNT_OFFST % regsPerBlock)
+    val icountRegs = bramBlockGetReg(block, ARCH_PSTATE_ICOUNTREGS_OFFST % regsPerBlock)
+    pstate.icountExecuted := icountRegs(31, 0) // 34[31:0] -> icountExecuted
+    pstate.icountBudget := icountRegs(63, 32) // 34[63:32] -> icountBudget
     pstate
   }
   def bramBlockPackPState(pstate: PStateRegs): UInt = {
@@ -38,8 +39,9 @@ object TransBram2HostUnitIO {
     block := DontCare
     block(ARCH_PSTATE_PC_OFFST % regsPerBlock) := pstate.PC
     block(ARCH_PSTATE_FLAGS_OFFST % regsPerBlock) := pstate.flags.asUInt
-    block(ARCH_PSTATE_ICOUNT_OFFST % regsPerBlock) := Cat(pstate.icountBudget, pstate.icount)
     block(ARCH_PSTATE_ASID_OFFST % regsPerBlock) := Cat(pstate.asid_unused, pstate.asid)
+    block(ARCH_PSTATE_ICOUNT_OFFST % regsPerBlock) := pstate.icount
+    block(ARCH_PSTATE_ICOUNTREGS_OFFST % regsPerBlock) := Cat(pstate.icountBudget, pstate.icountExecuted)
     return block.asUInt()
   }
 
@@ -258,7 +260,7 @@ class TransBram2HostUnit(thidN: Int) extends Module {
   }.elsewhen(wrPort.pstate.req.fire){
     uBRAM.portB.ADDR := bramAlignAddr(wrPort.thid, TRANS_STATE_PState_OFFST.U)
     uBRAM.portB.DI := bramBlockPackPState(wrPort.pstate.req.bits.state)
-    uBRAM.portB.WE := Fill(32, 1.U) // Write Half Block
+    uBRAM.portB.WE := Fill(48, 1.U) // Write 3/4 Block
   }.elsewhen(rdPort.xreg.req.fire){
     uBRAM.portB.ADDR := bramAlignAddr(rdPort.thid, rdPort.xreg.req.bits.regIdx)
     uBRAM.portB.DI := DontCare

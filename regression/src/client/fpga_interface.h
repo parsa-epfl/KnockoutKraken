@@ -122,28 +122,30 @@ typedef struct DevteroflexArchState {
 	uint64_t pc;
 	uint64_t flags;
     union {
-        uint64_t icountRegs;
-        struct {
-            uint32_t icount;
-            uint32_t icountBudget;
-        };
-    };
-    union {
         uint64_t asid_reg;
         struct {
             uint32_t asid;
             uint32_t _asid_unused_;
         };
     };
-    uint64_t _unused_[4];
+    uint64_t icount;
+    union {
+        uint64_t icountRegs;
+        struct {
+            uint32_t icountExecuted;
+            uint32_t icountBudget;
+        };
+    };
+    uint64_t _unused_[3]; // Pad to 320 bytes -- Max 512 bytes
 } DevteroflexArchState;
 
 #define ARCH_PSTATE_XREG_OFFST   (0)
 #define ARCH_PSTATE_PC_OFFST     (32)
 #define ARCH_PSTATE_FLAGS_OFFST  (33)
-#define ARCH_PSTATE_ICOUNT_OFFST (34)
-#define ARCH_PSTATE_ASID_OFFST   (35)
-#define ARCH_PSTATE_TOT_REGS     (36)
+#define ARCH_PSTATE_ASID_OFFST   (34)
+#define ARCH_PSTATE_ICOUNT_OFFST (35)
+#define ARCH_PSTATE_ICOUNTREGS_OFFST (36)
+#define ARCH_PSTATE_TOT_REGS     (37)
 
 #define FLAGS_NZCV_MASK                     (0xF)
 #define FLAGS_GET_NZCV(flags)               (flags & FLAGS_NZCV_MASK)
