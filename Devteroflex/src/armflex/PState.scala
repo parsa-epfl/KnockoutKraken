@@ -36,10 +36,11 @@ class PStateFlags extends Bundle {
 }
 
 class PStateRegs extends Bundle {
+  val icountExecuted = UInt(32.W)
+  val icountBudget = UInt(32.W)
+  val icount = UInt(64.W)
   val asid_unused = UInt(32.W)
   val asid = UInt(32.W)
-  val icountBudget = UInt(32.W)
-  val icount = UInt(32.W)
   val flags = new PStateFlags
   val PC = DATA_T
 }
@@ -48,9 +49,10 @@ object PStateConsts {
   val ARCH_PSTATE_XREGS_OFFST  = (0)
   val ARCH_PSTATE_PC_OFFST     = (32)
   val ARCH_PSTATE_FLAGS_OFFST  = (33)
-  val ARCH_PSTATE_ICOUNT_OFFST = (34)
-  val ARCH_PSTATE_ASID_OFFST   = (35)
-  val ARCH_PSTATE_TOT_REGS     = (36)
+  val ARCH_PSTATE_ASID_OFFST   = (34)
+  val ARCH_PSTATE_ICOUNT_OFFST = (35)
+  val ARCH_PSTATE_ICOUNTREGS_OFFST = (36)
+  val ARCH_PSTATE_TOT_REGS     = (37)
 
   val TRANS_STATE_PState_OFFST   = (32)  // Contains PC, flags, and icount
   val TRANS_STATE_SIZE_BYTES     = (320) // 5 512-bit blocks; Full state fits in this amount of bytes
@@ -183,6 +185,7 @@ class ArchState(thidN: Int, withDbg: Boolean) extends Module {
         && !pstateIO.commit.pstate.next.flags.isException 
         && !pstateIO.commit.pstate.next.flags.isUndef) {
     pstateMem(pstateIO.commit.tag).icount := pstateMem(pstateIO.commit.tag).icount + 1.U
+    pstateMem(pstateIO.commit.tag).icountExecuted := pstateMem(pstateIO.commit.tag).icountExecuted + 1.U
     when(pstateIO.commit.icountLastInst) {
       pstateMem(pstateIO.commit.tag).flags.isICountDepleted := true.B
     }
@@ -191,8 +194,7 @@ class ArchState(thidN: Int, withDbg: Boolean) extends Module {
   when(pstateMem(pstateIO.commit.tag).icountBudget === 0.U) {
     pstateIO.commit.icountLastInst := false.B // Just execute normally, no icount
   }.otherwise {
-    pstateIO.commit.icountLastInst := (pstateMem(pstateIO.commit.tag).icount + 1.U) === pstateMem(pstateIO.commit.tag).icountBudget // See PipelineWithTransplant
-    
+    pstateIO.commit.icountLastInst := (pstateMem(pstateIO.commit.tag).icountExecuted + 1.U) === pstateMem(pstateIO.commit.tag).icountBudget // See PipelineWithTransplant
   }
 
   pstateIO.commit.ready := true.B // This signal get's multiplexed higher in the hierarchy

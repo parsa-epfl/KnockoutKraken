@@ -8,18 +8,7 @@ import chiseltest._
 import armflex.util._
 
 import armflex.util.SoftwareStructs._
-
-object Trans2State {
-  val r_DONE :: r_XREGS :: r_PC :: r_SP :: r_FLAGS :: r_ICOUNT :: Nil = Enum(6)
-  val ARCH_XREGS_OFFST = 0
-  val ARCH_PC_OFFST = 32
-  val ARCH_SP_OFFST = 33
-  val ARCH_FLAGS_OFFST = 34
-  val ARCH_ICOUNT_OFFST = 35
-  val ARCH_MAX_OFFST = ARCH_ICOUNT_OFFST + 1
-}
-
-import Trans2State._
+import armflex.PStateConsts._
 
 object BRAMPortDriver {
   implicit class BRAMPortDriver(target: BRAMPort)(implicit clock: Clock) {
@@ -28,16 +17,6 @@ object BRAMPortDriver {
       target.WE.poke(0.U)
       target.ADDR.poke(0.U)
       target.DI.poke(0.U)
-    }
-
-    def wr(tag: Int, state: PState): Unit = {
-      val baseOffset = tag << log2Ceil(ARCH_MAX_OFFST)
-      for (i <- ARCH_XREGS_OFFST until ARCH_XREGS_OFFST + 32) {
-        target.wr(state.xregs(i), baseOffset + i)
-      }
-      target.wr(state.pc, baseOffset + ARCH_PC_OFFST)
-      target.wr(state.sp, baseOffset + ARCH_SP_OFFST)
-      target.wr(state.nzcv, baseOffset + ARCH_FLAGS_OFFST)
     }
 
     def wr(bits:BigInt, offst: BigInt) = {
@@ -66,20 +45,6 @@ object BRAMPortDriver {
       clock.step()
       target.EN.poke(false.B)
       target.WE.poke(0.U)
-    }
-
-    def rdState(tag: Int): PState = {
-      val baseOffset = tag << log2Ceil(ARCH_MAX_OFFST)
-      val xregs = for (reg <- ARCH_XREGS_OFFST until ARCH_XREGS_OFFST + 32) yield {
-        val regVal = target.rd(baseOffset + reg)
-        regVal
-      }
-      val pc = target.rd(baseOffset + ARCH_PC_OFFST)
-      val sp = target.rd(baseOffset + ARCH_SP_OFFST)
-      val nzcv = target.rd(baseOffset + ARCH_FLAGS_OFFST)
-
-      val pstate = new PState(xregs.toList: List[BigInt], pc: BigInt, sp: BigInt, nzcv.toInt: Int)
-      pstate
     }
 
     def rd(offst:BigInt): BigInt = {

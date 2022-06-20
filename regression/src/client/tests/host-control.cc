@@ -144,12 +144,14 @@ TEST_CASE("host-cmd-singlestep") {
     assert(state.xregs[2] = state.xregs[0] + state.xregs[1]);
     INFO("Check icount 0");
     assert(state.icount == 1);
+    assert(state.icountExecuted == 1);
     INFO("Check state 1");
     transplantGetState(&ctx, 1, &state);
     assert(state.xregs[2] = state.xregs[0] + state.xregs[1]);
     assert(state.xregs[2] = state.xregs[0] + state.xregs[1]);
     INFO("Check icount 1");
     assert(state.icount == 1);
+    assert(state.icountExecuted == 1);
 
     transplantPending(&ctx, &pending_threads);
     assert(pending_threads == 0);
@@ -199,6 +201,7 @@ TEST_CASE("check-flag-undef") {
     assert(FLAGS_GET_IS_UNDEF(state.flags));
     INFO("Check icount");
     assert(state.icount == 1);
+    assert(state.icountExecuted == 1);
  
     releaseFPGAContext(&ctx);
 }
@@ -244,6 +247,7 @@ TEST_CASE("check-flag-transplant") {
     printf("flags: %lx\n", state.flags);
     assert(FLAGS_GET_IS_EXCEPTION(state.flags));
     INFO("Check icount");
+    assert(state.icountExecuted == 0);
     assert(state.icount == 0);
  
     releaseFPGAContext(&ctx);
@@ -304,6 +308,7 @@ TEST_CASE("check-icount-budget") {
     
     INFO("Check icount");
     assert(state.icount == 100);
+    assert(state.icountExecuted == 100);
  
     releaseFPGAContext(&ctx);
 }

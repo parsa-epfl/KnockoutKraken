@@ -23,6 +23,7 @@ object ArmflexStructsLits {
                 _.isUndef -> false.B
             ),
             _.icount -> 0.U,
+            _.icountExecuted -> 0.U,
             _.icountBudget -> 0.U
         )
     }
