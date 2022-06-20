@@ -12,12 +12,11 @@
 #include "devteroflex.h"
 
 static int hit_segfault = 0;
+static char *x_array;
 
-static void handler(int sig, siginfo_t *si, void *unused) {
+static void handler(int sig, siginfo_t *si, void *unused){
   uint64_t addr = (uint64_t) si->si_addr & ~PAGE_MASK;
-  uint64_t *addr_ptr = (uint64_t *) addr;
-  *addr_ptr = (uint64_t) mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  ((char *)addr_ptr)[0] = 'X';
+  mprotect((void *) addr, PAGE_SIZE, PROT_WRITE);
   hit_segfault++;
 }
 
@@ -29,17 +28,18 @@ int main() {
   sigaction(SIGSEGV, &sa, NULL);
 
   int id = open(DUMMY_FILE_DIR, O_RDONLY);
-  char *x_array = mmap(NULL, PAGE_SIZE, PROT_READ, MAP_PRIVATE, id, 0);
+  x_array = mmap(NULL, PAGE_SIZE, PROT_READ, MAP_PRIVATE, id, 0);
+  puts(x_array);
 
   DO_DEVTEROFLEX_OP(DEVTEROFLEX_FLOW_START);
-  munmap((void *)x_array, PAGE_SIZE);
+  x_array[0] = '/';
   DO_DEVTEROFLEX_OP(DEVTEROFLEX_FLOW_STOP);
 
-  char readSegfault = x_array[0];
-  do_assert(readSegfault == 'X');
+  do_assert(x_array[0] == '/');
   do_assert(hit_segfault == 1);
+  munmap((void *) x_array, PAGE_SIZE);
   close(id);
-
-  printf("Success unmap!\n");
+  printf("Success mprotect_segfault!\n");
   return 0;
 }
+
