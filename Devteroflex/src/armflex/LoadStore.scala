@@ -627,8 +627,8 @@ class MemoryUnit(
     doneInst.io.enq.bits.tag := cacheReqQ.io.deq.bits.inst.tag
   }.otherwise {
     doneInst.io.enq.bits.rd(0).valid := metaInfo.rd.valid
-    doneInst.io.enq.bits.rd(1).valid := metaInfo.isLoad
-    doneInst.io.enq.bits.rd(2).valid := metaInfo.isLoad && metaInfo.isPair
+    doneInst.io.enq.bits.rd(1).valid := metaInfo.isLoad && metaInfo.req(0).reg =/= 31.U
+    doneInst.io.enq.bits.rd(2).valid := metaInfo.isLoad && metaInfo.isPair && metaInfo.req(1).reg =/= 31.U
     doneInst.io.enq.bits.res(0) := metaInfo.rd_res
     doneInst.io.enq.bits.res(1) := signExtendData(memData(0), metaInfo.size, metaInfo.isSigned)
     doneInst.io.enq.bits.res(2) := signExtendData(memData(1), metaInfo.size, metaInfo.isSigned)
