@@ -36,7 +36,11 @@ class LogicALU extends Module {
               ))
 
   io.res := res
-  io.nzcv := Cat(Mux(io.is32bit, res(31), res(63)), (res === 0.U).asUInt, 0.U(2.W))
+  when(io.is32bit) {
+    io.nzcv := Cat(res(31), (res(31, 0) === 0.U).asUInt, 0.U(2.W))
+  }.otherwise {
+    io.nzcv := Cat(res(63), (res === 0.U).asUInt, 0.U(2.W))
+  }
 }
 
 class ConditionHolds extends Module
