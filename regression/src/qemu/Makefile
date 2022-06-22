@@ -9,7 +9,7 @@ objects=test_cache_page_evict test_fclose test_fopen test_fork test_fread test_g
 _DEPS = devteroflex.h
 DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
 
-all: dir $(objects) close
+all: dir $(objects) close test_multithreading
 
 close:
 	echo "chmod +x no_loader/*"
@@ -23,6 +23,10 @@ dir:
 $(objects): %: %.c $(DEPS) 
 	$(CC) $(CFLAGS) -Wall -g -O0 -o no_loader/$@ $< 
 	$(CC) $(CFLAGS) -Wall -g -O0 -DCONFIG_FOR_LOADER -o with_loader/$@ $< 
+
+test_multithreading: test_multithreading.c $(DEPS)
+	$(CC) $(CFLAGS) -Wall -lpthread -g -O0 -o no_loader/$@ $<
+	$(CC) $(CFLAGS) -Wall -lpthread -g -O0 -DCONFIG_FOR_LOADER -o with_loader/$@ $< 
 
 .PHONY: clean
 
