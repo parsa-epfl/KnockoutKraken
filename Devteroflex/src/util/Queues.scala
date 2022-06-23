@@ -107,9 +107,11 @@ class CreditQueueController(val size: Int) extends Module {
     is(BigInt("111", 2).U) { diff := -1.S }
  }
 
-  private val cnt = RegInit(0.S((log2Ceil(size) + 1).W))
+  private val cnt = RegInit(0.S((log2Ceil(size) + 2).W))
   cnt := cnt + diff
 
   ready := cnt <= (size - 1).S
   inflight := cnt.asUInt
+
+  assert(cnt + diff >= 0.S)
 }
