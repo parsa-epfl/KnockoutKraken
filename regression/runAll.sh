@@ -48,8 +48,8 @@ microBenchTests=(
   "select-sort-1-threads"
   "select-sort-2-threads"
   "select-sort-15-threads"
+  "select-sort-16-threads"
 )
-# TODO "select-sort-16-threads"
 
 allTests=(
   "${fpgaTests[@]}"

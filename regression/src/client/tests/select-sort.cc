@@ -135,7 +135,11 @@ static void select_sort_x_threads(size_t thidN, bool run_1024 = false) {
   printPMUCounters(&c);
 
   // 6. check the transplant reason.
-
+  for(int thid = 0; thid < thidN; ++thid) {
+    transplantGetState(&c, thid, &state[thid]);
+    REQUIRE((state[thid].pc & 0xFFF) == 76);
+  }
+ 
   // 7. check the result.
   char pageFPGA[PAGE_SIZE];
   for(int thid = 0; thid < thidN; ++thid){
