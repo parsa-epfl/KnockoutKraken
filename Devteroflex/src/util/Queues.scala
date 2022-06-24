@@ -113,5 +113,5 @@ class CreditQueueController(val size: Int) extends Module {
   ready := cnt <= (size - 1).S
   inflight := cnt.asUInt
 
-  assert(cnt + diff >= 0.S)
+  assert(cnt >= 0.S)
 }

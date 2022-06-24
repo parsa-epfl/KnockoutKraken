@@ -119,12 +119,15 @@ object PipeCache {
     private val miss2hit = WireInit(cache_io.resp.bits.miss2hit)
     metaQ.req_i.valid := pipe_io.req.port.fire
     metaQ.ctrl_i := 0.U.asTypeOf(metaQ.ctrl_i)
-    when(cache_io.resp.fire) {
+    when(cache_io.resp.valid) {
       metaQ.ctrl_i.drop := false.B // All transactions are certified to complete
       metaQ.ctrl_i.done := hit && !miss2hit
       metaQ.ctrl_i.long := miss
       metaQ.ctrl_i.longDone := miss2hit
-      pipe_io.resp.port.valid := !miss
+      when(miss) {
+        cache_io.resp.ready := true.B
+        pipe_io.resp.port.valid := false.B
+      }
     }
 
     // If metaQ is full, wait for misses to complete

@@ -459,7 +459,7 @@ class MemoryUnit(
     }
 
     when(!mem_io.tlb.resp.bits.hit) {
-      cacheReqQ.io.enq.valid := false.B // Ditch instruction on miss/violation
+      cacheReqQ.io.enq.valid := false.B // Ditch instruction on miss
       tlbDropInst := true.B
     }
   }
@@ -468,18 +468,19 @@ class MemoryUnit(
   // -------------- Cache Access -------------
   // -----------------------------------------
 
-  // Data -------
-  private val cacheAdaptorMInstInput = WireInit(cacheAdaptor.pipe_io.req.meta)
-  // singleAccessPair can perform the pair operation in a single cache access
-  private val singleAccessPair = WireInit(cacheAdaptor.pipe_io.req.meta.inst.isPair && !cacheAdaptor.pipe_io.req.meta.blockMisaligned)
-  // secondAccessPair implies the first access has completed already
-  private val secondAccessPair = WireInit(cacheAdaptor.pipe_io.req.meta.inst.isPair && cacheAdaptor.pipe_io.req.meta.firstIsCompleted)
 
-  private val cacheAdaptorReqData = WireInit(cacheAdaptor.pipe_io.req.port.bits.data.cloneType, 0.U)
-  private val cacheAdaptorReqW_en = WireInit(cacheAdaptor.pipe_io.req.port.bits.w_en.cloneType, 0.U)
+  // ---------- Req
+  private val cacheArbitrer = Module(new Arbiter(cacheReqQ.io.deq.bits.cloneType, 2))
+  cacheArbitrer.io.in(0) <> cacheReqMisalignedQ.io.deq
+  cacheArbitrer.io.in(1) <> cacheReqQ.io.deq
+  mem_io.cache <> cacheAdaptor.cache_io
 
+  private val maskSize = WireInit(SIZE128.cloneType, cacheArbitrer.io.out.bits.inst.size)
+  private val dataSingleAccessPairPacked = WireInit(
+    cacheArbitrer.io.out.bits.inst.req(1).data << Cat(params.getBlockAddrBits(cacheArbitrer.io.out.bits.inst.req(1).addr), 0.U(3.W)) |
+    cacheArbitrer.io.out.bits.inst.req(0).data << Cat(params.getBlockAddrBits(cacheArbitrer.io.out.bits.inst.req(0).addr), 0.U(3.W)))
+  private val dataAlignmentShift = WireInit(Cat(params.getBlockAddrBits(cacheAdaptor.pipe_io.req.port.bits.addr), 0.U(3.W)))
   // Align store data with byte and address for block
-  private val maskSize = WireInit(cacheAdaptorMInstInput.inst.size +& singleAccessPair.asUInt)
   private val maskByteEn: UInt = MuxLookup(maskSize, 1.U, Seq(
     // Mask for size = 2**(bytes in maskSize+1) - 1
     SIZEB -> ((1 << 1) - 1).U, // 0b1
@@ -487,120 +488,125 @@ class MemoryUnit(
     SIZE32 -> ((1 << 4) - 1).U, // 0b1111
     SIZE64 -> ((1 << 8) - 1).U, // 0b11111111
     SIZE128 -> ((1 << 16) - 1).U // 0b1111111111111111 // Only for pair 64 bit instructions
-    ))
+  ))
 
-  // Select, align and mask bytes in block
-  private val selReqIdx = secondAccessPair.asUInt // Select second one in case it is the second access
-  private val maskEn_shift = WireInit(params.getBlockAddrBits(cacheAdaptorMInstInput.inst.req(selReqIdx).addr))
-  when(cacheAdaptorMInstInput.inst.isLoad) {
-    cacheAdaptorReqW_en := 0.U
+  cacheAdaptor.pipe_io.req.meta := cacheArbitrer.io.out.bits
+
+  when(cacheArbitrer.io.out.bits.inst.isLoad) {
+    cacheAdaptor.pipe_io.req.port.bits.w_en := 0.U
   }.otherwise {
-    cacheAdaptorReqW_en := maskByteEn << maskEn_shift
+    cacheAdaptor.pipe_io.req.port.bits.w_en := maskByteEn << params.getBlockAddrBits(cacheAdaptor.pipe_io.req.port.bits.addr)
   }
 
-  cacheAdaptorReqData := cacheAdaptorMInstInput.inst.req(selReqIdx).data << Cat(params.getBlockAddrBits(cacheAdaptorMInstInput.inst.req(selReqIdx).addr), 0.U(3.W))
-  when(singleAccessPair) {
-    cacheAdaptorReqData := cacheAdaptorMInstInput.inst.req(1).data << Cat(params.getBlockAddrBits(cacheAdaptorMInstInput.inst.req(1).addr), 0.U(3.W)) |
-        cacheAdaptorMInstInput.inst.req(0).data << Cat(params.getBlockAddrBits(cacheAdaptorMInstInput.inst.req(0).addr), 0.U(3.W))
-  }
-
-  cacheAdaptor.pipe_io.req.port.bits.data := cacheAdaptorReqData
-  cacheAdaptor.pipe_io.req.port.bits.w_en := cacheAdaptorReqW_en
-  cacheAdaptor.pipe_io.req.port.bits.addr := cacheReqQ.io.deq.bits.paddr(selReqIdx)
-  cacheAdaptor.pipe_io.req.meta := cacheReqQ.io.deq.bits
-  when(cacheReqMisalignedQ.io.deq.valid) {
-    cacheAdaptor.pipe_io.req.port.bits.addr := cacheReqMisalignedQ.io.deq.bits.paddr(selReqIdx)
-    cacheAdaptor.pipe_io.req.meta := cacheReqMisalignedQ.io.deq.bits
-  }
-
-  // Manage Control signals ---------
-  // Send and Receive Cache Requests to the Pipeline
-  mem_io.cache <> cacheAdaptor.cache_io
-
-  // Arbiter for Cache Adaptor, prioritise requests that need second run
-  // Send Cache Block
-  cacheReqQ.io.deq.ready := false.B
-  cacheReqMisalignedQ.io.deq.ready := false.B
   cacheAdaptor.pipe_io.req.port.valid := false.B
-  // Receive Cache Block
-  cacheReqMisalignedQ.io.enq.valid := false.B
-  doneInst.io.enq.valid := false.B
-
-  // Credits for backpressure
-  cache2doneInst_credits.trans.in := false.B
-  cache2cacheMisaligned_credits.trans.in := false.B
+  cacheArbitrer.io.out.ready := false.B
+  // Cache transactions always complete
   cache2doneInst_credits.trans.dropped := false.B
   cache2cacheMisaligned_credits.trans.dropped := false.B
-  when(cacheReqQ.io.deq.fire) {
-    when(cacheReqQ.io.deq.bits.blockMisaligned && cacheReqQ.io.deq.bits.inst.isPair) {
-      cache2cacheMisaligned_credits.trans.in := true.B
+  when(cacheArbitrer.io.out.bits.exception) {
+    // Exception, don't send request to arbitrer
+    cacheAdaptor.pipe_io.req.port.bits.addr := DontCare
+    cacheAdaptor.pipe_io.req.port.bits.data := DontCare
+    cacheAdaptor.pipe_io.req.port.valid := false.B
+    // Send it to doneInstQueue
+    cache2doneInst_credits.trans.in := cacheArbitrer.io.out.fire
+    cache2cacheMisaligned_credits.trans.in := false.B
+  }.elsewhen(cacheArbitrer.io.out.bits.inst.isPair) {
+    // Pair access decomposition
+    when(!cacheArbitrer.io.out.bits.blockMisaligned) {
+      // Both access at once
+      maskSize := cacheArbitrer.io.out.bits.inst.size +& 1.U
+      cacheAdaptor.pipe_io.req.port.bits.addr := cacheArbitrer.io.out.bits.paddr(0)
+      cacheAdaptor.pipe_io.req.port.bits.data := dataSingleAccessPairPacked
+      cacheAdaptor.pipe_io.req.port.handshake(cacheArbitrer.io.out, cache2doneInst_credits.ready)
+      cache2doneInst_credits.trans.in := cacheArbitrer.io.out.fire
+      cache2cacheMisaligned_credits.trans.in := false.B
+   }.elsewhen(cacheArbitrer.io.out.bits.firstIsCompleted) {
+      // Second Access
+      cacheAdaptor.pipe_io.req.port.bits.addr := cacheArbitrer.io.out.bits.paddr(1)
+      cacheAdaptor.pipe_io.req.port.bits.data := cacheArbitrer.io.out.bits.inst.req(1).data << dataAlignmentShift
+      cacheAdaptor.pipe_io.req.port.handshake(cacheArbitrer.io.out, cache2doneInst_credits.ready)
+      cache2doneInst_credits.trans.in := cacheArbitrer.io.out.fire
+      cache2cacheMisaligned_credits.trans.in := false.B
     }.otherwise {
-      cache2doneInst_credits.trans.in := true.B
+      // First access
+      cacheAdaptor.pipe_io.req.port.bits.addr := cacheArbitrer.io.out.bits.paddr(0)
+      cacheAdaptor.pipe_io.req.port.bits.data := cacheArbitrer.io.out.bits.inst.req(0).data << dataAlignmentShift
+      cacheAdaptor.pipe_io.req.port.handshake(cacheArbitrer.io.out, cache2cacheMisaligned_credits.ready)
+      cache2doneInst_credits.trans.in := false.B
+      cache2cacheMisaligned_credits.trans.in := cacheArbitrer.io.out.fire
     }
-  }.elsewhen(cacheReqMisalignedQ.io.deq.fire) {
-    cache2doneInst_credits.trans.in := true.B
-  }
-  cache2cacheMisaligned_credits.trans.out := cacheReqMisalignedQ.io.deq.fire
-  cache2doneInst_credits.trans.out := doneInst.io.deq.fire
-
-  // Manage requests to the cache, if pair pending, it has priority for execution
-  private val bypassCacheByException = WireInit(false.B) 
-  when(cacheAdaptor.pipe_io.req.port.ready) {
-    when(cacheReqMisalignedQ.io.deq.valid && cache2doneInst_credits.ready) {
-      cacheReqMisalignedQ.io.deq.handshake(cacheAdaptor.pipe_io.req.port)
-    }.otherwise {
-      when(cacheReqQ.io.deq.bits.exception) {
-        cacheReqQ.io.deq.ready := false.B // Handshake with commitU below
-        bypassCacheByException := true.B
-      }.elsewhen(cacheReqQ.io.deq.bits.blockMisaligned) {
-        cacheReqQ.io.deq.handshake(cacheAdaptor.pipe_io.req.port, cache2cacheMisaligned_credits.ready)
-      }.otherwise {
-        cacheReqQ.io.deq.handshake(cacheAdaptor.pipe_io.req.port, cache2doneInst_credits.ready)
-      }
-    }
-  }
-
-  // Manage responses from the cache, if pair not done, push it to be re-executed
-  private val cachePipeResp = WireInit(cacheAdaptor.pipe_io.resp)
-  private val respPairIdx = cachePipeResp.meta.firstIsCompleted.asUInt
-  private val alignedDataResp: UInt = WireInit(cachePipeResp.port.bits.data >> Cat(params.getBlockAddrBits(cachePipeResp.meta.inst.req(respPairIdx).addr), 0.U(3.W)))
-  private val receiveFromBypass = WireInit(false.B)
-  // If blockMisaligned, save initial load in req data
-  // when(cachePipeResp.meta.inst.isLoad) { } // Not necessary, overwrite store data given already executed
-  cacheAdaptor.pipe_io.resp.port.ready := true.B // Backpressure is managed by ensuring enough credits
-  cacheReqMisalignedQ.io.enq.bits := cachePipeResp.meta
-  cacheReqMisalignedQ.io.enq.bits.inst.req(0).data := alignedDataResp
-  when(cacheAdaptor.pipe_io.resp.port.valid) {
-    when(cachePipeResp.meta.inst.isPair
-      && cachePipeResp.meta.blockMisaligned
-      && !cachePipeResp.meta.firstIsCompleted) {
-      cacheReqMisalignedQ.io.enq.bits.firstIsCompleted := true.B
-      cacheReqMisalignedQ.io.enq.valid := cacheAdaptor.pipe_io.resp.port.valid
-    }.otherwise {
-      doneInst.io.enq.valid := cacheAdaptor.pipe_io.resp.port.valid
-    }
-  }.elsewhen(bypassCacheByException) {
-      doneInst.io.enq.handshake(cacheReqQ.io.deq)
-      receiveFromBypass := true.B
+  }.otherwise {
+    // Normal access
+    cacheAdaptor.pipe_io.req.port.bits.addr := cacheArbitrer.io.out.bits.paddr(0)
+    cacheAdaptor.pipe_io.req.port.bits.data := cacheArbitrer.io.out.bits.inst.req(0).data << dataAlignmentShift
+    cacheAdaptor.pipe_io.req.port.handshake(cacheArbitrer.io.out, cache2doneInst_credits.ready)
+    cache2doneInst_credits.trans.in := cacheArbitrer.io.out.fire
+    cache2cacheMisaligned_credits.trans.in := false.B
   }
 
-  // Pack final response
-  val metaInfo = cachePipeResp.meta.inst
   val memData = Seq.fill(2)(WireInit(DATA_X))
-  when(metaInfo.isPair) {
-    when(cachePipeResp.meta.blockMisaligned) {
+  when(cacheAdaptor.pipe_io.resp.meta.inst.isPair) {
+    when(cacheAdaptor.pipe_io.resp.meta.blockMisaligned) {
       // Pair instruction in two blocks, fetch intermediate result saved previously
-      memData(0) := cachePipeResp.meta.inst.req(0).data
-      memData(1) := alignedDataResp
+      memData(0) := cacheAdaptor.pipe_io.resp.meta.inst.req(0).data
+      memData(1) := cacheAdaptor.pipe_io.resp.port.bits.data >> Cat(params.getBlockAddrBits(cacheAdaptor.pipe_io.resp.meta.paddr(1)), 0.U(3.W))
     }.otherwise {
       // Pair instruction in same block
-      memData(0) := alignedDataResp
-      memData(1) := alignedDataResp >> Cat((1.U << metaInfo.size), 0.U(3.W))
+      memData(0) := cacheAdaptor.pipe_io.resp.port.bits.data >> Cat(params.getBlockAddrBits(cacheAdaptor.pipe_io.resp.meta.paddr(0)), 0.U(3.W))
+      memData(1) := cacheAdaptor.pipe_io.resp.port.bits.data >> Cat(params.getBlockAddrBits(cacheAdaptor.pipe_io.resp.meta.paddr(1)), 0.U(3.W)) // Cat((1.U << cacheAdaptor.pipe_io.resp.meta.inst.size), 0.U(3.W))
     }
   }.otherwise {
     // Normal instruction
-    memData(0) := alignedDataResp
+    memData(0) := cacheAdaptor.pipe_io.resp.port.bits.data >> Cat(params.getBlockAddrBits(cacheAdaptor.pipe_io.resp.meta.paddr(0)), 0.U(3.W))
     memData(1) := DontCare
+  }
+
+  cache2cacheMisaligned_credits.trans.out := cacheReqMisalignedQ.io.deq.fire
+  cache2doneInst_credits.trans.out := doneInst.io.deq.fire
+  when(cacheAdaptor.pipe_io.resp.port.valid) {
+    when(cacheAdaptor.pipe_io.resp.meta.inst.isPair && cacheAdaptor.pipe_io.resp.meta.blockMisaligned && !cacheAdaptor.pipe_io.resp.meta.firstIsCompleted) {
+      // Response consumed by Misaligned for second access
+      cacheReqMisalignedQ.io.enq.bits := cacheAdaptor.pipe_io.resp.meta
+      cacheReqMisalignedQ.io.enq.bits.firstIsCompleted := true.B
+      cacheReqMisalignedQ.io.enq.bits.inst.req(0).data := cacheAdaptor.pipe_io.resp.port.bits.data >> Cat(params.getBlockAddrBits(cacheAdaptor.pipe_io.resp.meta.paddr(0)), 0.U(3.W))
+      cacheReqMisalignedQ.io.enq.handshake(cacheAdaptor.pipe_io.resp.port)
+      doneInst.io.enq.bits := DontCare
+      doneInst.io.enq.valid := false.B
+    }.otherwise {
+      // Cache access done
+      doneInst.io.enq.bits := 0.U.asTypeOf(doneInst.gen) // Init all false
+      doneInst.io.enq.bits.rd(0).valid := cacheAdaptor.pipe_io.resp.meta.inst.rd.valid
+      doneInst.io.enq.bits.rd(1).valid := cacheAdaptor.pipe_io.resp.meta.inst.isLoad && cacheAdaptor.pipe_io.resp.meta.inst.req(0).reg =/= 31.U
+      doneInst.io.enq.bits.rd(2).valid := cacheAdaptor.pipe_io.resp.meta.inst.isLoad && cacheAdaptor.pipe_io.resp.meta.inst.isPair && cacheAdaptor.pipe_io.resp.meta.inst.req(1).reg =/= 31.U
+      doneInst.io.enq.bits.res(0) := cacheAdaptor.pipe_io.resp.meta.inst.rd_res
+      doneInst.io.enq.bits.res(1) := signExtendData(memData(0), cacheAdaptor.pipe_io.resp.meta.inst.size, cacheAdaptor.pipe_io.resp.meta.inst.isSigned, cacheAdaptor.pipe_io.resp.meta.inst.is32bit)
+      doneInst.io.enq.bits.res(2) := signExtendData(memData(1), cacheAdaptor.pipe_io.resp.meta.inst.size, cacheAdaptor.pipe_io.resp.meta.inst.isSigned, cacheAdaptor.pipe_io.resp.meta.inst.is32bit)
+      doneInst.io.enq.bits.rd(0).bits := cacheAdaptor.pipe_io.resp.meta.inst.rd.bits
+      doneInst.io.enq.bits.rd(1).bits := cacheAdaptor.pipe_io.resp.meta.inst.req(0).reg
+      doneInst.io.enq.bits.rd(2).bits := cacheAdaptor.pipe_io.resp.meta.inst.req(1).reg
+      doneInst.io.enq.bits.is32bit := cacheAdaptor.pipe_io.resp.meta.inst.is32bit
+      doneInst.io.enq.bits.tag := cacheAdaptor.pipe_io.resp.meta.inst.tag
+      doneInst.io.enq.handshake(cacheAdaptor.pipe_io.resp.port)
+      cacheReqMisalignedQ.io.enq.bits := DontCare
+      cacheReqMisalignedQ.io.enq.valid := false.B
+    }
+  }.elsewhen(cacheArbitrer.io.out.bits.exception) {
+    // Can receive pending exception bypass
+    doneInst.io.enq.bits := 0.U.asTypeOf(doneInst.gen) // Init all false
+    doneInst.io.enq.bits.exceptions.valid := true.B
+    doneInst.io.enq.bits.exceptions.bits := 1.U
+    doneInst.io.enq.bits.tag := cacheArbitrer.io.out.bits.inst.tag
+    doneInst.io.enq.handshake(cacheArbitrer.io.out)
+    cacheAdaptor.pipe_io.resp.port.ready := false.B
+    cacheReqMisalignedQ.io.enq.bits := DontCare
+    cacheReqMisalignedQ.io.enq.valid := false.B
+  }.otherwise {
+    cacheAdaptor.pipe_io.resp.port.ready := false.B
+    doneInst.io.enq.bits := DontCare
+    doneInst.io.enq.valid := false.B
+    cacheReqMisalignedQ.io.enq.bits := DontCare
+    cacheReqMisalignedQ.io.enq.valid := false.B
   }
 
   def signExtendData(bits: UInt, size: UInt, sign: Bool, is32bit: Bool): UInt = {
@@ -627,24 +633,6 @@ class MemoryUnit(
     res
   }
 
-  doneInst.io.enq.bits := 0.U.asTypeOf(doneInst.gen) // Init all false
-  when(receiveFromBypass) {
-    doneInst.io.enq.bits.exceptions.valid := true.B
-    doneInst.io.enq.bits.exceptions.bits := 1.U
-    doneInst.io.enq.bits.tag := cacheReqQ.io.deq.bits.inst.tag
-  }.otherwise {
-    doneInst.io.enq.bits.rd(0).valid := metaInfo.rd.valid
-    doneInst.io.enq.bits.rd(1).valid := metaInfo.isLoad && metaInfo.req(0).reg =/= 31.U
-    doneInst.io.enq.bits.rd(2).valid := metaInfo.isLoad && metaInfo.isPair && metaInfo.req(1).reg =/= 31.U
-    doneInst.io.enq.bits.res(0) := metaInfo.rd_res
-    doneInst.io.enq.bits.res(1) := signExtendData(memData(0), metaInfo.size, metaInfo.isSigned, metaInfo.is32bit)
-    doneInst.io.enq.bits.res(2) := signExtendData(memData(1), metaInfo.size, metaInfo.isSigned, metaInfo.is32bit)
-    doneInst.io.enq.bits.rd(0).bits := metaInfo.rd.bits
-    doneInst.io.enq.bits.rd(1).bits := metaInfo.req(0).reg
-    doneInst.io.enq.bits.rd(2).bits := metaInfo.req(1).reg
-    doneInst.io.enq.bits.is32bit := metaInfo.is32bit
-    doneInst.io.enq.bits.tag := metaInfo.tag
-  }
 
   pipe.resp <> doneInst.io.deq
 
@@ -718,10 +706,8 @@ class MemoryUnit(
         assert(doneInst.io.enq.fire, "On normal access, instruction must be pushed to completed insts")
       }
     }
-    when(bypassCacheByException) {
-      when(cacheReqQ.io.deq.fire) {
-        assert(doneInst.io.enq.fire, "If exception, bypass directly to commit instruction")
-      }
+    when(cacheReqQ.io.deq.fire && cacheReqQ.io.deq.bits.exception) {
+      assert(doneInst.io.enq.fire, "If exception, bypass directly to commit instruction")
     }
 
     // --- Flush assertions ---
