@@ -450,8 +450,8 @@ class MemoryUnit(
   cacheReq.blockMisaligned := isBlockMisaligned(cacheReq.paddr(0), cacheReq.paddr(1))
   cacheReq.exception := mem_io.tlb.resp.bits.violation
   when(mem_io.tlb.resp.fire && sTLB_state =/= sTLB_intermediateResp) {
-    cacheReq.paddr(0) := mem_io.tlb.resp.bits.addr                            | tlb_resp_addr_pagebits_0
-    cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr + (1.U << tlbMeta.size)    | tlb_resp_addr_pagebits_1
+    cacheReq.paddr(0) := mem_io.tlb.resp.bits.addr | tlb_resp_addr_pagebits_0
+    cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr | tlb_resp_addr_pagebits_1
     when(isPairPageMisaligned(tlbMeta)) {
       cacheReq.paddr(0) := tlbPair_paddr1            | tlb_resp_addr_pagebits_0
       cacheReq.paddr(1) := mem_io.tlb.resp.bits.addr | tlb_resp_addr_pagebits_1
