@@ -603,20 +603,27 @@ class MemoryUnit(
     memData(1) := DontCare
   }
 
-  def signExtendData(bits: UInt, size: UInt, sign: Bool): UInt = {
+  def signExtendData(bits: UInt, size: UInt, sign: Bool, is32bit: Bool): UInt = {
     val bitsSExt: SInt = MuxLookup(size, bits.asSInt, Seq(
       SIZEB -> bits(7, 0).asSInt.pad(DATA_SZ),
       SIZEH -> bits(15, 0).asSInt.pad(DATA_SZ),
       SIZE32 -> bits(31, 0).asSInt.pad(DATA_SZ),
       SIZE64 -> bits.asSInt
       ))
+    val bitsSExt32b: SInt = MuxLookup(size, bits(31, 0).asSInt, Seq(
+      SIZEB -> bits(7, 0).asSInt.pad(32),
+      SIZEH -> bits(15, 0).asSInt.pad(32),
+      SIZE32 -> bits(31, 0).asSInt.pad(32),
+      SIZE64 -> bits(31, 0).asSInt
+    ))
+ 
     val bitsUExt: UInt = MuxLookup(size, bits, Seq(
       SIZEB -> bits(7, 0).pad(DATA_SZ),
       SIZEH -> bits(15, 0).pad(DATA_SZ),
       SIZE32 -> bits(31, 0).pad(DATA_SZ),
       SIZE64 -> bits
       ))
-    val res = WireInit(Mux(sign, bitsSExt.asUInt, bitsUExt))
+    val res = WireInit(Mux(sign, Mux(is32bit, bitsSExt32b.asUInt.pad(DATA_SZ), bitsSExt.asUInt), bitsUExt))
     res
   }
 
@@ -630,8 +637,8 @@ class MemoryUnit(
     doneInst.io.enq.bits.rd(1).valid := metaInfo.isLoad && metaInfo.req(0).reg =/= 31.U
     doneInst.io.enq.bits.rd(2).valid := metaInfo.isLoad && metaInfo.isPair && metaInfo.req(1).reg =/= 31.U
     doneInst.io.enq.bits.res(0) := metaInfo.rd_res
-    doneInst.io.enq.bits.res(1) := signExtendData(memData(0), metaInfo.size, metaInfo.isSigned)
-    doneInst.io.enq.bits.res(2) := signExtendData(memData(1), metaInfo.size, metaInfo.isSigned)
+    doneInst.io.enq.bits.res(1) := signExtendData(memData(0), metaInfo.size, metaInfo.isSigned, metaInfo.is32bit)
+    doneInst.io.enq.bits.res(2) := signExtendData(memData(1), metaInfo.size, metaInfo.isSigned, metaInfo.is32bit)
     doneInst.io.enq.bits.rd(0).bits := metaInfo.rd.bits
     doneInst.io.enq.bits.rd(1).bits := metaInfo.req(0).reg
     doneInst.io.enq.bits.rd(2).bits := metaInfo.req(1).reg
