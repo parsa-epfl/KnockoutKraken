@@ -362,7 +362,7 @@ TEST_CASE("load-xzr") {
 
     INFO("Push and start state");
     state.asid = asid;
-    transplantPushAndStart(&ctx, 0, &state);
+    transplantPushAndSinglestep(&ctx, 0, &state);
 
     INFO("Advance");
     advanceTicks(&ctx, 200);
@@ -374,6 +374,10 @@ TEST_CASE("load-xzr") {
 
     INFO("Check transplant");
     transplantGetState(&ctx, 0, &state);
+    INFO("Check exception")
+    REQUIRE(!FLAGS_GET_IS_EXCEPTION(state.flags));
+    INFO("Check !undef")
+    REQUIRE(!FLAGS_GET_IS_UNDEF(state.flags));
     INFO("Check address");
     REQUIRE(state.xregs[0] == addr);
     INFO("Check data not modified");
@@ -471,7 +475,7 @@ TEST_CASE("ldst-exception") {
     for(int iter = 0; iter < 3; iter++) {
       INFO("Push and start state");
       state.asid = asid;
-      transplantPushAndStart(&ctx, 0, &state);
+      transplantPushAndSinglestep(&ctx, 0, &state);
 
       INFO("Advance");
       advanceTicks(&ctx, 200);
@@ -479,14 +483,17 @@ TEST_CASE("ldst-exception") {
       INFO("Check now execution stopped");
       uint32_t pending_threads = 0;
       transplantPending(&ctx, &pending_threads);
-      assert(pending_threads);
+      REQUIRE(pending_threads);
 
       INFO("Check transplant");
       transplantGetState(&ctx, 0, &state);
+      INFO("Check !undef")
+      REQUIRE(!FLAGS_GET_IS_UNDEF(state.flags));
+      INFO("Check exception")
+      REQUIRE(FLAGS_GET_IS_EXCEPTION(state.flags));
       INFO("Check address");
-      assert(state.xregs[0] == vaddr);
+      REQUIRE(state.xregs[0] == vaddr);
       INFO("Check exception");
-      assert(FLAGS_GET_IS_EXCEPTION(state.flags));
       state.pc = 0;
     }
 
