@@ -38,8 +38,22 @@ static void select_sort_x_threads(size_t thidN, bool run_1024 = false) {
       dataPages[thread_idx][pe] = rand() % 128;
     }
   }
+
+  // 3.1 Small test: Whether the first page of the DRAM is zero?
+  uint8_t first_page[4096];
+  dramPagePull(&c, 0, first_page);
+
+  for(int i = 0; i < 4096; ++i){
+    if(first_page[i] != 0){
+      printf("Warning: detect a non-zero byte in the first page: byte at 0x%x, and its value is 0x%x \n", i, first_page[i]);
+    }
+    first_page[i] = 0;
+  }
+
+  // sync the page back
+  dramPagePush(&c, 9, first_page);
   
-  // 3. prepare the architecture state
+  // 3.2. prepare the architecture state
   DevteroflexArchState state[MAX_THREAD_COUNT];
   uint64_t data_page_pa[MAX_THREAD_COUNT] = {0};
   uint64_t data_page_va[MAX_THREAD_COUNT] = {0};
@@ -49,6 +63,8 @@ static void select_sort_x_threads(size_t thidN, bool run_1024 = false) {
     initArchState(&state[thid], 0);
     // this is changed, because the first 512bit of FPGA DRAM is not zero, even if it's reset???
     data_page_va[thid] = (4 * thid + 2) * PAGE_SIZE;
+    // avoid using the first 512 bits.
+    state[thid].asid = thid * 3 + 1;
     uint64_t pc = (4 * thid + 1) * PAGE_SIZE;
     data_page_pa[thid] = c.ppage_base_addr + (4 * thid + 2) * PAGE_SIZE;
     inst_page_pa[thid] = c.ppage_base_addr + (4 * thid + 1) * PAGE_SIZE;
@@ -57,7 +73,7 @@ static void select_sort_x_threads(size_t thidN, bool run_1024 = false) {
     printf("Dispatch thread %d \n", thid);
   }
   
-  // 5. Setup PME counters
+  // 4. Setup PME counters
   pmuStartCounting(&c);
 
   // handle the page fault. In theory, there should be 64 page faults.
