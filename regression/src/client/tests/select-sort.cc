@@ -194,8 +194,17 @@ TEST_CASE("select-sort-1024-elements-15-threads") {
 }
 
 TEST_CASE("select-sort-16-threads") {
-  // TODO: Fails
   select_sort_x_threads(16);
 }
 
-// TODO TEST_CASE("select-sort-32-threads")
+TEST_CASE("select-sort-1024-elements-16-threads") {
+  select_sort_x_threads(16, true);
+}
+
+TEST_CASE("select-sort-32-threads") {
+  select_sort_x_threads(32);
+}
+
+TEST_CASE("select-sort-1024-elements-32-threads") {
+  select_sort_x_threads(32, true);
+}
