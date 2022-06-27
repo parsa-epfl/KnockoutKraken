@@ -19,6 +19,13 @@ fpgaTests=(
   "check-dram-address"
 )
 
+memTests=(
+  "ldr-wback-addr"
+  "load-xzr"
+  "load-signed-byte-32-bit"
+  "ldst-exception"
+)
+
 transplantTests=(
   "check-flag-undef"
   "check-flag-transplant"
@@ -40,7 +47,6 @@ executionTests=(
   "out-of-page-bound-pair-load"
   "execute-instruction"
   "test-ldst-pair-all-sizes"
-  "ldr-wback-addr"
   "test-pressure-ldp-stp-short"
 )
 
@@ -48,8 +54,8 @@ microBenchTests=(
   "select-sort-1-threads"
   "select-sort-2-threads"
   "select-sort-15-threads"
+  "select-sort-16-threads"
 )
-# TODO "select-sort-16-threads"
 
 allTests=(
   "${fpgaTests[@]}"
@@ -57,6 +63,7 @@ allTests=(
   "${mmuTests[@]}"
   "${microBenchTests[@]}"
   "${executionTests[@]}"
+  "${fpgaTests}"
 )
 
 echo """
@@ -66,6 +73,7 @@ You can run these types of tests:
   mmuTests
   transplantTests
   fpgaTests
+  memTests
 """
 
 tests2run=()
@@ -79,6 +87,8 @@ elif [ "$1" ==  "transplantTests" ]; then
 tests2run+=("${transplantTests[@]}")
 elif [ "$1" ==  "fpgaTests" ]; then
 tests2run+=("${fpgaTests[@]}")
+elif [ "$1" ==  "memTests" ]; then
+tests2run+=("${memTests[@]}")
 else
 tests2run+=("${allTests[@]}")
 fi

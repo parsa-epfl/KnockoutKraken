@@ -55,6 +55,65 @@ class DecodeBitMasksUnitTest extends AnyFreeSpec with ChiselScalatestTester {
   }
 }
 
+class LogicALUUnitTest extends AnyFreeSpec with ChiselScalatestTester {
+  // Plan: Just print the iteration value and see the maximum period.
+  def logicALUPokeExpect(
+      dut: LogicALU,
+      inst: BigInt,
+      inA: BigInt,
+      inB: BigInt
+  ): Unit = {
+    val opcode = ((inst >> 29) & 0x3).toInt match {
+      case 0 => OP_AND
+      case 1 => OP_ORR
+      case 2 => OP_EOR
+      case 3 => OP_AND
+    }
+
+    val is32bit = ((inst >> 31) & 0x1) == 0
+    val res = opcode match {
+      case OP_AND => inA & inB
+      case OP_ORR => inA | inB
+      case OP_EOR => inA ^ inB
+    }
+
+    val resBitString = ExecuteModels.toBitString(res, 64)
+    val nzcvBools = if(is32bit) {
+      Seq(resBitString(31) == '1', BigInt(resBitString.reverse.drop(32).reverse, 2) == 0, false, false)
+    } else {
+      Seq(resBitString(63) == '1', res == 0, false, false)
+    }
+
+    val nzcvBits = nzcvBools.map {
+      case false => '0'
+      case true => '1'
+    }
+    val nzcv = BigInt(nzcvBits.mkString, 2)
+    println(is32bit.toString + "nzcvBits: " + nzcvBits.mkString + "nzcv" + nzcv)
+    
+    dut.io.is32bit.poke(is32bit.B)
+    dut.io.a.poke(inA.U)
+    dut.io.b.poke(inB.U)
+    dut.io.opcode.poke(opcode.U)
+    dut.clock.step(1)
+
+    dut.io.res.expect(res.U)
+    dut.io.nzcv.expect(nzcv.U)
+  }
+
+  val anno = Seq(
+    VerilatorBackendAnnotation,
+    TargetDirAnnotation("test/execute/LogicALU"),
+    WriteVcdAnnotation
+  )
+
+  "72000422:ands    w1, w2, #3" in {
+    test(new LogicALU).withAnnotations(anno) { dut =>
+      logicALUPokeExpect(dut, BigInt("72000422", 16), BigInt("0000000300000003", 16), BigInt("6ABCCD638373A7E4", 16))
+    }
+  }
+}
+
 class DataProcessingUnitTest extends AnyFreeSpec with ChiselScalatestTester {
   // Plan: Just print the iteration value and see the maximum period.
   def dataProcessingPokeExpect(
@@ -130,6 +189,7 @@ class DataProcessingUnitTest extends AnyFreeSpec with ChiselScalatestTester {
 
 object ExecuteModels {
   def toBigInt(binary: String, bitsize: Int) = BigInt(binary.padTo(bitsize, '0'), 2)
+  def toBitString(bits: BigInt, bitsize: Int) = bits.toString(2).reverse.padTo(bitsize, '0')
  
   def ROR(bits: BigInt, shift: Int, size: Int): BigInt = ((bits >> shift) | (bits << (size - shift)) & Ones(size))
 

@@ -318,14 +318,184 @@ TEST_CASE("ldr-wback-addr") {
     INFO("Check now execution stopped");
     uint32_t pending_threads = 0;
     transplantPending(&ctx, &pending_threads);
-    assert(pending_threads);
+    REQUIRE(pending_threads);
 
     INFO("Check transplant");
     transplantGetState(&ctx, 0, &state);
     INFO("Check address");
-    assert(state.xregs[0] == addr);
+    REQUIRE(state.xregs[0] == addr);
     INFO("Check data");
-    assert(state.xregs[8] == 0x11);
+    REQUIRE(state.xregs[8] == 0x11);
  
+    releaseFPGAContext(&ctx);
+}
+
+TEST_CASE("load-xzr") {
+    FPGAContext ctx;
+    DevteroflexArchState state;
+    REQUIRE(initFPGAContext(&ctx) == 0);
+    initArchState(&state, 0x0);
+    int asid = 0x10;
+
+    INFO("Load instruction")
+    int paddr = ctx.ppage_base_addr;
+    uint8_t page[PAGE_SIZE] = {0}; 
+    makeDeadbeefPage(page, PAGE_SIZE);
+    ((uint32_t *) page)[0] = 0xf940001f; // ldr     xzr, [x0]
+    ((uint32_t *) page)[1] = 0x0; // Trigger transplant
+    state.xregs[0] = 0x000FFFFFFFFF530;
+    state.xregs[31] = 0x000FFFFFFFFF530;
+    uint64_t addr = state.xregs[0];
+
+    MessageFPGA pf_reply;
+
+    INFO("Push instruction page");
+    dramPagePush(&ctx, paddr, page);
+    makeMissReply(INST_FETCH, -1, asid, state.pc, paddr, &pf_reply);
+    mmuMsgSend(&ctx, &pf_reply);
+
+    INFO("Push data page");
+    ((uint64_t *) page)[(addr & 0xFFF)/8] = 0x000FFFFFFFFF550;
+    dramPagePush(&ctx, paddr + PAGE_SIZE, page);
+    makeMissReply(DATA_LOAD, -1, asid, addr, paddr + PAGE_SIZE, &pf_reply);
+    mmuMsgSend(&ctx, &pf_reply);
+
+    INFO("Push and start state");
+    state.asid = asid;
+    transplantPushAndSinglestep(&ctx, 0, &state);
+
+    INFO("Advance");
+    advanceTicks(&ctx, 200);
+
+    INFO("Check now execution stopped");
+    uint32_t pending_threads = 0;
+    transplantPending(&ctx, &pending_threads);
+    REQUIRE(pending_threads);
+
+    INFO("Check transplant");
+    transplantGetState(&ctx, 0, &state);
+    INFO("Check exception")
+    REQUIRE(!FLAGS_GET_IS_EXCEPTION(state.flags));
+    INFO("Check !undef")
+    REQUIRE(!FLAGS_GET_IS_UNDEF(state.flags));
+    INFO("Check address");
+    REQUIRE(state.xregs[0] == addr);
+    INFO("Check data not modified");
+    REQUIRE(state.xregs[31] == 0x000FFFFFFFFF530);
+ 
+    releaseFPGAContext(&ctx);
+}
+
+TEST_CASE("load-signed-byte-32-bit") {
+    FPGAContext ctx;
+    DevteroflexArchState state;
+    REQUIRE(initFPGAContext(&ctx) == 0);
+    initArchState(&state, 0x0);
+    int asid = 0x10;
+
+    INFO("Load instruction")
+    int paddr = ctx.ppage_base_addr;
+    uint8_t page[PAGE_SIZE] = {0}; 
+    makeDeadbeefPage(page, PAGE_SIZE);
+    ((uint32_t *) page)[0] = 0x39c17c26; // ldr     w6, [x1, #0x5f]
+    ((uint32_t *) page)[1] = 0x0; // Trigger transplant
+    state.xregs[6] = 0xDEADBEEFDEADBEEF;
+    state.xregs[1] = 0x00000000000ABC00;
+    uint64_t addr = state.xregs[1] + 0x5f;
+
+    MessageFPGA pf_reply;
+
+    INFO("Push instruction page");
+    dramPagePush(&ctx, paddr, page);
+    makeMissReply(INST_FETCH, -1, asid, state.pc, paddr, &pf_reply);
+    mmuMsgSend(&ctx, &pf_reply);
+
+    INFO("Push data page");
+    ((uint8_t *) page)[(addr & 0xFFF)] = 0xFF;
+    dramPagePush(&ctx, paddr + PAGE_SIZE, page);
+    makeMissReply(DATA_LOAD, -1, asid, addr, paddr + PAGE_SIZE, &pf_reply);
+    mmuMsgSend(&ctx, &pf_reply);
+
+    INFO("Push and start state");
+    state.asid = asid;
+    transplantPushAndSinglestep(&ctx, 0, &state);
+
+    INFO("Advance");
+    advanceTicks(&ctx, 200);
+
+    INFO("Check now execution stopped");
+    uint32_t pending_threads = 0;
+    transplantPending(&ctx, &pending_threads);
+    REQUIRE(pending_threads);
+
+    INFO("Check transplant");
+    transplantGetState(&ctx, 0, &state);
+    INFO("Check exception")
+    REQUIRE(!FLAGS_GET_IS_EXCEPTION(state.flags));
+    INFO("Check !undef")
+    REQUIRE(!FLAGS_GET_IS_UNDEF(state.flags));
+    INFO("Check address");
+    REQUIRE(state.xregs[1] == 0x00000000000ABC00);
+    INFO("Check data read right");
+    REQUIRE(state.xregs[6] == 0x00000000FFFFFFFF);
+ 
+    releaseFPGAContext(&ctx);
+}
+
+TEST_CASE("ldst-exception") {
+    FPGAContext ctx;
+    DevteroflexArchState state;
+    REQUIRE(initFPGAContext(&ctx) == 0);
+    initArchState(&state, 0x0);
+    int asid = 0x10;
+
+    INFO("Load instruction")
+    int paddr = ctx.ppage_base_addr;
+    uint8_t page[PAGE_SIZE] = {0}; 
+    makeDeadbeefPage(page, PAGE_SIZE);
+    ((uint32_t *) page)[0] = 0xF900001F; // str     xzr, [x0]
+    ((uint32_t *) page)[1] = 0x0;        // Trigger transplant
+    uint64_t vaddr = 0x000000ABCD040;
+    state.xregs[0] = vaddr;
+    state.xregs[31] = 0xABCDABCDABCDABC;
+
+    MessageFPGA pf_reply;
+
+    INFO("Push instruction page");
+    dramPagePush(&ctx, paddr, page);
+    makeMissReply(INST_FETCH, -1, asid, state.pc, paddr, &pf_reply);
+    mmuMsgSend(&ctx, &pf_reply);
+
+    INFO("Push data page");
+    ((uint64_t *) page)[(vaddr & 0xFFF)/8] = 0xB00B5B00B5B0A00;
+    dramPagePush(&ctx, paddr + PAGE_SIZE, page);
+    makeMissReply(DATA_LOAD, -1, asid, vaddr, paddr + PAGE_SIZE, &pf_reply);
+    mmuMsgSend(&ctx, &pf_reply);
+
+    for(int iter = 0; iter < 3; iter++) {
+      INFO("Push and start state");
+      state.asid = asid;
+      transplantPushAndSinglestep(&ctx, 0, &state);
+
+      INFO("Advance");
+      advanceTicks(&ctx, 200);
+
+      INFO("Check now execution stopped");
+      uint32_t pending_threads = 0;
+      transplantPending(&ctx, &pending_threads);
+      REQUIRE(pending_threads);
+
+      INFO("Check transplant");
+      transplantGetState(&ctx, 0, &state);
+      INFO("Check !undef")
+      REQUIRE(!FLAGS_GET_IS_UNDEF(state.flags));
+      INFO("Check exception")
+      REQUIRE(FLAGS_GET_IS_EXCEPTION(state.flags));
+      INFO("Check address");
+      REQUIRE(state.xregs[0] == vaddr);
+      INFO("Check exception");
+      state.pc = 0;
+    }
+
     releaseFPGAContext(&ctx);
 }

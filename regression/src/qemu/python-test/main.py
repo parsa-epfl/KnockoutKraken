@@ -2,10 +2,10 @@
 
 import os
 
-with open("stupid.py") as f:
+with open("python-test/stupid.py") as f:
   l = f.read()
 
 eval(l)
 
-for x in os.listdir("."):
+for x in os.listdir("python-test"):
   print("{} -> {}".format(len(x), x))

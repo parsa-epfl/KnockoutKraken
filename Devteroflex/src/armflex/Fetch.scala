@@ -89,6 +89,8 @@ class FetchUnit(
   // Make sure receiver has enough entries left
   private val pc2cache_credits = Module(new CreditQueueController(cacheReqQ_entries))
   private val cache2insts_credits = Module(new CreditQueueController(instQueue_entries))
+  // Flush Request 
+  private val flushController = Module(new PipeCache.CacheFlushingController)
 
   pcUnit.ctrl <> ctrl_i
 
@@ -120,7 +122,7 @@ class FetchUnit(
   pcUnit.req.ready := false.B
   mem_io.tlb.resp.ready := true.B // Managed by credits, always ready to receive
   cacheReqQ.io.enq.valid := false.B
-  mem_io.tlb.req.handshake(pcUnit.req, pc2cache_credits.ready)
+  mem_io.tlb.req.handshake(pcUnit.req, pc2cache_credits.ready && !flushController.ctrl.stopTransactions)
   when(mem_io.tlb.resp.valid && mem_io.tlb.resp.bits.hit) {
     cacheReqQ.io.enq.handshake(mem_io.tlb.resp)
   }
@@ -140,7 +142,7 @@ class FetchUnit(
   cacheAdaptor.pipe_io.req.meta := cacheReqQ.io.deq.bits.meta
   cacheAdaptor.pipe_io.req.port.bits.addr := cacheReqQ.io.deq.bits.paddr
   cacheAdaptor.pipe_io.req.port.bits.data := DontCare
-  cacheAdaptor.pipe_io.req.port.bits.w_en := false.B
+  cacheAdaptor.pipe_io.req.port.bits.w_en := 0.U
   mem_io.cache <> cacheAdaptor.cache_io
 
 
@@ -172,17 +174,8 @@ class FetchUnit(
   // Next stage
   instQ_o <> instQueue.io.deq
 
-  // -----------------------------------------
-  // -------------- Flush Request ------------
-  // -----------------------------------------
-  private val flushController = Module(new PipeCache.CacheFlushingController)
   private val haveCacheReq = WireInit(cacheReqQ.io.deq.valid)
   private val havePendingCacheReq = WireInit(cacheAdaptor.pending =/= 0.U)
-  when(flushController.ctrl.stopTransactions){
-    pcUnit.req.ready := false.B
-    mem_io.tlb.req.valid := false.B
-  }
-
   flushController.ctrl.hasPendingWork := haveCacheReq || havePendingCacheReq
 
   mmu_io <> flushController.mmu_io
@@ -244,6 +237,12 @@ class FetchUnit(
     when(mem_io.cache.resp.fire) {
       printf(p"${location}:iCache:Resp:thid[${cacheAdaptor.pipe_io.resp.meta.id}]:PC[0x${Hexadecimal(cacheAdaptor.pipe_io.resp.meta.pc)}]:\n" +
              p"   Hit[${mem_io.cache.resp.bits.hit}]") // :DATA[0x${Hexadecimal(mem_io.cache.resp.bits.data.asUInt)}]\n");
+    }
+  }
+
+  if(true) { // TODO Conditional asserts
+    when(mem_io.cache.resp.valid) {
+      assert(mem_io.cache.resp.ready, "Cache does not support backpressure, must ensure always to be ready through credits")
     }
   }
 }
