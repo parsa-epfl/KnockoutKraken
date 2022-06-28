@@ -27,7 +27,7 @@ static int test_stress_memory(
   INFO("- Init state")
   REQUIRE(thidN <= 32);
   DevteroflexArchState fetchedState;
-  uint32_t threadsMask = ((uint64_t) 1 <<  thidN) - 1;
+  uint32_t threadsMask = (1ULL << thidN) - 1;
   uint8_t page[PAGE_SIZE] = {0};
   uint8_t deadbeefedPage[PAGE_SIZE] = {0};
   uint64_t pc = 0x3000, vaddr_ld = 0x1000000, vaddr_st = 0xF000000;

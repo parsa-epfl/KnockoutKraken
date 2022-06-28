@@ -113,7 +113,7 @@ int initFPGAContext(FPGAContext *c) {
 
   // reset the DRAM page table
   uint8_t zero_page[4096] = {0};
-  for(int ppn = 0; ppn < (c->ppage_base_addr) / 4096; ++ppn){
+  for(uint64_t ppn = 0; ppn < (c->ppage_base_addr) / 4096; ++ppn){
     writeAXI(c, ppn << 12, zero_page, 4096);
   }
 

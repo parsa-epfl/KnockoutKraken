@@ -39,7 +39,7 @@ TEST_CASE("host-cmd-stop-cpu") {
     INFO("Check transplants");
     uint32_t pending_threads;
     transplantPending(&ctx, &pending_threads);
-    assert(!pending_threads);
+    REQUIRE(!pending_threads);
  
     INFO("Advance");
     advanceTicks(&ctx, 100);
@@ -52,7 +52,7 @@ TEST_CASE("host-cmd-stop-cpu") {
  
     INFO("Check now execution stopped");
     transplantPending(&ctx, &pending_threads);
-    assert(pending_threads);
+    REQUIRE(pending_threads);
  
     releaseFPGAContext(&ctx);
 }
@@ -81,7 +81,7 @@ TEST_CASE("host-cmd-force-transplant") {
     INFO("Check transplants");
     uint32_t pending_threads;
     transplantPending(&ctx, &pending_threads);
-    assert(!pending_threads);
+    REQUIRE(!pending_threads);
  
     INFO("Advance");
     advanceTicks(&ctx, 100);
@@ -94,11 +94,11 @@ TEST_CASE("host-cmd-force-transplant") {
  
     INFO("Check now execution stopped");
     transplantPending(&ctx, &pending_threads);
-    assert(pending_threads);
+    REQUIRE(pending_threads);
 
     INFO("Check flag")
     transplantGetState(&ctx, 0, &state);
-    assert(FLAGS_GET_IS_EXCEPTION(state.flags));
+    REQUIRE(FLAGS_GET_IS_EXCEPTION(state.flags));
  
     releaseFPGAContext(&ctx);
 }
@@ -136,25 +136,25 @@ TEST_CASE("host-cmd-singlestep") {
     INFO("Check now execution stopped");
     uint32_t pending_threads;
     transplantPending(&ctx, &pending_threads);
-    assert(pending_threads & 0b11);
+    REQUIRE(pending_threads & 0b11);
 
     INFO("Check state 0");
     transplantGetState(&ctx, 0, &state);
-    assert(state.xregs[2] = state.xregs[0] + state.xregs[1]);
-    assert(state.xregs[2] = state.xregs[0] + state.xregs[1]);
+    REQUIRE(state.xregs[2] == state.xregs[0] + state.xregs[1]);
+    REQUIRE(state.xregs[2] == state.xregs[0] + state.xregs[1]);
     INFO("Check icount 0");
-    assert(state.icount == 1);
-    assert(state.icountExecuted == 1);
+    REQUIRE(state.icount == 1);
+    REQUIRE(state.icountExecuted == 1);
     INFO("Check state 1");
     transplantGetState(&ctx, 1, &state);
-    assert(state.xregs[2] = state.xregs[0] + state.xregs[1]);
-    assert(state.xregs[2] = state.xregs[0] + state.xregs[1]);
+    REQUIRE(state.xregs[2] == state.xregs[0] + state.xregs[1]);
+    REQUIRE(state.xregs[2] == state.xregs[0] + state.xregs[1]);
     INFO("Check icount 1");
-    assert(state.icount == 1);
-    assert(state.icountExecuted == 1);
+    REQUIRE(state.icount == 1);
+    REQUIRE(state.icountExecuted == 1);
 
     transplantPending(&ctx, &pending_threads);
-    assert(pending_threads == 0);
+    REQUIRE(pending_threads == 0);
  
     releaseFPGAContext(&ctx);
 }
@@ -193,15 +193,15 @@ TEST_CASE("check-flag-undef") {
     INFO("Check now execution stopped");
     uint32_t pending_threads = 0;
     transplantPending(&ctx, &pending_threads);
-    assert(pending_threads);
+    REQUIRE(pending_threads);
 
     INFO("Check transplant");
     transplantGetState(&ctx, 0, &state);
     printf("flags: %lx\n", state.flags);
-    assert(FLAGS_GET_IS_UNDEF(state.flags));
+    REQUIRE(FLAGS_GET_IS_UNDEF(state.flags));
     INFO("Check icount");
-    assert(state.icount == 1);
-    assert(state.icountExecuted == 1);
+    REQUIRE(state.icount == 1);
+    REQUIRE(state.icountExecuted == 1);
  
     releaseFPGAContext(&ctx);
 }
@@ -240,15 +240,15 @@ TEST_CASE("check-flag-transplant") {
     INFO("Check now execution stopped");
     uint32_t pending_threads = 0;
     transplantPending(&ctx, &pending_threads);
-    assert(pending_threads);
+    REQUIRE(pending_threads);
 
     INFO("Check transplant");
     transplantGetState(&ctx, 0, &state);
     printf("flags: %lx\n", state.flags);
-    assert(FLAGS_GET_IS_EXCEPTION(state.flags));
+    REQUIRE(FLAGS_GET_IS_EXCEPTION(state.flags));
     INFO("Check icount");
-    assert(state.icountExecuted == 0);
-    assert(state.icount == 0);
+    REQUIRE(state.icountExecuted == 0);
+    REQUIRE(state.icount == 0);
  
     releaseFPGAContext(&ctx);
 }
@@ -273,42 +273,39 @@ TEST_CASE("check-icount-budget") {
     makeMissReply(INST_FETCH, -1, asid, state.pc, paddr, &pf_reply);
     mmuMsgSend(&ctx, &pf_reply);
 
-    INFO("Push state");
-    state.icountBudget = 100;
-    state.asid = asid;
-    transplantPushAndWait(&ctx, 0, &state);
+    for(int i = 0; i < 3; i++) {
+        INFO("Push state");
+        state.icountBudget = 100;
+        state.icountExecuted = 0;
+        state.asid = asid;
+        transplantPushAndStart(&ctx, 0, &state);
 
-    INFO("Advance");
-    advanceTicks(&ctx, 100);
+        INFO("Advance");
+        advanceTicks(&ctx, 100);
 
-    INFO("Start Execution");
-    transplantStart(&ctx, 0);
-
-    INFO("Advance");
-    advanceTicks(&ctx, 100);
-
-    INFO("Check transplants");
-    uint32_t pending_threads;
-    transplantPending(&ctx, &pending_threads);
-    assert(!pending_threads);
+        INFO("Check transplants");
+        uint32_t pending_threads;
+        transplantPending(&ctx, &pending_threads);
+        REQUIRE(!pending_threads);
  
-    INFO("Advance");
-    advanceTicks(&ctx, 2000);
+        INFO("Advance");
+        advanceTicks(&ctx, 2000);
  
-    INFO("Check now execution stopped");
-    transplantPending(&ctx, &pending_threads);
-    assert(pending_threads);
+        INFO("Check now execution stopped");
+        transplantPending(&ctx, &pending_threads);
+        REQUIRE(pending_threads);
 
-    INFO("Check transplant");
-    transplantGetState(&ctx, 0, &state);
-    printf("flags: %lx\n", state.flags);
+        INFO("Check transplant");
+        transplantGetState(&ctx, 0, &state);
+        printf("flags: %lx\n", state.flags);
 
-    INFO("Check icount depletion");
-    assert(FLAGS_GET_IS_ICOUNT_DEPLETED(state.flags));
+        INFO("Check icount depletion");
+        REQUIRE(FLAGS_GET_IS_ICOUNT_DEPLETED(state.flags));
     
-    INFO("Check icount");
-    assert(state.icount == 100);
-    assert(state.icountExecuted == 100);
- 
+        INFO("Check icount");
+        REQUIRE(state.icount == (i + 1)*100);
+        REQUIRE(state.icountExecuted == 100);
+    }
+    
     releaseFPGAContext(&ctx);
 }

@@ -156,8 +156,8 @@ object DEC_LITS {
   val OP_STP32 = SIZE32
   val OP_STP64 = SIZE64
   val OP_LDP32 = SIZE32 + isLoad
+  val OP_LDPSW = SIZE32 + isLoad + isSigned
   val OP_LDP64 = SIZE64 + isLoad
-  val OP_LDPSW = SIZE64 + isLoad + isSigned
 
   // Instruction Types for scala
   val TYPE_W = 5
