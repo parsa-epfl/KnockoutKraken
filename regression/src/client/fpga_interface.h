@@ -8,8 +8,8 @@
 #include <stdbool.h>
 
 #define PAGE_SIZE (4096LLU)
-#define GET_PAGE_MASK(addr) (addr & ~(PAGE_SIZE-1))
-#define GET_PPN_FROM_PADDR(addr) (addr >> 12) // log2(4096)
+#define GET_PAGE_MASK(addr) ((uint64_t) addr & ~(PAGE_SIZE-1))
+#define GET_PPN_FROM_PADDR(addr) ((uint64_t) addr >> 12LU) // log2(4096)
 
 /**
  * @file This file defines the software messages for FPGA communication.

@@ -25,6 +25,7 @@ add_executable(
   src/client/tests/transplants.cc
   src/client/tests/memory-ordering.cc
   src/client/tests/select-sort.cc
+  src/client/tests/mmu.cc
 )
 
 add_executable(
