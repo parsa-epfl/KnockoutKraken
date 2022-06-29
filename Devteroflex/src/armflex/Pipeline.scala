@@ -51,9 +51,9 @@ class Pipeline(params: PipelineParams) extends Module {
   val fetch = Module(new FetchUnit(params))
   // Decode
   val decoder = Module(new DecodeUnit)
-  val decReg = Module(new FlushReg(params.thidT, new DInst))
+  val decReg = Module(new Queue(new Tagged(params.thidT, new DInst), 1, true, false))
   // Issue
-  val issuer = Module(new FlushReg(params.thidT, new DInst))
+  val issuer = Module(new Queue(new Tagged(params.thidT, new DInst), 1, true, false))
   // |         |        |            |
   // | Execute |        |            |
   // |         | Branch |            |
@@ -90,27 +90,27 @@ class Pipeline(params: PipelineParams) extends Module {
 
   // --- Fetch Inst -> Decode ---
   decoder.inst := fetch.instQ_o.bits.data
-  decReg.io.enq.bits := decoder.dinst
-  decReg.io.enq.tag := fetch.instQ_o.bits.tag
+  decReg.io.enq.bits.data := decoder.dinst
+  decReg.io.enq.bits.tag := fetch.instQ_o.bits.tag
   decReg.io.enq.handshake(fetch.instQ_o)
 
   // --- Decode -> Issue ---
   // Read from RFile, 1 cycle delay
-  archstate.issue.sel.tag := decReg.io.deq.tag
+  archstate.issue.sel.tag := decReg.io.deq.bits.tag
   archstate.issue.sel.valid := decReg.io.deq.fire
-  archstate.issue.rd.tag := decReg.io.deq.tag
-  archstate.issue.rd.port(0).addr := decReg.io.deq.bits.rs1
-  archstate.issue.rd.port(1).addr := decReg.io.deq.bits.rs2
-  archstate.issue.rd.port(2).addr := decReg.io.deq.bits.rd.bits
+  archstate.issue.rd.tag := decReg.io.deq.bits.tag
+  archstate.issue.rd.port(0).addr := decReg.io.deq.bits.data.rs1
+  archstate.issue.rd.port(1).addr := decReg.io.deq.bits.data.rs2
+  archstate.issue.rd.port(2).addr := decReg.io.deq.bits.data.rd.bits
   issuer.io.enq <> decReg.io.deq // Issue is always ready, so no check for archstate.issue.ready necessary
   // connect rfile read(address) interface
-  when(decReg.io.deq.bits.itype === I_DP3S) {
-    archstate.issue.rd.port(2).addr := decReg.io.deq.bits.imm(4, 0)
+  when(decReg.io.deq.bits.data.itype === I_DP3S) {
+    archstate.issue.rd.port(2).addr := decReg.io.deq.bits.data.imm(4, 0)
   }
 
   // Issue ---------------------------
   // Execute : Issue -> Execute
-  val issued_dinst = WireInit(issuer.io.deq.bits)
+  val issued_dinst = WireInit(issuer.io.deq.bits.data)
 
   // Execute ---------------------------
   // Read register data from rfile
@@ -154,7 +154,7 @@ class Pipeline(params: PipelineParams) extends Module {
 
   // ------ Pack Execute/LDST result
   memUnit.pipe.req.bits.:=(ldstU.io.minst.bits) // Enforce := method of MInstTag
-  memUnit.pipe.req.bits.tag := issuer.io.deq.tag
+  memUnit.pipe.req.bits.tag := issuer.io.deq.bits.tag
   memUnit.mem_io <> mem_io.data
   memUnit.mmu_io <> mmu_io.data
 
@@ -199,7 +199,7 @@ class Pipeline(params: PipelineParams) extends Module {
   commitNext.undef := !issued_dinst.inst32.valid
   commitNext.inst := issued_dinst.inst32.bits
   commitNext.is32bit := issued_dinst.is32bit
-  commitNext.tag := issuer.io.deq.tag
+  commitNext.tag := issuer.io.deq.bits.tag
 
   // Memory Resp
 
@@ -235,14 +235,10 @@ class Pipeline(params: PipelineParams) extends Module {
   }.otherwise {
     transplantIO.done.valid := commitU.commit.transplant.valid || (commitU.commit.archstate.fire && commitU.commit.archstate.icountLastInst)
   }
-
-  // Flushing ----------------------------------------------------------------
-  // No speculative state is kept in the pipeline in current version
-  // The Flush signal is no longer needed
-  decReg.io.flush.valid := false.B
-  issuer.io.flush.valid := false.B
-  decReg.io.flush.tag := DontCare
-  issuer.io.flush.tag := DontCare
+  // ------ Sanity checks ------
+  val currRunning = RegInit(VecInit(Seq.fill(params.thidN)(false.B)))
+  when(fetch.instQ_o.fire) {
+  }
 
   // Instrumentation Interface -----------------------------------------------
   val instrument = IO(new Bundle {
@@ -260,7 +256,7 @@ class Pipeline(params: PipelineParams) extends Module {
     })
   })
   dbg.issue.valid := issuer.io.deq.fire
-  dbg.issue.thread := issuer.io.deq.tag
+  dbg.issue.thread := issuer.io.deq.bits.tag
   dbg.issue.mem := ldstU.io.minst.valid
   dbg.issue.transplant := commitU.enq.bits.exceptions.valid || commitU.enq.bits.undef
 
@@ -271,7 +267,7 @@ class Pipeline(params: PipelineParams) extends Module {
       assert(commitU.enq.fire || memUnit.pipe.req.fire, "In case of Issue fire, either the MemUnit or the commit queue must receive the transaction")
       assert(!((commitU.enq.fire && !memUnit.pipe.resp.fire) && memUnit.pipe.req.fire), "Both the MemUnit and commit queue can't receive the transaction at the same time")
       when(commitU.commit.commited.valid) { 
-        assert(issuer.io.deq.tag =/= commitU.commit.commited.tag, "Instructions from the same context can't be present in two stages concurrently")
+        assert(issuer.io.deq.bits.tag =/= commitU.commit.commited.tag, "Instructions from the same context can't be present in two stages concurrently")
       }
     }
     when(commitU.enq.fire) {
