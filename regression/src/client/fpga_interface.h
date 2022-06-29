@@ -205,6 +205,8 @@ int pmuReadCycleCounters(const FPGAContext *c, int index, uint16_t counters[16])
 #define TRANS_REG_OFFST_STOP_CPU         (0x4 * 2)
 #define TRANS_REG_OFFST_FORCE_TRANSPLANT (0x4 * 3)
 #define TRANS_REG_OFFST_WAITING          (0x4 * 4)
+#define TRANS_REG_OFFST_RUNNING          (0x4 * 5)
+#define TRANS_REG_OFFST_WAIT_STOP        (0x4 * 6)
 #define TRANS_STATE_SIZE_BYTES      (320)   // 5 512-bit blocks; State fits in this amount of bytes
 #define TRANS_STATE_THID_MAX_BYTES  (512)   // 8 512-bit blocks; max bytes allocated per thread
 #define TRANS_STATE_THID_MAX_REGS   (512/8) // 64 64-bit words: total regs allocated per thread
@@ -218,6 +220,9 @@ int transplantWaitTillPending(const FPGAContext *c, uint32_t *pending_threads);
 int transplantStart(const FPGAContext *c, uint32_t thid);
 int transplantStopCPU(const FPGAContext *c, uint32_t thid);
 int transplantForceTransplant(const FPGAContext *c, uint32_t thid);
+int transplantCheckRunning(const FPGAContext *c, uint32_t *running_threads);
+int transplantCheckWaitStop(const FPGAContext *c, uint32_t *waitStop_threads);
+
 
 #ifndef MemoryAccessType
 // See cpu.h to match MMUAccessType

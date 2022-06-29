@@ -99,6 +99,15 @@ int transplantForceTransplant(const FPGAContext *c, uint32_t thid) {
   return writeAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRANS_REG_OFFST_FORCE_TRANSPLANT, 1 << thid);
 }
 
+int transplantCheckRunning(const FPGAContext *c, uint32_t *running_threads) {
+  *running_threads = 0;
+  return readAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRANS_REG_OFFST_RUNNING, running_threads);
+}
+
+int transplantCheckWaitStop(const FPGAContext *c, uint32_t *waitStop_threads) {
+  *waitStop_threads = 0;
+  return readAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRANS_REG_OFFST_WAIT_STOP, waitStop_threads);
+}
 
 /**
  * @brief Check whether there is a MMU message waiting for processing.

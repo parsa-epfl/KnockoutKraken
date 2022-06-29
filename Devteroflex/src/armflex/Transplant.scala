@@ -11,6 +11,8 @@ import armflex.PStateConsts._
 import antmicro.Bus.AXI4
 import antmicro.CSR._
 
+import chisel3.experimental.{prefix, noPrefix}
+
 object TransplantIO extends Bundle {
   class Trans2CPU(val thidN: Int) extends Bundle { // Push state back to CPU
     val thid = Output(UInt(log2Ceil(thidN).W))
@@ -44,6 +46,11 @@ object TransplantIO extends Bundle {
     val stallPipeline = Output(Bool())
     val busyCpu2Trans = Output(Bool())
   }
+
+  class TransplantStatus(thidN: Int) extends Bundle {
+    val runningThreads = Output(UInt(thidN.W))
+  }
+
   class Mem2Trans(val thidN: Int) extends Bundle {
     val instFault = Input(ValidTag(thidN))
     val dataFault = Input(ValidTag(thidN))
@@ -58,7 +65,9 @@ object TransplantConsts {
   val TRANS_REG_OFFST_STOP_CPU         = (2)
   val TRANS_REG_OFFST_FORCE_TRANSPLANT = (3)
   val TRANS_REG_OFFST_WAITING          = (4)
-  val TRANS_REG_TOTAL_REGS             = (5)
+  val TRANS_REG_OFFST_RUNNING          = (5)
+  val TRANS_REG_OFFST_WAIT_STOP        = (6)
+  val TRANS_REG_TOTAL_REGS             = (7)
 }
 
 import armflex.TransplantConsts._
@@ -75,6 +84,8 @@ class TransplantUnit(thidN: Int) extends Module {
   cpu2trans <> uCpu2TransBRAM.cpu2trans
   trans2cpu <> uCpu2TransBRAM.trans2cpu
 
+  val status = IO(uCpu2TransBRAM.status.cloneType)
+  status <> uCpu2TransBRAM.status
   val S_AXI = IO(Flipped(uTransBram2HostUnit.S_AXI.cloneType))
   S_AXI <> uTransBram2HostUnit.S_AXI
 }
@@ -85,6 +96,8 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
 
   val transBram2Cpu = IO(Flipped(new TransBram2HostUnitIO.TransBRAM2CpuIO(thidN)))
 
+  val status = IO(new TransplantIO.TransplantStatus(thidN))
+
   // Wait, in this case, at most 32 threads is supported?
   assert(thidN <= 32)
   val uCSR = Module(new CSR(32, TRANS_REG_TOTAL_REGS))
@@ -94,21 +107,19 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
   val cpuDoneMask = WireInit(Mux(cpu2trans.doneCPU.valid, 1.U << cpu2trans.doneCPU.bits, 0.U))
 
   // uCSR[0]: Check whether a thread has its state in the TBRAM and requiring a transplant back.
-  val (rTrans2HostPending, setTrans2Host, clearTrans2Host) = SetClearReg(thidN)
+  val (rTrans2HostPending, setTrans2Host, clearTrans2Host) = prefix("Trans2HostPending")(SetClearReg(thidN))
   StatusCSR(rTrans2HostPending, uCSR.io.csr(TRANS_REG_OFFST_PENDING), thidN)
   clearTrans2Host := transBram2Cpu.ctrl.clearTrans2Host
 
   // uCSR[1]: Set to trigger an unpack of the architecture state to the pipeline (BRAM to CPU) and restart the thread.
-  val (rTrans2CpuPending, setTrans2Cpu, clearTrans2Cpu) = SetClearReg(thidN)
+  val (rTrans2CpuPending, setTrans2Cpu, clearTrans2Cpu) = prefix("Trans2CpuPending")(SetClearReg(thidN))
   setTrans2Cpu := transBram2Cpu.ctrl.setTrans2Cpu
 
   // uCSR[2]: Stop executing the CPU after next instruction
-  val (rStopCPURequest, setStopCpu, clearStopCpu) = SetClearReg(thidN)
-  // Register was changed to read only as now PStateFlags contains execution mode
-  StatusCSR(rStopCPURequest, uCSR.io.csr(TRANS_REG_OFFST_STOP_CPU), thidN)
+  val (rStopCPURequest, setStopCpu, clearStopCpu) = prefix("StopCPURequest")(SetClearReg(thidN))
   val setStopCpuHost = PulseCSR(uCSR.io.csr(TRANS_REG_OFFST_STOP_CPU), thidN)
   val setStopCpuTrans = WireInit(setStopCpu.cloneType, 0.U)
-  setStopCpu := setStopCpuHost | setStopCpuTrans
+  setStopCpu := setStopCpuTrans | setStopCpuHost 
   clearStopCpu := cpuDoneMask
   cpu2trans.stopCPU := rStopCPURequest
 
@@ -117,7 +128,7 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
   cpu2trans.forceTransplant := setCpu2TransHostForce
 
   // Pending transplants from Cpu2Trans
-  private val (rCpu2TransPending, setCpu2Trans, clearCpu2Trans) = SetClearReg(thidN)
+  private val (rCpu2TransPending, setCpu2Trans, clearCpu2Trans) = prefix("Cpu2TransPending")(SetClearReg(thidN))
   // All possible sources that trigger packing a state.
   private val setCpu2TransCpuDone = cpuDoneMask
   setCpu2Trans := setCpu2TransCpuDone | setCpu2TransHostForce
@@ -127,9 +138,19 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
   private val startSend = WireInit(false.B)
   private val startingFromWaiting = WireInit(false.B)
   // uCSR[4]: Transplant waiting for start signal
-  val (rStartingCpu, setStartingCpu, clearStartingCpu) = SetClearReg(thidN)
-  val (rWaitStartCpu, setWaitStartCpu, clearWaitStartCpu) = SetClearReg(thidN)
+  val (rStartingCpu, setStartingCpu, clearStartingCpu) = prefix("StartingCpu")(SetClearReg(thidN))
+  val (rWaitStartCpu, setWaitStartCpu, clearWaitStartCpu) = prefix("WaitStartCpu")(SetClearReg(thidN))
   StatusCSR(rWaitStartCpu, uCSR.io.csr(TRANS_REG_OFFST_WAITING), thidN)
+
+  // uCSR[5]: Threads are present in the FPGA
+  private val (rRunning, setRunning, clearRunning) = prefix("Running")(SetClearReg(thidN))
+  StatusCSR(rRunning, uCSR.io.csr(TRANS_REG_OFFST_RUNNING), thidN)
+  setRunning := startSend.asUInt << startThread
+  clearRunning := setCpu2TransCpuDone
+
+  // uCSR[6]: Threads that have the stop flag raised
+  StatusCSR(rStopCPURequest, uCSR.io.csr(TRANS_REG_OFFST_WAIT_STOP), thidN)
+ 
   // uCSR[0]: Start a waiting thread
   setStartingCpu := PulseCSR(uCSR.io.csr(TRANS_REG_OFFST_START), thidN) & rWaitStartCpu // It must be waiting to be started by host
 
@@ -174,7 +195,7 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
         rSyncState := sTSyncingB2CXReg
         rCurrentSyncReg := 0.U
         rSyncThread := PriorityEncoder(rTrans2CpuPending)
-      }.elsewhen(rCpu2TransPending =/= 0.U){
+      }.elsewhen(rCpu2TransPending =/= 0.U) {
         // Skip reading registers as register are already available in BRAM
         rSyncState := sTSyncingC2BPState
         rCurrentSyncReg := 0.U
@@ -204,7 +225,9 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
 
     // ---- C2B -----
     is(sTSyncingC2BPState) { 
-      rSyncState := sTDoneC2B
+      when(transBram2Cpu.wr.pstate.req.fire) {
+        rSyncState := sTDoneC2B
+      }
     }
 
     is(sTDoneC2B) {
@@ -262,6 +285,8 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
   trans2cpu.start.bits := startThread
   trans2cpu.start.valid := startSend
 
+  status.runningThreads := rRunning
+
   if (true) { // TODO Conditional assertions
     when(rSyncState === sTSyncingB2CXReg) {
       assert(transBram2Cpu.rd.xreg.req.ready, "BRAM must be ready to receive transactions when interacting with it: pushing XRegs")
@@ -269,8 +294,8 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
     when(rSyncState === sTSyncingB2CPState) {
       assert(transBram2Cpu.rd.pstate.req.ready, "BRAM must be ready to receive transactions when interacting with it: pushing PState")
     }
-    when(rSyncState === sTSyncingC2BPState) {
-      assert(transBram2Cpu.wr.pstate.req.ready, "BRAM must be ready to receive transactions when interacting with it: pulling PState")
+    when(transBram2Cpu.wr.pstate.req.fire) {
+      assert(rSyncState === sTSyncingC2BPState, "BRAM must be ready to receive transactions when interacting with it: pulling PState")
     }
   }
 }

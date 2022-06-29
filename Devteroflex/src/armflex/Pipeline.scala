@@ -41,6 +41,7 @@ class Pipeline(params: PipelineParams) extends Module {
     val stopCPU = Input(UInt(params.thidN.W))
     val start = Input(ValidTag(params.thidT, DATA_T))
     val done = Output(ValidTag(params.thidT))
+    val status = Flipped(new TransplantIO.TransplantStatus(params.thidN))
   })
   // ISA State
   val archstate = IO(new PipeArchStateIO(params.thidN))
@@ -235,11 +236,6 @@ class Pipeline(params: PipelineParams) extends Module {
   }.otherwise {
     transplantIO.done.valid := commitU.commit.transplant.valid || (commitU.commit.archstate.fire && commitU.commit.archstate.icountLastInst)
   }
-  // ------ Sanity checks ------
-  val currRunning = RegInit(VecInit(Seq.fill(params.thidN)(false.B)))
-  when(fetch.instQ_o.fire) {
-  }
-
   // Instrumentation Interface -----------------------------------------------
   val instrument = IO(new Bundle {
     val commit = commitU.deq.cloneType

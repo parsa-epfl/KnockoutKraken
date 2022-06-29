@@ -25,13 +25,14 @@ import armflex.TransplantUnitDrivers.{
 
 class Cpu2TransUnitTest extends AnyFreeSpec with ChiselScalatestTester {
   val thid = 4
+  val xregs = for(reg <- 0 until 32) yield BigInt(reg * 15)
+
   "Start transplant with normal execution" in {
     test(new Cpu2TransBramUnitTestDriver(32)).withAnnotations(Seq(
       VerilatorBackendAnnotation, TargetDirAnnotation("test/transplant/Cpu2TransTest/Normal"), 
       WriteVcdAnnotation)) {
         dut => 
           dut.init()
-          val xregs = for(reg <- 0 until 32) yield BigInt(reg * 15)
           val pstate = PStateRegs(0x100.U, 0x10.U, PSTATE_FLAGS_EXECUTE_NORMAL.U)
           dut.startTransBram2Cpu(thid, xregs, pstate)
       }
@@ -42,9 +43,9 @@ class Cpu2TransUnitTest extends AnyFreeSpec with ChiselScalatestTester {
         WriteVcdAnnotation)) {
           dut => 
             dut.init()
-            val xregs = for(reg <- 0 until 32) yield BigInt(reg * 15)
-            val pstate = PStateRegs(0x100.U, 0x10.U, PSTATE_FLAGS_EXECUTE_WAIT.U)
+            val pstate = PStateRegs(0x100.U, 0x10.U, PSTATE_FLAGS_EXECUTE_SINGLESTEP.U)
             dut.startTransBram2Cpu(thid, xregs, pstate)
+            dut.clock.step(3)
       }
     }
 
@@ -54,7 +55,6 @@ class Cpu2TransUnitTest extends AnyFreeSpec with ChiselScalatestTester {
       WriteVcdAnnotation)) {
         dut => 
           dut.init()
-          val xregs = for(reg <- 0 until 32) yield BigInt(reg * 15)
           val pstate = PStateRegs(0x100.U, 0x10.U, PSTATE_FLAGS_EXECUTE_WAIT.U)
           dut.startTransBram2Cpu(thid, xregs, pstate)
           dut.wrCSRCmd(TRANS_REG_OFFST_START, 1 << thid)
@@ -79,6 +79,25 @@ class Cpu2TransUnitTest extends AnyFreeSpec with ChiselScalatestTester {
           dut.clock.step()
     }
   }
+
+  "Check Running CSR" in {
+    test(new Cpu2TransBramUnitTestDriver(32)).withAnnotations(Seq(
+      VerilatorBackendAnnotation, TargetDirAnnotation("test/transplant/Cpu2TransTest/RunningCSR"), 
+      WriteVcdAnnotation)) {
+        dut => 
+          implicit val clock: Clock = dut.clock
+          dut.init()
+          assert(dut.rdCSRCmd(TRANS_REG_OFFST_RUNNING) == 0)
+          val pstate = PStateRegs(0x100.U, 0x10.U, PSTATE_FLAGS_EXECUTE_SINGLESTEP.U)
+          dut.startTransBram2Cpu(thid, xregs, pstate)
+          dut.clock.step()
+          assert(dut.rdCSRCmd(TRANS_REG_OFFST_RUNNING) != 0)
+          dut.clock.step()
+          dut.cpu2trans.sendCpu2Trans(thid)
+          dut.clock.step()
+          assert(dut.rdCSRCmd(TRANS_REG_OFFST_RUNNING) == 0)
+    }
+  }
 }
 
 object TransplantUnitDrivers {
@@ -93,6 +112,7 @@ object TransplantUnitDrivers {
       target.doneCPU.valid.poke(true.B)
       target.doneCPU.bits.poke(thid.U)
       clock.step()
+      target.doneCPU.valid.poke(false.B)
     }
   }
 
@@ -139,6 +159,8 @@ object TransplantUnitDrivers {
     def hasStallTrans2Cpu(): Boolean = target.trans2cpu.stallPipeline.litToBoolean
     def wrCSRCmd(reg: Int, value: BigInt) = target.S_CSR.writeReg(reg, value)
     def rdCSRCmd(reg: Int): BigInt = target.S_CSR.readReg(reg)
+
+    def recvCpu2TransReq() = target.transBram2Cpu.wr.pstate.req.ready.poke(true.B)
 
     def pipeSendStateExpect(thid: Int, xregs: Seq[BigInt], pstate: PStateRegs): Unit = {
       assert(!target.cpu2trans.stallPipeline.litToBoolean)
@@ -198,7 +220,7 @@ object TransplantUnitDrivers {
         target.trans2cpu.start.valid.expect(true.B)
         target.trans2cpu.start.bits.expect(thid.U)
         clock.step()
-        assert(target.S_CSR.readReg(TRANS_REG_OFFST_STOP_CPU) == 1 << thid)
+        assert(target.S_CSR.readReg(TRANS_REG_OFFST_WAIT_STOP) == 1 << thid)
       }
     }
   }
