@@ -278,7 +278,9 @@ class ARMFlexTopSimulator(
   val oILA = IO(new Bundle {
     val bits = if (paramsPipeline.ilaEnabled) Some(Output(devteroFlexTop.oILA.cloneType)) else None
   })
-  oILA.bits.get := devteroFlexTop.oILA
+  if(paramsPipeline.ilaEnabled) {
+    oILA.bits.get := devteroFlexTop.oILA
+  }
 }
 
 object ARMFlexTopSimulatorVerilogEmitter extends App {
