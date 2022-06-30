@@ -260,6 +260,7 @@ class Pipeline(params: PipelineParams) extends Module {
     val nonRunning_issue  = Bool()
     val nonRunning_memory = Bool()
     val nonRunning_commit = Bool()
+    val mem = memU.asserts.cloneType
   }))
 
   asserts.nonRunning_fetch  := nonRunning_fetch 
@@ -269,6 +270,7 @@ class Pipeline(params: PipelineParams) extends Module {
   asserts.nonRunning_commit := nonRunning_commit
   asserts.nonRunningFault := nonRunningFault
   asserts.fetchAndTransplant := fetchAndTransplant
+  asserts.mem := memU.asserts
  
   // DEBUG Signals ------------------------------------------------------------
   val dbg = IO(Output(new Bundle {

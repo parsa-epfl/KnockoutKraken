@@ -297,6 +297,9 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
   val whileRunning_start = WireInit((rRunning & setStartingCpu) =/= 0.U)
   val whileRunning_transplant = WireInit((rRunning & setTrans2Cpu) =/= 0.U)
   val whileRunning_restart = WireInit((rRunning & (startSend.asUInt << startThread)) =/= 0.U)
+  val whilePendingHost_set = WireInit((rTrans2HostPending & setTrans2Host) =/= 0.U)
+  val whilePendingCpu_set = WireInit((rTrans2CpuPending & setTrans2Cpu) =/= 0.U)
+  val whileCpu2TransPending_set = WireInit((rCpu2TransPending & setCpu2Trans) =/= 0.U)
   val asserts = IO(Output(new Bundle {
     val reTransplant = Bool()
     val whileNotRunning_setDone = Bool()
@@ -316,6 +319,9 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
     assert(!whileRunning_start)
     assert(!whileRunning_transplant)
     assert(!whileRunning_restart)
+    assert(!whilePendingHost_set)
+    assert(!whilePendingCpu_set)
+    assert(!whileCpu2TransPending_set)
   }
 
   if (true) { // TODO Conditional assertions

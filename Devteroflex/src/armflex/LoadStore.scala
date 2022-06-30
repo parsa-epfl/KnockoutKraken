@@ -650,6 +650,18 @@ class MemoryUnit(
 
   mmu_io <> flushController.mmu_io
 
+  val asserts = IO(Output(new Bundle {
+    val assertCacheReqMisalignedResp_0 = Bool()
+    val assertCacheReqMisalignedResp_1 = Bool()
+    val assertCacheReqNormal = Bool()
+  }))
+  val assertCacheReqMisalignedRespAssert_0 = WireInit(cacheAdaptor.pipe_io.resp.port.fire && cacheAdaptor.pipe_io.resp.meta.inst.isPair && cacheAdaptor.pipe_io.resp.meta.blockMisaligned && !cacheAdaptor.pipe_io.resp.meta.firstIsCompleted && doneInst.io.enq.fire)
+  val assertCacheReqMisalignedRespAssert_1 = WireInit(cacheAdaptor.pipe_io.resp.port.fire && cacheAdaptor.pipe_io.resp.meta.inst.isPair && cacheAdaptor.pipe_io.resp.meta.blockMisaligned && !cacheAdaptor.pipe_io.resp.meta.firstIsCompleted && !cacheReqMisalignedQ.io.enq.fire)
+  val assertCacheReqNormal = WireInit(cacheAdaptor.pipe_io.resp.port.fire && !cacheAdaptor.pipe_io.resp.meta.inst.isPair && !doneInst.io.enq.fire)
+  asserts.assertCacheReqMisalignedResp_0 := assertCacheReqMisalignedRespAssert_0
+  asserts.assertCacheReqMisalignedResp_1 := assertCacheReqMisalignedRespAssert_1
+  asserts.assertCacheReqNormal := assertCacheReqNormal
+
   val location = "Pipeline:MemoryUnit"
   if(true) { // TODO Conditional asserts
     // --- TLB Stage ---
