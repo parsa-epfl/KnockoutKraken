@@ -216,7 +216,7 @@ class ARMFlexTop(
 
   val assertRegs = Math.ceil(u_pipeline.asserts.asUInt.getWidth/32.0).toInt
   assert(assertRegs >= 1)
-  val uCSR = Module(new CSR(32, assertRegs))
+  val uCSR = Module(new CSR(32, assertRegs*2))
   uCSRMux.slavesBus(4) <> uCSR.io.bus
   
   // uCSR[0]: Assertions
@@ -229,8 +229,8 @@ class ARMFlexTop(
 
   val regsAssert_first = Seq.fill(assertRegs)(prefix("Asserts_first")(SetClearReg(32)))
   val (rAssertsPending_1, setAssert_1, clearAssert_1) = regsAssert_first(0)
-  clearAssert_1 := PulseCSR(uCSR.io.csr(0), 32)
-  StatusCSR(rAssertsPending_1, uCSR.io.csr(0), 32)
+  clearAssert_1 := PulseCSR(uCSR.io.csr(1), 32)
+  StatusCSR(rAssertsPending_1, uCSR.io.csr(1), 32)
   when(!rAssertsPending_1.orR) {
     setAssert_1 := u_pipeline.asserts.asUInt
   }
