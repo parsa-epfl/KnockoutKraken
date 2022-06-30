@@ -180,7 +180,7 @@ class FetchUnit(
 
   mmu_io <> flushController.mmu_io
 
-  if (false) { // TODO, conditional asserts
+  if (true) { // TODO, conditional asserts
     // --- TLB Stage ---
     when(mem_io.tlb.resp.fire) {
       assert(RegNext(mem_io.tlb.req.fire), "Hit response of TLB should arrive in 1 cycle")
