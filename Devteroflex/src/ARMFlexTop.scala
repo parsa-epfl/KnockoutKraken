@@ -237,12 +237,13 @@ class ARMFlexTop(
 
 
   // This debug signal is different from dbg: It's directly connected to the ILA.
+  val cloneTypeAsserts = WireInit(u_pipeline.asserts.asUInt)
   val oILA = IO(Output(new Bundle {
-    val assert = u_pipeline.asserts.asUInt.cloneType
+    val assert = cloneTypeAsserts.cloneType
     val mem = memory.oILA.cloneType
   }))
-  oILA.mem := memory.oILA
   oILA.assert := u_pipeline.asserts.asUInt
+  oILA.mem := memory.oILA
 }
 
 class ARMFlexTopSimulator(
@@ -274,8 +275,10 @@ class ARMFlexTopSimulator(
   dbg <> devteroFlexTop.dbg
 
   // The signals observed by ILA
-  // val oILA = IO(Output(devteroFlexTop.oILA.cloneType))
-  // oILA := devteroFlexTop.oILA
+  val oILA = IO(new Bundle {
+    val bits = if (paramsPipeline.ilaEnabled) Some(Output(devteroFlexTop.oILA.cloneType)) else None
+  })
+  oILA.bits.get := devteroFlexTop.oILA
 }
 
 object ARMFlexTopSimulatorVerilogEmitter extends App {
@@ -322,3 +325,21 @@ object ARMFlexTopVerilogEmitter extends App {
   fr.close()
 }
 
+object ARMFlexTopVerilogFPGAEmitter extends App {
+  val c = new chisel3.stage.ChiselStage
+  import java.io._
+  val v = c.emitVerilog(
+    new ARMFlexTopSimulator(
+      new PipelineParams(thidN = 32, pAddrW =  34, ilaEnabled = true),
+      new MemoryHierarchyParams(thidN = 32, pAddrW = 34)
+    ), annotations = Seq(TargetDirAnnotation("fpga/")))
+  
+  
+  // renaming AXI wires
+  val processed_v = v.replaceAll("""([MS]_AXI[A-Z_]*_)(aw|w|b|r|ar)_""", "$1")
+
+  val fr = new FileWriter(new File("fpga/ARMFlexTop.v"))
+  // fr.write(v)
+  fr.write(processed_v)
+  fr.close()
+}

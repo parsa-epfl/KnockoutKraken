@@ -20,7 +20,8 @@ class PipelineParams(
   val assertEnabled: Boolean = false, // TODO use this variable for assertions
   val DebugSignals: Boolean = false,
   val rtlVerbose:   Boolean = false,
-  val simVerbose:   Boolean = false
+  val simVerbose:   Boolean = false,
+  val ilaEnabled:   Boolean = false
 ) {
   assert(vAddrW == 64 || vAddrW == 32)
   val thidW = log2Ceil(thidN)

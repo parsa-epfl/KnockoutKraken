@@ -37,6 +37,6 @@ object Devteroflex extends ScalaPBModule {
 
   def exportFPGAVerilog() = T.command {
     printf("Generate Verilog for FPGA...")
-    super.runMain("ARMFlexTopVerilogEmitter")
+    super.runMain("ARMFlexTopVerilogFPGAEmitter")
   }
 }

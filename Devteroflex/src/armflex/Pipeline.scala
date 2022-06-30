@@ -243,30 +243,30 @@ class Pipeline(params: PipelineParams) extends Module {
   instrument.commit <> commitU.deq
 
   // ---------- Asserts
-  val nonRunnning_fetch  = WireInit(((~transplantIO.status.runningThreads) & (fetchU.instQ_o.valid.asUInt << fetchU.instQ_o.bits.tag)) =/= 0.U)
-  val nonRunnning_decode = WireInit(((~transplantIO.status.runningThreads) & (decReg.io.deq.valid.asUInt << decReg.io.deq.bits.tag)) =/= 0.U)
-  val nonRunnning_issue  = WireInit(((~transplantIO.status.runningThreads) & (issuerU.io.deq.valid.asUInt << issuerU.io.deq.bits.tag)) =/= 0.U)
-  val nonRunnning_memory = WireInit(((~transplantIO.status.runningThreads) & (memU.pipe.resp.valid.asUInt << memU.pipe.resp.bits.tag)) =/= 0.U)
-  val nonRunnning_commit = WireInit(((~transplantIO.status.runningThreads) & (commitU.commit.commited.valid.asUInt << commitU.commit.commited.tag)) =/= 0.U)
-  val nonRunningFault = WireInit(nonRunnning_fetch || nonRunnning_decode || nonRunnning_issue || nonRunnning_memory || nonRunnning_commit)
+  val nonRunning_fetch  = WireInit(((~transplantIO.status.runningThreads) & (fetchU.instQ_o.valid.asUInt << fetchU.instQ_o.bits.tag)) =/= 0.U)
+  val nonRunning_decode = WireInit(((~transplantIO.status.runningThreads) & (decReg.io.deq.valid.asUInt << decReg.io.deq.bits.tag)) =/= 0.U)
+  val nonRunning_issue  = WireInit(((~transplantIO.status.runningThreads) & (issuerU.io.deq.valid.asUInt << issuerU.io.deq.bits.tag)) =/= 0.U)
+  val nonRunning_memory = WireInit(((~transplantIO.status.runningThreads) & (memU.pipe.resp.valid.asUInt << memU.pipe.resp.bits.tag)) =/= 0.U)
+  val nonRunning_commit = WireInit(((~transplantIO.status.runningThreads) & (commitU.commit.commited.valid.asUInt << commitU.commit.commited.tag)) =/= 0.U)
+  val nonRunningFault = WireInit(nonRunning_fetch || nonRunning_decode || nonRunning_issue || nonRunning_memory || nonRunning_commit)
   val fetchAndTransplant = WireInit((fetchU.ctrl_i.commit.valid && transplantIO.done.valid) && (fetchU.ctrl_i.commit.tag === transplantIO.done.tag))
   val parallelInsts = WireInit((issuerU.io.deq.valid && commitU.commit.commited.valid) && (issuerU.io.deq.bits.tag === commitU.commit.commited.tag))
 
   val asserts = IO(Output(new Bundle {
     val nonRunningFault = Bool()
     val fetchAndTransplant = Bool()
-    val nonRunnning_fetch  = Bool()
-    val nonRunnning_decode = Bool()
-    val nonRunnning_issue  = Bool()
-    val nonRunnning_memory = Bool()
-    val nonRunnning_commit = Bool()
+    val nonRunning_fetch  = Bool()
+    val nonRunning_decode = Bool()
+    val nonRunning_issue  = Bool()
+    val nonRunning_memory = Bool()
+    val nonRunning_commit = Bool()
   }))
 
-  asserts.nonRunnning_fetch  := nonRunnning_fetch 
-  asserts.nonRunnning_decode := nonRunnning_decode
-  asserts.nonRunnning_issue  := nonRunnning_issue 
-  asserts.nonRunnning_memory := nonRunnning_memory
-  asserts.nonRunnning_commit := nonRunnning_commit
+  asserts.nonRunning_fetch  := nonRunning_fetch 
+  asserts.nonRunning_decode := nonRunning_decode
+  asserts.nonRunning_issue  := nonRunning_issue 
+  asserts.nonRunning_memory := nonRunning_memory
+  asserts.nonRunning_commit := nonRunning_commit
   asserts.nonRunningFault := nonRunningFault
   asserts.fetchAndTransplant := fetchAndTransplant
  
