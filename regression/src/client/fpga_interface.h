@@ -169,24 +169,11 @@ typedef struct DevteroflexArchState {
 #define ARCH_PSTATE_CF_MASK      (1)    // 64bit 1
 #define ARCH_PSTATE_VF_MASK      (0)    // 64bit 0
 
-// MMU
-bool mmuMsgHasPending(const FPGAContext *c);
-int  mmuMsgGet(const FPGAContext *c, MessageFPGA *msg);
-int  mmuMsgPeek(const FPGAContext *c, MessageFPGA *msg);
-int  mmuMsgSend(const FPGAContext *c,  MessageFPGA *msg);
-
 // DRAM
 int dramPagePush(const FPGAContext *c, uint64_t paddr, void *page);
 int dramPagePull(const FPGAContext *c, uint64_t paddr, void *page);
 
-// PMU
-int pmuStartCounting(const FPGAContext *c);
-int pmuStopCounting(const FPGAContext *c);
-uint64_t pmuTotalCycles(const FPGAContext *c);
-uint64_t pmuTotalCommitInstructions(const FPGAContext *c);
-int pmuReadCycleCounters(const FPGAContext *c, int index, uint16_t counters[16]);
-
-
+// MMU
 #define BASE_ADDR_MMU_MSG_QUEUE          (BASE_ADDR_AXIL + 0x200 * 4)
 #define MMU_MSG_QUEUE_REG_OFST_PENDING   (0x0)
 #define MMU_MSG_QUEUE_REG_OFST_FREE      (0x4)
@@ -194,11 +181,33 @@ int pmuReadCycleCounters(const FPGAContext *c, int index, uint16_t counters[16])
 #define MMU_MSG_QUEUE_REG_OFST_POP       (0xC)
 
 #define BASE_ADDR_AXI_MMU_MSG            (BASE_ADDR_RTL + 0x10000)
+bool mmuMsgHasPending(const FPGAContext *c);
+int  mmuMsgGet(const FPGAContext *c, MessageFPGA *msg);
+int  mmuMsgPeek(const FPGAContext *c, MessageFPGA *msg);
+int  mmuMsgSend(const FPGAContext *c,  MessageFPGA *msg);
+
+
+// PMU
+#define BASE_ADDR_PMU_REGS               (BASE_ADDR_AXIL + 0x300 * 0x4)
+#define PMU_REG_OFFST_TOTAL_CYCLES_LO    (0x4 * 0)
+#define PMU_REG_OFFST_TOTAL_CYCLES_HI    (0x4 * 1)
+#define PMU_REG_OFFST_START              (0x4 * 2)
+#define PMU_REG_OFFST_STOP               (0x4 * 2)
+#define PMU_REG_OFFST_COMMIT_INSTS_LO    (0x4 * 3)
+#define PMU_REG_OFFST_COMMIT_INSTS_HI    (0x4 * 4)
+#define PMU_REG_OFFST_CYCLE_CTNS_BASE    (0x4 * 8)
+int pmuStartCounting(const FPGAContext *c);
+int pmuStopCounting(const FPGAContext *c);
+uint64_t pmuTotalCycles(const FPGAContext *c);
+uint64_t pmuTotalCommitInstructions(const FPGAContext *c);
+int pmuReadCycleCounters(const FPGAContext *c, int index, uint16_t counters[16]);
+
+
 
 // State transplants
 #define BASE_ADDR_TRANSPLANT_DATA        (BASE_ADDR_RTL + 0x0)
 #define BASE_ADDR_BIND_ASID_THID         (BASE_ADDR_AXIL + 0x0)
-#define BASE_ADDR_TRANSPLANT_CTRL        (BASE_ADDR_AXIL + 0x100 * 4)
+#define BASE_ADDR_TRANSPLANT_CTRL        (BASE_ADDR_AXIL + 0x100 * 0x4)
 #define TRANS_REG_OFFST_PENDING          (0x4 * 0)
 #define TRANS_REG_OFFST_FREE_PENDING     (0x4 * 0)
 #define TRANS_REG_OFFST_START            (0x4 * 1)
