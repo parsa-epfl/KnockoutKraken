@@ -86,6 +86,10 @@ class TransplantUnit(thidN: Int) extends Module {
 
   val status = IO(uCpu2TransBRAM.status.cloneType)
   status <> uCpu2TransBRAM.status
+
+  val asserts = IO(uCpu2TransBRAM.asserts.cloneType)
+  asserts <> uCpu2TransBRAM.asserts
+ 
   val S_AXI = IO(Flipped(uTransBram2HostUnit.S_AXI.cloneType))
   S_AXI <> uTransBram2HostUnit.S_AXI
 }
@@ -286,6 +290,33 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
   trans2cpu.start.valid := startSend
 
   status.runningThreads := rRunning
+
+  // Asserts
+  val reTransplant = WireInit((rCpu2TransPending & cpuDoneMask) =/= 0.U)
+  val whileNotRunning_setDone = WireInit((rRunning & setRunning) =/= 0.U)
+  val whileRunning_start = WireInit((rRunning & setStartingCpu) =/= 0.U)
+  val whileRunning_transplant = WireInit((rRunning & setTrans2Cpu) =/= 0.U)
+  val whileRunning_restart = WireInit((rRunning & (startSend.asUInt << startThread)) =/= 0.U)
+  val asserts = IO(Output(new Bundle {
+    val reTransplant = Bool()
+    val whileNotRunning_setDone = Bool()
+    val whileRunning_start = Bool()
+    val whileRunning_transplant = Bool()
+    val whileRunning_restart = Bool()
+  }))
+  asserts.reTransplant := reTransplant
+  asserts.whileNotRunning_setDone := whileNotRunning_setDone
+  asserts.whileRunning_start      := whileRunning_start      
+  asserts.whileRunning_transplant := whileRunning_transplant 
+  asserts.whileRunning_restart    := whileRunning_restart    
+
+  if (false) {
+    assert(!reTransplant)
+    assert(!whileNotRunning_setDone)
+    assert(!whileRunning_start)
+    assert(!whileRunning_transplant)
+    assert(!whileRunning_restart)
+  }
 
   if (true) { // TODO Conditional assertions
     when(rSyncState === sTSyncingB2CXReg) {

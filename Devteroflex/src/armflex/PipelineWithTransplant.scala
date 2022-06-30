@@ -68,6 +68,8 @@ class PipelineWithCSR(params: PipelineParams) extends Module {
   val dbg = IO(pipelineU.dbg.cloneType)
   dbg <> pipelineU.dbg
 
+  val asserts = IO(pipelineU.asserts.cloneType)
+  asserts <> pipelineU.asserts
 
   // To PerformanceMonitor
   val oPMUCountingCommit = IO(Output(Bool()))
@@ -170,6 +172,13 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
   val instrument = IO(pipelineU.instrument.cloneType)
   instrument <> pipelineU.instrument
 
+  // ----------- Asserts 
+  val asserts = IO(Output(new Bundle {
+    val transplant = transplantU.asserts.cloneType
+    val pipeline = pipelineU.asserts.cloneType
+  }))
+  asserts.transplant <> transplantU.asserts
+  asserts.pipeline <> pipelineU.asserts
 
   if(false) { // TODO Conditional assertions and printing
     when(archstateU.pstateIO.commit.fire) {

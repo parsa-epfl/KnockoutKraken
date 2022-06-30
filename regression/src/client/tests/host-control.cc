@@ -71,6 +71,12 @@ TEST_CASE("host-cmd-force-transplant") {
     REQUIRE(fread(page, 1, 4096, f) != 0);
     fclose(f);
 
+    INFO("Push instruction page");
+    dramPagePush(&ctx, paddr, page);
+    MessageFPGA pf_reply;
+    makeMissReply(INST_FETCH, -1, asid, state.pc, paddr, &pf_reply);
+    mmuMsgSend(&ctx, &pf_reply);
+
     INFO("Push state");
     state.asid = asid;
     transplantPushAndStart(&ctx, 0, &state);
@@ -307,5 +313,60 @@ TEST_CASE("check-icount-budget") {
         REQUIRE(state.icountExecuted == 100);
     }
     
+    releaseFPGAContext(&ctx);
+}
+
+TEST_CASE("host-cmd-force-transplant-assert-fail", "manual-only") {
+    FPGAContext ctx;
+    DevteroflexArchState state;
+    uint8_t page[PAGE_SIZE] = {0};
+    REQUIRE(initFPGAContext(&ctx) == 0);
+    initArchState(&state, 0xABCDABCD0000);
+    initState_infinite_loop(&state, true);
+    int paddr = ctx.ppage_base_addr;
+
+    FILE *f = fopen("../src/client/tests/asm/executables/infinite-loop.bin", "rb");
+    REQUIRE(f != nullptr);
+    REQUIRE(fread(page, 1, 4096, f) != 0);
+    fclose(f);
+
+    INFO("Push instruction page");
+    dramPagePush(&ctx, paddr, page);
+    MessageFPGA pf_reply;
+    makeMissReply(INST_FETCH, -1, asid, state.pc, paddr, &pf_reply);
+    mmuMsgSend(&ctx, &pf_reply);
+
+    INFO("Push state");
+    state.asid = asid;
+    transplantPushAndStart(&ctx, 0, &state);
+
+    INFO("Advance");
+    advanceTicks(&ctx, 100);
+
+    INFO("Check transplants");
+    uint32_t pending_threads;
+    transplantPending(&ctx, &pending_threads);
+    REQUIRE(!pending_threads);
+ 
+    INFO("Advance");
+    advanceTicks(&ctx, 100);
+    transplantPushAndWait(&ctx, 0, &state);
+    transplantStart(&ctx, 0);
+
+    advanceTicks(&ctx, 1000);
+
+    INFO("Stop CPU");
+    transplantForceTransplant(&ctx, 0);
+
+    INFO("Advance");
+    advanceTicks(&ctx, 100);
+ 
+    INFO("Check now execution stopped");
+    transplantPending(&ctx, &pending_threads);
+    REQUIRE(pending_threads);
+
+    INFO("Check assertions")
+    CHECK(assertFailedGet(&ctx, 0));
+ 
     releaseFPGAContext(&ctx);
 }

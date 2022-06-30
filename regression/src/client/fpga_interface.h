@@ -232,6 +232,9 @@ int transplantForceTransplant(const FPGAContext *c, uint32_t thid);
 int transplantCheckRunning(const FPGAContext *c, uint32_t *running_threads);
 int transplantCheckWaitStop(const FPGAContext *c, uint32_t *waitStop_threads);
 
+// Assertion
+#define BASE_ADDR_ASSERTION_REGS         (BASE_ADDR_AXIL + 0x400 * 0x4)
+uint32_t assertFailedGet(const FPGAContext *c, int reg);
 
 #ifndef MemoryAccessType
 // See cpu.h to match MMUAccessType

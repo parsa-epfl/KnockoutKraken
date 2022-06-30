@@ -238,6 +238,12 @@ int dramPagePull(const FPGAContext *c, uint64_t paddr, void *page){
   return readAXI(c, BASE_ADDR_DRAM + paddr, page, PAGE_SIZE);
 }
 
+uint32_t assertFailedGet(const FPGAContext *c, int reg) {
+  uint32_t regval = 0;
+  readAXIL(c, BASE_ADDR_ASSERTION_REGS + reg * 0x4, &regval);
+  return regval; 
+}
+
 // Instrumentation helpers
 int trace_PC_set_paddr(const FPGAContext *c, uint32_t paddr) {
   return writeAXIL(c, BASE_ADDR_TRANSPLANT_CTRL + TRACE_PC_OFFST_PADDR, paddr);

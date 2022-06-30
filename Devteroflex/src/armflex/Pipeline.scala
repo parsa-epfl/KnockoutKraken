@@ -242,20 +242,54 @@ class Pipeline(params: PipelineParams) extends Module {
   })
   instrument.commit <> commitU.deq
 
+  // ---------- Asserts
+  val nonRunnning_fetch  = WireInit(((~transplantIO.status.runningThreads) & (fetchU.instQ_o.valid.asUInt << fetchU.instQ_o.bits.tag)) =/= 0.U)
+  val nonRunnning_decode = WireInit(((~transplantIO.status.runningThreads) & (decReg.io.deq.valid.asUInt << decReg.io.deq.bits.tag)) =/= 0.U)
+  val nonRunnning_issue  = WireInit(((~transplantIO.status.runningThreads) & (issuerU.io.deq.valid.asUInt << issuerU.io.deq.bits.tag)) =/= 0.U)
+  val nonRunnning_memory = WireInit(((~transplantIO.status.runningThreads) & (memU.pipe.resp.valid.asUInt << memU.pipe.resp.bits.tag)) =/= 0.U)
+  val nonRunnning_commit = WireInit(((~transplantIO.status.runningThreads) & (commitU.commit.commited.valid.asUInt << commitU.commit.commited.tag)) =/= 0.U)
+  val nonRunningFault = WireInit(nonRunnning_fetch || nonRunnning_decode || nonRunnning_issue || nonRunnning_memory || nonRunnning_commit)
+  val fetchAndTransplant = WireInit((fetchU.ctrl_i.commit.valid && transplantIO.done.valid) && (fetchU.ctrl_i.commit.tag === transplantIO.done.tag))
+  val parallelInsts = WireInit((issuerU.io.deq.valid && commitU.commit.commited.valid) && (issuerU.io.deq.bits.tag === commitU.commit.commited.tag))
+
+  val asserts = IO(Output(new Bundle {
+    val nonRunningFault = Bool()
+    val fetchAndTransplant = Bool()
+    val nonRunnning_fetch  = Bool()
+    val nonRunnning_decode = Bool()
+    val nonRunnning_issue  = Bool()
+    val nonRunnning_memory = Bool()
+    val nonRunnning_commit = Bool()
+  }))
+
+  asserts.nonRunnning_fetch  := nonRunnning_fetch 
+  asserts.nonRunnning_decode := nonRunnning_decode
+  asserts.nonRunnning_issue  := nonRunnning_issue 
+  asserts.nonRunnning_memory := nonRunnning_memory
+  asserts.nonRunnning_commit := nonRunnning_commit
+  asserts.nonRunningFault := nonRunningFault
+  asserts.fetchAndTransplant := fetchAndTransplant
+ 
   // DEBUG Signals ------------------------------------------------------------
-  val dbg = IO(new Bundle {
-    val issue = Output(new Bundle {
+  val dbg = IO(Output(new Bundle {
+    val issue = new Bundle {
       val valid = Bool()
-      val thread = params.thidT
+      val thid  = params.thidT
       val mem = Bool()
       val transplant = Bool()
-    })
-  })
-  dbg.issue.valid := issuer.io.deq.fire
-  dbg.issue.thread := issuer.io.deq.bits.tag
+    }
+
+  }))
+  dbg.issue.valid := issuerU.io.deq.fire
+  dbg.issue.thid := issuerU.io.deq.bits.tag
   dbg.issue.mem := ldstU.io.minst.valid
   dbg.issue.transplant := commitU.enq.bits.exceptions.valid || commitU.enq.bits.undef
 
+
+  if(false) { // TODO Conditional Assertions
+    assert(!nonRunningFault, "Did an operation while not running anymore")
+    assert(!fetchAndTransplant, "Started an instruction while transplant done")
+    assert(!parallelInsts, "Instructions from the same context can't be present in two stages concurrently")
     assert(!(executerU.io.einst.valid && brancherU.io.pcrel.valid), "Can't have both instruction valid at the same time")
     // Assertions:  Issuer Deq | MemUnit | CommitReg Enq
     when(issuerU.io.deq.fire) {
