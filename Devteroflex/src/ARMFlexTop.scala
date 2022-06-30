@@ -237,8 +237,12 @@ class ARMFlexTop(
 
 
   // This debug signal is different from dbg: It's directly connected to the ILA.
-  val oILA = IO(Output(memory.oILA.cloneType))
-  oILA := memory.oILA
+  val oILA = IO(Output(new Bundle {
+    val assert = u_pipeline.asserts.asUInt.cloneType
+    val mem = memory.oILA.cloneType
+  }))
+  oILA.mem := memory.oILA
+  oILA.assert := u_pipeline.asserts.asUInt
 }
 
 class ARMFlexTopSimulator(
