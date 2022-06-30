@@ -96,9 +96,6 @@ class FetchUnit(
 
   // --------- TLB Request ---------------
 
-  private val tlbDropInst = WireInit(false.B)
-
-
   // Data
   mem_io.tlb.req.bits.addr := pcUnit.req.bits
   mem_io.tlb.req.bits.thid := pcUnit.req.tag
@@ -116,16 +113,13 @@ class FetchUnit(
   cacheReqQ.io.enq.bits.paddr := mem_io.tlb.resp.bits.addr | metaDataTLB_r.pc(11,0) // PAGE_SIZE
   cacheReqQ.io.enq.bits.meta := metaDataTLB_r
 
-
   // Handshakes management
   mem_io.tlb.req.valid := false.B
   pcUnit.req.ready := false.B
   mem_io.tlb.resp.ready := true.B // Managed by credits, always ready to receive
   cacheReqQ.io.enq.valid := false.B
   mem_io.tlb.req.handshake(pcUnit.req, pc2cache_credits.ready && !flushController.ctrl.stopTransactions)
-  when(mem_io.tlb.resp.valid && mem_io.tlb.resp.bits.hit) {
-    cacheReqQ.io.enq.handshake(mem_io.tlb.resp)
-  }
+  cacheReqQ.io.enq.handshake(mem_io.tlb.resp, mem_io.tlb.resp.valid && mem_io.tlb.resp.bits.hit)
 
   // Backpressure
   pc2cache_credits.trans.in := pcUnit.req.fire
@@ -144,7 +138,6 @@ class FetchUnit(
   cacheAdaptor.pipe_io.req.port.bits.data := DontCare
   cacheAdaptor.pipe_io.req.port.bits.w_en := 0.U
   mem_io.cache <> cacheAdaptor.cache_io
-
 
   // Get 32 bit Instruction from response block
   private val respMetaData = WireInit(cacheAdaptor.pipe_io.resp.meta)
@@ -180,17 +173,17 @@ class FetchUnit(
 
   mmu_io <> flushController.mmu_io
 
-  if (false) { // TODO, conditional asserts
+  if (true) { // TODO, conditional asserts
     // --- TLB Stage ---
     when(mem_io.tlb.resp.fire) {
       assert(RegNext(mem_io.tlb.req.fire), "Hit response of TLB should arrive in 1 cycle")
     }
 
-    when(!pc2cache_credits.ready) {
-      assert(!pcUnit.req.fire, "Can't fire requests if not enough credits left")
+    when(pcUnit.req.fire) {
+      assert(pc2cache_credits.ready, "Can't fire requests if not enough credits left")
     }
-    when(!cache2insts_credits.ready) {
-      assert(!cacheAdaptor.pipe_io.req.port.fire, "Can't fire new request if instruction queue doesn't have enough credits")
+    when(cacheAdaptor.pipe_io.req.port.fire) {
+      assert(cache2insts_credits.ready, "Can't fire new request if instruction queue doesn't have enough credits")
     }
     when(cacheReqQ.io.enq.valid) {
         assert(cacheReqQ.io.enq.ready, "Credit system should ensure that receiver has always enough entries left")

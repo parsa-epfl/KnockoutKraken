@@ -41,6 +41,7 @@ class Pipeline(params: PipelineParams) extends Module {
     val stopCPU = Input(UInt(params.thidN.W))
     val start = Input(ValidTag(params.thidT, DATA_T))
     val done = Output(ValidTag(params.thidT))
+    val status = Flipped(new TransplantIO.TransplantStatus(params.thidN))
   })
   // ISA State
   val archstate = IO(new PipeArchStateIO(params.thidN))
@@ -48,23 +49,23 @@ class Pipeline(params: PipelineParams) extends Module {
   // ----- System modules ------
 
   // Pipeline -----------------------------------------------
-  val fetch = Module(new FetchUnit(params))
+  val fetchU = Module(new FetchUnit(params))
   // Decode
-  val decoder = Module(new DecodeUnit)
-  val decReg = Module(new FlushReg(params.thidT, new DInst))
+  val decoderU = Module(new DecodeUnit)
+  val decReg = Module(new Queue(new Tagged(params.thidT, new DInst), 1, true, false))
   // Issue
-  val issuer = Module(new FlushReg(params.thidT, new DInst))
+  val issuerU = Module(new Queue(new Tagged(params.thidT, new DInst), 1, true, false))
   // |         |        |            |
   // | Execute |        |            |
   // |         | Branch |            |
   // |         |        | Load Store |
   // |         |        |            |
-  val executer = Module(new ExecuteUnit)
-  val brancher = Module(new BranchUnit)
+  val executerU = Module(new ExecuteUnit)
+  val brancherU = Module(new BranchUnit)
   val ldstU = Module(new LDSTUnit)
   // (MemInst || Issuer) -> CommitReg
 
-  val memUnit = Module(new MemoryUnit(params))
+  val memU = Module(new MemoryUnit(params))
   // Commit
   val commitU = Module(new CommitUnit(params.thidN))
 
@@ -72,45 +73,45 @@ class Pipeline(params: PipelineParams) extends Module {
 
   // --- Enable Fetch ---
   // Start on transplant
-  fetch.ctrl_i.start := transplantIO.start
+  fetchU.ctrl_i.start := transplantIO.start
   // Wake on TLB miss completed
-  fetch.ctrl_i.memWake := mem_io.wake
+  fetchU.ctrl_i.memWake := mem_io.wake
   // Wake on instruction commit
-  fetch.ctrl_i.commit.valid := 
+  fetchU.ctrl_i.commit.valid := 
     commitU.commit.commited.valid && 
     !commitU.commit.transplant.valid && 
     !transplantIO.stopCPU(commitU.commit.commited.tag).asBool && 
     !commitU.commit.archstate.icountLastInst
-  fetch.ctrl_i.commit.tag := commitU.commit.commited.tag
-  fetch.ctrl_i.commit.bits.get := commitU.commit.archstate.pstate.next.PC
+  fetchU.ctrl_i.commit.tag := commitU.commit.commited.tag
+  fetchU.ctrl_i.commit.bits.get := commitU.commit.archstate.pstate.next.PC
 
   // --- Fetch PC from Mem ---
-  fetch.mem_io <> mem_io.inst
-  fetch.mmu_io <> mmu_io.inst
+  fetchU.mem_io <> mem_io.inst
+  fetchU.mmu_io <> mmu_io.inst
 
   // --- Fetch Inst -> Decode ---
-  decoder.inst := fetch.instQ_o.bits.data
-  decReg.io.enq.bits := decoder.dinst
-  decReg.io.enq.tag := fetch.instQ_o.bits.tag
-  decReg.io.enq.handshake(fetch.instQ_o)
+  decoderU.inst := fetchU.instQ_o.bits.data
+  decReg.io.enq.bits.data := decoderU.dinst
+  decReg.io.enq.bits.tag := fetchU.instQ_o.bits.tag
+  decReg.io.enq.handshake(fetchU.instQ_o)
 
   // --- Decode -> Issue ---
   // Read from RFile, 1 cycle delay
-  archstate.issue.sel.tag := decReg.io.deq.tag
+  archstate.issue.sel.tag := decReg.io.deq.bits.tag
   archstate.issue.sel.valid := decReg.io.deq.fire
-  archstate.issue.rd.tag := decReg.io.deq.tag
-  archstate.issue.rd.port(0).addr := decReg.io.deq.bits.rs1
-  archstate.issue.rd.port(1).addr := decReg.io.deq.bits.rs2
-  archstate.issue.rd.port(2).addr := decReg.io.deq.bits.rd.bits
-  issuer.io.enq <> decReg.io.deq // Issue is always ready, so no check for archstate.issue.ready necessary
+  archstate.issue.rd.tag := decReg.io.deq.bits.tag
+  archstate.issue.rd.port(0).addr := decReg.io.deq.bits.data.rs1
+  archstate.issue.rd.port(1).addr := decReg.io.deq.bits.data.rs2
+  archstate.issue.rd.port(2).addr := decReg.io.deq.bits.data.rd.bits
+  issuerU.io.enq <> decReg.io.deq // Issue is always ready, so no check for archstate.issue.ready necessary
   // connect rfile read(address) interface
-  when(decReg.io.deq.bits.itype === I_DP3S) {
-    archstate.issue.rd.port(2).addr := decReg.io.deq.bits.imm(4, 0)
+  when(decReg.io.deq.bits.data.itype === I_DP3S) {
+    archstate.issue.rd.port(2).addr := decReg.io.deq.bits.data.imm(4, 0)
   }
 
   // Issue ---------------------------
   // Execute : Issue -> Execute
-  val issued_dinst = WireInit(issuer.io.deq.bits)
+  val issued_dinst = WireInit(issuerU.io.deq.bits.data)
 
   // Execute ---------------------------
   // Read register data from rfile
@@ -132,18 +133,18 @@ class Pipeline(params: PipelineParams) extends Module {
   }
 
   // connect executeUnit interface
-  executer.io.dinst := issued_dinst
-  executer.io.rVal1 := rVal1
-  executer.io.rVal2 := rVal2
-  executer.io.rVal3 := rVal3
-  executer.io.nzcv := curr_state.flags.NZCV
+  executerU.io.dinst := issued_dinst
+  executerU.io.rVal1 := rVal1
+  executerU.io.rVal2 := rVal2
+  executerU.io.rVal3 := rVal3
+  executerU.io.nzcv := curr_state.flags.NZCV
 
   // connect BranchUnit interface
-  brancher.io.dinst := issued_dinst
-  brancher.io.rVal1 := rVal1
-  brancher.io.rVal2 := rVal2
-  brancher.io.cond := executer.io.condRes
-  brancher.io.pc := curr_state.PC
+  brancherU.io.dinst := issued_dinst
+  brancherU.io.rVal1 := rVal1
+  brancherU.io.rVal2 := rVal2
+  brancherU.io.cond := executerU.io.condRes
+  brancherU.io.pc := curr_state.PC
 
   // connect LDSTUnit interface
   ldstU.io.dinst := issued_dinst
@@ -153,10 +154,10 @@ class Pipeline(params: PipelineParams) extends Module {
   ldstU.io.pstate := curr_state
 
   // ------ Pack Execute/LDST result
-  memUnit.pipe.req.bits.:=(ldstU.io.minst.bits) // Enforce := method of MInstTag
-  memUnit.pipe.req.bits.tag := issuer.io.deq.tag
-  memUnit.mem_io <> mem_io.data
-  memUnit.mmu_io <> mmu_io.data
+  memU.pipe.req.bits.:=(ldstU.io.minst.bits) // Enforce := method of MInstTag
+  memU.pipe.req.bits.tag := issuerU.io.deq.bits.tag
+  memU.mem_io <> mem_io.data
+  memU.mmu_io <> mmu_io.data
 
   // - Exceptions -
   val memException = WireInit(
@@ -168,38 +169,38 @@ class Pipeline(params: PipelineParams) extends Module {
   )
 
   val branchException = WireInit(
-    brancher.io.binst.valid &&
-      brancher.io.binst.bits.unalignedExcp
+    brancherU.io.binst.valid &&
+      brancherU.io.binst.bits.unalignedExcp
   )
 
   // CommitReg
   val commitNext = WireInit(CommitInst(params.thidN))
-  when(brancher.io.pcrel.valid) {
+  when(brancherU.io.pcrel.valid) {
     commitNext.rd(0).valid := true.B
-    commitNext.rd(0).bits := brancher.io.pcrel.bits.rd
-    commitNext.res(0) := brancher.io.pcrel.bits.res
-  }.elsewhen(executer.io.einst.bits.rd.valid) {
+    commitNext.rd(0).bits := brancherU.io.pcrel.bits.rd
+    commitNext.res(0) := brancherU.io.pcrel.bits.res
+  }.elsewhen(executerU.io.einst.bits.rd.valid) {
     commitNext.rd(0).valid := true.B
-    commitNext.rd(0).bits := executer.io.einst.bits.rd.bits
-    commitNext.res(0) := executer.io.einst.bits.res
+    commitNext.rd(0).bits := executerU.io.einst.bits.rd.bits
+    commitNext.res(0) := executerU.io.einst.bits.res
   }
 
-  commitNext.nzcv.valid := executer.io.einst.bits.nzcv.valid && executer.io.einst.valid
-  commitNext.nzcv.bits := executer.io.einst.bits.nzcv.bits
+  commitNext.nzcv.valid := executerU.io.einst.bits.nzcv.valid && executerU.io.einst.valid
+  commitNext.nzcv.bits := executerU.io.einst.bits.nzcv.bits
 
-  commitNext.br_taken.valid := brancher.io.binst.valid
-  commitNext.br_taken.bits := brancher.io.binst.bits.pc
+  commitNext.br_taken.valid := brancherU.io.binst.valid
+  commitNext.br_taken.bits := brancherU.io.binst.bits.pc
 
   commitNext.exceptions.valid := memException || branchException
   commitNext.exceptions.bits := Cat(
-    brancher.io.binst.bits.unalignedExcp.asUInt,
+    brancherU.io.binst.bits.unalignedExcp.asUInt,
     unalignedExcpData.asUInt
   )
 
   commitNext.undef := !issued_dinst.inst32.valid
   commitNext.inst := issued_dinst.inst32.bits
   commitNext.is32bit := issued_dinst.is32bit
-  commitNext.tag := issuer.io.deq.tag
+  commitNext.tag := issuerU.io.deq.bits.tag
 
   // Memory Resp
 
@@ -207,22 +208,22 @@ class Pipeline(params: PipelineParams) extends Module {
   // ----- Control Execute Stage Handshakes -----
   // Handle response from Memory Hierarchy before Issued Inst
   // Handshakes of IssuerDeq, memInst and CommitReg
-  issuer.io.deq.ready := false.B
-  memUnit.pipe.req.valid := false.B
-  memUnit.pipe.resp.ready := false.B
+  issuerU.io.deq.ready := false.B
+  memU.pipe.req.valid := false.B
+  memU.pipe.resp.ready := false.B
   commitU.enq.valid := false.B
 
   val ldstInstruction = ldstU.io.minst.valid && !ldstU.io.minst.bits.exceptions.valid
-  when(memUnit.pipe.resp.valid) {
+  when(memU.pipe.resp.valid) {
     // When memory response arrives, don't take from issue but from response
-    commitU.enq <> memUnit.pipe.resp
+    commitU.enq <> memU.pipe.resp
   }.otherwise {
-    commitU.enq.handshake(issuer.io.deq, !ldstInstruction)
+    commitU.enq.handshake(issuerU.io.deq, !ldstInstruction)
     commitU.enq.bits := commitNext
   }
 
   when(ldstInstruction) {
-    issuer.io.deq.handshake(memUnit.pipe.req)
+    issuerU.io.deq.handshake(memU.pipe.req)
   }
 
 
@@ -235,48 +236,69 @@ class Pipeline(params: PipelineParams) extends Module {
   }.otherwise {
     transplantIO.done.valid := commitU.commit.transplant.valid || (commitU.commit.archstate.fire && commitU.commit.archstate.icountLastInst)
   }
-
-  // Flushing ----------------------------------------------------------------
-  // No speculative state is kept in the pipeline in current version
-  // The Flush signal is no longer needed
-  decReg.io.flush.valid := false.B
-  issuer.io.flush.valid := false.B
-  decReg.io.flush.tag := DontCare
-  issuer.io.flush.tag := DontCare
-
   // Instrumentation Interface -----------------------------------------------
   val instrument = IO(new Bundle {
     val commit = commitU.deq.cloneType
   })
   instrument.commit <> commitU.deq
 
+  // ---------- Asserts
+  val nonRunnning_fetch  = WireInit(((~transplantIO.status.runningThreads) & (fetchU.instQ_o.valid.asUInt << fetchU.instQ_o.bits.tag)) =/= 0.U)
+  val nonRunnning_decode = WireInit(((~transplantIO.status.runningThreads) & (decReg.io.deq.valid.asUInt << decReg.io.deq.bits.tag)) =/= 0.U)
+  val nonRunnning_issue  = WireInit(((~transplantIO.status.runningThreads) & (issuerU.io.deq.valid.asUInt << issuerU.io.deq.bits.tag)) =/= 0.U)
+  val nonRunnning_memory = WireInit(((~transplantIO.status.runningThreads) & (memU.pipe.resp.valid.asUInt << memU.pipe.resp.bits.tag)) =/= 0.U)
+  val nonRunnning_commit = WireInit(((~transplantIO.status.runningThreads) & (commitU.commit.commited.valid.asUInt << commitU.commit.commited.tag)) =/= 0.U)
+  val nonRunningFault = WireInit(nonRunnning_fetch || nonRunnning_decode || nonRunnning_issue || nonRunnning_memory || nonRunnning_commit)
+  val fetchAndTransplant = WireInit((fetchU.ctrl_i.commit.valid && transplantIO.done.valid) && (fetchU.ctrl_i.commit.tag === transplantIO.done.tag))
+  val parallelInsts = WireInit((issuerU.io.deq.valid && commitU.commit.commited.valid) && (issuerU.io.deq.bits.tag === commitU.commit.commited.tag))
+
+  val asserts = IO(Output(new Bundle {
+    val nonRunningFault = Bool()
+    val fetchAndTransplant = Bool()
+    val nonRunnning_fetch  = Bool()
+    val nonRunnning_decode = Bool()
+    val nonRunnning_issue  = Bool()
+    val nonRunnning_memory = Bool()
+    val nonRunnning_commit = Bool()
+  }))
+
+  asserts.nonRunnning_fetch  := nonRunnning_fetch 
+  asserts.nonRunnning_decode := nonRunnning_decode
+  asserts.nonRunnning_issue  := nonRunnning_issue 
+  asserts.nonRunnning_memory := nonRunnning_memory
+  asserts.nonRunnning_commit := nonRunnning_commit
+  asserts.nonRunningFault := nonRunningFault
+  asserts.fetchAndTransplant := fetchAndTransplant
+ 
   // DEBUG Signals ------------------------------------------------------------
-  val dbg = IO(new Bundle {
-    val issue = Output(new Bundle {
+  val dbg = IO(Output(new Bundle {
+    val issue = new Bundle {
       val valid = Bool()
-      val thread = params.thidT
+      val thid  = params.thidT
       val mem = Bool()
       val transplant = Bool()
-    })
-  })
-  dbg.issue.valid := issuer.io.deq.fire
-  dbg.issue.thread := issuer.io.deq.tag
+    }
+
+  }))
+  dbg.issue.valid := issuerU.io.deq.fire
+  dbg.issue.thid := issuerU.io.deq.bits.tag
   dbg.issue.mem := ldstU.io.minst.valid
   dbg.issue.transplant := commitU.enq.bits.exceptions.valid || commitU.enq.bits.undef
 
-  if(true) { // TODO Conditional Assertions
-    assert(!(executer.io.einst.valid && brancher.io.pcrel.valid), "Can't have both instruction valid at the same time")
+
+  if(false) { // TODO Conditional Assertions
+    assert(!nonRunningFault, "Did an operation while not running anymore")
+    assert(!fetchAndTransplant, "Started an instruction while transplant done")
+    assert(!parallelInsts, "Instructions from the same context can't be present in two stages concurrently")
+    assert(!(executerU.io.einst.valid && brancherU.io.pcrel.valid), "Can't have both instruction valid at the same time")
     // Assertions:  Issuer Deq | MemUnit | CommitReg Enq
-    when(issuer.io.deq.fire) {
-      assert(commitU.enq.fire || memUnit.pipe.req.fire, "In case of Issue fire, either the MemUnit or the commit queue must receive the transaction")
-      assert(!((commitU.enq.fire && !memUnit.pipe.resp.fire) && memUnit.pipe.req.fire), "Both the MemUnit and commit queue can't receive the transaction at the same time")
-      when(commitU.commit.commited.valid) { 
-        assert(issuer.io.deq.tag =/= commitU.commit.commited.tag, "Instructions from the same context can't be present in two stages concurrently")
-      }
+    when(issuerU.io.deq.fire) {
+      assert(commitU.enq.fire || memU.pipe.req.fire, "In case of Issue fire, either the MemUnit or the commit queue must receive the transaction")
+      assert(!((commitU.enq.fire && !memU.pipe.resp.fire) && memU.pipe.req.fire), "Both the MemUnit and commit queue can't receive the transaction at the same time")
     }
     when(commitU.enq.fire) {
-      assert(memUnit.pipe.resp.valid || (issuer.io.deq.fire && !memUnit.pipe.req.fire), "When the commit queue receives a transaction, it must either come from the MemUnit or Issue stage")
-      assert(!(memUnit.pipe.resp.valid && (issuer.io.deq.fire && !memUnit.pipe.req.fire)), "When the commit queue receives a transaction, it can't come from both the MemUnit or Issue stage")
+      assert(memU.pipe.resp.valid || (issuerU.io.deq.fire && !memU.pipe.req.fire), "When the commit queue receives a transaction, it must either come from the MemUnit or Issue stage")
+      assert(!(memU.pipe.resp.valid && (issuerU.io.deq.fire && !memU.pipe.req.fire)), "When the commit queue receives a transaction, it can't come from both the MemUnit or Issue stage")
     }
   }
 }

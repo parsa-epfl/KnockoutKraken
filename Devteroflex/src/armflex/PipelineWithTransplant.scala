@@ -47,61 +47,63 @@ class PipelineWithCSR(params: PipelineParams) extends Module {
   S_CSR_ThreadTable <> uCSRVecAsid.io.bus
   uCSRVecAsid.io.vec := 0.U.asTypeOf(uCSRVecAsid.io.vec.cloneType)
 
-  val pipeline = Module(new PipelineWithTransplant(params))
-  val S_CSR_Pipeline = IO(Flipped(pipeline.hostIO.S_CSR.cloneType))
-  S_CSR_Pipeline <> pipeline.hostIO.S_CSR
+  val pipelineU = Module(new PipelineWithTransplant(params))
+  val S_CSR_Pipeline = IO(Flipped(pipelineU.hostIO.S_CSR.cloneType))
+  S_CSR_Pipeline <> pipelineU.hostIO.S_CSR
 
   // BRAM (Architecture State)
-  val S_AXI_ArchState = IO(Flipped(pipeline.hostIO.S_AXI.cloneType))
-  pipeline.hostIO.S_AXI <> S_AXI_ArchState
+  val S_AXI_ArchState = IO(Flipped(pipelineU.hostIO.S_AXI.cloneType))
+  pipelineU.hostIO.S_AXI <> S_AXI_ArchState
 
   // Memory port.
-  val mem_io = IO(pipeline.mem_io.cloneType)
-  val mmu_io = IO(pipeline.mmu_io.cloneType)
-  pipeline.mem_io <> mem_io
-  pipeline.mmu_io <> mmu_io
+  val mem_io = IO(pipelineU.mem_io.cloneType)
+  val mmu_io = IO(pipelineU.mmu_io.cloneType)
+  pipelineU.mem_io <> mem_io
+  pipelineU.mmu_io <> mmu_io
 
   // Instrumentation Interface
-  val instrument = IO(pipeline.instrument.cloneType)
-  instrument <> pipeline.instrument
+  val instrument = IO(pipelineU.instrument.cloneType)
+  instrument <> pipelineU.instrument
 
-  val dbg = IO(pipeline.dbg.cloneType)
-  dbg <> pipeline.dbg
+  val dbg = IO(pipelineU.dbg.cloneType)
+  dbg <> pipelineU.dbg
+
+  val asserts = IO(pipelineU.asserts.cloneType)
+  asserts <> pipelineU.asserts
 
   // To PerformanceMonitor
   val oPMUCountingCommit = IO(Output(Bool()))
-  oPMUCountingCommit := pipeline.oPMUCountingCommit
+  oPMUCountingCommit := pipelineU.oPMUCountingCommit
   val oPMUTransplantCycleCountingReq = IO(Output(new CycleCountingPort(params.thidN)))
-  oPMUTransplantCycleCountingReq := pipeline.oPMUTransplantCycleCountingReq
+  oPMUTransplantCycleCountingReq := pipelineU.oPMUTransplantCycleCountingReq
 }
 
 class PipelineWithTransplant(params: PipelineParams) extends Module {
 
   // Pipeline
-  val pipeline = Module(new Pipeline(params))
+  val pipelineU = Module(new Pipeline(params))
+
   // State
   // Memory
-  val mem_io = IO(pipeline.mem_io.cloneType)
-  val mmu_io = IO(pipeline.mmu_io.cloneType)
-  mem_io <> pipeline.mem_io
-  mmu_io <> pipeline.mmu_io
-  val archstate = Module(new ArchState(params.thidN, params.DebugSignals))
-  archstate.pstateIO.mem(0).thid := mem_io.inst.tlb.req.bits.thid
-  archstate.pstateIO.mem(1).thid := mem_io.data.tlb.req.bits.thid
-  mem_io.inst.tlb.req.bits.asid := archstate.pstateIO.mem(0).asid
-  mem_io.data.tlb.req.bits.asid := archstate.pstateIO.mem(1).asid
+  val mem_io = IO(pipelineU.mem_io.cloneType)
+  val mmu_io = IO(pipelineU.mmu_io.cloneType)
+  mem_io <> pipelineU.mem_io
+  mmu_io <> pipelineU.mmu_io
+  val archstateU = Module(new ArchState(params.thidN, params.DebugSignals))
+  archstateU.pstateIO.mem(0).thid := mem_io.inst.tlb.req.bits.thid
+  archstateU.pstateIO.mem(1).thid := mem_io.data.tlb.req.bits.thid
+  mem_io.inst.tlb.req.bits.asid := archstateU.pstateIO.mem(0).asid
+  mem_io.data.tlb.req.bits.asid := archstateU.pstateIO.mem(1).asid
 
   // -------- Pipeline ---------
   // Get state from Issue
-  pipeline.archstate.issue.ready := true.B
-  pipeline.archstate.issue.sel.tag <> archstate.pstateIO.issue.thid
-  pipeline.archstate.issue.regs.curr <> archstate.pstateIO.issue.pstate
-  pipeline.archstate.issue.rd <> archstate.rfile_rd
+  pipelineU.archstate.issue.ready := true.B
+  pipelineU.archstate.issue.sel.tag <> archstateU.pstateIO.issue.thid
+  pipelineU.archstate.issue.regs.curr <> archstateU.pstateIO.issue.pstate
+  pipelineU.archstate.issue.rd <> archstateU.rfile_rd
 
   // Writeback state from commit
   
-  
-
   // -------- Stats ------
   // TODO Performance counter stats
 
@@ -115,70 +117,79 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
 
   // Shanqing sincerely to @Rafael: PLEASE!!! Only update one signal from one place, not multiple places? Otherwise when debugging you have to search all possible sources and this is a disaster!!!!
   // Doing this can bring some benefit when writing, but it's a bomb buried deep for future debugging!
-  archstate.pstateIO.commit <> pipeline.archstate.commit
+  archstateU.pstateIO.commit <> pipelineU.archstate.commit
 
   // Update State - Highjack commit ports from pipeline
   
-  pipeline.archstate.commit.ready := archstate.pstateIO.commit.ready && 
+  pipelineU.archstate.commit.ready := archstateU.pstateIO.commit.ready && 
                                     !transplantU.trans2cpu.stallPipeline && 
                                     !transplantU.cpu2trans.stallPipeline
   
   // Multiplex the archstate write port.
   when(transplantU.trans2cpu.rfile_wr.en){
     // transplant unit always has the highest priority to write into the register file.
-    archstate.rfile_wr <> transplantU.trans2cpu.rfile_wr
+    archstateU.rfile_wr <> transplantU.trans2cpu.rfile_wr
     // Don't worry, the pipeline should be stalled.
-    assert(pipeline.archstate.commit.ready === false.B)
+    assert(pipelineU.archstate.commit.ready === false.B)
   }.otherwise {
-    archstate.rfile_wr <> pipeline.archstate.commit.wr
+    archstateU.rfile_wr <> pipelineU.archstate.commit.wr
   }
 
-  
   // By default, the Pstate is from the CPU.
   // @Rafael you have update to the archstate.pstateIO.commit in another place.
   when(transplantU.trans2cpu.pstate.valid) {
     // PState is from the pipeline.
-    archstate.pstateIO.commit.fire := true.B
-    archstate.pstateIO.commit.tag := transplantU.trans2cpu.thid
-    archstate.pstateIO.commit.pstate.next := transplantU.trans2cpu.pstate.bits
-    archstate.pstateIO.commit.isTransplantUnit := true.B
-    archstate.pstateIO.commit.isCommitUnit := false.B
-    transplantU.cpu2trans.pstate := archstate.pstateIO.commit.pstate.curr
-    assert(pipeline.archstate.commit.ready === false.B)
+    archstateU.pstateIO.commit.fire := true.B
+    archstateU.pstateIO.commit.tag := transplantU.trans2cpu.thid
+    archstateU.pstateIO.commit.pstate.next := transplantU.trans2cpu.pstate.bits
+    archstateU.pstateIO.commit.isTransplantUnit := true.B
+    archstateU.pstateIO.commit.isCommitUnit := false.B
+    transplantU.cpu2trans.pstate := archstateU.pstateIO.commit.pstate.curr
+    assert(pipelineU.archstate.commit.ready === false.B)
   }.otherwise {
     // Read State for Host
-    transplantU.cpu2trans.pstate := archstate.pstateIO.transplant.pstate
+    transplantU.cpu2trans.pstate := archstateU.pstateIO.transplant.pstate
   }
 
-  transplantU.cpu2trans.rfile_wr <> pipeline.archstate.commit.wr
-  transplantU.cpu2trans.doneCPU.bits := pipeline.transplantIO.done.tag
-  transplantU.cpu2trans.doneCPU.valid := pipeline.transplantIO.done.valid
+  transplantU.cpu2trans.rfile_wr <> pipelineU.archstate.commit.wr
+  transplantU.cpu2trans.doneCPU.bits := pipelineU.transplantIO.done.tag
+  transplantU.cpu2trans.doneCPU.valid := pipelineU.transplantIO.done.valid
 
-  archstate.pstateIO.transplant.thid := transplantU.trans2cpu.thid
+  archstateU.pstateIO.transplant.thid := transplantU.trans2cpu.thid
   // Wait for the PC to be available in archstate
-  pipeline.transplantIO.start.valid := transplantU.trans2cpu.start.valid
-  pipeline.transplantIO.start.tag := transplantU.trans2cpu.start.bits
-  pipeline.transplantIO.start.bits.get := archstate.pstateIO.transplant.pstate.PC
+  pipelineU.transplantIO.start.valid := transplantU.trans2cpu.start.valid
+  pipelineU.transplantIO.start.tag := transplantU.trans2cpu.start.bits
+  pipelineU.transplantIO.start.bits.get := archstateU.pstateIO.transplant.pstate.PC
 
   // Transplant from Host
   transplantU.S_CSR <> hostIO.S_CSR
   transplantU.S_AXI <> hostIO.S_AXI
-  pipeline.transplantIO.stopCPU := transplantU.cpu2trans.stopCPU
-  archstate.pstateIO.forceTransplant := transplantU.cpu2trans.forceTransplant
+  pipelineU.transplantIO.stopCPU := transplantU.cpu2trans.stopCPU
+  archstateU.pstateIO.forceTransplant := transplantU.cpu2trans.forceTransplant
+  pipelineU.transplantIO.status <> transplantU.status
 
   // Instrumentation interface
-  val instrument = IO(pipeline.instrument.cloneType)
-  instrument <> pipeline.instrument
+  val instrument = IO(pipelineU.instrument.cloneType)
+  instrument <> pipelineU.instrument
+
+  // ----------- Asserts 
+  val asserts = IO(Output(new Bundle {
+    val transplant = transplantU.asserts.cloneType
+    val pipeline = pipelineU.asserts.cloneType
+  }))
+  asserts.transplant <> transplantU.asserts
+  asserts.pipeline <> pipelineU.asserts
 
   if(false) { // TODO Conditional assertions and printing
-    when(archstate.pstateIO.commit.fire) {
-      printf(p"Pipeline:Commit:THID[${archstate.pstateIO.commit.tag}]:PC[0x${Hexadecimal(pipeline.archstate.commit.pstate.next.PC)}]->PC[0x${Hexadecimal(pipeline.archstate.commit.pstate.next.PC)}]\n")
+    when(archstateU.pstateIO.commit.fire) {
+      printf(p"Pipeline:Commit:THID[${archstateU.pstateIO.commit.tag}]:PC[0x${Hexadecimal(pipelineU.archstate.commit.pstate.next.PC)}]->PC[0x${Hexadecimal(pipelineU.archstate.commit.pstate.next.PC)}]\n")
     }
-    when(pipeline.transplantIO.done.valid) {
-      printf(p"Pipeline:Transplant:THID[${archstate.pstateIO.commit.tag}]:PC[0x${Hexadecimal(archstate.pstateIO.commit.pstate.curr.PC)}]->Transplant\n")
+    when(pipelineU.transplantIO.done.valid) {
+      printf(p"Pipeline:Transplant:THID[${archstateU.pstateIO.commit.tag}]:PC[0x${Hexadecimal(archstateU.pstateIO.commit.pstate.curr.PC)}]->Transplant\n")
     }
   }
 
+  //* DBG
   class DebugBundle extends Bundle {
     val fetch = ValidTag(params.thidN)
     val issue = ValidTag(params.thidN)
@@ -187,27 +198,25 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
     val commit = ValidTag(params.thidN)
     val commitIsTransplant = Output(Bool())
     val transplant = Output(ValidTag(params.thidN))
-    val stateVec = archstate.dbg.vecState.get.cloneType
+    val stateVec = archstateU.dbg.vecState.get.cloneType
   }
 
-  //* DBG
   val dbg = IO(new Bundle {
     val bits = if (params.DebugSignals) Some(Output(new DebugBundle)) else None
   })
-
   if(params.DebugSignals) {
-    dbg.bits.get.stateVec := archstate.dbg.vecState.get
-    dbg.bits.get.fetch.valid := pipeline.mem_io.inst.tlb.req.valid
-    dbg.bits.get.fetch.tag := pipeline.mem_io.inst.tlb.req.bits.thid
+    dbg.bits.get.stateVec := archstateU.dbg.vecState.get
+    dbg.bits.get.fetch.valid := pipelineU.mem_io.inst.tlb.req.valid
+    dbg.bits.get.fetch.tag := pipelineU.mem_io.inst.tlb.req.bits.thid
 
-    dbg.bits.get.issue.tag := pipeline.dbg.issue.thread
-    dbg.bits.get.issuingMem := pipeline.dbg.issue.mem
-    dbg.bits.get.issuingTransplant := pipeline.dbg.issue.transplant
-    dbg.bits.get.issue.valid := pipeline.dbg.issue.valid
+    dbg.bits.get.issue.tag := pipelineU.dbg.issue.thid
+    dbg.bits.get.issuingMem := pipelineU.dbg.issue.mem
+    dbg.bits.get.issuingTransplant := pipelineU.dbg.issue.transplant
+    dbg.bits.get.issue.valid := pipelineU.dbg.issue.valid
 
-    dbg.bits.get.commit.tag := RegNext(pipeline.archstate.commit.tag)
-    dbg.bits.get.commit.valid := RegNext(pipeline.archstate.commit.fire)
-    dbg.bits.get.commitIsTransplant := RegNext(pipeline.transplantIO.done.valid)
+    dbg.bits.get.commit.tag := RegNext(pipelineU.archstate.commit.tag)
+    dbg.bits.get.commit.valid := RegNext(pipelineU.archstate.commit.fire)
+    dbg.bits.get.commitIsTransplant := RegNext(pipelineU.transplantIO.done.valid)
     dbg.bits.get.transplant.valid := transplantU.trans2cpu.start.valid
     dbg.bits.get.transplant.tag := transplantU.trans2cpu.start.bits
   }
@@ -215,9 +224,9 @@ class PipelineWithTransplant(params: PipelineParams) extends Module {
 
   // PMU Event
   val oPMUCountingCommit = IO(Output(Bool()))
-  oPMUCountingCommit := archstate.pstateIO.commit.fire && 
-    archstate.pstateIO.commit.ready && 
-    archstate.pstateIO.commit.isCommitUnit
+  oPMUCountingCommit := archstateU.pstateIO.commit.fire && 
+    archstateU.pstateIO.commit.ready && 
+    archstateU.pstateIO.commit.isCommitUnit
   
   val oPMUTransplantCycleCountingReq = IO(Output(new CycleCountingPort(params.thidN)))
   oPMUTransplantCycleCountingReq.start.bits := transplantU.cpu2trans.doneCPU.bits

@@ -11,8 +11,8 @@ class ValidTag[T <: Data](genTag: UInt, genData: Option[T]) extends Bundle {
 }
 
 class Tagged[T <: Data](genTag: UInt, genData: T) extends Bundle {
-  val tag = genTag.cloneType
-  val data = genData.cloneType
+  val tag = Output(genTag.cloneType)
+  val data = Output(genData.cloneType)
 }
 
 object Tagged {
@@ -25,9 +25,9 @@ object Tagged {
 }
 
 object ValidTag {
-  def apply[T <: Data](genTag:    UInt, genData: Option[T]): ValidTag[T] = new ValidTag(genTag, genData)
-  def apply[T <: Data](genTag:    UInt, genData: T): ValidTag[T] = new ValidTag(genTag, Some(genData))
-  def apply[T <: Data](genTag:    UInt): ValidTag[T] = new ValidTag(genTag, None)
+  def apply[T <: Data](genTag: UInt, genData: Option[T]): ValidTag[T] = new ValidTag(genTag, genData)
+  def apply[T <: Data](genTag: UInt, genData: T): ValidTag[T] = new ValidTag(genTag, Some(genData))
+  def apply[T <: Data](genTag: UInt): ValidTag[T] = new ValidTag(genTag, None)
   def apply[T <: Data](thidN: Int, genData: T): ValidTag[T] = ValidTag(UInt(log2Ceil(thidN).W), genData)
   def apply[T <: Data](thidN: Int): ValidTag[T] = ValidTag(UInt(log2Ceil(thidN).W), None)
 }

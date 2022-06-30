@@ -12,6 +12,8 @@ import antmicro.CSR.AXI4LiteCSR
 import antmicro.CSR.CSRBusMasterToNSlaves
 import antmicro.CSR.CSRBusSlaveConfig
 import armflex_pmu.PerformanceMonitor
+import antmicro.CSR._
+import chisel3.experimental.{prefix, noPrefix}
 
 class MemorySystemPipelinePortIO(params: MemoryHierarchyParams) extends Bundle {
   val cache = Flipped(new PipeCache.PipeCacheIO(params.getCacheParams.pAddrWidth, params.getCacheParams.blockSize))
@@ -158,15 +160,16 @@ class ARMFlexTop(
 
   
   // Wrap S_CSR bus with an AXIL
-  val uAXIL2CSR = Module(new AXI4LiteCSR(32, 0x400))
+  val uAXIL2CSR = Module(new AXI4LiteCSR(32, 0x500))
   val S_AXIL = IO(Flipped(uAXIL2CSR.io.ctl.cloneType))
   S_AXIL <> uAXIL2CSR.io.ctl
   val uCSRMux = Module(new CSRBusMasterToNSlaves(32, Seq(
     new CSRBusSlaveConfig(0, 0x100),
     new CSRBusSlaveConfig(0x100, TransplantConsts.TRANS_REG_TOTAL_REGS),
     new CSRBusSlaveConfig(0x200, 4),
-    new CSRBusSlaveConfig(0x300, 0x100)
-  ), (0, 0x400)))
+    new CSRBusSlaveConfig(0x300, 0x100),
+    new CSRBusSlaveConfig(0x400, 0x100)
+  ), (0, 0x500)))
   uCSRMux.masterBus <> uAXIL2CSR.io.bus
   uCSRMux.slavesBus(0) <> u_pipeline.S_CSR_ThreadTable
   uCSRMux.slavesBus(1) <> u_pipeline.S_CSR_Pipeline
@@ -211,9 +214,35 @@ class ARMFlexTop(
 
   uCSRMux.slavesBus(3) <> uPMU.S_CSR
 
+  val assertRegs = Math.ceil(u_pipeline.asserts.asUInt.getWidth/32.0).toInt
+  assert(assertRegs >= 1)
+  val uCSR = Module(new CSR(32, assertRegs))
+  uCSRMux.slavesBus(4) <> uCSR.io.bus
+  
+  // uCSR[0]: Assertions
+  assert(assertRegs == 1)
+  val regsAssert = Seq.fill(assertRegs)(prefix("Asserts")(SetClearReg(32)))
+  val (rAssertsPending_0, setAssert_0, clearAssert_0) = regsAssert(0)
+  clearAssert_0 := PulseCSR(uCSR.io.csr(0), 32)
+  StatusCSR(rAssertsPending_0, uCSR.io.csr(0), 32)
+  setAssert_0 := u_pipeline.asserts.asUInt
+
+  val regsAssert_first = Seq.fill(assertRegs)(prefix("Asserts_first")(SetClearReg(32)))
+  val (rAssertsPending_1, setAssert_1, clearAssert_1) = regsAssert_first(0)
+  clearAssert_1 := PulseCSR(uCSR.io.csr(0), 32)
+  StatusCSR(rAssertsPending_1, uCSR.io.csr(0), 32)
+  when(!rAssertsPending_1.orR) {
+    setAssert_1 := u_pipeline.asserts.asUInt
+  }
+
+
   // This debug signal is different from dbg: It's directly connected to the ILA.
-  val oILA = IO(Output(memory.oILA.cloneType))
-  oILA := memory.oILA
+  val oILA = IO(Output(new Bundle {
+    val assert = u_pipeline.asserts.asUInt.cloneType
+    val mem = memory.oILA.cloneType
+  }))
+  oILA.mem := memory.oILA
+  oILA.assert := u_pipeline.asserts.asUInt
 }
 
 class ARMFlexTopSimulator(
