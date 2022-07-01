@@ -150,7 +150,7 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
   private val (rRunning, setRunning, clearRunning) = prefix("Running")(SetClearReg(thidN))
   StatusCSR(rRunning, uCSR.io.csr(TRANS_REG_OFFST_RUNNING), thidN)
   setRunning := startSend.asUInt << startThread
-  clearRunning := setCpu2TransCpuDone
+  clearRunning := setCpu2Trans
 
   // uCSR[6]: Threads that have the stop flag raised
   StatusCSR(rStopCPURequest, uCSR.io.csr(TRANS_REG_OFFST_WAIT_STOP), thidN)
@@ -292,7 +292,7 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
   status.runningThreads := rRunning
 
   // Asserts
-  val reTransplant = WireInit((rCpu2TransPending & cpuDoneMask) =/= 0.U)
+  val reTransplant = WireInit((rCpu2TransPending & setCpu2Trans) =/= 0.U)
   val whileNotRunning_setDone = WireInit((rRunning & setRunning) =/= 0.U)
   val whileRunning_start = WireInit((rRunning & setStartingCpu) =/= 0.U)
   val whileRunning_transplant = WireInit((rRunning & setTrans2Cpu) =/= 0.U)
@@ -300,20 +300,29 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
   val whilePendingHost_set = WireInit((rTrans2HostPending & setTrans2Host) =/= 0.U)
   val whilePendingCpu_set = WireInit((rTrans2CpuPending & setTrans2Cpu) =/= 0.U)
   val whileCpu2TransPending_set = WireInit((rCpu2TransPending & setCpu2Trans) =/= 0.U)
+  val notRunning_forcedTransplant = WireInit(((~rRunning) & setCpu2TransHostForce) =/= 0.U)
   val asserts = IO(Output(new Bundle {
     val reTransplant = Bool()
     val whileNotRunning_setDone = Bool()
     val whileRunning_start = Bool()
     val whileRunning_transplant = Bool()
     val whileRunning_restart = Bool()
+    val whilePendingHost_set = Bool()
+    val whilePendingCpu_set = Bool()
+    val whileCpu2TransPending_set = Bool()
+    val notRunning_forcedTransplant = Bool()
   }))
   asserts.reTransplant := reTransplant
   asserts.whileNotRunning_setDone := whileNotRunning_setDone
   asserts.whileRunning_start      := whileRunning_start      
   asserts.whileRunning_transplant := whileRunning_transplant 
   asserts.whileRunning_restart    := whileRunning_restart    
+  asserts.whilePendingHost_set      := whilePendingHost_set      
+  asserts.whilePendingCpu_set       := whilePendingCpu_set       
+  asserts.whileCpu2TransPending_set := whileCpu2TransPending_set 
+  asserts.notRunning_forcedTransplant := notRunning_forcedTransplant
 
-  if (false) {
+  if (true) {
     assert(!reTransplant)
     assert(!whileNotRunning_setDone)
     assert(!whileRunning_start)
@@ -322,6 +331,7 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
     assert(!whilePendingHost_set)
     assert(!whilePendingCpu_set)
     assert(!whileCpu2TransPending_set)
+    assert(!notRunning_forcedTransplant)
   }
 
   if (true) { // TODO Conditional assertions
