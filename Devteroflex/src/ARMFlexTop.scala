@@ -248,12 +248,26 @@ class ARMFlexTop(
 
 class ARMFlexTopSimulator(
   paramsPipeline: PipelineParams,
-  paramsMemoryHierarchy: MemoryHierarchyParams
+  paramsMemoryHierarchy: MemoryHierarchyParams,
+  negativeAsyncReset: Boolean = false
 ) extends Module {
   import armflex.util.AXIReadMultiplexer
   import armflex.util.AXIWriteMultiplexer
-  val devteroFlexTop = Module(new ARMFlexTop(paramsPipeline, paramsMemoryHierarchy))
-  private val dmaMasterCtrl = Module(new AXI4MasterDMACtrl(3, 3, paramsMemoryHierarchy.dramAddrW, paramsMemoryHierarchy.dramDataW))
+  import scala.language.existentials
+
+  var devteroFlexTop: ARMFlexTop = null;
+  private var dmaMasterCtrl: AXI4MasterDMACtrl = null;
+
+  if(negativeAsyncReset){
+    withReset((!this.reset.asBool).asAsyncReset){
+      devteroFlexTop = Module(new ARMFlexTop(paramsPipeline, paramsMemoryHierarchy))
+      dmaMasterCtrl = Module(new AXI4MasterDMACtrl(3, 3, paramsMemoryHierarchy.dramAddrW, paramsMemoryHierarchy.dramDataW))
+    }
+  } else {
+    devteroFlexTop = Module(new ARMFlexTop(paramsPipeline, paramsMemoryHierarchy))
+    dmaMasterCtrl = Module(new AXI4MasterDMACtrl(3, 3, paramsMemoryHierarchy.dramAddrW, paramsMemoryHierarchy.dramDataW))
+  }
+  
   val S_AXI = IO(Flipped(devteroFlexTop.S_AXI.cloneType))
   val S_AXIL = IO(Flipped(devteroFlexTop.S_AXIL.cloneType))
   val M_AXI = IO(new AXI4(paramsMemoryHierarchy.dramAddrW, paramsMemoryHierarchy.dramDataW))
@@ -333,7 +347,7 @@ object ARMFlexTopVerilogFPGAEmitter extends App {
   val v = c.emitVerilog(
     new ARMFlexTopSimulator(
       new PipelineParams(thidN = 32, pAddrW =  34, ilaEnabled = true),
-      new MemoryHierarchyParams(thidN = 32, pAddrW = 34)
+      new MemoryHierarchyParams(thidN = 32, pAddrW = 34), true
     ), annotations = Seq(TargetDirAnnotation("fpga/")))
   
   
