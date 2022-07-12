@@ -64,6 +64,12 @@ class FetchUnitPC(thidN: Int) extends Module {
   }
 }
 
+class FetchRespBundle(thidN: Int) extends Bundle {
+  val thid = UInt(log2Ceil(thidN).W)
+  val inst = INST_T
+  val excp = Bool()
+}
+
 // TODO: Expose event when instruciton is ditched (TLB miss/permError/etc)
 class FetchUnit(
   params: PipelineParams,
@@ -75,7 +81,7 @@ class FetchUnit(
   private val pcUnit = Module(new FetchUnitPC(params.thidN))
 
   val ctrl_i = IO(pcUnit.ctrl.cloneType)
-  val instQ_o = IO(Decoupled(new Tagged(params.thidT, INST_T)))
+  val instQ_o = IO(Decoupled(new FetchRespBundle(params.thidN)))
   val mem_io = IO(new PipeMemPortIO(DATA_SZ, params.pAddrW, params.thidW, params.asidW, params.blockSize))
   val mmu_io = IO(new PipeMMUPortIO)
 
@@ -85,7 +91,7 @@ class FetchUnit(
   private val cacheReqQ = Module(new Queue(new PendingCacheReq, cacheReqQ_entries, true, false))
   private val cacheAdaptor = Module(new PipeCache.CacheInterface(new MetaData, maxInstsInFlight, params.pAddrW, params.blockSize))
   // Actual instructions
-  private val instQueue = Module(new Queue(new Tagged(params.thidT, INST_T), instQueue_entries, true, false))
+  private val instQueue = Module(new Queue(new FetchRespBundle(params.thidN), instQueue_entries, true, false))
   // Make sure receiver has enough entries left
   private val pc2cache_credits = Module(new CreditQueueController(cacheReqQ_entries))
   private val cache2insts_credits = Module(new CreditQueueController(instQueue_entries))
@@ -104,13 +110,14 @@ class FetchUnit(
 
   class MetaData extends Bundle {
     val pc = Output(DATA_T)
-    val id = Output(params.thidT)
+    val thid = Output(params.thidT)
   }
   private val metaDataTLB_w = Wire(new MetaData)
   metaDataTLB_w.pc := pcUnit.req.bits
-  metaDataTLB_w.id := pcUnit.req.tag
+  metaDataTLB_w.thid := pcUnit.req.tag
   private val metaDataTLB_r = RegEnable(metaDataTLB_w, mem_io.tlb.req.fire)
   cacheReqQ.io.enq.bits.paddr := mem_io.tlb.resp.bits.addr | metaDataTLB_r.pc(11,0) // PAGE_SIZE
+  cacheReqQ.io.enq.bits.excp := mem_io.tlb.resp.bits.violation
   cacheReqQ.io.enq.bits.meta := metaDataTLB_r
 
   // Handshakes management
@@ -131,12 +138,9 @@ class FetchUnit(
   // In case Cache is unavailable, store TLB requests
   class PendingCacheReq extends Bundle {
     val paddr = Output(mem_io.tlb.resp.bits.addr.cloneType)
+    val excp = Output(Bool())
     val meta = Output(new MetaData)
   }
-  cacheAdaptor.pipe_io.req.meta := cacheReqQ.io.deq.bits.meta
-  cacheAdaptor.pipe_io.req.port.bits.addr := cacheReqQ.io.deq.bits.paddr
-  cacheAdaptor.pipe_io.req.port.bits.data := DontCare
-  cacheAdaptor.pipe_io.req.port.bits.w_en := 0.U
   mem_io.cache <> cacheAdaptor.cache_io
 
   // Get 32 bit Instruction from response block
@@ -148,16 +152,39 @@ class FetchUnit(
   }
   private val instBits = WireInit(blockInsts(selectBlock.asUInt))
 
-  // Push 32 bit instruction to queue
-  instQueue.io.enq.bits := Tagged(respMetaData.id, instBits)
-
-  // Handshakes
-  cacheAdaptor.pipe_io.req.port.valid := false.B
   cacheReqQ.io.deq.ready := false.B
+  cacheAdaptor.pipe_io.req.port.valid := false.B
   cacheAdaptor.pipe_io.resp.port.ready := false.B
-  instQueue.io.enq.valid := false.B
-  cacheAdaptor.pipe_io.req.port.handshake(cacheReqQ.io.deq, cache2insts_credits.ready)
-  instQueue.io.enq.handshake(cacheAdaptor.pipe_io.resp.port)
+  when(!cacheReqQ.io.deq.bits.excp) {
+    // Normal cache request
+    cacheAdaptor.pipe_io.req.meta := cacheReqQ.io.deq.bits.meta
+    cacheAdaptor.pipe_io.req.port.bits.addr := cacheReqQ.io.deq.bits.paddr
+    cacheAdaptor.pipe_io.req.port.bits.data := DontCare
+    cacheAdaptor.pipe_io.req.port.bits.w_en := 0.U
+    cacheAdaptor.pipe_io.req.port.handshake(cacheReqQ.io.deq, cache2insts_credits.ready)
+  }.otherwise {
+    cacheAdaptor.pipe_io.req.meta := DontCare
+    cacheAdaptor.pipe_io.req.port.bits := DontCare
+    cacheAdaptor.pipe_io.req.port.valid := false.B
+  }
+
+  when(cacheAdaptor.pipe_io.resp.port.valid) {
+    // Push 32 bit instruction to queue
+    instQueue.io.enq.bits.thid := cacheAdaptor.pipe_io.resp.meta.thid
+    instQueue.io.enq.bits.inst := instBits
+    instQueue.io.enq.bits.excp := false.B
+    instQueue.io.enq.handshake(cacheAdaptor.pipe_io.resp.port)
+  }.elsewhen(cacheReqQ.io.deq.bits.excp) {
+    // Exception, bypass cacheReq
+    instQueue.io.enq.bits.thid := cacheReqQ.io.deq.bits.meta.thid
+    instQueue.io.enq.bits.inst := 0.U // Undef instruction
+    instQueue.io.enq.bits.excp := true.B
+    instQueue.io.enq.handshake(cacheReqQ.io.deq)
+  }.otherwise {
+    // No request
+    instQueue.io.enq.bits := DontCare
+    instQueue.io.enq.valid := false.B
+  }
 
   // Backpressure
   cache2insts_credits.trans.in := cacheReqQ.io.deq.fire
@@ -206,6 +233,9 @@ class FetchUnit(
     when(cacheAdaptor.pipe_io.resp.port.fire) {
       assert(instQueue.io.enq.fire, "On normal access, instruction must be pushed to completed insts")
     }
+    when(mem_io.cache.resp.valid) {
+      assert(mem_io.cache.resp.ready, "Cache does not support backpressure, must ensure always to be ready through credits")
+    }
 
     // --- Flush assertions ---
     when(flushController.ctrl.stopTransactions) {
@@ -214,6 +244,7 @@ class FetchUnit(
     when(flushController.ctrl.waitingForMMU) {
       assert(!haveCacheReq && !havePendingCacheReq, "No new cache requests should ever appear given that we stopped translating")
     }
+
   }
 
   if(false) { // TODO Conditional printing
@@ -222,20 +253,14 @@ class FetchUnit(
       printf(p"${location}:iTLB:Req:thid[${mem_io.tlb.req.bits.thid}]:PC[0x${Hexadecimal(mem_io.tlb.req.bits.addr)}]\n")
     }
     when(mem_io.tlb.resp.fire) {
-      printf(p"${location}:iTLB:Resp:thid[${metaDataTLB_r.id}]:PC[0x${Hexadecimal(metaDataTLB_r.pc)}]:paddr[0x${Hexadecimal(mem_io.tlb.resp.bits.addr)}]\n");
+      printf(p"${location}:iTLB:Resp:thid[${metaDataTLB_r.thid}]:PC[0x${Hexadecimal(metaDataTLB_r.pc)}]:paddr[0x${Hexadecimal(mem_io.tlb.resp.bits.addr)}]\n");
     }
     when(mem_io.cache.req.fire) {
-      printf(p"${location}:iCache:Req:thid[${cacheAdaptor.pipe_io.req.meta.id}]:PC[0x${Hexadecimal(cacheAdaptor.pipe_io.req.meta.pc)}]:paddr[0x${Hexadecimal(mem_io.cache.req.bits.addr)}]\n");
+      printf(p"${location}:iCache:Req:thid[${cacheAdaptor.pipe_io.req.meta.thid}]:PC[0x${Hexadecimal(cacheAdaptor.pipe_io.req.meta.pc)}]:paddr[0x${Hexadecimal(mem_io.cache.req.bits.addr)}]\n");
     }
     when(mem_io.cache.resp.fire) {
-      printf(p"${location}:iCache:Resp:thid[${cacheAdaptor.pipe_io.resp.meta.id}]:PC[0x${Hexadecimal(cacheAdaptor.pipe_io.resp.meta.pc)}]:\n" +
+      printf(p"${location}:iCache:Resp:thid[${cacheAdaptor.pipe_io.resp.meta.thid}]:PC[0x${Hexadecimal(cacheAdaptor.pipe_io.resp.meta.pc)}]:\n" +
              p"   Hit[${mem_io.cache.resp.bits.hit}]") // :DATA[0x${Hexadecimal(mem_io.cache.resp.bits.data.asUInt)}]\n");
-    }
-  }
-
-  if(true) { // TODO Conditional asserts
-    when(mem_io.cache.resp.valid) {
-      assert(mem_io.cache.resp.ready, "Cache does not support backpressure, must ensure always to be ready through credits")
     }
   }
 }
