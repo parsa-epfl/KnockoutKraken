@@ -14,11 +14,11 @@ void requireStateIsIdentical(const DevteroflexArchState &state1,
   REQUIRE(state1.icountBudget == state2.icountBudget);
 }
 
-void synchronizePage(FPGAContext *ctx, int asid, uint8_t *page, uint64_t vaddr,
+void synchronizePage(FPGAContext *ctx, int asid, uint8_t *page, uint64_t vaddr, bool is_instruction_page,
                      uint64_t paddr, bool expect_modified) {
   INFO("Synchronize page");
   MessageFPGA evict_request;
-  makeEvictRequest(asid, vaddr, &evict_request);
+  makeEvictRequest(asid, vaddr, is_instruction_page, true, &evict_request);
   mmuMsgSend(ctx, &evict_request);
 
   // Let's query message. It should send an eviction message

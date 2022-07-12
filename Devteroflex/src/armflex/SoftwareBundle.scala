@@ -166,12 +166,18 @@ abstract class SerializableToRaw[T <: RawMessage](msg: T) extends Bundle
 
 class QEMUPageEvictRequest(params: PageTableParams) extends SerializableToRaw(new RxMessage){
   val tag = new PTTagPacket(params)
+  val flushI = new Bool()
+  val flushD = new Bool()
 
-  def asVec: Vec[UInt] = tag.asVec
+  def asVec: Vec[UInt] = {
+    VecInit(tag.asVec ++ Seq(flushI, flushD))
+  }
 
   def parseFromVec(vec: Vec[UInt]): this.type = {
     val res = Wire(this.cloneType)
     res.tag := res.tag.parseFromVec(vec)
+    res.flushI := vec(3)
+    res.flushD := vec(4)
     res.asInstanceOf[this.type]
   }
 

@@ -15,7 +15,7 @@ extern "C" {
  * @param paddr the PA of the page to evict (for checking only)
  * @param expect_modified whether the page is modified (for checking only)
  */
-void synchronizePage(FPGAContext *ctx, int asid, uint8_t *page, uint64_t vaddr,
+void synchronizePage(FPGAContext *ctx, int asid, uint8_t *page, uint64_t vaddr, bool is_instruction_page,
                      uint64_t paddr, bool expect_modified);
 void requireStateIsIdentical(const DevteroflexArchState &state1,
                              const DevteroflexArchState &state2);

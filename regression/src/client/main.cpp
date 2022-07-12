@@ -125,7 +125,7 @@ TEST_CASE("execute-instruction-with-context-in-dram"){
   // fetch the page back.
   INFO("Send Page Eviction Request");
   MessageFPGA evict_request;
-  makeEvictRequest(asid, mem_addr, &evict_request);
+  makeEvictRequest(asid, mem_addr, false, true, &evict_request);
   mmuMsgSend(&c, &evict_request);
  
   // Let's query message. It should send an eviction message
@@ -259,7 +259,7 @@ TEST_CASE("execute-instruction") {
 
   INFO("Get back page");
   uint8_t data_buffer[4096];
-  synchronizePage(&c, asid, data_buffer, 0, page_data_paddr, true);
+  synchronizePage(&c, asid, data_buffer, 0, false, page_data_paddr, true);
   // CHECK its value
   INFO("Check final result");
   REQUIRE(data_buffer[0] == 10);

@@ -34,7 +34,7 @@ TEST_CASE("push-page-ppn-overflow", "aws-only") {
   mmuMsgSend(&ctx, &msg);
 
   INFO("Synchronize page");
-  makeEvictRequest(asid, vaddr, &msg);
+  makeEvictRequest(asid, vaddr, false, true, &msg);
   mmuMsgSend(&ctx, &msg);
 
   // Let's query message. It should send an eviction message
@@ -84,7 +84,7 @@ TEST_CASE("MMU-push-and-evict-pte"){
   // now, page is in the DRAM now.
   // Let's get it back.
   MessageFPGA evict_request;
-  makeEvictRequest(asid, va, &evict_request);
+  makeEvictRequest(asid, va, true, true, &evict_request);
   mmuMsgSend(&c, &evict_request);
 
   // Let's query message. It should send an eviction message

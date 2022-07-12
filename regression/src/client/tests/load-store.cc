@@ -133,7 +133,7 @@ static int test_ldst_all_sizes_pair(FPGAContext *ctx) {
 
   INFO("- Fetch back store page")
   makeZeroPage(page);
-  synchronizePage(ctx, asid, page, vaddr_st, page_data_st_paddr, true);
+  synchronizePage(ctx, asid, page, vaddr_st, false, page_data_st_paddr, true);
 
   // INFO("Verify store pair byte");
   // check_ldst_all_sizes_stores(page, 0, 8, 0xAB, 0xBA);
@@ -259,8 +259,8 @@ TEST_CASE("out-of-page-bound-pair-load") {
   REQUIRE((pending_threads & (1 << thid)) != 0);
   transplantGetState(&ctx, thid, &state);
 
-  synchronizePage(&ctx, asid, (uint8_t *)data_pages[1], expected_vas[1], pas[1], true);
-  synchronizePage(&ctx, asid, (uint8_t *)data_pages[2], expected_vas[2], pas[2], true);
+  synchronizePage(&ctx, asid, (uint8_t *)data_pages[1], expected_vas[1], false, pas[1], true);
+  synchronizePage(&ctx, asid, (uint8_t *)data_pages[2], expected_vas[2], false, pas[2], true);
 
   INFO("- Check context");
   REQUIRE(state.xregs[0] == 0xAABBCCDD);

@@ -98,6 +98,8 @@ typedef struct MessageFPGA
             uint32_t asid;
             uint32_t vpn_lo;
             uint32_t vpn_hi;
+            uint32_t flush_i;
+            uint32_t flush_d;
         } PageEvictRequest;
         uint32_t words[16];
         uint8_t bytes[64];
@@ -246,12 +248,14 @@ typedef enum MemoryAccessType {
 #define MemoryAccessType
 #endif
 
-static inline void makeEvictRequest(int asid, uint64_t va, MessageFPGA *evict_request)
+static inline void makeEvictRequest(int asid, uint64_t va, bool flushICache, bool flushDCache, MessageFPGA *evict_request)
 {
     evict_request->type = sPageEvict;
     evict_request->asid = asid;
     evict_request->vpn_hi = VPN_GET_HI(va);
     evict_request->vpn_lo = VPN_GET_LO(va);
+    evict_request->PageEvictRequest.flush_i = (flushICache != 0);
+    evict_request->PageEvictRequest.flush_d = (flushDCache != 0);
 }
 
 /* sEvictReply not used anymore
