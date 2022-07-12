@@ -230,3 +230,59 @@ TEST_CASE("test-pressure-ldp-stp-max-thread-short") {
   
   releaseFPGAContext(&ctx);
 }
+
+
+TEST_CASE("ldst-infinite-pressure") {
+  FPGAContext ctx;
+  DevteroflexArchState state;
+  MessageFPGA msg;
+  REQUIRE(initFPGAContext(&ctx) == 0);
+  initArchState(&state, 0x0);
+  int asid = 0x10;
+  uint64_t inst_paddr = 0x4000;
+
+  INFO("- Get page from binary")
+  makeDeadbeefPage(page, PAGE_SIZE);
+  FILE *f = fopen("../src/client/tests/asm/executables/pressure_ldp_stp_infinite.bin", "rb");
+  REQUIRE(f != nullptr);
+  REQUIRE(fread(page, 1, 4096, f) != 0);
+  fclose(f);
+
+  INFO("Push instruction page");
+  dramPagePush(&ctx, paddr, page);
+  makeMissReply(INST_FETCH, -1, asid, state.pc, paddr, &pf_reply);
+  mmuMsgSend(&ctx, &msg);
+
+  INFO("Push data page");
+  ((uint64_t *) page)[(vaddr & 0xFFF)/8] = 0x0000000300000001ULL;
+  dramPagePush(&ctx, paddr + PAGE_SIZE, page);
+  makeMissReply(DATA_LOAD, -1, asid, vaddr, paddr + PAGE_SIZE, &pf_reply);
+  mmuMsgSend(&ctx, &pf_reply);
+
+  INFO("Push and start state");
+  state.asid = asid;
+  transplantPushAndSinglestep(&ctx, 0, &state);
+
+  INFO("Advance");
+  advanceTicks(&ctx, 200);
+
+  INFO("Check now execution stopped");
+  uint32_t pending_threads = 0;
+  transplantPending(&ctx, &pending_threads);
+  REQUIRE(pending_threads);
+
+  INFO("Check transplant");
+  transplantGetState(&ctx, 0, &state);
+  INFO("Check !undef")
+  REQUIRE(!FLAGS_GET_IS_UNDEF(state.flags));
+  INFO("Check exception")
+  REQUIRE(!FLAGS_GET_IS_EXCEPTION(state.flags));
+  INFO("Check address");
+  REQUIRE(state.xregs[19] == vaddr);
+  INFO("Check dest 1");
+  CHECK(state.xregs[7] == 1);
+  INFO("Check dest 2");
+  CHECK(state.xregs[13] == 3);
+
+  releaseFPGAContext(&ctx);
+}
