@@ -21,6 +21,7 @@ void requireStateIsIdentical(const DevteroflexArchState &state1,
                              const DevteroflexArchState &state2);
 void checkPagePerWord(uint8_t *page_expect, uint8_t *page_actual);
 void initFPGAContextAndPage(int num_threads, FPGAContext *c);
+void expectPageFault(const FPGAContext *ctx, uint32_t asid, uint64_t vaddr, int perm);
 
 static uint8_t zero_page[PAGE_SIZE] = {0};
 static uint8_t page[PAGE_SIZE] = {0};

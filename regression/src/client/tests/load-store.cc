@@ -206,16 +206,6 @@ TEST_CASE("out-of-page-bound-pair-load") {
   REQUIRE(transplantPushAndWait(&ctx, thid, &state) == 0);
   REQUIRE(transplantStart(&ctx, thid) == 0);
 
-  // FPGA requires instruction page.
-  MessageFPGA message;
-  mmuMsgGet(&ctx, &message);
-  INFO("- Check page fault request");
-  REQUIRE(message.type == sPageFaultNotify);
-  REQUIRE(message.asid == asid);
-  REQUIRE(message.vpn_lo == VPN_GET_LO(state.pc));
-  REQUIRE(message.vpn_hi == VPN_GET_HI(state.pc));
-  REQUIRE(message.PageFaultNotif.permission == INST_FETCH);
-
   INFO("- Push instruction page");
   MessageFPGA pf_reply;
   dramPagePush(&ctx, inst_pa, page);
@@ -237,12 +227,7 @@ TEST_CASE("out-of-page-bound-pair-load") {
   int expected_access_types[] = {DATA_LOAD, DATA_STORE, DATA_STORE};
   for(int i = 0; i < 3; ++i){
     INFO("- Query " << i << " page fault message");
-    mmuMsgGet(&ctx, &message);
-    REQUIRE(message.type == sPageFaultNotify);
-    REQUIRE(message.asid == asid);
-    REQUIRE(message.vpn_lo == VPN_GET_LO(expected_vas[i]));
-    REQUIRE(message.vpn_hi == VPN_GET_HI(expected_vas[i]));
-    CHECK(message.PageFaultNotif.permission <= expected_access_types[i]);
+    expectPageFault(&ctx, asid, expected_vas[i], expected_access_types[i]);
 
     INFO("- Resolve " << i << " page fault");
     dramPagePush(&ctx, pas[i], data_pages[i]);
