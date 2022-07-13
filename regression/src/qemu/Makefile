@@ -4,12 +4,16 @@ CFLAGS=-I$(IDIR)
 
 ODIR=obj
 
-objects=test_cache_page_evict test_fclose test_fopen test_fork test_fread test_getpid test_memsvc_segfault_full test_mmap test_mprotect_segfault test_mprotect_success test_mremap test_mumap test_puts test_sleep test_read_inst_page_buffer test_read_inst_page_func loader
+objects=test_cache_page_evict test_fclose test_fopen test_fork \
+	test_fread test_getpid test_memsvc_segfault_full test_mmap \
+	test_mprotect_segfault test_mprotect_success test_mremap \
+	test_mumap test_puts test_sleep test_read_inst_page_buffer \
+	test_read_inst_page_func loader 
 
 _DEPS = devteroflex.h
 DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
 
-all: dir $(objects) close test_multithreading
+all: dir $(objects) test_multithreading close 
 
 close:
 	echo "chmod +x no_loader/*"
@@ -25,8 +29,8 @@ $(objects): %: %.c $(DEPS)
 	$(CC) $(CFLAGS) -Wall -g -O0 -DCONFIG_FOR_LOADER -o with_loader/$@ $< 
 
 test_multithreading: test_multithreading.c $(DEPS)
-	$(CC) $(CFLAGS) -Wall -lpthread -g -O0 -o no_loader/$@ $<
-	$(CC) $(CFLAGS) -Wall -lpthread -g -O0 -DCONFIG_FOR_LOADER -o with_loader/$@ $< 
+	$(CC) $(CFLAGS) -Wall -pthread -g -O0 -o no_loader/$@ $<
+	$(CC) $(CFLAGS) -Wall -pthread -g -O0 -DCONFIG_FOR_LOADER -o with_loader/$@ $< 
 
 .PHONY: clean
 
