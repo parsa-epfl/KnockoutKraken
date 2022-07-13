@@ -34,6 +34,8 @@ class PageTableReq(params: PageTableParams) extends Bundle {
   val thid = UInt(log2Ceil(params.thidN).W)
   val thid_v = Bool()
   val refillDest = PageTableOps.destType // Contains source of request
+  val flushI = Bool() // whether to flush the iTLB and iCache
+  val flushD = Bool() // whether to flush the dTLB and dCache
 }
 
 import PageTableOps._

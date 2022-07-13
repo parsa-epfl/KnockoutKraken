@@ -15,12 +15,13 @@ extern "C" {
  * @param paddr the PA of the page to evict (for checking only)
  * @param expect_modified whether the page is modified (for checking only)
  */
-void synchronizePage(FPGAContext *ctx, int asid, uint8_t *page, uint64_t vaddr,
+void synchronizePage(FPGAContext *ctx, int asid, uint8_t *page, uint64_t vaddr, bool is_instruction_page,
                      uint64_t paddr, bool expect_modified);
 void requireStateIsIdentical(const DevteroflexArchState &state1,
                              const DevteroflexArchState &state2);
 void checkPagePerWord(uint8_t *page_expect, uint8_t *page_actual);
 void initFPGAContextAndPage(int num_threads, FPGAContext *c);
+void expectPageFault(const FPGAContext *ctx, uint32_t asid, uint64_t vaddr, int perm);
 
 static uint8_t zero_page[PAGE_SIZE] = {0};
 static uint8_t page[PAGE_SIZE] = {0};

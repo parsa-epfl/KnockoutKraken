@@ -245,6 +245,9 @@ class TLB(
     u_dataBankManager.writeback_request_o.ready := uArbMissWriteBack.io.in(0).ready
   }
 
+  uArbMissWriteBack.io.in(0).bits.flushD := false.B
+  uArbMissWriteBack.io.in(0).bits.flushI := false.B
+
 
   // Miss Request
   uArbMissWriteBack.io.in(1).bits := DontCare
@@ -255,6 +258,8 @@ class TLB(
   uArbMissWriteBack.io.in(1).bits.op := PageTableOps.opLookup
   uArbMissWriteBack.io.in(1).valid := u_dataBankManager.miss_request_o.valid
   uArbMissWriteBack.io.in(1).ready <> u_dataBankManager.miss_request_o.ready
+  uArbMissWriteBack.io.in(1).bits.flushD := false.B
+  uArbMissWriteBack.io.in(1).bits.flushI := false.B
 
   if(false) { // TODO Conditional printing
     val location = "TLB"

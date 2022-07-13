@@ -26,7 +26,11 @@ import os.stat
  */ 
 
 class PageTableEntryDeletorPort(params: MemoryHierarchyParams) extends Bundle {
-  val req = Flipped(Decoupled(new PageTableItem(params.getPageTableParams)))
+  val req = Flipped(Decoupled(new Bundle {
+    val pt_item = new PageTableItem(params.getPageTableParams)
+    val flushI = Bool()
+    val flushD = Bool()
+  }))
   val resp = Decoupled(new PageTableItem(params.getPageTableParams))
 }
 
@@ -53,15 +57,15 @@ class PageTableEntryDeletor(params: MemoryHierarchyParams) extends Module {
   })
 
   // Get flush request
-  val workingPageTableEntry = Reg(PORT.req.bits.cloneType)
+  val rFlushContext = Reg(PORT.req.bits.cloneType)
   PORT.req.ready := state_r === sIdle
   when(PORT.req.fire) {
-    workingPageTableEntry := PORT.req.bits
+    rFlushContext := PORT.req.bits
   }
 
   // Flush request completed
   PORT.resp.valid := state_r === sComplete
-  PORT.resp.bits := workingPageTableEntry
+  PORT.resp.bits := rFlushContext.pt_item
 
   // To synchronize flushing both Data and Inst paths
   val reqInstDone_r = RegInit(false.B)
@@ -71,22 +75,22 @@ class PageTableEntryDeletor(params: MemoryHierarchyParams) extends Module {
   val reqBothDone = WireInit(reqInstDone_r && reqDataDone_r)
   val respBothDone = WireInit(respInstDone_r && respDataDone_r)
   // Request Pipeline flush permission
-  MMU_FLUSH_REQ_PIPELINE_IO.inst.flushPermReq.valid := state_r === sReqPipePerm && workingPageTableEntry.entry.perm === INST_FETCH.U && !reqInstDone_r
-  MMU_FLUSH_REQ_PIPELINE_IO.data.flushPermReq.valid := state_r === sReqPipePerm && !reqDataDone_r
+  MMU_FLUSH_REQ_PIPELINE_IO.inst.flushPermReq.valid := state_r === sReqPipePerm && rFlushContext.flushI && !reqInstDone_r
+  MMU_FLUSH_REQ_PIPELINE_IO.data.flushPermReq.valid := state_r === sReqPipePerm && rFlushContext.flushD && !reqDataDone_r
   when(MMU_FLUSH_REQ_PIPELINE_IO.inst.flushPermReq.fire) { reqInstDone_r := true.B }
   when(MMU_FLUSH_REQ_PIPELINE_IO.data.flushPermReq.fire) { reqDataDone_r := true.B }
 
   // Release Pipeline flush permission 
-  MMU_FLUSH_REQ_PIPELINE_IO.inst.flushCompled.valid := state_r === sReleasePipePerm && workingPageTableEntry.entry.perm === INST_FETCH.U && !reqInstDone_r
-  MMU_FLUSH_REQ_PIPELINE_IO.data.flushCompled.valid := state_r === sReleasePipePerm && !reqDataDone_r
+  MMU_FLUSH_REQ_PIPELINE_IO.inst.flushCompled.valid := state_r === sReleasePipePerm && rFlushContext.flushI && !reqInstDone_r
+  MMU_FLUSH_REQ_PIPELINE_IO.data.flushCompled.valid := state_r === sReleasePipePerm && rFlushContext.flushD && !reqDataDone_r
   when(MMU_FLUSH_REQ_PIPELINE_IO.inst.flushCompled.fire) { reqInstDone_r := true.B }
   when(MMU_FLUSH_REQ_PIPELINE_IO.data.flushCompled.fire) { reqDataDone_r := true.B }
 
   // Flush and get TLB entry latest value
-  MMU_FLUSH_TLB_IO.inst.req.bits := workingPageTableEntry.tag
-  MMU_FLUSH_TLB_IO.inst.req.valid := state_r === sFlushTLB && workingPageTableEntry.entry.perm === INST_FETCH.U && !reqInstDone_r
-  MMU_FLUSH_TLB_IO.data.req.bits := workingPageTableEntry.tag
-  MMU_FLUSH_TLB_IO.data.req.valid := state_r === sFlushTLB && !reqDataDone_r
+  MMU_FLUSH_TLB_IO.inst.req.bits := rFlushContext.pt_item.tag
+  MMU_FLUSH_TLB_IO.inst.req.valid := state_r === sFlushTLB && rFlushContext.flushI && !reqInstDone_r
+  MMU_FLUSH_TLB_IO.data.req.bits := rFlushContext.pt_item.tag
+  MMU_FLUSH_TLB_IO.data.req.valid := state_r === sFlushTLB && rFlushContext.flushD && !reqDataDone_r
   when(MMU_FLUSH_TLB_IO.inst.req.fire) { reqInstDone_r := true.B }
   when(MMU_FLUSH_TLB_IO.data.req.fire) { reqDataDone_r := true.B }
   when(MMU_FLUSH_TLB_IO.inst.resp.fire) { respInstDone_r := true.B }
@@ -95,7 +99,7 @@ class PageTableEntryDeletor(params: MemoryHierarchyParams) extends Module {
   // TLB Resp, hit => evicted entry, update modified bit
   when(MMU_FLUSH_TLB_IO.data.resp.fire && MMU_FLUSH_TLB_IO.data.resp.bits.hit) {
     // NOTE: Only the data can modify the page, so we don't check for the instruction side
-    workingPageTableEntry.entry.modified := MMU_FLUSH_TLB_IO.data.resp.bits.entry.modified
+    rFlushContext.pt_item.entry.modified := MMU_FLUSH_TLB_IO.data.resp.bits.entry.modified
   }
  
 
@@ -103,10 +107,10 @@ class PageTableEntryDeletor(params: MemoryHierarchyParams) extends Module {
   val iCacheFlushBlock_r = RegInit(0.U(log2Ceil(params.cacheBlocksPerPage).W))
   val dCacheFlushBlock_r = RegInit(0.U(log2Ceil(params.cacheBlocksPerPage).W))
 
-  MMU_FLUSH_CACHE_IO.inst.flushReq.bits.addr := Cat(workingPageTableEntry.entry.ppn, iCacheFlushBlock_r) << log2Ceil(params.cacheBlockSize/8).U
-  MMU_FLUSH_CACHE_IO.data.flushReq.bits.addr := Cat(workingPageTableEntry.entry.ppn, dCacheFlushBlock_r) << log2Ceil(params.cacheBlockSize/8).U
-  MMU_FLUSH_CACHE_IO.inst.flushReq.valid := state_r === sEvictCacheBlocks && workingPageTableEntry.entry.perm === INST_FETCH.U && !reqInstDone_r
-  MMU_FLUSH_CACHE_IO.data.flushReq.valid := state_r === sEvictCacheBlocks && !reqDataDone_r
+  MMU_FLUSH_CACHE_IO.inst.flushReq.bits.addr := Cat(rFlushContext.pt_item.entry.ppn, iCacheFlushBlock_r) << log2Ceil(params.cacheBlockSize/8).U
+  MMU_FLUSH_CACHE_IO.data.flushReq.bits.addr := Cat(rFlushContext.pt_item.entry.ppn, dCacheFlushBlock_r) << log2Ceil(params.cacheBlockSize/8).U
+  MMU_FLUSH_CACHE_IO.inst.flushReq.valid := state_r === sEvictCacheBlocks && rFlushContext.flushI && !reqInstDone_r
+  MMU_FLUSH_CACHE_IO.data.flushReq.valid := state_r === sEvictCacheBlocks && rFlushContext.flushD && !reqDataDone_r
   when(MMU_FLUSH_CACHE_IO.inst.flushReq.fire) { 
     iCacheFlushBlock_r := iCacheFlushBlock_r + 1.U 
     when(iCacheFlushBlock_r === (params.cacheBlocksPerPage - 1).U) {
@@ -129,54 +133,38 @@ class PageTableEntryDeletor(params: MemoryHierarchyParams) extends Module {
     is(sIdle) {
       when(PORT.req.fire) {
         state_r := sReqPipePerm
-        reqDataDone_r := false.B
-        reqInstDone_r := false.B
-        when(PORT.req.bits.entry.perm =/= INST_FETCH.U) {
-          // No need to flush instructions on Data permissions
-          reqInstDone_r := true.B
-          respInstDone_r := true.B
-        }
+        reqInstDone_r := !PORT.req.bits.flushI
+        reqDataDone_r := !PORT.req.bits.flushD
+        respInstDone_r := !PORT.req.bits.flushI
+        respDataDone_r := !PORT.req.bits.flushD
       }
     }
 
     is(sReqPipePerm) {
       when(reqBothDone) {
-        reqDataDone_r := false.B
-        reqInstDone_r := false.B
+        reqInstDone_r := !rFlushContext.flushI
+        reqDataDone_r := !rFlushContext.flushD
         state_r := sFlushTLB
-        when(workingPageTableEntry.entry.perm =/= INST_FETCH.U) {
-          // No need to flush instructions on Data permissions
-          reqInstDone_r := true.B
-        }
       }
     }
 
     is(sFlushTLB) {
       when(reqBothDone && respBothDone) {
-        reqDataDone_r := false.B
-        reqInstDone_r := false.B
-        respDataDone_r := false.B
-        respInstDone_r := false.B
+        reqInstDone_r := !rFlushContext.flushI
+        reqDataDone_r := !rFlushContext.flushD
+        respInstDone_r := !rFlushContext.flushI
+        respDataDone_r := !rFlushContext.flushD
         state_r := sEvictCacheBlocks
-        when(workingPageTableEntry.entry.perm =/= INST_FETCH.U) {
-          // No need to flush instructions on Data permissions
-          reqInstDone_r := true.B
-          respInstDone_r := true.B
-        }
       }
     }
 
     is(sEvictCacheBlocks) {
       when(reqBothDone) {
-        reqInstDone_r := false.B
-        reqDataDone_r := false.B
+        reqInstDone_r := !rFlushContext.flushI
+        reqDataDone_r := !rFlushContext.flushD
         iCacheFlushBlock_r := 0.U
         dCacheFlushBlock_r := 0.U
         state_r := sWaitWbLatency
-        when(workingPageTableEntry.entry.perm =/= INST_FETCH.U) {
-          // No need to flush instructions on Data permissions
-          reqInstDone_r := true.B
-        }
       }
     }
 
@@ -198,13 +186,9 @@ class PageTableEntryDeletor(params: MemoryHierarchyParams) extends Module {
 
     is(sReleasePipePerm) {
       when(reqBothDone) {
-        reqDataDone_r := false.B
-        reqInstDone_r := false.B
+        reqInstDone_r := !rFlushContext.flushI
+        reqDataDone_r := !rFlushContext.flushD
         state_r := sComplete
-        when(workingPageTableEntry.entry.perm =/= INST_FETCH.U) {
-          // No need to flush instructions on Data permissions
-          reqInstDone_r := true.B
-        }
       }
     }
 

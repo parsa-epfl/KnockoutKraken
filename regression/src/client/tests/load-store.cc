@@ -133,7 +133,7 @@ static int test_ldst_all_sizes_pair(FPGAContext *ctx) {
 
   INFO("- Fetch back store page")
   makeZeroPage(page);
-  synchronizePage(ctx, asid, page, vaddr_st, page_data_st_paddr, true);
+  synchronizePage(ctx, asid, page, vaddr_st, false, page_data_st_paddr, true);
 
   // INFO("Verify store pair byte");
   // check_ldst_all_sizes_stores(page, 0, 8, 0xAB, 0xBA);
@@ -206,16 +206,6 @@ TEST_CASE("out-of-page-bound-pair-load") {
   REQUIRE(transplantPushAndWait(&ctx, thid, &state) == 0);
   REQUIRE(transplantStart(&ctx, thid) == 0);
 
-  // FPGA requires instruction page.
-  MessageFPGA message;
-  mmuMsgGet(&ctx, &message);
-  INFO("- Check page fault request");
-  REQUIRE(message.type == sPageFaultNotify);
-  REQUIRE(message.asid == asid);
-  REQUIRE(message.vpn_lo == VPN_GET_LO(state.pc));
-  REQUIRE(message.vpn_hi == VPN_GET_HI(state.pc));
-  REQUIRE(message.PageFaultNotif.permission == INST_FETCH);
-
   INFO("- Push instruction page");
   MessageFPGA pf_reply;
   dramPagePush(&ctx, inst_pa, page);
@@ -237,12 +227,7 @@ TEST_CASE("out-of-page-bound-pair-load") {
   int expected_access_types[] = {DATA_LOAD, DATA_STORE, DATA_STORE};
   for(int i = 0; i < 3; ++i){
     INFO("- Query " << i << " page fault message");
-    mmuMsgGet(&ctx, &message);
-    REQUIRE(message.type == sPageFaultNotify);
-    REQUIRE(message.asid == asid);
-    REQUIRE(message.vpn_lo == VPN_GET_LO(expected_vas[i]));
-    REQUIRE(message.vpn_hi == VPN_GET_HI(expected_vas[i]));
-    CHECK(message.PageFaultNotif.permission <= expected_access_types[i]);
+    expectPageFault(&ctx, asid, expected_vas[i], expected_access_types[i]);
 
     INFO("- Resolve " << i << " page fault");
     dramPagePush(&ctx, pas[i], data_pages[i]);
@@ -259,8 +244,8 @@ TEST_CASE("out-of-page-bound-pair-load") {
   REQUIRE((pending_threads & (1 << thid)) != 0);
   transplantGetState(&ctx, thid, &state);
 
-  synchronizePage(&ctx, asid, (uint8_t *)data_pages[1], expected_vas[1], pas[1], true);
-  synchronizePage(&ctx, asid, (uint8_t *)data_pages[2], expected_vas[2], pas[2], true);
+  synchronizePage(&ctx, asid, (uint8_t *)data_pages[1], expected_vas[1], false, pas[1], true);
+  synchronizePage(&ctx, asid, (uint8_t *)data_pages[2], expected_vas[2], false, pas[2], true);
 
   INFO("- Check context");
   REQUIRE(state.xregs[0] == 0xAABBCCDD);
@@ -555,6 +540,84 @@ TEST_CASE("ldst-signed-word-pair") {
     CHECK(state.xregs[7] == 1);
     INFO("Check dest 2");
     CHECK(state.xregs[13] == 3);
+
+    releaseFPGAContext(&ctx);
+}
+
+TEST_CASE("instfetch-exception") {
+    FPGAContext ctx;
+    DevteroflexArchState state;
+    REQUIRE(initFPGAContext(&ctx) == 0);
+    initArchState(&state, 0x0);
+    int asid = 0x10;
+
+    INFO("Load instruction")
+    int paddr = ctx.ppage_base_addr;
+    uint8_t page[PAGE_SIZE] = {0}; 
+    makeDeadbeefPage(page, PAGE_SIZE);
+    ((uint32_t *) page)[0] = 0xF940001F; // ldr     xzr, [x0]
+    ((uint32_t *) page)[1] = 0x0;        // Trigger transplant
+    uint64_t vaddr = 0x000000ABCD040;
+    state.xregs[0] = vaddr;
+    state.xregs[31] = 0xABCDABCDABCDABC;
+
+    MessageFPGA pf_reply;
+
+    INFO("Push instruction page");
+    dramPagePush(&ctx, paddr, page);
+    makeMissReply(INST_FETCH, -1, asid, state.pc, paddr, &pf_reply);
+    mmuMsgSend(&ctx, &pf_reply);
+
+    INFO("Push data page");
+    ((uint64_t *) page)[(vaddr & 0xFFF)/8] = 0xB00B5B00B5B0A00;
+    dramPagePush(&ctx, paddr + PAGE_SIZE, page);
+    makeMissReply(DATA_LOAD, -1, asid, vaddr, paddr + PAGE_SIZE, &pf_reply);
+    mmuMsgSend(&ctx, &pf_reply);
+
+    INFO("Push and start state");
+    state.asid = asid;
+    transplantPushAndSinglestep(&ctx, 0, &state);
+
+    INFO("Advance");
+    advanceTicks(&ctx, 200);
+
+    INFO("Check now execution stopped");
+    uint32_t pending_threads = 0;
+    transplantPending(&ctx, &pending_threads);
+    REQUIRE(pending_threads);
+
+    INFO("Check transplant");
+    transplantGetState(&ctx, 0, &state);
+    INFO("Check undef")
+    REQUIRE(!FLAGS_GET_IS_UNDEF(state.flags));
+    INFO("Check exception")
+    REQUIRE(!FLAGS_GET_IS_EXCEPTION(state.flags));
+    INFO("Check address");
+    REQUIRE(state.xregs[0] == vaddr);
+    INFO("Check exception");
+
+    INFO("Push and start state on Data Page");
+    state.pc = vaddr;
+    state.asid = asid;
+    transplantPushAndSinglestep(&ctx, 0, &state);
+
+    INFO("Advance");
+    advanceTicks(&ctx, 200);
+
+    INFO("Check now execution stopped");
+    pending_threads = 0;
+    transplantPending(&ctx, &pending_threads);
+    REQUIRE(pending_threads);
+
+    INFO("Check transplant");
+    transplantGetState(&ctx, 0, &state);
+    INFO("Check undef")
+    REQUIRE(!FLAGS_GET_IS_UNDEF(state.flags));
+    INFO("Check exception")
+    REQUIRE(FLAGS_GET_IS_EXCEPTION(state.flags));
+    INFO("Check address");
+    REQUIRE(state.xregs[0] == vaddr);
+    INFO("Check exception");
 
     releaseFPGAContext(&ctx);
 }

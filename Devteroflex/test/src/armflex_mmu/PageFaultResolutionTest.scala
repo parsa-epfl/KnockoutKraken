@@ -71,7 +71,7 @@ class PageFaultResolutionTester extends AnyFreeSpec with ChiselScalatestTester {
       val sets = Seq((evictedEntryIdx -> evictedItem))
 
       // Prepare Evict Request
-      val qemuEvictRequest = QEMUPageEvictRequest(evictedTag)
+      val qemuEvictRequest = QEMUPageEvictRequest(evictedTag, false.B, true.B)
       val qemuEvictRequestMsg = dut.rawMessageHelper.encodeMsgPageEvictReq(qemuEvictRequest)
 
       // Send miss reply

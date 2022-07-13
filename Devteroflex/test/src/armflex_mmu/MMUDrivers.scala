@@ -177,8 +177,12 @@ object MMUBundleDrivers {
   }
 
   object QEMUPageEvictRequest {
-    def apply(tag: PTTagPacket)(implicit params: PageTableParams): QEMUPageEvictRequest = 
-      new QEMUPageEvictRequest(params).Lit(_.tag -> PTTagPacket(tag.vpn, tag.asid))
+    def apply(tag: PTTagPacket, flushI: Bool, flushD: Bool)(implicit params: PageTableParams): QEMUPageEvictRequest = 
+      new QEMUPageEvictRequest(params).Lit(
+        _.tag -> PTTagPacket(tag.vpn, tag.asid),
+        _.flushD -> flushD,
+        _.flushI -> flushI
+      )
   }
 
   object QEMUMissReply {
@@ -216,8 +220,16 @@ object MMUBundleDrivers {
   }
 
   object PageTableReq {
-    def apply(entry: PageTableItem, op: UInt, thid: UInt, withForward: Bool, dest: UInt)(implicit params: PageTableParams): PageTableReq = 
-      new PageTableReq(params).Lit(_.entry -> PageTableItem(entry.tag, entry.entry), _.op -> op, _.thid -> thid, _.thid_v -> withForward, _.refillDest -> dest)
+    def apply(entry: PageTableItem, op: UInt, thid: UInt, withForward: Bool, dest: UInt, flushI: Bool, flushD: Bool)(implicit params: PageTableParams): PageTableReq = 
+      new PageTableReq(params).Lit(
+      _.entry -> PageTableItem(entry.tag, entry.entry),
+      _.op -> op,
+      _.thid -> thid,
+      _.thid_v -> withForward,
+      _.refillDest -> dest,
+      _.flushD -> flushD,
+      _.flushI -> flushI
+    )
   }
  
   object PageTableSetPacket {
@@ -438,9 +450,9 @@ object MMUDriver {
 
     def sendMissReq(accessType: Int, thid: UInt, asid: UInt, vpn: UInt, perm: UInt) = {
       if(accessType == MemoryAccessType.INST_FETCH) {
-        target.mmu_tlb_io.inst.pageTableReq.enqueue(PageTableReq(PageTableItem(PTTagPacket(vpn, asid), PTEntryPacket(0.U, perm, false.B)), PageTableOps.opLookup, thid, false.B, PageTableOps.destITLB))
+        target.mmu_tlb_io.inst.pageTableReq.enqueue(PageTableReq(PageTableItem(PTTagPacket(vpn, asid), PTEntryPacket(0.U, perm, false.B)), PageTableOps.opLookup, thid, false.B, PageTableOps.destITLB, false.B, false.B))
       } else {
-        target.mmu_tlb_io.data.pageTableReq.enqueue(PageTableReq(PageTableItem(PTTagPacket(vpn, asid), PTEntryPacket(0.U, perm, false.B)), PageTableOps.opLookup, thid, false.B, PageTableOps.destDTLB))
+        target.mmu_tlb_io.data.pageTableReq.enqueue(PageTableReq(PageTableItem(PTTagPacket(vpn, asid), PTEntryPacket(0.U, perm, false.B)), PageTableOps.opLookup, thid, false.B, PageTableOps.destDTLB, false.B, false.B))
       }
     }
     

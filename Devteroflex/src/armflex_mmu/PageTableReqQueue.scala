@@ -24,7 +24,7 @@ class PageTableReqQueue(params: MemoryHierarchyParams) extends Module {
   val PAGE_TABLE_OPERATOR_QUEUE = IO(Decoupled(new PageTableReq(params.getPageTableParams)))
 
   val hostMsgs = Queue(HOST_MSG_QUEUE.req, 2, false, false)
-  val hostReq_w = WireInit(PAGE_TABLE_OPERATOR_QUEUE.bits.cloneType, DontCare)
+  val hostReq_w = Wire(PAGE_TABLE_OPERATOR_QUEUE.bits.cloneType)
 
   val uArbiter = Module(new Arbiter(new PageTableReq(params.getPageTableParams), 3))
 
@@ -36,7 +36,6 @@ class PageTableReqQueue(params: MemoryHierarchyParams) extends Module {
   uArbiter.io.in(1) <> TLB_MSG_QUEUE.data
   uArbiter.io.in(2) <> TLB_MSG_QUEUE.inst
 
-  uArbiter.io.in(0).bits.refillDest := Mux(hostReq_w.entry.entry.perm === MemoryAccessType.INST_FETCH.U, PageTableOps.destITLB, PageTableOps.destDTLB)
   uArbiter.io.in(1).bits.refillDest := PageTableOps.destDTLB
   uArbiter.io.in(2).bits.refillDest := PageTableOps.destITLB
 
@@ -76,10 +75,21 @@ class PageTableReqQueue(params: MemoryHierarchyParams) extends Module {
   when(isQemuEvictRequest_w) {
     hostReq_w.entry := pageTableEntryEvict
     hostReq_w.op := PageTableOps.opEvict
+    hostReq_w.flushD := qemuEvictRequestMsg_w.flushD
+    hostReq_w.flushI := qemuEvictRequestMsg_w.flushI
   }.elsewhen(isQemuMissReply_w) {
     hostReq_w.entry := pageTableEntryInsert
     hostReq_w.op := PageTableOps.opInsert
+    hostReq_w.flushD := DontCare
+    hostReq_w.flushI := DontCare
+  }.otherwise {
+    hostReq_w.entry := DontCare
+    hostReq_w.op := DontCare
+    hostReq_w.flushD := DontCare
+    hostReq_w.flushI := DontCare
   }
+
+  hostReq_w.refillDest := Mux(hostReq_w.entry.entry.perm === MemoryAccessType.INST_FETCH.U, PageTableOps.destITLB, PageTableOps.destDTLB)
 
   if (true) { // TODO Conditional asserts
 

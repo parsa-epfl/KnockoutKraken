@@ -14,11 +14,20 @@ void requireStateIsIdentical(const DevteroflexArchState &state1,
   REQUIRE(state1.icountBudget == state2.icountBudget);
 }
 
-void synchronizePage(FPGAContext *ctx, int asid, uint8_t *page, uint64_t vaddr,
+void synchronizePage(FPGAContext *ctx, int asid, uint8_t *page, uint64_t vaddr, bool is_instruction_page,
                      uint64_t paddr, bool expect_modified) {
+  int perm = 0;
+  if(expect_modified) {
+    perm = DATA_STORE;
+  } else if(is_instruction_page) {
+    perm = INST_FETCH;
+  } else {
+    perm = DATA_LOAD;
+  }
+
   INFO("Synchronize page");
   MessageFPGA evict_request;
-  makeEvictRequest(asid, vaddr, &evict_request);
+  makeEvictRequest(asid, vaddr, is_instruction_page, true, &evict_request);
   mmuMsgSend(ctx, &evict_request);
 
   // Let's query message. It should send an eviction message
@@ -40,7 +49,7 @@ void synchronizePage(FPGAContext *ctx, int asid, uint8_t *page, uint64_t vaddr,
   REQUIRE(message.vpn_hi == VPN_GET_HI(vaddr));
   REQUIRE(message.vpn_lo == VPN_GET_LO(vaddr));
   REQUIRE(message.EvictDone.ppn == GET_PPN_FROM_PADDR(paddr));
-  REQUIRE(message.EvictDone.permission == DATA_STORE);
+  REQUIRE(message.EvictDone.permission == perm);
   REQUIRE(message.EvictDone.modified == expect_modified);
 
   // Let's query message. It should send an eviction completed message
@@ -103,3 +112,13 @@ void printPMUCounters(const FPGAContext *ctx){
     puts("----------");
   }
 }
+
+void expectPageFault(const FPGAContext *ctx, uint32_t asid, uint64_t vaddr, int perm) {
+  MessageFPGA message;
+  mmuMsgGet(ctx, &message);
+  INFO("- Check page fault request");
+  REQUIRE(message.type == sPageFaultNotify);
+  REQUIRE(message.asid == asid);
+  REQUIRE(message.vpn == VPN_ALIGN(vaddr));
+  CHECK(message.PageFaultNotif.permission == perm);
+}  // FPGA requires instruction page.

@@ -24,6 +24,8 @@ memTests=(
   "load-xzr"
   "load-signed-byte-32-bit"
   "ldst-exception"
+  "ldst-signed-word-pair"
+  "instfetch-exception"
 )
 
 transplantTests=(

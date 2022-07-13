@@ -29,6 +29,12 @@ class PipeArchStateIO(thidN: Int) extends Bundle {
   val commit = new CommitArchStateIO(thidN)
 }
 
+class IssuedInst(thidN: Int) extends Bundle {
+  val thid = Output(UInt(log2Ceil(thidN).W))
+  val dinst = Output(new DInst)
+  val instFetchExcp = Output(Bool())
+}
+
 /** Processor
   */
 class Pipeline(params: PipelineParams) extends Module {
@@ -52,9 +58,9 @@ class Pipeline(params: PipelineParams) extends Module {
   val fetchU = Module(new FetchUnit(params))
   // Decode
   val decoderU = Module(new DecodeUnit)
-  val decReg = Module(new Queue(new Tagged(params.thidT, new DInst), 1, true, false))
+  val decReg = Module(new Queue(new IssuedInst(params.thidN), 1, true, false))
   // Issue
-  val issuerU = Module(new Queue(new Tagged(params.thidT, new DInst), 1, true, false))
+  val issuerU = Module(new Queue(new IssuedInst(params.thidN), 1, true, false))
   // |         |        |            |
   // | Execute |        |            |
   // |         | Branch |            |
@@ -90,28 +96,29 @@ class Pipeline(params: PipelineParams) extends Module {
   fetchU.mmu_io <> mmu_io.inst
 
   // --- Fetch Inst -> Decode ---
-  decoderU.inst := fetchU.instQ_o.bits.data
-  decReg.io.enq.bits.data := decoderU.dinst
-  decReg.io.enq.bits.tag := fetchU.instQ_o.bits.tag
+  decoderU.inst := fetchU.instQ_o.bits.inst
+  decReg.io.enq.bits.dinst := decoderU.dinst
+  decReg.io.enq.bits.thid := fetchU.instQ_o.bits.thid
+  decReg.io.enq.bits.instFetchExcp := fetchU.instQ_o.bits.excp
   decReg.io.enq.handshake(fetchU.instQ_o)
 
   // --- Decode -> Issue ---
   // Read from RFile, 1 cycle delay
-  archstate.issue.sel.tag := decReg.io.deq.bits.tag
+  archstate.issue.sel.tag := decReg.io.deq.bits.thid
   archstate.issue.sel.valid := decReg.io.deq.fire
-  archstate.issue.rd.tag := decReg.io.deq.bits.tag
-  archstate.issue.rd.port(0).addr := decReg.io.deq.bits.data.rs1
-  archstate.issue.rd.port(1).addr := decReg.io.deq.bits.data.rs2
-  archstate.issue.rd.port(2).addr := decReg.io.deq.bits.data.rd.bits
+  archstate.issue.rd.tag := decReg.io.deq.bits.thid
+  archstate.issue.rd.port(0).addr := decReg.io.deq.bits.dinst.rs1
+  archstate.issue.rd.port(1).addr := decReg.io.deq.bits.dinst.rs2
+  archstate.issue.rd.port(2).addr := decReg.io.deq.bits.dinst.rd.bits
   issuerU.io.enq <> decReg.io.deq // Issue is always ready, so no check for archstate.issue.ready necessary
   // connect rfile read(address) interface
-  when(decReg.io.deq.bits.data.itype === I_DP3S) {
-    archstate.issue.rd.port(2).addr := decReg.io.deq.bits.data.imm(4, 0)
+  when(decReg.io.deq.bits.dinst.itype === I_DP3S) {
+    archstate.issue.rd.port(2).addr := decReg.io.deq.bits.dinst.imm(4, 0)
   }
 
   // Issue ---------------------------
   // Execute : Issue -> Execute
-  val issued_dinst = WireInit(issuerU.io.deq.bits.data)
+  val issued_dinst = WireInit(issuerU.io.deq.bits.dinst)
 
   // Execute ---------------------------
   // Read register data from rfile
@@ -155,7 +162,7 @@ class Pipeline(params: PipelineParams) extends Module {
 
   // ------ Pack Execute/LDST result
   memU.pipe.req.bits.:=(ldstU.io.minst.bits) // Enforce := method of MInstTag
-  memU.pipe.req.bits.tag := issuerU.io.deq.bits.tag
+  memU.pipe.req.bits.tag := issuerU.io.deq.bits.thid
   memU.mem_io <> mem_io.data
   memU.mmu_io <> mmu_io.data
 
@@ -164,13 +171,19 @@ class Pipeline(params: PipelineParams) extends Module {
     ldstU.io.minst.valid &&
       ldstU.io.minst.bits.exceptions.valid
   )
+
   val unalignedExcpData = WireInit(
-    ldstU.io.minst.bits.exceptions.bits.unalignedExcp
+    ldstU.io.minst.valid &&
+      ldstU.io.minst.bits.exceptions.bits.unalignedExcp
   )
 
   val branchException = WireInit(
     brancherU.io.binst.valid &&
       brancherU.io.binst.bits.unalignedExcp
+  )
+
+  val instFetchException = WireInit(
+    issuerU.io.deq.bits.instFetchExcp
   )
 
   // CommitReg
@@ -191,16 +204,16 @@ class Pipeline(params: PipelineParams) extends Module {
   commitNext.br_taken.valid := brancherU.io.binst.valid
   commitNext.br_taken.bits := brancherU.io.binst.bits.pc
 
-  commitNext.exceptions.valid := memException || branchException
+  commitNext.exceptions.valid := memException || branchException || instFetchException
   commitNext.exceptions.bits := Cat(
     brancherU.io.binst.bits.unalignedExcp.asUInt,
     unalignedExcpData.asUInt
   )
 
-  commitNext.undef := !issued_dinst.inst32.valid
+  commitNext.undef := !issued_dinst.inst32.valid && !instFetchException
   commitNext.inst := issued_dinst.inst32.bits
   commitNext.is32bit := issued_dinst.is32bit
-  commitNext.tag := issuerU.io.deq.bits.tag
+  commitNext.tag := issuerU.io.deq.bits.thid
 
   // Memory Resp
 
@@ -243,14 +256,14 @@ class Pipeline(params: PipelineParams) extends Module {
   instrument.commit <> commitU.deq
 
   // ---------- Asserts
-  val nonRunning_fetch  = WireInit(((~transplantIO.status.runningThreads) & (fetchU.instQ_o.valid.asUInt << fetchU.instQ_o.bits.tag)) =/= 0.U)
-  val nonRunning_decode = WireInit(((~transplantIO.status.runningThreads) & (decReg.io.deq.valid.asUInt << decReg.io.deq.bits.tag)) =/= 0.U)
-  val nonRunning_issue  = WireInit(((~transplantIO.status.runningThreads) & (issuerU.io.deq.valid.asUInt << issuerU.io.deq.bits.tag)) =/= 0.U)
+  val nonRunning_fetch  = WireInit(((~transplantIO.status.runningThreads) & (fetchU.instQ_o.valid.asUInt << fetchU.instQ_o.bits.thid)) =/= 0.U)
+  val nonRunning_decode = WireInit(((~transplantIO.status.runningThreads) & (decReg.io.deq.valid.asUInt << decReg.io.deq.bits.thid)) =/= 0.U)
+  val nonRunning_issue  = WireInit(((~transplantIO.status.runningThreads) & (issuerU.io.deq.valid.asUInt << issuerU.io.deq.bits.thid)) =/= 0.U)
   val nonRunning_memory = WireInit(((~transplantIO.status.runningThreads) & (memU.pipe.resp.valid.asUInt << memU.pipe.resp.bits.tag)) =/= 0.U)
   val nonRunning_commit = WireInit(((~transplantIO.status.runningThreads) & (commitU.commit.commited.valid.asUInt << commitU.commit.commited.tag)) =/= 0.U)
   val nonRunningFault = WireInit(nonRunning_fetch || nonRunning_decode || nonRunning_issue || nonRunning_memory || nonRunning_commit)
   val fetchAndTransplant = WireInit((fetchU.ctrl_i.commit.valid && transplantIO.done.valid) && (fetchU.ctrl_i.commit.tag === transplantIO.done.tag))
-  val parallelInsts = WireInit((issuerU.io.deq.valid && commitU.commit.commited.valid) && (issuerU.io.deq.bits.tag === commitU.commit.commited.tag))
+  val parallelInsts = WireInit((issuerU.io.deq.valid && commitU.commit.commited.valid) && (issuerU.io.deq.bits.thid === commitU.commit.commited.tag))
 
   val asserts = IO(Output(new Bundle {
     val nonRunningFault = Bool()
@@ -283,7 +296,7 @@ class Pipeline(params: PipelineParams) extends Module {
 
   }))
   dbg.issue.valid := issuerU.io.deq.fire
-  dbg.issue.thid := issuerU.io.deq.bits.tag
+  dbg.issue.thid := issuerU.io.deq.bits.thid
   dbg.issue.mem := ldstU.io.minst.valid
   dbg.issue.transplant := commitU.enq.bits.exceptions.valid || commitU.enq.bits.undef
 

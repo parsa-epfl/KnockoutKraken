@@ -161,7 +161,7 @@ class MMU(params: MemoryHierarchyParams, messageFIFODepth: Int = 2) extends Modu
   uHostMsgQueue.wrFifo.freeCnt := uPageTableReqQueue.HOST_MSG_QUEUE.req.ready.asUInt
 
   uPageTableReqHandler.PAGE_ENTRY_REQ <> uPageTableReqQueue.PAGE_TABLE_OPERATOR_QUEUE
-  uPageTableReqHandler.PAGE_ENTRY_PAGE_WALK <> uPageTableSetOperator.PORT
+  uPageTableReqHandler.PAGE_SET_OPERATION <> uPageTableSetOperator.PORT
   uPageTableReqHandler.PAGE_ENTRY_DELETOR <> uPageTableEntryDeletor.PORT
 
   if(true) { // TODO Conditional printing 

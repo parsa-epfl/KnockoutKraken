@@ -24,7 +24,7 @@ class PageTableReqHandler(params: MemoryHierarchyParams) extends Module {
   val PAGE_ENTRY_REQ = IO(Flipped(Decoupled(new PageTableReq(params.getPageTableParams))))
 
   // Operate on Page Table
-  val PAGE_ENTRY_PAGE_WALK = IO(new Bundle {
+  val PAGE_SET_OPERATION = IO(new Bundle {
     val req = Decoupled(new PageTableReq(params.getPageTableParams))
     val resp = Flipped(Decoupled(Valid(new PageTableItem(params.getPageTableParams))))
   })
@@ -46,9 +46,9 @@ class PageTableReqHandler(params: MemoryHierarchyParams) extends Module {
   PAGE_ENTRY_REQ.ready := state_r === sIdle
 
   // ------- Do the Page Table walk and operation -------
-  PAGE_ENTRY_PAGE_WALK.req.bits := workingReq_r
-  PAGE_ENTRY_PAGE_WALK.req.valid := state_r === sSendPageTableReq
-  PAGE_ENTRY_PAGE_WALK.resp.ready := state_r === sWaitPageTableResp
+  PAGE_SET_OPERATION.req.bits := workingReq_r
+  PAGE_SET_OPERATION.req.valid := state_r === sSendPageTableReq
+  PAGE_SET_OPERATION.resp.ready := state_r === sWaitPageTableResp
 
   // ------- Pack messages to HOST ------
   val pageTableRespValid_r = RegInit(false.B)
@@ -72,7 +72,18 @@ class PageTableReqHandler(params: MemoryHierarchyParams) extends Module {
   FPGA_MSG_QUEUE.req.valid := state_r === sNotifyDoneResp || state_r === sNotifyStartResp || state_r === sNotifyFaultResp
 
   // ----- Delete evicted entry -------
-  PAGE_ENTRY_DELETOR.req.bits := pageTableResp_r
+  PAGE_ENTRY_DELETOR.req.bits.pt_item := pageTableResp_r
+  // Based on the different delete reason, the permission is from different place.
+  PAGE_ENTRY_DELETOR.req.bits.flushD := Mux(
+    workingReq_r.op === PageTableOps.opEvict,
+    workingReq_r.flushD,
+    true.B // the data cache is always flushed because an instruction page may be in the data cache. 
+  )
+  PAGE_ENTRY_DELETOR.req.bits.flushI := Mux(
+    workingReq_r.op === PageTableOps.opEvict,
+    workingReq_r.flushI,
+    workingReq_r.entry.entry.perm === INST_FETCH.U // We flush the instruction TLB and cache only when the page being evicted is an instruction page.
+  )
   PAGE_ENTRY_DELETOR.req.valid := state_r === sSendPageTableDelete
 
   PAGE_ENTRY_DELETOR.resp.ready := state_r === sWaitPageTableDelete
@@ -84,9 +95,9 @@ class PageTableReqHandler(params: MemoryHierarchyParams) extends Module {
   PAGE_ENTRY_TLB_IO.refillResp.bits.dest := workingReq_r.refillDest
   PAGE_ENTRY_TLB_IO.refillResp.valid := state_r === sForwardTLB
 
-  when(PAGE_ENTRY_PAGE_WALK.resp.valid) {
-    pageTableResp_r := PAGE_ENTRY_PAGE_WALK.resp.bits.bits
-    pageTableRespValid_r := PAGE_ENTRY_PAGE_WALK.resp.bits.valid
+  when(PAGE_SET_OPERATION.resp.valid) {
+    pageTableResp_r := PAGE_SET_OPERATION.resp.bits.bits
+    pageTableRespValid_r := PAGE_SET_OPERATION.resp.bits.valid
   }
 
   // state machine
@@ -99,20 +110,21 @@ class PageTableReqHandler(params: MemoryHierarchyParams) extends Module {
              PAGE_ENTRY_REQ.bits.op =/= PageTableOps.opLookup &&
              PAGE_ENTRY_REQ.bits.op =/= PageTableOps.opEvict) {
           state_r := sIdle
+          assert(false.B, "Unknown message is exported to the PageTableRequestHandler.")
         }
       }
     }
 
     is(sSendPageTableReq){
-      when(PAGE_ENTRY_PAGE_WALK.req.fire) {
+      when(PAGE_SET_OPERATION.req.fire) {
         state_r := sWaitPageTableResp
       }
     }
 
     is(sWaitPageTableResp) {
-      when(PAGE_ENTRY_PAGE_WALK.resp.fire) {
+      when(PAGE_SET_OPERATION.resp.fire) {
         when(workingReq_r.op === PageTableOps.opInsert) {
-          when(PAGE_ENTRY_PAGE_WALK.resp.bits.valid) {
+          when(PAGE_SET_OPERATION.resp.bits.valid) {
             // Evict due to associatibity colition
             state_r := sNotifyStartResp
           }.elsewhen(workingReq_r.thid_v) {
@@ -123,7 +135,7 @@ class PageTableReqHandler(params: MemoryHierarchyParams) extends Module {
             state_r := sIdle
           }
         }.elsewhen(workingReq_r.op === PageTableOps.opEvict) {
-          when(PAGE_ENTRY_PAGE_WALK.resp.bits.valid) {
+          when(PAGE_SET_OPERATION.resp.bits.valid) {
             // Evict entry
             state_r := sNotifyStartResp
           }.otherwise {
@@ -131,9 +143,9 @@ class PageTableReqHandler(params: MemoryHierarchyParams) extends Module {
             state_r := sIdle
           }
         }.elsewhen(workingReq_r.op === PageTableOps.opLookup) {
-          when(PAGE_ENTRY_PAGE_WALK.resp.bits.valid) {
+          when(PAGE_SET_OPERATION.resp.bits.valid) {
             // Hit Page Table
-            workingReq_r.entry := PAGE_ENTRY_PAGE_WALK.resp.bits.bits
+            workingReq_r.entry := PAGE_SET_OPERATION.resp.bits.bits
             state_r := sForwardTLB
           }.otherwise {
             // Miss Page Table

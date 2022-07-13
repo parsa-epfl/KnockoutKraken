@@ -25,16 +25,7 @@ TEST_CASE("basic-transplant-with-initial-page-fault"){
   transplantStart(&c, th);
 
   // Let's query message. It should be a page fault.
-  MessageFPGA msg;
-  REQUIRE(mmuMsgGet(&c, &msg) == 0);
-
-
-  REQUIRE(msg.type == sPageFaultNotify);
-  REQUIRE(msg.asid == asid);
-  REQUIRE(msg.vpn_lo == VPN_GET_LO(state.pc));
-  REQUIRE(msg.vpn_hi == VPN_GET_HI(state.pc));
-  REQUIRE(msg.PageFaultNotif.permission == INST_FETCH);
-
+  expectPageFault(&c, asid, state.pc, INST_FETCH);
   releaseFPGAContext(&c);
 }
 
@@ -125,7 +116,7 @@ TEST_CASE("execute-instruction-with-context-in-dram"){
   // fetch the page back.
   INFO("Send Page Eviction Request");
   MessageFPGA evict_request;
-  makeEvictRequest(asid, mem_addr, &evict_request);
+  makeEvictRequest(asid, mem_addr, false, true, &evict_request);
   mmuMsgSend(&c, &evict_request);
  
   // Let's query message. It should send an eviction message
@@ -195,11 +186,7 @@ TEST_CASE("execute-instruction") {
   mmuMsgGet(&c, &msg);
 
   INFO("Check page fault request");
-  REQUIRE(msg.type == sPageFaultNotify);
-  REQUIRE(msg.asid == asid);
-  REQUIRE(msg.vpn_lo == VPN_GET_LO(state.pc));
-  REQUIRE(msg.vpn_hi == VPN_GET_HI(state.pc));
-  REQUIRE(msg.PageFaultNotif.permission == INST_FETCH);
+  expectPageFault(&c, asid, state.pc, INST_FETCH);
 
   // Reply with the correct page.
   INFO("Send instruction page to FPGA");
@@ -222,11 +209,7 @@ TEST_CASE("execute-instruction") {
   REQUIRE(mmuMsgGet(&c, &msg) == 0);
 
   INFO("Check page fault request");
-  REQUIRE(msg.type == sPageFaultNotify);
-  REQUIRE(msg.asid == asid);
-  REQUIRE(msg.vpn_lo == VPN_GET_LO(0L));
-  REQUIRE(msg.vpn_hi == VPN_GET_HI(0L));
-  REQUIRE(msg.PageFaultNotif.permission == DATA_STORE);
+  expectPageFault(&c, asid, 0, DATA_STORE);
 
   // If so, reply with a empty page.
   INFO("Send data page to FPGA");
@@ -259,7 +242,7 @@ TEST_CASE("execute-instruction") {
 
   INFO("Get back page");
   uint8_t data_buffer[4096];
-  synchronizePage(&c, asid, data_buffer, 0, page_data_paddr, true);
+  synchronizePage(&c, asid, data_buffer, 0, false, page_data_paddr, true);
   // CHECK its value
   INFO("Check final result");
   REQUIRE(data_buffer[0] == 10);

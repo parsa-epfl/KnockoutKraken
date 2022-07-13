@@ -147,7 +147,7 @@ class QEMUMessageEncoderDecoderTester extends AnyFreeSpec with ChiselScalatestTe
       dut => dut.init()
       implicit val params = dut.param.getPageTableParams
       val pageSet = PageTableItem(PTTagPacket(vpn.U, asid.U), PTEntryPacket(ppn.U, perm.U, false.B))
-      val msg = QEMUPageEvictRequest(pageSet.tag)
+      val msg = QEMUPageEvictRequest(pageSet.tag, true.B, true.B)
       val msgRaw = dut.rawMessageHelper.encodeMsgPageEvictReq(msg)
       dut.message.encoded_i.enqueueNow(msgRaw)
       dut.message.evictPage.expectDequeueNow(msg)

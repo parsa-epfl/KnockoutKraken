@@ -159,7 +159,7 @@ static void select_sort_x_threads(size_t thidN, bool run_1024 = false) {
   // 7. check the result.
   char pageFPGA[PAGE_SIZE];
   for(int thid = 0; thid < thidN; ++thid){
-    synchronizePage(&c, state[thid].asid, (uint8_t *) pageFPGA, data_page_va[thid], data_page_pa[thid], true);
+    synchronizePage(&c, state[thid].asid, (uint8_t *) pageFPGA, data_page_va[thid], false, data_page_pa[thid], true);
     // make sure that p is ordered.
     for(int i = 0; i < (run_1024 ? 1023 : 15); ++i) {
       //printf("page[%i] <= page[%i]\n", i, i+1);

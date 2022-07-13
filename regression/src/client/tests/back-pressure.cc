@@ -197,7 +197,7 @@ static int test_stress_memory(
       uint64_t base_paddr = page_data_st_paddr + thid * nDataPagesPerThread * PAGE_SIZE;
       uint64_t paddr = base_paddr + currPage * PAGE_SIZE;
       INFO("Synchronizing Page");
-      synchronizePage(ctx, asid[thid], page, vaddr, paddr, true);
+      synchronizePage(ctx, asid[thid], page, vaddr, false, paddr, true);
       INFO("Checking Page");
       checkPagePerWord(&src_pages[thid*nDataPagesPerThread*PAGE_SIZE + currPage*PAGE_SIZE], page);
     }
