@@ -11,23 +11,23 @@ on:
 
 jobs:
   scala_unit_test:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
     - uses: actions/checkout@v2
     - uses: jodersky/setup-mill@master
       with:
-        mill-version: 0.10.0
+        mill-version: 0.10.5
     - name: Setup Verilator
       run: sudo apt update && sudo apt install verilator -y && verilator --version
     - name: Run tests
       run: mill Devteroflex.test
   cpp_unit_test:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
     - uses: actions/checkout@v2
     - uses: jodersky/setup-mill@master
       with:
-        mill-version: 0.10.0
+        mill-version: 0.10.5
     - name: Setup Verilator
       run: sudo apt update && sudo apt install verilator -y && verilator --version
     - name: Generate Verilog
