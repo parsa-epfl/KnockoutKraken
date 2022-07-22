@@ -188,10 +188,10 @@ int pmuStopCounting(const FPGAContext *c){
 uint64_t pmuTotalCycles(const FPGAContext *c){
   uint64_t res = 0;
   uint32_t half = 0;
-  assert(readAXIL(c, BASE_ADDR_PMU_REGS + PMU_REG_OFFST_TOTAL_CYCLES_LO, &half) == 0);
+  assert(readAXIL(c, BASE_ADDR_PMU_REGS + PMU_REG_OFFST_TOTAL_CYCLES_HI, &half) == 0);
   res = half;
   res <<= 32;
-  assert(readAXIL(c, BASE_ADDR_PMU_REGS + PMU_REG_OFFST_TOTAL_CYCLES_HI, &half) == 0);
+  assert(readAXIL(c, BASE_ADDR_PMU_REGS + PMU_REG_OFFST_TOTAL_CYCLES_LO, &half) == 0);
   res |= half;
   return res;
 }
