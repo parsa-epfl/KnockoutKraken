@@ -199,6 +199,12 @@ class ArchState(thidN: Int, withDbg: Boolean) extends Module {
 
   pstateIO.commit.ready := true.B // This signal get's multiplexed higher in the hierarchy
 
+  if (true) {
+    when(pstateIO.forceTransplant =/= 0.U && pstateIO.commit.fire) {
+      assert((pstateIO.forceTransplant & 1.U << pstateIO.commit.tag) === 0.U)
+    }
+  }
+
   val dbg = IO(new Bundle {
     val vecState = if(withDbg) Some(Output(Vec(thidN, new FullStateBundle))) else None
   })

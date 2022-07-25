@@ -66,17 +66,6 @@ TEST_CASE("host-cmd-force-transplant") {
     initState_infinite_loop(&state, true);
     int paddr = ctx.ppage_base_addr;
 
-    FILE *f = fopen("../src/client/tests/asm/executables/infinite-loop.bin", "rb");
-    REQUIRE(f != nullptr);
-    REQUIRE(fread(page, 1, 4096, f) != 0);
-    fclose(f);
-
-    INFO("Push instruction page");
-    dramPagePush(&ctx, paddr, page);
-    MessageFPGA pf_reply;
-    makeMissReply(INST_FETCH, -1, asid, state.pc, paddr, &pf_reply);
-    mmuMsgSend(&ctx, &pf_reply);
-
     INFO("Push state");
     state.asid = asid;
     transplantPushAndStart(&ctx, 0, &state);
@@ -88,9 +77,10 @@ TEST_CASE("host-cmd-force-transplant") {
     uint32_t pending_threads;
     transplantPending(&ctx, &pending_threads);
     REQUIRE(!pending_threads);
- 
+
     INFO("Advance");
     advanceTicks(&ctx, 100);
+    expectPageFault(&ctx, state.asid, state.pc, INST_FETCH);
 
     INFO("Stop CPU");
     transplantForceTransplant(&ctx, 0);

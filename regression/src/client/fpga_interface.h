@@ -230,6 +230,8 @@ int transplantFreePending(const FPGAContext *c, uint32_t pending_threads);
 int transplantWaitTillPending(const FPGAContext *c, uint32_t *pending_threads);
 int transplantStart(const FPGAContext *c, uint32_t thid);
 int transplantStopCPU(const FPGAContext *c, uint32_t thid);
+// Should only be used when the pipeline is not running -> Page Fault
+// Will lead to undeterministic state in case the pipeline commits the thread
 int transplantForceTransplant(const FPGAContext *c, uint32_t thid);
 int transplantCheckRunning(const FPGAContext *c, uint32_t *running_threads);
 int transplantCheckWaitStop(const FPGAContext *c, uint32_t *waitStop_threads);
