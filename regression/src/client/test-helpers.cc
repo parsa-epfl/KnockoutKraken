@@ -115,10 +115,14 @@ void printPMUCounters(const FPGAContext *ctx){
 
 void expectPageFault(const FPGAContext *ctx, uint32_t asid, uint64_t vaddr, int perm) {
   MessageFPGA message;
-  mmuMsgGet(ctx, &message);
+  REQUIRE(mmuMsgGet(ctx, &message) == 0);
   INFO("- Check page fault request");
   REQUIRE(message.type == sPageFaultNotify);
   REQUIRE(message.asid == asid);
   REQUIRE(message.vpn == VPN_ALIGN(vaddr));
-  CHECK(message.PageFaultNotif.permission == perm);
+  if(perm == INST_FETCH){
+    REQUIRE(message.PageFaultNotif.permission == perm);
+  } else {
+    REQUIRE(message.PageFaultNotif.permission <= perm);
+  }
 }  // FPGA requires instruction page.

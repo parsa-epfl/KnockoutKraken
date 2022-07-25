@@ -182,10 +182,6 @@ TEST_CASE("execute-instruction") {
 
   // First page fault here, it's instruction page.
   INFO("FPGA requires instruction page");
-  MessageFPGA msg;
-  mmuMsgGet(&c, &msg);
-
-  INFO("Check page fault request");
   expectPageFault(&c, asid, state.pc, INST_FETCH);
 
   // Reply with the correct page.
@@ -206,9 +202,6 @@ TEST_CASE("execute-instruction") {
 
   // Page fault again for data. 
   INFO("FPGA requires data page");
-  REQUIRE(mmuMsgGet(&c, &msg) == 0);
-
-  INFO("Check page fault request");
   expectPageFault(&c, asid, 0, DATA_STORE);
 
   // If so, reply with a empty page.

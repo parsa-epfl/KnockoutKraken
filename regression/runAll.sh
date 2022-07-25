@@ -110,11 +110,16 @@ for t in ${tests2run[@]}; do
   sleep 1
 done
 
+is_failed=0
+
 echo "TEST THAT FAILED==============================================================================="
 for t in ${failed_tests[@]}; do
   echo "FAILED:$t."
+  is_failed=1
 done
 
 echo "DONE"
 
 cd ..
+
+exit $is_failed

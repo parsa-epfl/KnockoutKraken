@@ -207,6 +207,7 @@ TEST_CASE("out-of-page-bound-pair-load") {
   REQUIRE(transplantStart(&ctx, thid) == 0);
 
   INFO("- Push instruction page");
+  expectPageFault(&ctx, asid, state.pc, INST_FETCH);
   MessageFPGA pf_reply;
   dramPagePush(&ctx, inst_pa, page);
   makeMissReply(INST_FETCH, thid, asid, state.pc, inst_pa, &pf_reply);

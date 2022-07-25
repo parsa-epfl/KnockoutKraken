@@ -51,7 +51,7 @@ static void select_sort_x_threads(size_t thidN, bool run_1024 = false) {
   }
 
   // sync the page back
-  dramPagePush(&c, 9, first_page);
+  dramPagePush(&c, 0, first_page);
   
   // 3.2. prepare the architecture state
   DevteroflexArchState state[MAX_THREAD_COUNT];
