@@ -82,7 +82,7 @@ class PageTableReqHandler(params: MemoryHierarchyParams) extends Module {
   PAGE_ENTRY_DELETOR.req.bits.flushI := Mux(
     workingReq_r.op === PageTableOps.opEvict,
     workingReq_r.flushI,
-    workingReq_r.entry.entry.perm === INST_FETCH.U // We flush the instruction TLB and cache only when the page being evicted is an instruction page.
+    pageTableResp_r.entry.perm === INST_FETCH.U // We flush the instruction TLB and cache only when the page being evicted is an instruction page.
   )
   PAGE_ENTRY_DELETOR.req.valid := state_r === sSendPageTableDelete
 
