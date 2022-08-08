@@ -107,12 +107,6 @@ int initFPGAContext(FPGAContext *c) {
     goto failed;
   }
 
-  // reset the DRAM page table
-  uint8_t zero_page[4096] = {0};
-  for(uint64_t ppn = 0; ppn < (c->ppage_base_addr) / 4096; ++ppn){
-    writeAXI(c, ppn << 12, zero_page, 4096);
-  }
-
   // read platform information
   // Verilog exporting time.
   uint32_t verilog_generated_time = 0;
@@ -140,6 +134,12 @@ int initFPGAContext(FPGAContext *c) {
   c->axi_peri_addr_base = c->dram_size;
   // DRAM base is always zero.
   c->dram_addr_base = 0;
+
+  // reset the DRAM page table
+  uint8_t zero_page[4096] = {0};
+  for(uint64_t ppn = 0; ppn < (c->ppage_base_addr) / 4096; ++ppn){
+    writeAXI(c, ppn << 12, zero_page, 4096);
+  }
 
   return res;
 failed:
