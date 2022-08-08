@@ -182,7 +182,7 @@ int dramPagePull(const FPGAContext *c, uint64_t paddr, void *page);
 #define MMU_MSG_QUEUE_REG_OFST_PUSH      (0x8)
 #define MMU_MSG_QUEUE_REG_OFST_POP       (0xC)
 
-#define BASE_ADDR_AXI_MMU_MSG            (BASE_ADDR_RTL + 0x10000)
+#define BASE_ADDR_AXI_MMU_MSG            (c->axi_peri_addr_base + 0x10000)
 bool mmuMsgHasPending(const FPGAContext *c);
 int  mmuMsgGet(const FPGAContext *c, MessageFPGA *msg);
 int  mmuMsgPeek(const FPGAContext *c, MessageFPGA *msg);
@@ -204,11 +204,9 @@ uint64_t pmuTotalCycles(const FPGAContext *c);
 uint64_t pmuTotalCommitInstructions(const FPGAContext *c);
 int pmuReadCycleCounters(const FPGAContext *c, int index, uint16_t counters[16]);
 
-
-
 // State transplants
-#define BASE_ADDR_TRANSPLANT_DATA        (BASE_ADDR_RTL + 0x0)
-#define BASE_ADDR_BIND_ASID_THID         (BASE_ADDR_AXIL + 0x0)
+#define BASE_ADDR_TRANSPLANT_DATA        (c->axi_peri_addr_base + 0x0)
+// #define BASE_ADDR_BIND_ASID_THID         (BASE_ADDR_AXIL + 0x0)
 #define BASE_ADDR_TRANSPLANT_CTRL        (BASE_ADDR_AXIL + 0x100 * 0x4)
 #define TRANS_REG_OFFST_PENDING          (0x4 * 0)
 #define TRANS_REG_OFFST_FREE_PENDING     (0x4 * 0)

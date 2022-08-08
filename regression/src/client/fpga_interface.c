@@ -168,7 +168,7 @@ int dramPagePush(const FPGAContext *c, uint64_t paddr, void *page){
     paddr ^= (paddr & 0xFFFUL);
   }
   assert(paddr < c->dram_size && "DRAM range overflow.");
-  return writeAXI(c, BASE_ADDR_DRAM + paddr, page, PAGE_SIZE);
+  return writeAXI(c, c->dram_addr_base + paddr, page, PAGE_SIZE);
 }
 
 /**
@@ -235,7 +235,7 @@ int dramPagePull(const FPGAContext *c, uint64_t paddr, void *page){
     paddr ^= (paddr & 0xFFFUL);
   }
   assert(paddr < c->dram_size && "DRAM range overflow.");
-  return readAXI(c, BASE_ADDR_DRAM + paddr, page, PAGE_SIZE);
+  return readAXI(c, c->dram_addr_base + paddr, page, PAGE_SIZE);
 }
 
 uint32_t assertFailedGet(const FPGAContext *c, int reg) {

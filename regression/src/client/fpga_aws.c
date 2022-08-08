@@ -72,10 +72,6 @@ int initFPGAContext(FPGAContext *c) {
   static const int slot_id = 0;
   static const struct logger *logger = &logger_stdout;
 
-  c->dram_size = 0x0400000000ULL; // Change DRAM_SIZE from here.
-
-  c->ppage_base_addr = c->dram_size >> 8;
-
   // init log
 
   c->axil = PCI_BAR_HANDLE_INIT;
@@ -116,6 +112,34 @@ int initFPGAContext(FPGAContext *c) {
   for(uint64_t ppn = 0; ppn < (c->ppage_base_addr) / 4096; ++ppn){
     writeAXI(c, ppn << 12, zero_page, 4096);
   }
+
+  // read platform information
+  // Verilog exporting time.
+  uint32_t verilog_generated_time = 0;
+  if(readAXIL(c, BASE_ADDR_PLATFORM_INFO + VERILOG_GENERATED_TIME, &verilog_generated_time) != 0) {
+    goto failed;
+  }
+
+  // convert the unix timestamp to actual time.
+  struct tm ts = *localtime((time_t *) &verilog_generated_time);
+  char time_buf[80];
+  strftime(time_buf, 80, "%Y-%m-%d %H:%M:%S", &ts);
+  printf("Verilog Generation Time: %s \n", time_buf);
+
+  // Read PA size
+  uint32_t pa_width = 0;
+  if(readAXIL(c, BASE_ADDR_PLATFORM_INFO + PLATFORM_PADDR_WIDTH, &pa_width) != 0) {
+    goto failed;
+  }
+  printf("Platform PA size: %d \n", pa_width);
+
+  // Use PA width to initialize the DRAM size.
+  c->dram_size = 1ULL << pa_width;
+  c->ppage_base_addr = (c->dram_size >> 8);
+  // the AXI RTL device is just above the physical pages.
+  c->axi_peri_addr_base = c->dram_size;
+  // DRAM base is always zero.
+  c->dram_addr_base = 0;
 
   return res;
 failed:
