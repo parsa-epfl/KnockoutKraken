@@ -5,11 +5,12 @@
 
 // Base addresses
 // BAR1 - AXIL
-#define BASE_ADDR_AXIL             (0x000000000000)
-
-// PCIS - AXI
-#define BASE_ADDR_DRAM             (0x000000000000)
-#define BASE_ADDR_RTL              (0x001000000000)
+#define BASE_ADDR_AXIL                   (0x000000000000)
+#define BASE_ADDR_PLATFORM_INFO          (BASE_ADDR_AXIL + 0x0)
+#define VERILOG_GENERATED_TIME_LO        (0x4 * 0)
+#define VERILOG_GENERATED_TIME_HI        (0x4 * 1)
+#define PLATFORM_PADDR_WIDTH             (0x4 * 2)
+#define PLATFORM_THREAD_NUMBER           (0x4 * 3)
 
 typedef struct FPGAContext {
 #ifndef AWS_FPGA
@@ -22,6 +23,9 @@ typedef struct FPGAContext {
 #endif
   uint64_t dram_size;
   uint64_t ppage_base_addr;
+
+  uint64_t dram_addr_base;
+  uint64_t axi_peri_addr_base; 
 } FPGAContext;
 
 

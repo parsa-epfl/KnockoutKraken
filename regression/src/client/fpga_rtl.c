@@ -3,24 +3,20 @@
 #include "fpga.h"
 #include "ipc.h"
 
-#include <bits/stdint-uintn.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <string.h>
-#include <stdbool.h>
+#include <time.h>
 
 /**
  * @file the interface for simulator.
  */
 int initFPGAContext(FPGAContext *c) {
-  c->dram_size = 1024 * 1024 * 16;
   c->axi_fd = -1;
   c->axil_fd = -1;
-
-  c->ppage_base_addr = (c->dram_size >> 8);
 
   printf("Init AXI socket\n");
   if(initIPC_client(&c->axi_fd, "/dev/shm/axi") !=0) {
@@ -31,6 +27,39 @@ int initFPGAContext(FPGAContext *c) {
     goto failed;
   }
   printf("Done with sockets\n");
+
+  // read platform information
+  // Verilog exporting time.
+  uint64_t verilog_generated_time = 0;
+  if(readAXIL(c, BASE_ADDR_PLATFORM_INFO + VERILOG_GENERATED_TIME_HI, (uint32_t *)&verilog_generated_time) != 0) {
+    goto failed;
+  }
+  verilog_generated_time <<= 32;
+  if(readAXIL(c, BASE_ADDR_PLATFORM_INFO + VERILOG_GENERATED_TIME_LO, (uint32_t *)&verilog_generated_time) != 0) {
+    goto failed;
+  }
+
+  // convert the unix timestamp to actual time.
+  struct tm ts;
+  localtime_r((time_t *) &verilog_generated_time, &ts);
+  char time_buf[80];
+  strftime(time_buf, 80, "%Y-%m-%d %H:%M:%S", &ts);
+  printf("Verilog Generation Time: %s \n", time_buf);
+
+  // Read PA size
+  uint32_t pa_width = 0;
+  if(readAXIL(c, BASE_ADDR_PLATFORM_INFO + PLATFORM_PADDR_WIDTH, &pa_width) != 0) {
+    goto failed;
+  }
+  printf("Platform PA size: %d \n", pa_width);
+
+  // Use PA width to initialize the DRAM size.
+  c->dram_size = 1ULL << pa_width;
+  c->ppage_base_addr = (c->dram_size >> 8);
+  // the AXI RTL device is just above the physical pages.
+  c->axi_peri_addr_base = c->dram_size;
+  // DRAM base is always zero.
+  c->dram_addr_base = 0;
 
   return 0;
 

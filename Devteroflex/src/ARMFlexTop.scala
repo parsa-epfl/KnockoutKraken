@@ -125,6 +125,32 @@ object MemorySystemVerilogEmitter extends App {
   fr.close()
 }
 
+/***
+ * @brief Constant memory-mapped registers recording the metadata of the platform
+ * 
+ * @param
+ */ 
+class PlatformInfo(
+  paramPipeline: PipelineParams,
+  paramMemory: MemoryHierarchyParams
+) extends Module {
+  val uCnt = Module(new CSR(32, 4))
+
+  // uCnt[1:0]: Verilog generation time
+  val wTime = WireInit((System.currentTimeMillis() / 1000).U(64.W))
+  uCnt.io.csr(0).dataIn := wTime(31, 0)
+  uCnt.io.csr(1).dataIn := wTime(63, 32)
+
+  // uCnt[2]: Number of bits of the physical address
+  uCnt.io.csr(2).dataIn := paramMemory.pAddrW.U
+
+  // uCnt[3]: Number of physical threads.
+  uCnt.io.csr(3).dataIn := paramPipeline.thidN.U
+
+  val S_CSR = IO(Flipped(uCnt.io.bus.cloneType))
+  S_CSR <> uCnt.io.bus
+}
+
 class ARMFlexTop(
   paramsPipeline: PipelineParams,
   paramsMemoryHierarchy: MemoryHierarchyParams
@@ -171,7 +197,11 @@ class ARMFlexTop(
     new CSRBusSlaveConfig(0x400, 0x100)
   ), (0, 0x500)))
   uCSRMux.masterBus <> uAXIL2CSR.io.bus
-  uCSRMux.slavesBus(0) <> u_pipeline.S_CSR_ThreadTable
+
+  // First AXIL device is the platform information
+  val uPlatformInfo = Module(new PlatformInfo(paramsPipeline, paramsMemoryHierarchy))
+
+  uCSRMux.slavesBus(0) <> uPlatformInfo.S_CSR
   uCSRMux.slavesBus(1) <> u_pipeline.S_CSR_Pipeline
   uCSRMux.slavesBus(2) <> memory.S_CSR
 

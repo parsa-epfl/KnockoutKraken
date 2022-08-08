@@ -1,15 +1,56 @@
 #include "dut.hh"
 #include "verilated.h"
-#include "../client/fpga_interface.h"
 #include <mutex>
 #include <thread>
 
 double TopDUT::time = 0;
 
+static size_t readDRAMSize(TopDUT &dut) {
+  // read 0x8.
+  dut->S_AXIL_araddr = 0x8;
+  dut->S_AXIL_arvalid = true;
+  dut->eval();
+  // wait for ar channel to be fired.
+  while(dut->S_AXIL_arready != true){
+    dut->clock = 1;
+    dut->eval();
+    dut->clock = 0;
+    dut->eval();
+  }
+  dut->clock = 1;
+  dut->eval();
+  dut->clock = 0;
+  dut->eval();
+  dut->S_AXIL_arvalid = false;
+
+  // wait for r channel to be fire
+  dut->S_AXIL_rready = true;
+  dut->eval();
+  while(dut->S_AXIL_rvalid != true){
+    dut->clock = 1;
+    dut->eval();
+    dut->clock = 0;
+    dut->eval();
+  }
+
+  uint32_t pa_width = dut->S_AXIL_rdata;
+  dut->clock = 1;
+  dut->eval();
+  dut->clock = 0;
+  dut->eval();
+
+  printf("Get PA Width: %d \n", pa_width);
+
+  dut->S_AXIL_rready = false;
+  dut->eval();
+  
+  return 1ULL << pa_width;
+}
+
 TopDUT::TopDUT(bool withTrace) {
-  size_t dram_size = 1024 * 1024 * 16;
   dut = new Vdevteroflex_top();
-  dram = new uint32_t[dram_size / 4];
+
+  dram = nullptr;
   tfp = new VerilatedFstC;
   if(withTrace) {
     dut->trace(tfp, 99);
@@ -18,12 +59,6 @@ TopDUT::TopDUT(bool withTrace) {
   ready_thread = 0;
   terminating = false;
   error_occurred = false;
-
-  this->dram_size = dram_size;
-  size_t power2_dram_size = 0;
-  for (power2_dram_size = 1; dram_size > 0;
-       dram_size >>= 1, power2_dram_size <<= 1);
-  this->dram_addr_mask = power2_dram_size - 1;
 
   decoupled_count = 0;
 }
@@ -35,11 +70,13 @@ TopDUT::~TopDUT() {
   }
   dut->final();
   delete dut;
-  delete[] dram;
+  if(dram != nullptr){
+    delete[] dram;
+  }
 }
 
  bool TopDUT::isAXIDRAM(uint64_t addr) {
-   return (BASE_ADDR_DRAM <= addr && addr < (BASE_ADDR_DRAM + dram_size));
+   return (0 <= addr && addr < (0 + dram_size));
  }
 
 void TopDUT::reset() {
@@ -57,6 +94,20 @@ void TopDUT::reset() {
   dut->clock = 0;
   dut->reset = 0;
   dut->eval();
+
+  // query the DRAM size.
+  size_t dram_size = readDRAMSize(*this);
+  if(dram != nullptr){
+    delete [] dram;
+  }
+
+  dram = new uint32_t[dram_size / 4];
+
+  this->dram_size = dram_size;
+  size_t power2_dram_size = 0;
+  for (power2_dram_size = 1; dram_size > 0;
+       dram_size >>= 1, power2_dram_size <<= 1);
+  this->dram_addr_mask = power2_dram_size - 1;
 }
 
 bool TopDUT::waitForTick(std::unique_lock<std::mutex> &lock) {
@@ -146,7 +197,7 @@ void TopDUT::closeSimulation(void) {
   tfp->close();
 
   // dump DRAM to a file.
-  FILE *f = fopen("dram.bin", "rb");
+  FILE *f = fopen("dram.bin", "wb");
   fwrite(this->dram, 1, this->dram_size, f);
   fflush(f);
   fclose(f);

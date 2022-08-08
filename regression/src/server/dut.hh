@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Vdevteroflex_top.h"
-#include "../client/fpga_interface.h"
 #include <exception>
 #include <mutex>
 #include <thread>
