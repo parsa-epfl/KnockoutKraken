@@ -245,11 +245,12 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
   // ---------------------- CPU2BRAM -----------------------
   // ----------- CPU2BRAM --------
   // - determine the write request. The data is write into tht TBRAM. 
-  transBram2Cpu.wr.thid := Mux(rSyncState === sTSyncingC2BPState, rSyncThread, cpu2trans.rfile_wr.tag)
+  transBram2Cpu.wr.pstate.thid :=rSyncThread 
   transBram2Cpu.wr.pstate.req.bits.state := cpu2trans.pstate
   transBram2Cpu.wr.pstate.req.valid := rSyncState === sTSyncingC2BPState
 
   // Listen to the pipeline write request and update register inside
+  transBram2Cpu.wr.xreg.thid := cpu2trans.rfile_wr.tag
   transBram2Cpu.wr.xreg.req.bits.regIdx := cpu2trans.rfile_wr.addr
   transBram2Cpu.wr.xreg.req.bits.data := cpu2trans.rfile_wr.data
   transBram2Cpu.wr.xreg.req.valid := cpu2trans.rfile_wr.en

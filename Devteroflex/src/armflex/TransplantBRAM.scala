@@ -62,11 +62,12 @@ object TransBram2HostUnitIO {
   }
 
   class WrPort(thidN: Int) extends Bundle {
-    val thid = Input(UInt(log2Ceil(thidN).W))
     val xreg = new Bundle {
+      val thid = Input(UInt(log2Ceil(thidN).W))
       val req = Flipped(Decoupled(new WrReq))
     }
     val pstate = new Bundle {
+      val thid = Input(UInt(log2Ceil(thidN).W))
       val req = Flipped(Decoupled(new WrPStateReq))
     }
   }
@@ -254,11 +255,11 @@ class TransBram2HostUnit(thidN: Int) extends Module {
   // determine the BRAM address
   when(wrPort.xreg.req.fire){
     val xregIdx = wrPort.xreg.req.bits.regIdx
-    uBRAM.portB.ADDR := bramAlignAddr(wrPort.thid, xregIdx)
+    uBRAM.portB.ADDR := bramAlignAddr(wrPort.xreg.thid, xregIdx)
     uBRAM.portB.DI   := bramAlignData(xregIdx, wrPort.xreg.req.bits.data)
     uBRAM.portB.WE   := bramAlignMask(xregIdx)
   }.elsewhen(wrPort.pstate.req.fire){
-    uBRAM.portB.ADDR := bramAlignAddr(wrPort.thid, TRANS_STATE_PState_OFFST.U)
+    uBRAM.portB.ADDR := bramAlignAddr(wrPort.pstate.thid, TRANS_STATE_PState_OFFST.U)
     uBRAM.portB.DI := bramBlockPackPState(wrPort.pstate.req.bits.state)
     uBRAM.portB.WE := Fill(48, 1.U) // Write 3/4 Block
   }.elsewhen(rdPort.xreg.req.fire){
@@ -266,7 +267,7 @@ class TransBram2HostUnit(thidN: Int) extends Module {
     uBRAM.portB.DI := DontCare
     uBRAM.portB.WE := 0.U
   }.elsewhen(rdPort.pstate.req.fire) {
-    uBRAM.portB.ADDR := bramAlignAddr(wrPort.thid, TRANS_STATE_PState_OFFST.U)
+    uBRAM.portB.ADDR := bramAlignAddr(wrPort.pstate.thid, TRANS_STATE_PState_OFFST.U)
     uBRAM.portB.DI := DontCare
     uBRAM.portB.WE := 0.U
   }.otherwise {
