@@ -98,6 +98,20 @@ class Cpu2TransUnitTest extends AnyFreeSpec with ChiselScalatestTester {
           assert(dut.rdCSRCmd(TRANS_REG_OFFST_RUNNING) == 0)
     }
   }
+
+  "Multiple writing is prohibit" in {
+    test(new TransBram2HostUnit(32)).withAnnotations(Seq(
+      VerilatorBackendAnnotation,
+      TargetDirAnnotation("test/transplant/Cpu2TransTest/multi-write-prohibit"),
+      WriteFstAnnotation
+    )) { dut =>
+      dut.wrPort.pstate.req.ready.expect(true.B)
+      timescope {
+        dut.wrPort.pstate.req.valid.poke(true.B)
+        dut.wrPort.xreg.req.ready.expect(false.B)
+      }
+    }
+  }
 }
 
 object TransplantUnitDrivers {
@@ -123,7 +137,7 @@ object TransplantUnitDrivers {
   implicit class TransBRAM2CpuIODrivers(target: TransBram2HostUnitIO.TransBRAM2CpuIO)(implicit clock: Clock) {
     def wr(thid: Int, xregs: Seq[BigInt]): Unit = {
       assert(xregs.size == 32)
-      target.wr.thid.poke((1 << thid).U)
+      target.wr.xreg.thid.poke((1 << thid).U)
       for(reg <- 0 until xregs.size) {
         target.wr.xreg.req.enqueue(new TransBram2HostUnitIO.WrReq().Lit(
           _.regIdx -> reg.U, _.data -> xregs(reg).U))
