@@ -245,7 +245,7 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
   // ---------------------- CPU2BRAM -----------------------
   // ----------- CPU2BRAM --------
   // - determine the write request. The data is write into tht TBRAM. 
-  transBram2Cpu.wr.pstate.thid :=rSyncThread 
+  transBram2Cpu.wr.pstate.thid := rSyncThread 
   transBram2Cpu.wr.pstate.req.bits.state := cpu2trans.pstate
   transBram2Cpu.wr.pstate.req.valid := rSyncState === sTSyncingC2BPState
 
@@ -256,7 +256,7 @@ class Cpu2TransBramUnit(thidN: Int) extends Module {
   transBram2Cpu.wr.xreg.req.valid := cpu2trans.rfile_wr.en
 
   // stall the pipeline when we decide to write the PState.
-  cpu2trans.stallPipeline := transBram2Cpu.wr.pstate.req.valid
+  cpu2trans.stallPipeline := !(transBram2Cpu.wr.pstate.req.ready && transBram2Cpu.wr.xreg.req.ready)
   cpu2trans.busyCpu2Trans := rSyncState === sTSyncingC2BPState
 
   // ----------- BRAM2CPU --------
