@@ -582,9 +582,6 @@ class ExecuteUnit extends Module
   ))
   einst.res := Mux(io.dinst.is32bit, res(31, 0).pad(64), res)
   einst.rd := io.dinst.rd
-  when(io.dinst.itype === I_LogSR || io.dinst.itype === I_LogI) {
-    einst.rd.valid := io.dinst.rd.bits =/= 31.U
-  }
   einst.nzcv.bits := MuxLookup(io.dinst.itype, addWithCarry.io.nzcv, Seq(
                            I_LogSR -> logicALU.io.nzcv,
                            I_LogI  -> logicALU.io.nzcv,

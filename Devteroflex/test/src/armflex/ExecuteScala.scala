@@ -6,17 +6,19 @@ import chisel3.experimental._
 import org.scalatest.freespec.AnyFreeSpec
 import chiseltest._
 import chiseltest.internal._
+import chisel3.experimental.BundleLiterals._
+import chisel3.util.{Valid}
 
 import firrtl.options.TargetDirAnnotation
 
 import arm.DEC_LITS._
+import arm.PROCESSOR_TYPES._
 
 class DecodeBitMasksUnitTest extends AnyFreeSpec with ChiselScalatestTester {
   // Plan: Just print the iteration value and see the maximum period.
   def decodeBitMasksPokeExpect(
       dut: DecodeBitMasks,
-      inst: BigInt,
-      reg: BigInt
+      inst: BigInt
   ): Unit = {
     val immn = (inst >> 22) & 0x1
     val imms = (inst >> 10) & 0x3f
@@ -38,19 +40,25 @@ class DecodeBitMasksUnitTest extends AnyFreeSpec with ChiselScalatestTester {
 
   "b200c3e8:orr     x8, xzr, #0x101010101010101" in {
     test(new DecodeBitMasks).withAnnotations(anno) { dut =>
-      decodeBitMasksPokeExpect(dut, BigInt("b200c3e8", 16), 0)
+      decodeBitMasksPokeExpect(dut, BigInt("b200c3e8", 16))
     }
   }
 
   "b202e7e0:orr     x0, xzr, #0xcccccccccccccccc" in {
     test(new DecodeBitMasks).withAnnotations(Seq(VerilatorBackendAnnotation, TargetDirAnnotation("test/execute/DecodeBitMask/orr2"), WriteVcdAnnotation)) { dut =>
-      decodeBitMasksPokeExpect(dut, BigInt("b202e7e0", 16), 0)
+      decodeBitMasksPokeExpect(dut, BigInt("b202e7e0", 16))
     }
   }
 
   "92402c04:and     x4, x0,  #0xfff" in {
     test(new DecodeBitMasks).withAnnotations(anno) { dut =>
-      decodeBitMasksPokeExpect(dut, BigInt("92402c04", 16), 0)
+      decodeBitMasksPokeExpect(dut, BigInt("92402c04", 16))
+    }
+  }
+
+  "927be93f:and    sp, x9, #0xffffffffffffffe0" in {
+    test(new DecodeBitMasks).withAnnotations(anno) { dut =>
+      decodeBitMasksPokeExpect(dut, BigInt("927be93f", 16))
     }
   }
 }
@@ -89,7 +97,7 @@ class LogicALUUnitTest extends AnyFreeSpec with ChiselScalatestTester {
       case true => '1'
     }
     val nzcv = BigInt(nzcvBits.mkString, 2)
-    println(is32bit.toString + "nzcvBits: " + nzcvBits.mkString + "nzcv" + nzcv)
+    println(is32bit.toString + ":nzcvBits[ " + nzcvBits.mkString + "]:nzcv[" + nzcv + "]")
     
     dut.io.is32bit.poke(is32bit.B)
     dut.io.a.poke(inA.U)
@@ -112,6 +120,8 @@ class LogicALUUnitTest extends AnyFreeSpec with ChiselScalatestTester {
       logicALUPokeExpect(dut, BigInt("72000422", 16), BigInt("0000000300000003", 16), BigInt("6ABCCD638373A7E4", 16))
     }
   }
+
+
 }
 
 class DataProcessingUnitTest extends AnyFreeSpec with ChiselScalatestTester {
@@ -274,4 +284,57 @@ object ExecuteModels {
       return BigInt("deadbeef", 16)
     }
   }
+}
+
+
+
+class ExecuteUnitTests extends AnyFreeSpec with ChiselScalatestTester {
+  val anno = Seq(
+    VerilatorBackendAnnotation,
+    TargetDirAnnotation("test/execute/ExecuteUnit"),
+    WriteVcdAnnotation
+  )
+
+  "927be93f:and    sp, x9, #0xffffffffffffffe0" in {
+    test(new ExecuteUnitDriver).withAnnotations(anno) { dut =>
+      val inst = BigInt("927be93f", 16)
+      val rVal1 = BigInt("ffffffffdd60", 16)
+
+      dut.io.inst.poke(inst.U)
+      dut.io.rVal1.poke(rVal1.U)
+      dut.io.rVal2.poke(0.U)
+      dut.io.rVal3.poke(0.U)
+      dut.io.nzcv.poke(0.U)
+
+      dut.clock.step(2)
+
+      dut.io.einst.bits.res.expect(BigInt("ffffffffdd60", 16).U)
+      dut.io.einst.bits.rd.valid.expect(true.B)
+   }
+  }
+}
+
+class ExecuteUnitDriver extends Module {
+  val decoderU = Module(new DecodeUnit)
+  val executerU = Module(new ExecuteUnit)
+  val io = IO(new Bundle {
+    val inst = Input(decoderU.inst.cloneType)
+    val rVal1 = Input(executerU.io.rVal1.cloneType)
+    val rVal2 = Input(executerU.io.rVal1.cloneType)
+    val rVal3 = Input(executerU.io.rVal1.cloneType)
+    val nzcv = Input(executerU.io.nzcv.cloneType)
+
+    val condRes = Output(executerU.io.condRes.cloneType)
+    val einst = Output(executerU.io.einst.cloneType)
+  })
+
+  decoderU.inst := io.inst
+  executerU.io.dinst := decoderU.dinst
+  executerU.io.rVal1 := io.rVal1
+  executerU.io.rVal2 := io.rVal2
+  executerU.io.rVal3 := io.rVal3
+  executerU.io.nzcv := io.nzcv
+
+  io.condRes := executerU.io.condRes
+  io.einst := executerU.io.einst
 }
