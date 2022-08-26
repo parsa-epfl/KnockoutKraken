@@ -111,10 +111,12 @@ int initFPGAContext(FPGAContext *c) {
   // Verilog exporting time.
   uint64_t verilog_generated_time = 0;
   if(readAXIL(c, BASE_ADDR_PLATFORM_INFO + VERILOG_GENERATED_TIME_HI, (uint32_t *)&verilog_generated_time) != 0) {
+    perror("Cannot read the exporting time of the FPGA. Error happens when accessing VERILOG_GENERATED_TIME_HI.");
     goto failed;
   }
   verilog_generated_time <<= 32;
   if(readAXIL(c, BASE_ADDR_PLATFORM_INFO + VERILOG_GENERATED_TIME_LO, (uint32_t *)&verilog_generated_time) != 0) {
+    perror("Cannot read the exporting time of the FPGA. Error happens when accessing VERILOG_GENERATED_TIME_LO.");
     goto failed;
   }
 
@@ -128,6 +130,7 @@ int initFPGAContext(FPGAContext *c) {
   // Read PA size
   uint32_t pa_width = 0;
   if(readAXIL(c, BASE_ADDR_PLATFORM_INFO + PLATFORM_PADDR_WIDTH, &pa_width) != 0) {
+    perror("Cannot read the PA width. Error happens when accessing PLATFORM_PADDR_WIDTH.");
     goto failed;
   }
   printf("Platform PA size: %d \n", pa_width);
