@@ -109,13 +109,18 @@ int initFPGAContext(FPGAContext *c) {
 
   // read platform information
   // Verilog exporting time.
-  uint32_t verilog_generated_time = 0;
-  if(readAXIL(c, BASE_ADDR_PLATFORM_INFO + VERILOG_GENERATED_TIME, &verilog_generated_time) != 0) {
+  uint64_t verilog_generated_time = 0;
+  if(readAXIL(c, BASE_ADDR_PLATFORM_INFO + VERILOG_GENERATED_TIME_HI, (uint32_t *)&verilog_generated_time) != 0) {
+    goto failed;
+  }
+  verilog_generated_time <<= 32;
+  if(readAXIL(c, BASE_ADDR_PLATFORM_INFO + VERILOG_GENERATED_TIME_LO, (uint32_t *)&verilog_generated_time) != 0) {
     goto failed;
   }
 
   // convert the unix timestamp to actual time.
-  struct tm ts = *localtime((time_t *) &verilog_generated_time);
+  struct tm ts;
+  localtime_r((time_t *) &verilog_generated_time, &ts);
   char time_buf[80];
   strftime(time_buf, 80, "%Y-%m-%d %H:%M:%S", &ts);
   printf("Verilog Generation Time: %s \n", time_buf);
