@@ -235,7 +235,8 @@ class ARMFlexTop(
 
   // Performance Unit
   val uPMU = Module(new PerformanceMonitor(paramsPipeline.thidN))
-  uPMU.iCommittedValid := u_pipeline.oPMUCountingCommit
+  uPMU.iCommittedValid := u_pipeline.oPMUEvent.commit
+  uPMU.iTransplantValid := u_pipeline.oPMUEvent.exception || u_pipeline.oPMUEvent.forceTransplant
 
   uPMU.iCycleCountingReq(0) := memory.oPMUEventTriggers.dcache
   uPMU.iCycleCountingReq(1) := memory.oPMUEventTriggers.tlb

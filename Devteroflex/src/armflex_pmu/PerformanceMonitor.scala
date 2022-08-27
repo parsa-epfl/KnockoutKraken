@@ -25,6 +25,7 @@ class PerformanceMonitor(threadNumber: Int = 128) extends Module {
   val uPageFaultPenaltyCnt = Module(new CycleCounters(counterNumber, counterBits, threadNumber))
 
   val rInstructionCommitted = RegInit(0.U(64.W))
+  val rInstructionTriggeringTransplant = RegInit(0.U(64.W))
 
   val iCycleCountingReq = IO(Input(Vec(4, new CycleCountingPort(threadNumber))))
   uDCachePenaltyCnt.iReq <> iCycleCountingReq(0)
@@ -36,6 +37,12 @@ class PerformanceMonitor(threadNumber: Int = 128) extends Module {
   when(iCommittedValid){
     rInstructionCommitted := rInstructionCommitted + 1.U
   }
+  
+  val iTransplantValid = IO(Input(Bool()))
+  when(iTransplantValid){
+    rInstructionTriggeringTransplant := rInstructionTriggeringTransplant + 1.U
+  }
+  assert(iCommittedValid && iTransplantValid =/= true.B, "It's never possible to see that one instruction is committed with and without exception at the same time.")
 
   val rCycleCounter = RegInit(0.U(64.W))
   val rCycleCounterRunning = RegInit(false.B)
@@ -63,10 +70,12 @@ class PerformanceMonitor(threadNumber: Int = 128) extends Module {
   uCSR.io.csr(3).dataIn := rInstructionCommitted(31, 0)
   uCSR.io.csr(4).dataIn := rInstructionCommitted(63, 32)
 
-  // 5 to 8 are empty.
-  for(i <- 5 until 8){
-    uCSR.io.csr(i).dataIn := 0.U
-  }
+  // - CSR[6]:CSR[5]: The number of instruction triggering transplant.
+  uCSR.io.csr(5).dataIn := rInstructionTriggeringTransplant(31, 0)
+  uCSR.io.csr(6).dataIn := rInstructionTriggeringTransplant(63, 32)
+
+  // - CSR[7]: Constant zero
+  uCSR.io.csr(7).dataIn := 0.U
 
   private def connectCountersToCSR(data: Vec[UInt], startIndex: Int) = {
     assert(data.length == counterNumber)

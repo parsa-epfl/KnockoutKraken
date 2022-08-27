@@ -76,6 +76,7 @@ void printPMUCounters(const FPGAContext *ctx){
   uint64_t cmt = pmuTotalCommitInstructions(ctx);
   printf("Total committed instructions: %ld \n", cmt);
   printf("IPC: %lf CPI: %lf \n", double(cmt) / cyc, double(cyc) / double(cmt));
+  printf("Total number of transplants: %ld \n", pmuTotalTransplantTime(ctx));
   puts("----------");
 
   const char *names[4] = {

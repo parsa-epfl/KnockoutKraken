@@ -197,11 +197,14 @@ int  mmuMsgSend(const FPGAContext *c,  MessageFPGA *msg);
 #define PMU_REG_OFFST_STOP               (0x4 * 2)
 #define PMU_REG_OFFST_COMMIT_INSTS_LO    (0x4 * 3)
 #define PMU_REG_OFFST_COMMIT_INSTS_HI    (0x4 * 4)
+#define PMU_REG_OFFST_TRANSPLANT_TIME_LO (0x4 * 5)
+#define PMU_REG_OFFST_TRANSPLANT_TIME_HI (0x4 * 6)
 #define PMU_REG_OFFST_CYCLE_CTNS_BASE    (0x4 * 8)
 int pmuStartCounting(const FPGAContext *c);
 int pmuStopCounting(const FPGAContext *c);
 uint64_t pmuTotalCycles(const FPGAContext *c);
 uint64_t pmuTotalCommitInstructions(const FPGAContext *c);
+uint64_t pmuTotalTransplantTime(const FPGAContext *c);
 int pmuReadCycleCounters(const FPGAContext *c, int index, uint16_t counters[16]);
 
 // State transplants

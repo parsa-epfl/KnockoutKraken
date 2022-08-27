@@ -207,6 +207,17 @@ uint64_t pmuTotalCommitInstructions(const FPGAContext *c){
   return res;
 }
 
+uint64_t pmuTotalTransplantTime(const FPGAContext *c) {
+  uint64_t res = 0;
+  uint32_t half = 0;
+  assert(readAXIL(c, BASE_ADDR_PMU_REGS + PMU_REG_OFFST_TRANSPLANT_TIME_HI, &half) == 0);
+  res = half;
+  res <<= 32;
+  assert(readAXIL(c, BASE_ADDR_PMU_REGS + PMU_REG_OFFST_TRANSPLANT_TIME_LO, &half) == 0);
+  res |= half;
+  return res;
+}
+
 int pmuReadCycleCounters(const FPGAContext *c, int index, uint16_t counters[16]){
   assert(index < 4 && "At present, we only have 4 counters.");
   for(int i = 0; i < 8; ++i){
