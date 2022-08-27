@@ -42,7 +42,6 @@ class PerformanceMonitor(threadNumber: Int = 128) extends Module {
   when(iTransplantValid){
     rInstructionTriggeringTransplant := rInstructionTriggeringTransplant + 1.U
   }
-  assert(iCommittedValid && iTransplantValid =/= true.B, "It's never possible to see that one instruction is committed with and without exception at the same time.")
 
   val rCycleCounter = RegInit(0.U(64.W))
   val rCycleCounterRunning = RegInit(false.B)
