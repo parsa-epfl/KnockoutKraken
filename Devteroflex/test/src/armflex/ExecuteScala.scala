@@ -312,6 +312,28 @@ class ExecuteUnitTests extends AnyFreeSpec with ChiselScalatestTester {
       dut.io.einst.bits.rd.valid.expect(true.B)
    }
   }
+
+  "6a35001f:bics    wzr, w0, w21" in {
+    test(new ExecuteUnitDriver).withAnnotations(Seq(VerilatorBackendAnnotation,
+    TargetDirAnnotation("test/execute/ExecuteUnit/bics"),
+    WriteVcdAnnotation)) { dut =>
+      val inst = BigInt("6a35001f", 16)
+      val rVal1 = BigInt("0000000000001004", 16)
+      val rVal2 = BigInt("0000000000000008", 16)
+
+      dut.io.inst.poke(inst.U)
+      dut.io.rVal1.poke(rVal1.U)
+      dut.io.rVal2.poke(rVal2.U)
+      dut.io.rVal3.poke(0.U)
+      dut.io.nzcv.poke(0.U)
+
+      dut.clock.step(2)
+
+      dut.io.einst.bits.rd.valid.expect(false.B)
+   }
+  }
+
+
 }
 
 class ExecuteUnitDriver extends Module {

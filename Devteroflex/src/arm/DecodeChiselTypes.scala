@@ -253,6 +253,7 @@ object DECODE_MATCHING_TABLES
       LogSR_EOR32  -> List(I_LogSR, OP_EOR,   Y, Y, N, N, Y),
       LogSR_EON32  -> List(I_LogSR, OP_EON,   Y, Y, N, N, Y),
       LogSR_ANDS32 -> List(I_LogSR, OP_AND,   Y, Y, N, Y, Y),
+      LogSR_BICS32_WZR -> List(I_LogSR, OP_BIC,   N, Y, N, Y, Y),
       LogSR_BICS32 -> List(I_LogSR, OP_BIC,   Y, Y, N, Y, Y),
       LogSR_TST    -> List(I_LogSR, OP_AND,   N, Y, N, Y, N),
       LogSR_AND    -> List(I_LogSR, OP_AND,   Y, Y, N, N, N),
@@ -262,6 +263,7 @@ object DECODE_MATCHING_TABLES
       LogSR_EOR    -> List(I_LogSR, OP_EOR,   Y, Y, N, N, N),
       LogSR_EON    -> List(I_LogSR, OP_EON,   Y, Y, N, N, N),
       LogSR_ANDS   -> List(I_LogSR, OP_AND,   Y, Y, N, Y, N),
+      LogSR_BICS_XZR -> List(I_LogSR, OP_BIC,   N, Y, N, Y, N),
       LogSR_BICS   -> List(I_LogSR, OP_BIC,   Y, Y, N, Y, N),
       // Logical (immediate)
       LogI_TST32   -> List(I_LogI,  OP_AND,   N, N, N, Y, Y),
